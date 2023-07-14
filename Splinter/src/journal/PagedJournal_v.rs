@@ -19,7 +19,7 @@ pub struct JournalRecord {
 }
 
 impl JournalRecord {
-    pub open spec fn wf(self) -> bool
+    pub open spec(checked) fn wf(self) -> bool
     decreases self
     {
         &&& self.message_seq.wf()
@@ -29,7 +29,7 @@ impl JournalRecord {
             }
     }
 
-    pub open spec fn valid(self, boundary_lsn: LSN) -> bool
+    pub open spec(checked) fn valid(self, boundary_lsn: LSN) -> bool
     decreases self
     {
         &&& self.wf()
@@ -54,12 +54,12 @@ impl JournalRecord {
         }
     }
 
-    pub open spec fn cropped_prior(self, boundary_lsn: LSN) -> Option<JournalRecord>
+    pub open spec(checked) fn cropped_prior(self, boundary_lsn: LSN) -> Option<JournalRecord>
     {
         if self.message_seq.seq_start <= boundary_lsn { None } else { *self.prior_rec }
     }
 
-    pub open spec fn can_crop_head_records(self, boundary_lsn: LSN, depth: nat) -> bool
+    pub open spec(checked) fn can_crop_head_records(self, boundary_lsn: LSN, depth: nat) -> bool
     decreases depth, 0nat
     {
         &&& self.valid(boundary_lsn)
@@ -70,7 +70,7 @@ impl JournalRecord {
             }
     }
 
-    pub open spec fn opt_rec_can_crop_head_records(ojr: Option<JournalRecord>, boundary_lsn: LSN, depth: nat) -> bool
+    pub open spec(checked) fn opt_rec_can_crop_head_records(ojr: Option<JournalRecord>, boundary_lsn: LSN, depth: nat) -> bool
         decreases depth, 1nat
     {
         match ojr {
@@ -79,7 +79,7 @@ impl JournalRecord {
         }
     }
 
-    pub open spec fn crop_head_records(self, boundary_lsn: LSN, depth: nat) -> Option<JournalRecord>
+    pub open spec(checked) fn crop_head_records(self, boundary_lsn: LSN, depth: nat) -> Option<JournalRecord>
     recommends
         self.can_crop_head_records(boundary_lsn, depth)
     decreases depth, 0nat
@@ -91,7 +91,7 @@ impl JournalRecord {
         }
     }
 
-    pub open spec fn opt_rec_crop_head_records(ojr: Option<JournalRecord>, boundary_lsn: LSN, depth: nat) -> (out: Option<JournalRecord>)
+    pub open spec(checked) fn opt_rec_crop_head_records(ojr: Option<JournalRecord>, boundary_lsn: LSN, depth: nat) -> (out: Option<JournalRecord>)
     recommends
         Self::opt_rec_can_crop_head_records(ojr, boundary_lsn, depth),
     // ensures no longer available; becomes lemma
@@ -190,7 +190,7 @@ impl JournalRecord {
         }
     }
         
-    pub open spec fn message_seq_after_crop(self, boundary_lsn: LSN, depth: nat) -> MsgHistory
+    pub open spec(checked) fn message_seq_after_crop(self, boundary_lsn: LSN, depth: nat) -> MsgHistory
     recommends
         self.valid(boundary_lsn),
         self.can_crop_head_records(boundary_lsn, depth+1)
@@ -217,7 +217,7 @@ impl JournalRecord {
         }
     }
 
-    pub open spec fn discard_old_journal_rec(ojr: Option<JournalRecord>, lsn: LSN) -> (out: Option<JournalRecord>)
+    pub open spec(checked) fn discard_old_journal_rec(ojr: Option<JournalRecord>, lsn: LSN) -> (out: Option<JournalRecord>)
     recommends
         ojr.is_Some() ==> ojr.unwrap().valid(lsn),
     // ensures
@@ -268,7 +268,7 @@ pub struct TruncatedJournal {
 }
 
 impl TruncatedJournal {
-    pub open spec fn prior(self) -> TruncatedJournal
+    pub open spec(checked) fn prior(self) -> TruncatedJournal
     recommends
         self.freshest_rec.is_Some(),
     {
@@ -277,18 +277,18 @@ impl TruncatedJournal {
             freshest_rec: *self.freshest_rec.unwrap().prior_rec }
     }
 
-    pub open spec fn wf(self) -> bool {
+    pub open spec(checked) fn wf(self) -> bool {
         &&& self.freshest_rec.is_Some() ==> self.freshest_rec.unwrap().valid(self.boundary_lsn)
     }
 
-    pub open spec fn is_empty(self) -> bool
+    pub open spec(checked) fn is_empty(self) -> bool
     recommends
         self.wf(),
     {
         self.freshest_rec.is_None()
     }
 
-    pub open spec fn seq_end(self) -> LSN
+    pub open spec(checked) fn seq_end(self) -> LSN
     recommends
         self.wf(),
     {
@@ -296,21 +296,21 @@ impl TruncatedJournal {
         else { self.boundary_lsn }
     }
 
-    pub open spec fn seq_start(self) -> LSN
+    pub open spec(checked) fn seq_start(self) -> LSN
     recommends
         self.wf(),
     {
         self.boundary_lsn
     }
 
-    pub open spec fn can_discard_to(self, lsn: LSN) -> bool
+    pub open spec(checked) fn can_discard_to(self, lsn: LSN) -> bool
     recommends
         self.wf(),
     {
         self.seq_start() <= lsn <= self.seq_end()
     }
 
-    pub open spec fn discard_old_defn(self, lsn: LSN) -> (out: TruncatedJournal)
+    pub open spec(checked) fn discard_old_defn(self, lsn: LSN) -> (out: TruncatedJournal)
     recommends
         self.wf(),
         self.can_discard_to(lsn),
@@ -326,7 +326,7 @@ impl TruncatedJournal {
 
     // msgs appears as the (boundary-truncated) contents of the i'th entry in the
     // chain of JournalRecords
-    pub open spec fn has_messages_at_depth(self, msgs: MsgHistory, depth: nat) -> bool
+    pub open spec(checked) fn has_messages_at_depth(self, msgs: MsgHistory, depth: nat) -> bool
     recommends
         self.wf(),
         msgs.wf(),
@@ -336,7 +336,7 @@ impl TruncatedJournal {
         &&& self.freshest_rec.unwrap().message_seq_after_crop(self.boundary_lsn, depth) == msgs
     }
 
-    pub open spec fn append_record(self, msgs: MsgHistory) -> (out: TruncatedJournal)
+    pub open spec(checked) fn append_record(self, msgs: MsgHistory) -> (out: TruncatedJournal)
     recommends
         self.wf(),
         msgs.wf(),
@@ -346,11 +346,11 @@ impl TruncatedJournal {
             ..self}
     }
 
-    pub open spec fn can_crop(self, depth: nat) -> bool {
+    pub open spec(checked) fn can_crop(self, depth: nat) -> bool {
         JournalRecord::opt_rec_can_crop_head_records(self.freshest_rec, self.boundary_lsn, depth)
     }
 
-    pub open spec fn crop_head_records(self, depth: nat) -> (out: TruncatedJournal)
+    pub open spec(checked) fn crop_head_records(self, depth: nat) -> (out: TruncatedJournal)
     recommends
         self.can_crop(depth),
     // ensures out.wf()
@@ -360,7 +360,7 @@ impl TruncatedJournal {
             ..self}
     }
 
-    // replaces missing spec ensures
+    // replaces missing spec(checked) ensures
     pub proof fn crop_head_records_ensures(self, depth: nat)
     requires
         self.wf(),
@@ -369,11 +369,11 @@ impl TruncatedJournal {
         self.crop_head_records(depth).wf(),
     {
         if 0 < depth {
-            self.freshest_rec.unwrap().crop_head_records_lemma(self.boundary_lsn, depth);   // typcial infuriating missing spec ensures
+            self.freshest_rec.unwrap().crop_head_records_lemma(self.boundary_lsn, depth);   // typcial infuriating missing spec(checked) ensures
         }
     }
 
-    pub open spec fn freeze_for_commit(self, frozen_journal: TruncatedJournal, depth: nat) -> bool
+    pub open spec(checked) fn freeze_for_commit(self, frozen_journal: TruncatedJournal, depth: nat) -> bool
     recommends
         self.wf(),
     {
@@ -385,7 +385,7 @@ impl TruncatedJournal {
 
 }
 
-pub open spec fn mkfs() -> (out: TruncatedJournal)
+pub open spec(checked) fn mkfs() -> (out: TruncatedJournal)
 // ensures out.wf()
 {
     TruncatedJournal{boundary_lsn: 0, freshest_rec: None}
@@ -403,20 +403,20 @@ state_machine!{ PagedJournal {
         pub unmarshalled_tail: MsgHistory,
     }
 
-    pub open spec fn wf(self) -> bool {
+    pub open spec(checked) fn wf(self) -> bool {
         &&& self.truncated_journal.wf()
         &&& self.unmarshalled_tail.wf()
         &&& self.truncated_journal.seq_end() == self.unmarshalled_tail.seq_start
     }
 
-    pub open spec fn seq_start(self) -> LSN
+    pub open spec(checked) fn seq_start(self) -> LSN
     recommends
         self.wf(),
     {
         self.truncated_journal.boundary_lsn
     }
 
-    pub open spec fn seq_end(self) -> LSN
+    pub open spec(checked) fn seq_end(self) -> LSN
     recommends
         self.wf(),
     {

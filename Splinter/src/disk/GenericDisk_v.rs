@@ -11,7 +11,7 @@ verus!{
 pub type AU = nat;
 pub type Page = nat;
 
-pub closed spec fn page_count() -> nat;
+pub closed spec(checked) fn page_count() -> nat;
 
 pub struct Address {
     pub au: AU,
@@ -19,27 +19,27 @@ pub struct Address {
 }
 
 impl Address {
-    pub open spec fn wf(self) -> bool {
+    pub open spec(checked) fn wf(self) -> bool {
         self.page < page_count()
     }
 
-    pub open spec fn first_page(self) -> Address {
+    pub open spec(checked) fn first_page(self) -> Address {
         Address{page: 0, ..self}
     }
 
-    pub open spec fn next_page(self) -> Address {
+    pub open spec(checked) fn next_page(self) -> Address {
         Address{page: self.page+1, ..self}
     }
 }
 
-pub open spec fn min_addr(a: Address, b: Address) -> Address {
+pub open spec(checked) fn min_addr(a: Address, b: Address) -> Address {
     if a.au < b.au { a }
     else if a.au > b.au { b }
     else if a.page <= b.page { a }
     else { b }
 }
 
-pub open spec fn to_aus(addrs: Set<Address>) -> Set<AU> {
+pub open spec(checked) fn to_aus(addrs: Set<Address>) -> Set<AU> {
     addrs.map(|addr: Address| addr.au)
 }
 

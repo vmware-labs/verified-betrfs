@@ -29,7 +29,7 @@ verus! {
 
 pub type StampedBetree = Stamped<BetreeNode>;
 
-pub open spec fn empty_image() -> StampedBetree {
+pub open spec(checked) fn empty_image() -> StampedBetree {
     Stamped{ value: BetreeNode::Nil, seq_end: 0 }
 }
 
@@ -38,12 +38,12 @@ pub struct ChildMap{
     pub map: Map<Key, BetreeNode> 
 }
 
-pub open spec fn constant_child_map(target: BetreeNode) -> ChildMap {
+pub open spec(checked) fn constant_child_map(target: BetreeNode) -> ChildMap {
     ChildMap{ map: Map::new( |k| true, |k| target ) }
 }
 
 impl ChildMap {
-    pub open spec fn wf(self) -> bool
+    pub open spec(checked) fn wf(self) -> bool
     decreases self
     {
         &&& total_keys(self.map.dom())
@@ -52,7 +52,7 @@ impl ChildMap {
 }
 
 
-pub open spec fn empty_child_map() -> ChildMap {
+pub open spec(checked) fn empty_child_map() -> ChildMap {
     constant_child_map(BetreeNode::Nil)
 }
 
@@ -66,24 +66,24 @@ pub enum BetreeNode {
 }
 
 impl BetreeNode {
-    pub open spec fn wf(self) -> bool
+    pub open spec(checked) fn wf(self) -> bool
     decreases self
     {
         self.is_Node() ==> self.get_Node_children().wf()
     }
 
-    pub open spec fn child(self, key: Key) -> BetreeNode {
+    pub open spec(checked) fn child(self, key: Key) -> BetreeNode {
         self.get_Node_children().map[key]
     }
 
-    pub open spec fn empty_root() -> BetreeNode {
+    pub open spec(checked) fn empty_root() -> BetreeNode {
         BetreeNode::Node {
             buffer: Buffer::empty(),
             children: empty_child_map()
         }
     }
 
-    pub open spec fn promote(self) -> BetreeNode {
+    pub open spec(checked) fn promote(self) -> BetreeNode {
         if self.is_Nil() {
             Self::empty_root() 
         } else {
@@ -91,21 +91,21 @@ impl BetreeNode {
         }
     }
 
-    pub open spec fn merge_buffer(self, new_buffer: Buffer) -> BetreeNode {
+    pub open spec(checked) fn merge_buffer(self, new_buffer: Buffer) -> BetreeNode {
         BetreeNode::Node{
             buffer: self.get_Node_buffer().merge(new_buffer),
             children: self.get_Node_children(),
         }
     }
 
-    pub open spec fn push_memtable(self, memtable: Memtable) -> StampedBetree {
+    pub open spec(checked) fn push_memtable(self, memtable: Memtable) -> StampedBetree {
         Stamped{
             value: self.promote().merge_buffer(memtable.buffer),
             seq_end: memtable.seq_end
         }
     }
 
-    pub open spec fn filter_buffer_and_children(self, filter: Set<Key>) -> BetreeNode {
+    pub open spec(checked) fn filter_buffer_and_children(self, filter: Set<Key>) -> BetreeNode {
         if self.is_Nil() {
             self
         } else {
@@ -119,7 +119,7 @@ impl BetreeNode {
         }
     }
 
-    pub open spec fn split(self, left_keys: Set<Key>, right_keys: Set<Key>) -> BetreeNode {
+    pub open spec(checked) fn split(self, left_keys: Set<Key>, right_keys: Set<Key>) -> BetreeNode {
         // We suppose that a lower layer will use this when leftKeys+rightKeys are all
         // identical, so that the first two branches of the if expression each produce
         // a single BetreeNode (with a shared representation below).
@@ -133,7 +133,7 @@ impl BetreeNode {
         }
     }
 
-    pub open spec fn flush(self, down_keys: Set<Key>) -> BetreeNode {
+    pub open spec(checked) fn flush(self, down_keys: Set<Key>) -> BetreeNode {
         let kept_buffer = self.get_Node_buffer().apply_filter(all_keys().difference(down_keys));
         let moved_buffer = self.get_Node_buffer().apply_filter(down_keys);
         let out_children_map = Map::new( |k| true, |k| 
@@ -155,7 +155,7 @@ pub struct QueryReceiptLine {
 }
 
 impl QueryReceiptLine {
-    pub open spec fn wf(self) -> bool {
+    pub open spec(checked) fn wf(self) -> bool {
         &&& self.node.wf()
         &&& self.result.is_Define()
     }
@@ -171,7 +171,7 @@ pub struct QueryReceipt {
 }
 
 impl QueryReceipt {
-    pub open spec fn structure(self) -> bool {
+    pub open spec(checked) fn structure(self) -> bool {
         &&& 0 < self.lines.len()
         &&& self.lines[0].node == self.root
         &&& (forall |i| #![auto] 0 <= i < self.lines.len() ==> (
@@ -180,11 +180,11 @@ impl QueryReceipt {
         &&& self.lines.last().result == Message::empty()
     }
 
-    pub open spec fn all_lines_wf(self) -> bool {
+    pub open spec(checked) fn all_lines_wf(self) -> bool {
         forall |i| #![auto] 0 <= i < self.lines.len() ==> self.lines[i].wf()
     }
 
-    pub open spec fn child_at(self, i: int) -> BetreeNode 
+    pub open spec(checked) fn child_at(self, i: int) -> BetreeNode 
         recommends 
             self.all_lines_wf(),
             self.structure(),
@@ -193,7 +193,7 @@ impl QueryReceipt {
         self.lines[i].node.child(self.key)
     }
 
-    pub open spec fn child_linked_at(self, i: int) -> bool 
+    pub open spec(checked) fn child_linked_at(self, i: int) -> bool 
         recommends 
             self.all_lines_wf(),
             self.structure(),
@@ -202,13 +202,13 @@ impl QueryReceipt {
         self.lines[i+1].node == self.child_at(i)
     }
 
-    pub open spec fn result_at(self, i: int) -> Message 
+    pub open spec(checked) fn result_at(self, i: int) -> Message 
         recommends 0 <= i < self.lines.len()
     {
         self.lines[i].result
     }
 
-    pub open spec fn result_linked_at(self, i: int) -> bool 
+    pub open spec(checked) fn result_linked_at(self, i: int) -> bool 
         recommends 
             self.all_lines_wf(),
             self.structure(),
@@ -218,20 +218,20 @@ impl QueryReceipt {
         self.result_at(i) == self.result_at(i+1).merge(msg)
     }
 
-    pub open spec fn valid(self) -> bool {
+    pub open spec(checked) fn valid(self) -> bool {
         &&& self.structure()
         &&& self.all_lines_wf()
         &&& (forall |i| #![auto] 0 <= i < self.lines.len()-1 ==> self.child_linked_at(i))
         &&& (forall |i| #![auto] 0 <= i < self.lines.len()-1 ==> self.result_linked_at(i))
     }
 
-    pub open spec fn result(self) -> Message 
+    pub open spec(checked) fn result(self) -> Message 
         recommends self.structure()
     {
         self.result_at(0)
     }
 
-    pub open spec fn valid_for(self, root: BetreeNode, key: Key) -> bool {
+    pub open spec(checked) fn valid_for(self, root: BetreeNode, key: Key) -> bool {
         &&& self.valid()
         &&& self.root == root
         &&& self.key == key
@@ -246,7 +246,7 @@ pub struct Path {
 }
 
 impl Path {
-    pub open spec fn subpath(self) -> Path 
+    pub open spec(checked) fn subpath(self) -> Path 
     recommends 
         0 < self.routing.len(),
         self.node.wf(),
@@ -255,7 +255,7 @@ impl Path {
         Path{node: self.node.child(self.key), key: self.key, routing: self.routing.subrange(1, self.routing.len() as int)}
     }
 
-    pub open spec fn common_children(self) -> bool
+    pub open spec(checked) fn common_children(self) -> bool
     recommends
         self.node.wf(),
         self.node.is_Node(),
@@ -264,7 +264,7 @@ impl Path {
         forall |k: Key| #![auto] self.routing.index(0).contains(k) ==> self.node.child(k) == self.node.child(self.key)
     }
 
-    pub open spec fn valid(self) -> bool 
+    pub open spec(checked) fn valid(self) -> bool 
     decreases self.routing.len()
     {
         &&& self.node.wf()
@@ -275,7 +275,7 @@ impl Path {
         }
     }
 
-    pub open spec fn target(self) -> BetreeNode 
+    pub open spec(checked) fn target(self) -> BetreeNode 
     recommends self.valid()
     decreases self.routing.len()
     {
@@ -286,7 +286,7 @@ impl Path {
         }
     }
 
-    pub open spec fn replaced_children(self, replacement: BetreeNode) -> ChildMap
+    pub open spec(checked) fn replaced_children(self, replacement: BetreeNode) -> ChildMap
     recommends
         self.valid(),
         replacement.wf(),
@@ -300,7 +300,7 @@ impl Path {
         }
     }
 
-    pub open spec fn substitute(self, replacement: BetreeNode) -> BetreeNode 
+    pub open spec(checked) fn substitute(self, replacement: BetreeNode) -> BetreeNode 
     recommends 
         self.valid(),
         replacement.wf(),
@@ -325,7 +325,7 @@ state_machine!{ PagedBetree {
         pub root: BetreeNode,
     }
 
-    pub open spec fn wf(self) -> bool {
+    pub open spec(checked) fn wf(self) -> bool {
         &&& self.root.wf()
     }
 

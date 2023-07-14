@@ -21,14 +21,14 @@ use crate::betree::SplitRequest_v::*;
 verus! {
 
 impl BetreeNode {
-    pub open spec fn i_buffer(self) -> Buffer
+    pub open spec(checked) fn i_buffer(self) -> Buffer
         recommends self.wf(), self.is_Node()
     {
         let offset_map = self.make_offset_map();
         self.get_Node_buffers().i_filtered(offset_map)
     }
 
-    pub open spec fn i_children_seq(self, start: int) -> Seq<PivotBetree_v::BetreeNode>
+    pub open spec(checked) fn i_children_seq(self, start: int) -> Seq<PivotBetree_v::BetreeNode>
     recommends self.is_Node(), 0 <= start <= self.get_Node_children().len()
     decreases self, 0nat, self.get_Node_children().len()-start 
         when self.is_Node() && 0 <= start <= self.get_Node_children().len()
@@ -41,14 +41,14 @@ impl BetreeNode {
         }
     }
 
-    pub open spec fn i_children(self) -> Seq<PivotBetree_v::BetreeNode>
+    pub open spec(checked) fn i_children(self) -> Seq<PivotBetree_v::BetreeNode>
         recommends self.is_Node()
         decreases self, 1nat
     {
         self.i_children_seq(0)
     }
 
-    pub open spec fn i(self) -> PivotBetree_v::BetreeNode
+    pub open spec(checked) fn i(self) -> PivotBetree_v::BetreeNode
         recommends self.wf()
         decreases self
     {
@@ -176,7 +176,7 @@ impl BetreeNode {
         }
     }
 
-    pub open spec fn children_have_matching_domains(self, other_children: Seq<BetreeNode>) -> bool
+    pub open spec(checked) fn children_have_matching_domains(self, other_children: Seq<BetreeNode>) -> bool
         recommends self.wf(), self.is_index()
     {
         &&& other_children.len() == self.get_Node_children().len()
@@ -332,7 +332,7 @@ impl BetreeNode {
         assert(self.promote(domain).i().get_Node_buffer() =~= self.i().promote(domain).get_Node_buffer());
     }
 
-    pub open spec fn split_element(self, request: SplitRequest) -> Element
+    pub open spec(checked) fn split_element(self, request: SplitRequest) -> Element
         recommends self.can_split_parent(request)
     {
         let child = self.get_Node_children()[request.get_child_idx() as int];
@@ -778,13 +778,13 @@ impl BetreeNode {
     }
 } // end impl BetreeNode
 
-pub open spec fn i_stamped_betree(stamped: StampedBetree) -> PivotBetree_v::StampedBetree
+pub open spec(checked) fn i_stamped_betree(stamped: StampedBetree) -> PivotBetree_v::StampedBetree
 {
     Stamped{value: stamped.value.i(), seq_end: stamped.seq_end}
 }
 
 impl QueryReceiptLine{
-    pub open spec fn i(self) -> PivotBetree_v::QueryReceiptLine
+    pub open spec(checked) fn i(self) -> PivotBetree_v::QueryReceiptLine
         recommends self.wf()
     {
         PivotBetree_v::QueryReceiptLine{node: self.node.i(), result: self.result}
@@ -792,7 +792,7 @@ impl QueryReceiptLine{
 }
 
 impl QueryReceipt{
-    pub open spec fn i(self) -> PivotBetree_v::QueryReceipt
+    pub open spec(checked) fn i(self) -> PivotBetree_v::QueryReceipt
         recommends self.valid()
     {
         PivotBetree_v::QueryReceipt{
@@ -831,7 +831,7 @@ impl QueryReceipt{
 }
 
 impl Path{
-    pub open spec fn i(self) -> PivotBetree_v::Path
+    pub open spec(checked) fn i(self) -> PivotBetree_v::Path
     {
         PivotBetree_v::Path{node: self.node.i(), key: self.key, depth: self.depth}
     }
@@ -978,7 +978,7 @@ impl Path{
 }
 
 impl FilteredBetree::Label {
-    pub open spec fn i(self) -> PivotBetree::Label
+    pub open spec(checked) fn i(self) -> PivotBetree::Label
     {
         match self {
             FilteredBetree::Label::Query{end_lsn, key, value} => PivotBetree::Label::Query{end_lsn: end_lsn, key: key, value: value},
@@ -990,12 +990,12 @@ impl FilteredBetree::Label {
 } // end impl FilteredBetree::Label
 
 impl FilteredBetree::State {
-    pub open spec fn inv(self) -> bool {
+    pub open spec(checked) fn inv(self) -> bool {
         &&& self.wf()
         &&& (self.root.is_Node() ==> self.root.my_domain() == total_domain())
     }
 
-    pub open spec fn i(self) -> PivotBetree::State
+    pub open spec(checked) fn i(self) -> PivotBetree::State
     {
         PivotBetree::State{root: self.root.i(), memtable: self.memtable}
     }

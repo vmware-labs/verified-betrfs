@@ -24,7 +24,7 @@ pub enum Ephemeral {
 
 impl Ephemeral
 {
-    pub open spec fn wf(self) -> bool
+    pub open spec(checked) fn wf(self) -> bool
     {
       self.is_Known() ==> self.get_Known_v().wf()
     }

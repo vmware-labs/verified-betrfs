@@ -35,13 +35,13 @@ pub enum Output {
 
 // TODO ugly workaround for init!{my_init()} being a predicate from outside
 // TODO 2: can't declare this fn inside MapSpec state_machine!?
-pub open spec fn my_init() -> MapSpec::State
+pub open spec(checked) fn my_init() -> MapSpec::State
 {
     MapSpec::State{ kmmap: TotalKMMap::empty() }
 }
 
 // TODO (jonh): Make this automated. A macro of some sort
-pub open spec fn getInput(label: MapSpec::Label) -> Input {
+pub open spec(checked) fn getInput(label: MapSpec::Label) -> Input {
     match label {
         MapSpec::Label::Query{input, output} => input,
         MapSpec::Label::Put{input, output} => input,
@@ -49,7 +49,7 @@ pub open spec fn getInput(label: MapSpec::Label) -> Input {
     }
 }
 
-pub open spec fn getOutput(label: MapSpec::Label) -> Output {
+pub open spec(checked) fn getOutput(label: MapSpec::Label) -> Output {
     match label {
         MapSpec::Label::Query{input, output} => output,
         MapSpec::Label::Put{input, output} => output,
@@ -129,7 +129,7 @@ pub struct PersistentState {
     pub appv: MapSpec::State
 }
 impl PersistentState {
-    pub open spec fn ext_equal(self, other: PersistentState) -> bool {
+    pub open spec(checked) fn ext_equal(self, other: PersistentState) -> bool {
         &&& self.appv.kmmap.ext_equal(other.appv.kmmap)
     }
 
@@ -156,11 +156,11 @@ state_machine!{ AsyncMap {
         ReplyOp { reply: Reply },
     }
 
-    pub open spec fn init_persistent_state() -> PersistentState {
+    pub open spec(checked) fn init_persistent_state() -> PersistentState {
         PersistentState { appv: my_init() }
     }
 
-    pub open spec fn init_ephemeral_state() -> EphemeralState {
+    pub open spec(checked) fn init_ephemeral_state() -> EphemeralState {
         EphemeralState{ requests: set!{}, replies: set!{} }
     }
 
@@ -229,7 +229,7 @@ state_machine!{ CrashTolerantAsyncMap {
     }
     // TODO: complete this state machine
 
-    pub open spec fn stable_index(self) -> int {
+    pub open spec(checked) fn stable_index(self) -> int {
         self.versions.first_active_index()
     }
 
@@ -240,11 +240,11 @@ state_machine!{ CrashTolerantAsyncMap {
         init sync_requests = Map::empty();
     } }
 
-    pub open spec fn optionally_append_version(versions: FloatingSeq<Version>, versions_prime: FloatingSeq<Version>) -> bool
+    pub open spec(checked) fn optionally_append_version(versions: FloatingSeq<Version>, versions_prime: FloatingSeq<Version>) -> bool
     {
       // new versions list is either some new thing appended to the old one,
       ||| (0 < versions_prime.len() && versions_prime.drop_last() == versions)
-      // or unchanged. We allow unchanged in the trusted spec so that
+      // or unchanged. We allow unchanged in the trusted spec(checked) so that
       // implementations don't have to account for number of read-only (query) ops.
       ||| versions_prime == versions
     }
@@ -323,7 +323,7 @@ state_machine!{ CrashTolerantAsyncMap {
 
     //  TODO(jonh): Unhappy that the invariant (proof work) is in the same file as the model
     #[invariant]
-    pub open spec fn the_inv(self) -> bool {
+    pub open spec(checked) fn the_inv(self) -> bool {
         &&& 0 < self.versions.len()
         &&& self.versions.is_active(self.versions.len() - 1)
     }

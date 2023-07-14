@@ -28,14 +28,14 @@ use crate::abstract_system::MsgHistory_v::{MsgHistory, KeyedMessage};
 verus! {
   impl CrashTolerantJournal::State
   {
-    pub open spec fn i(self) -> MsgHistory
+    pub open spec(checked) fn i(self) -> MsgHistory
       recommends
         self.ephemeral.is_Known()
     {
       self.ephemeral.get_Known_v().journal
     }
 
-    pub open spec fn wf(self) -> bool
+    pub open spec(checked) fn wf(self) -> bool
     {
       &&& self.persistent.wf()
       &&& self.ephemeral.wf()
@@ -45,7 +45,7 @@ verus! {
 
   impl CrashTolerantMap::State
   {
-    pub open spec fn i(self) -> StampedMap
+    pub open spec(checked) fn i(self) -> StampedMap
       recommends
         self.ephemeral.is_Known()
     {
@@ -54,7 +54,7 @@ verus! {
 
     // AbstractCrashAwareMap needs to carry wf/invariant that shows that contained
     // TotalKMMap is always wf (always has total domain)
-    pub open spec fn wf(self) -> bool
+    pub open spec(checked) fn wf(self) -> bool
     {
       &&& self.persistent.value.wf()
       &&& match self.ephemeral {
@@ -72,7 +72,7 @@ verus! {
 
   impl CoordinationSystem::State
   {
-    pub open spec fn ephemeral_seq_end(self) -> LSN
+    pub open spec(checked) fn ephemeral_seq_end(self) -> LSN
       recommends
         self.ephemeral.is_Some()
     {
@@ -82,13 +82,13 @@ verus! {
 
   impl StampedMap
   {
-    pub open spec fn to_version(self) -> Version
+    pub open spec(checked) fn to_version(self) -> Version
     {
       PersistentState{ appv: MapSpec::State{ kmmap: self.value } }
     }
   }
 
-  pub open spec fn floating_versions(base: StampedMap, msg_history: MsgHistory, stable_lsn: LSN)
+  pub open spec(checked) fn floating_versions(base: StampedMap, msg_history: MsgHistory, stable_lsn: LSN)
     -> (versions: FloatingSeq<Version>)
     recommends
       msg_history.can_follow(base.seq_end),
@@ -103,7 +103,7 @@ verus! {
 
   impl CoordinationSystem::State
   {
-    pub open spec fn i(self) -> CrashTolerantAsyncMap::State
+    pub open spec(checked) fn i(self) -> CrashTolerantAsyncMap::State
     {
       let stable_lsn = self.journal.persistent.seq_end;
       match self.ephemeral {
@@ -121,12 +121,12 @@ verus! {
     }
   }
 
-  pub closed spec fn journal_overlaps_agree(j0: Journal, j1: Journal) -> bool
+  pub closed spec(checked) fn journal_overlaps_agree(j0: Journal, j1: Journal) -> bool
   {
     forall |lsn| #![auto] j0.contains(lsn) && j1.contains(lsn) ==> j0.msgs[lsn] == j1.msgs[lsn]
   }
 
-  pub open spec fn journal_extends_journal(jlong: Journal, jshort: Journal, start_lsn: LSN) -> bool
+  pub open spec(checked) fn journal_extends_journal(jlong: Journal, jshort: Journal, start_lsn: LSN) -> bool
     recommends
       jlong.can_follow(start_lsn),
       jshort.can_follow(start_lsn),
@@ -137,7 +137,7 @@ verus! {
 
   impl CoordinationSystem::State
   {
-    pub open spec fn wf(self) -> bool
+    pub open spec(checked) fn wf(self) -> bool
     {
       &&& self.journal.wf()
       &&& self.mapadt.wf()
@@ -148,12 +148,12 @@ verus! {
 
     // Geometry refers to the boundaries between the journal and
     // the mapadt line up correctly
-    pub open spec fn inv_persistent_journal_geometry(self) -> bool
+    pub open spec(checked) fn inv_persistent_journal_geometry(self) -> bool
     {
       self.journal.persistent.can_follow(self.mapadt.persistent.seq_end)
     }
 
-    pub open spec fn inv_ephemeral_geometry(self) -> bool
+    pub open spec(checked) fn inv_ephemeral_geometry(self) -> bool
       recommends
         self.ephemeral.is_Some(),
     {
@@ -171,7 +171,7 @@ verus! {
       &&& self.ephemeral.get_Some_0().map_lsn == self.mapadt.ephemeral.get_Known_v().stamped_map.seq_end
     }
 
-    pub open spec fn inv_ephemeral_value_agreement(self) -> bool
+    pub open spec(checked) fn inv_ephemeral_value_agreement(self) -> bool
       recommends
         self.ephemeral.is_Some(),
         self.inv_ephemeral_geometry()
@@ -186,17 +186,17 @@ verus! {
             self.journal.i().discard_recent(self.mapadt.i().seq_end))
     }
 
-    pub open spec fn map_is_frozen(self) -> bool
+    pub open spec(checked) fn map_is_frozen(self) -> bool
     {
       self.mapadt.in_flight.is_Some()
     }
 
-    pub open spec fn commit_started(self) -> bool
+    pub open spec(checked) fn commit_started(self) -> bool
     {
       self.journal.in_flight.is_Some()
     }
 
-    pub open spec fn inv_frozen_map_geometry(self) -> bool
+    pub open spec(checked) fn inv_frozen_map_geometry(self) -> bool
       recommends
         self.ephemeral.is_Some(),
         self.map_is_frozen()
@@ -207,7 +207,7 @@ verus! {
       &&& self.mapadt.persistent.seq_end <= self.mapadt.in_flight.get_Some_0().seq_end
     }
 
-    pub open spec fn inv_frozen_map_value_agreement(self) -> bool
+    pub open spec(checked) fn inv_frozen_map_value_agreement(self) -> bool
       recommends
         self.ephemeral.is_Some(),
         self.inv_ephemeral_geometry(),
@@ -227,7 +227,7 @@ verus! {
       // ephemeral journal.
     }
 
-    pub open spec fn inv_commit_started_geometry(self) -> bool
+    pub open spec(checked) fn inv_commit_started_geometry(self) -> bool
       recommends self.commit_started()
     {
       let if_map = self.mapadt.in_flight.get_Some_0();
@@ -250,7 +250,7 @@ verus! {
       &&& if_journal.seq_end <= self.ephemeral_seq_end()
     }
 
-    pub open spec fn inv_commit_started_value_agreement(self) -> bool
+    pub open spec(checked) fn inv_commit_started_value_agreement(self) -> bool
       recommends
         self.commit_started(),
         self.inv_commit_started_geometry(),
@@ -272,7 +272,7 @@ verus! {
 
     // TODO: (tenzin) Should this be made an inv of the state machine?
     // TODO: (Tenzin) have curly braces guarding implications double checked
-    pub open spec fn inv(self) -> bool
+    pub open spec(checked) fn inv(self) -> bool
     {
       &&& self.wf()
       &&& self.inv_persistent_journal_geometry()
@@ -319,7 +319,7 @@ verus! {
     // to actually use, so verus isn't actually sure here which one we're using (even
     // though there's only one definition for `init`, the dummy is possible and
     // doesn't provide any guarantees)
-    // Also I've noticed that these spec functions which we are calling are all
+    // Also I've noticed that these spec(checked) functions which we are calling are all
     // opaque, which might be cause for concern...
     // assert(CrashTolerantJournal::State::init(v.journal));
 
@@ -554,7 +554,7 @@ verus! {
     // this assertion to remember that)
     assert(vp.mapadt.i() == MsgHistory::map_plus_history(v.mapadt.i(), singleton));
   
-    // Because `verus` spec functions don't have ensures clauses, we need a separate lemma to
+    // Because `verus` spec(checked) functions don't have ensures clauses, we need a separate lemma to
     // prove properties of certain operations.
     MsgHistory::map_plus_history_forall_lemma();
 
@@ -705,7 +705,7 @@ verus! {
         assert(vp.inv());
       },
       CoordinationSystem::Step::recover(new_journal, new_mapadt, records) => {
-        // Lemma because we don't get ensures from spec functions
+        // Lemma because we don't get ensures from spec(checked) functions
         MsgHistory::map_plus_history_forall_lemma();
 
         // Pre variables

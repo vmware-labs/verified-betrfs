@@ -14,12 +14,12 @@ pub struct Delta(pub int);
 
 // TODO(jonh): Need to genericize the types of Key, Value; and then we'll need to axiomitify /
 // leave-unspecified a default value
-pub open spec fn default_value() -> Value {
+pub open spec(checked) fn default_value() -> Value {
     Value(0)
 }
 
 // TODO: placeholder
-pub open spec fn nop_delta() -> Delta {
+pub open spec(checked) fn nop_delta() -> Delta {
     Delta(0)
 }
 
@@ -32,7 +32,7 @@ pub enum Message {
 
 impl Message {
     // place holder since we don't use deltas yet
-    pub open spec fn combine_deltas(new: Delta, old: Delta) -> Delta
+    pub open spec(checked) fn combine_deltas(new: Delta, old: Delta) -> Delta
     {
         if new == nop_delta() {
             old
@@ -44,12 +44,12 @@ impl Message {
         }
     }
 
-    pub open spec fn apply_delta(delta: Delta, value: Value) -> Value
+    pub open spec(checked) fn apply_delta(delta: Delta, value: Value) -> Value
     {
         value
     }
 
-    pub open spec fn merge(self, new: Message) -> Message {
+    pub open spec(checked) fn merge(self, new: Message) -> Message {
         match (self, new)  {
             (_, Message::Define{value: new_value}) => { 
                 Message::Define{value: new_value} 
@@ -63,7 +63,7 @@ impl Message {
         }
     }
 
-    pub open spec fn empty() -> Message {
+    pub open spec(checked) fn empty() -> Message {
         Message::Define{ value: default_value() }  // TODO: This is a placeholder
     }
 

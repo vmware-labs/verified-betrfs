@@ -5,11 +5,11 @@ use crate::spec::Messages_t::*;
 
 verus! {
 
-pub open spec fn all_keys() -> Set<Key> {
+pub open spec(checked) fn all_keys() -> Set<Key> {
     Set::new( |k| true )
 }
 
-pub open spec fn total_keys(keys: Set<Key>) -> bool {
+pub open spec(checked) fn total_keys(keys: Set<Key>) -> bool {
     forall |k| keys.contains(k)
 }
 
@@ -19,7 +19,7 @@ pub struct Buffer {
 }
 
 impl Buffer {
-    pub open spec fn query(self, key: Key) -> Message {
+    pub open spec(checked) fn query(self, key: Key) -> Message {
         if self.map.contains_key(key) {
             self.map[key]
         } else {
@@ -40,11 +40,11 @@ impl Buffer {
     //     assert(self.map =~= other.map);
     // }
 
-    pub open spec fn apply_filter(self, accept: Set<Key>) -> Buffer {
+    pub open spec(checked) fn apply_filter(self, accept: Set<Key>) -> Buffer {
         Buffer{ map: Map::new( |k| accept.contains(k) && self.map.contains_key(k), |k| self.map[k] ) }
     }
 
-    pub open spec fn merge(self, new_buffer: Buffer) -> Buffer {
+    pub open spec(checked) fn merge(self, new_buffer: Buffer) -> Buffer {
         Buffer{ map: Map::new( |k| self.map.contains_key(k) || new_buffer.map.contains_key(k), 
             |k| if new_buffer.map.contains_key(k) && self.map.contains_key(k) { 
                     self.map[k].merge(new_buffer.map[k]) 
@@ -56,7 +56,7 @@ impl Buffer {
         }
     }
 
-    pub open spec fn empty() -> Buffer {
+    pub open spec(checked) fn empty() -> Buffer {
         Buffer{ map: Map::empty() }
     }
 } // end impl Buffer

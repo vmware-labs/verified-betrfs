@@ -27,32 +27,32 @@ pub struct FloatingSeq<T> {
 }
 
 impl<T> FloatingSeq<T> {
-    pub open spec fn new(start: nat, length: nat, f: FnSpec(int) -> T) -> FloatingSeq<T>
+    pub open spec(checked) fn new(start: nat, length: nat, f: FnSpec(int) -> T) -> FloatingSeq<T>
         recommends start <= length
     {
         FloatingSeq{start: start, entries: Seq::new((length-start) as nat, |i: int| f(i+start))}
     }
 
     // TODO if I omit "open" adjective, this file fails to compile!? (Followed, however, by a helpful message
-    // about needing 'open' or 'closed'). Tony: As per the guide, spec funcs must be marked either open or closed
+    // about needing 'open' or 'closed'). Tony: As per the guide, spec(checked) funcs must be marked either open or closed
     // Len() is the number of indices "occupied", *including* the empty space at
     // the beginning of the index space.
-    pub open spec fn len(self) -> int
+    pub open spec(checked) fn len(self) -> int
     {
         self.start as int + self.entries.len()
     }
 
-    pub open spec fn first_active_index(self) -> int
+    pub open spec(checked) fn first_active_index(self) -> int
     {
       self.start as int
     }
 
-    pub open spec fn is_active(self, i: int) -> bool
+    pub open spec(checked) fn is_active(self, i: int) -> bool
     {
         self.start <= i < self.len()
     }
 
-   pub open spec fn get(self, i: int) -> T
+   pub open spec(checked) fn get(self, i: int) -> T
         recommends self.is_active(i)
    {
      self.entries[i - self.start as int]
@@ -60,7 +60,7 @@ impl<T> FloatingSeq<T> {
 
     // You can only index values after the empty space.
     // Overrides the `[]` operator
-    pub open spec fn spec_index(self, i: int) -> T
+    pub open spec(checked) fn spec_index(self, i: int) -> T
         recommends self.is_active(i)
     {
         self.entries[i - self.start]
@@ -68,7 +68,7 @@ impl<T> FloatingSeq<T> {
 
     // You can chop off the right end of a FloatingSeq without shifting the
     // indices of elements.
-    pub open spec fn get_prefix(self, count: int) -> FloatingSeq<T>
+    pub open spec(checked) fn get_prefix(self, count: int) -> FloatingSeq<T>
         recommends 0 <= count <= self.len()
     {
         if count <= self.start { FloatingSeq{start: count as nat, entries: seq![]} }
@@ -82,18 +82,18 @@ impl<T> FloatingSeq<T> {
     // is this GetSuffix operation, which forgets some of the `entries`,
     // remembering only how many there used to be (in `start`), so that the
     // offsets of the surviving entries don't change.
-    pub open spec fn get_suffix(self, newStart: int) -> FloatingSeq<T>
+    pub open spec(checked) fn get_suffix(self, newStart: int) -> FloatingSeq<T>
         recommends self.is_active(newStart) || newStart == self.len()
     {
         FloatingSeq{start: newStart as nat, entries: self.entries.subrange(newStart - self.start, self.entries.len() as int)}
     }
 
-    pub open spec fn append(self, elts: Seq<T>) -> FloatingSeq<T>
+    pub open spec(checked) fn append(self, elts: Seq<T>) -> FloatingSeq<T>
     {
       FloatingSeq{start: self.start, entries: self.entries + elts}
     }
 
-    pub open spec fn last(self) -> T
+    pub open spec(checked) fn last(self) -> T
         recommends
             self.len() > 0,
             self.is_active(self.len()-1),
@@ -101,7 +101,7 @@ impl<T> FloatingSeq<T> {
         self[self.len()-1]
     }
 
-    pub open spec fn drop_last(self) -> FloatingSeq<T>
+    pub open spec(checked) fn drop_last(self) -> FloatingSeq<T>
         recommends self.len() > 0
     {
         self.get_prefix(self.len()-1)
@@ -109,7 +109,7 @@ impl<T> FloatingSeq<T> {
 
     // ext_equal not implemented here since the generic version can't
     // call ext_equal on T (since trait bounds aren't supported?)
-    // pub open spec fn ext_equal(self, other: FloatingSeq<T>) -> bool
+    // pub open spec(checked) fn ext_equal(self, other: FloatingSeq<T>) -> bool
     // {
     //     &&& self.start == other.start
     //     &&& self.len() == other.len()
@@ -177,7 +177,7 @@ impl<T> FloatingSeq<T> {
 }
 
 impl FloatingSeq<Version> {
-    pub open spec fn ext_equal(self, other: FloatingSeq<Version>) -> bool {
+    pub open spec(checked) fn ext_equal(self, other: FloatingSeq<Version>) -> bool {
         &&& self.start == other.start
         &&& self.len() == other.len()
         &&& forall |i| self.is_active(i) ==> #[trigger] self[i].ext_equal(other[i])

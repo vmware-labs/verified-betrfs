@@ -15,7 +15,7 @@ use crate::betree::SplitRequest_v::*;
 verus! {
 
 impl BetreeNode {
-    pub open spec fn i_children_seq(self, start: int) -> Seq<PagedBetree_v::BetreeNode>
+    pub open spec(checked) fn i_children_seq(self, start: int) -> Seq<PagedBetree_v::BetreeNode>
         recommends self.is_Node(), 0 <= start <= self.get_Node_children().len()
         decreases self, 0nat, self.get_Node_children().len()-start
         when self.is_Node() && 0 <= start <= self.get_Node_children().len()
@@ -28,7 +28,7 @@ impl BetreeNode {
         }
     }
 
-    pub open spec fn i_children(self) -> PagedBetree_v::ChildMap
+    pub open spec(checked) fn i_children(self) -> PagedBetree_v::ChildMap
         recommends self.is_Node()
         decreases self, 1nat
     {
@@ -44,7 +44,7 @@ impl BetreeNode {
         )}
     }
 
-    pub open spec fn i(self) -> PagedBetree_v::BetreeNode
+    pub open spec(checked) fn i(self) -> PagedBetree_v::BetreeNode
         decreases self
     {
         if self.is_Nil() {
@@ -55,7 +55,7 @@ impl BetreeNode {
     }
 
     // used as a trigger but not in defn of i_children bc closure can't take recursive fn
-    pub open spec fn i_child(self, k: Key) -> PagedBetree_v::BetreeNode
+    pub open spec(checked) fn i_child(self, k: Key) -> PagedBetree_v::BetreeNode
         recommends self.is_Node()
     {
         if self.key_in_domain(k) {
@@ -130,7 +130,7 @@ impl BetreeNode {
         }
     }
 
-    pub open spec fn children_have_matching_domains(self, other_children: Seq<BetreeNode>) -> bool
+    pub open spec(checked) fn children_have_matching_domains(self, other_children: Seq<BetreeNode>) -> bool
         recommends self.wf(), self.is_index()
     {
         &&& other_children.len() == self.get_Node_children().len()
@@ -156,7 +156,7 @@ impl BetreeNode {
         assert(empty.i() == PagedBetree_v::BetreeNode::empty_root());
     }
 
-    pub open spec fn split_element(self, request: SplitRequest) -> Element
+    pub open spec(checked) fn split_element(self, request: SplitRequest) -> Element
         recommends self.wf(), self.can_split_parent(request)
     {
         let old_child = self.get_Node_children()[request.get_child_idx() as int];
@@ -183,7 +183,7 @@ impl BetreeNode {
         self.get_Node_pivots().insert_wf(child_idx as int + 1, self.split_element(request));
     }
 
-    pub open spec fn split_keys(self, request: SplitRequest) -> (Set<Key>, Set<Key>)
+    pub open spec(checked) fn split_keys(self, request: SplitRequest) -> (Set<Key>, Set<Key>)
         recommends self.can_split_parent(request)
     {
         let child_idx = request.get_child_idx();
@@ -422,13 +422,13 @@ impl BetreeNode {
     }
 } // end impl BetreeNode
 
-pub open spec fn i_stamped_betree(stamped: StampedBetree) -> PagedBetree_v::StampedBetree
+pub open spec(checked) fn i_stamped_betree(stamped: StampedBetree) -> PagedBetree_v::StampedBetree
 {
     Stamped{value: stamped.value.i(), seq_end: stamped.seq_end}
 }
 
 impl QueryReceiptLine{
-    pub open spec fn i(self) -> PagedBetree_v::QueryReceiptLine
+    pub open spec(checked) fn i(self) -> PagedBetree_v::QueryReceiptLine
         recommends self.wf()
     {
         PagedBetree_v::QueryReceiptLine{node: self.node.i(), result: self.result}
@@ -436,7 +436,7 @@ impl QueryReceiptLine{
 }
 
 impl QueryReceipt{
-    pub open spec fn i(self) -> PagedBetree_v::QueryReceipt
+    pub open spec(checked) fn i(self) -> PagedBetree_v::QueryReceipt
         recommends self.valid()
     {
         PagedBetree_v::QueryReceipt{
@@ -471,7 +471,7 @@ impl QueryReceipt{
 }
 
 impl Path{
-    pub open spec fn routing(self) -> Seq<Set<Key>>
+    pub open spec(checked) fn routing(self) -> Seq<Set<Key>>
         recommends self.valid()
         decreases self.depth
     {
@@ -494,7 +494,7 @@ impl Path{
         }
     }
 
-    pub open spec fn i(self) -> PagedBetree_v::Path
+    pub open spec(checked) fn i(self) -> PagedBetree_v::Path
     {
         PagedBetree_v::Path{node: self.node.i(), key: self.key, routing: self.routing()}
     }
@@ -614,7 +614,7 @@ impl Path{
 }
 
 impl PivotBetree::Label {
-    pub open spec fn i(self) -> PagedBetree::Label
+    pub open spec(checked) fn i(self) -> PagedBetree::Label
     {
         match self {
             PivotBetree::Label::Query{end_lsn, key, value} => PagedBetree::Label::Query{end_lsn: end_lsn, key: key, value: value},
@@ -626,12 +626,12 @@ impl PivotBetree::Label {
 } // end impl PivotBetree::Label
 
 impl PivotBetree::State {
-    pub open spec fn inv(self) -> bool {
+    pub open spec(checked) fn inv(self) -> bool {
         &&& self.wf()
         &&& (self.root.is_Node() ==> self.root.my_domain() == total_domain())
     }
 
-    pub open spec fn i(self) -> PagedBetree::State
+    pub open spec(checked) fn i(self) -> PagedBetree::State
     {
         PagedBetree::State{root: self.root.i(), memtable: self.memtable}
     }

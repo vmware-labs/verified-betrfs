@@ -23,43 +23,43 @@ pub struct PivotTable {
     pub pivots: Seq<Element>
 }
 
-pub open spec fn domain_to_pivots(domain: Domain) -> PivotTable
+pub open spec(checked) fn domain_to_pivots(domain: Domain) -> PivotTable
 {
     PivotTable{pivots: seq![domain.get_Domain_start(), domain.get_Domain_end()]}
 }
 
 impl PivotTable {
     // equivalent to dafny boundedpivots's numbuckets
-    pub open spec fn num_ranges(self) -> int 
+    pub open spec(checked) fn num_ranges(self) -> int 
     {
         self.pivots.len() - 1
     }
 
-    pub open spec fn wf(self) -> bool
+    pub open spec(checked) fn wf(self) -> bool
     {
         &&& self.num_ranges() > 0
         &&& Element::is_strictly_sorted(self.pivots)
         &&& (forall |i: int| 0 <= i < self.num_ranges() ==> self.pivots[i].is_Elem())
     }
 
-    pub open spec fn len(self) -> nat
+    pub open spec(checked) fn len(self) -> nat
     {
         self.pivots.len()
     }
 
-    pub open spec fn update(self, i: int, element: Element) -> PivotTable
+    pub open spec(checked) fn update(self, i: int, element: Element) -> PivotTable
         recommends 0 <= i < self.len()
     {
         PivotTable{pivots: self.pivots.update(i, element)}
     }
 
-    pub open spec fn subrange(self, start: int, end: int) -> PivotTable
+    pub open spec(checked) fn subrange(self, start: int, end: int) -> PivotTable
         recommends 0 <= start <= end <= self.len()
     {
         PivotTable{pivots: self.pivots.subrange(start, end)}
     }
 
-    pub open spec fn can_insert(self, i: int, element: Element) -> bool
+    pub open spec(checked) fn can_insert(self, i: int, element: Element) -> bool
     {
         &&& element.is_Elem()
         &&& 0 <= i <= self.len()
@@ -68,7 +68,7 @@ impl PivotTable {
         &&& (0 < i && i < self.len() ==> Element::lt(self.pivots[i-1], element) && Element::lt(element, self.pivots[i]))
     }
 
-    pub open spec fn insert(self, i: int, element: Element) -> PivotTable
+    pub open spec(checked) fn insert(self, i: int, element: Element) -> PivotTable
         recommends self.can_insert(i, element)
     {
         PivotTable{pivots: self.pivots.insert(i, element)}
@@ -92,13 +92,13 @@ impl PivotTable {
         }
     }
   
-    pub open spec fn bounded_key(self, key: Key) -> bool
+    pub open spec(checked) fn bounded_key(self, key: Key) -> bool
     {
         &&& Element::lte(self.pivots[0], to_element(key))
         &&& Element::lt(to_element(key), self.pivots.last())
     }
 
-    pub open spec fn route(self, key: Key) -> int
+    pub open spec(checked) fn route(self, key: Key) -> int
         recommends self.bounded_key(key)
     {
         Element::largest_lte(self.pivots, to_element(key))
@@ -165,7 +165,7 @@ impl PivotTable {
         } by { pt.route_is_lemma(key, r); }
     } 
 
-    pub open spec fn pivot_range_keyset(self, i: int) -> Set<Key>
+    pub open spec(checked) fn pivot_range_keyset(self, i: int) -> Set<Key>
         recommends self.wf(), 0 <= i < self.num_ranges()
     {
         Set::new(|k: Key| self.bounded_key(k) && self.route(k) == i)

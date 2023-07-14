@@ -12,7 +12,7 @@ pub enum SplitRequest {
 }
 
 impl SplitRequest{
-    pub open spec fn get_child_idx(self) -> nat
+    pub open spec(checked) fn get_child_idx(self) -> nat
     {
         match self {
             Self::SplitLeaf{child_idx, ..} => child_idx,

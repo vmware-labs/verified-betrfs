@@ -16,17 +16,17 @@ pub struct Stamped<T> {
 
 pub type StampedMap = Stamped<TotalKMMap>;
 
-pub open spec fn empty() -> StampedMap {
+pub open spec(checked) fn empty() -> StampedMap {
   Stamped{ value: TotalKMMap::empty(), seq_end: 0}
 }
 
 impl StampedMap {
-  pub open spec fn ext_equal(self, other: StampedMap) -> bool {
+  pub open spec(checked) fn ext_equal(self, other: StampedMap) -> bool {
     &&& self.value.0 =~= other.value.0
     &&& self.seq_end == other.seq_end
   }
 
-  pub open spec fn plus_history(self, history: MsgHistory) -> StampedMap
+  pub open spec(checked) fn plus_history(self, history: MsgHistory) -> StampedMap
     recommends
       self.value.wf(),
       history.wf(),

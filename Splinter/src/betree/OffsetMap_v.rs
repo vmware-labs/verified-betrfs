@@ -14,23 +14,25 @@ pub struct OffsetMap {
 }
 
 impl OffsetMap {
-    pub open spec fn is_total(self) -> bool {
+    pub open spec(checked) fn is_total(self) -> bool {
         total_keys(self.offsets.dom())
     }
 
-    pub open spec fn get(self, k: Key) -> nat
-        recommends self.is_total()
+    pub open spec(checked) fn get(self, k: Key) -> nat
+    recommends
+        self.is_total(),
     {
         self.offsets[k]
     }
 
-    pub open spec fn active_keys(self, offset: nat) -> Set<Key>
-        recommends self.is_total()
+    pub open spec(checked) fn active_keys(self, offset: nat) -> Set<Key>
+    recommends
+        self.is_total(),
     {
         Set::new(|k| self.offsets[k] <= offset)
     }
 
-    pub open spec fn decrement(self, i: nat) -> OffsetMap
+    pub open spec(checked) fn decrement(self, i: nat) -> OffsetMap
         recommends self.is_total()
     {
         OffsetMap{ offsets: Map::new(|k| true, 

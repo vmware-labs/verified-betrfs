@@ -10,12 +10,12 @@ use crate::disk::GenericDisk_v::*;
 verus!{
     pub type Likes = Multiset<Address>;
 
-    pub open spec fn no_likes() -> Likes
+    pub open spec(checked) fn no_likes() -> Likes
     {
         Multiset::empty()
     }
 
-    pub open spec fn map_sum<T>(s: Map<T, Likes>) -> Likes
+    pub open spec(checked) fn map_sum<T>(s: Map<T, Likes>) -> Likes
         decreases s.dom().len() when s.dom().finite()
     {
         if s.dom().len() == 0 {

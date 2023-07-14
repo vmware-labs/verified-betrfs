@@ -16,7 +16,7 @@ use crate::betree::Memtable_v::*;
 
 verus! {
 impl BetreeNode {
-    pub open spec fn build_query_receipt(self, key: Key) -> QueryReceipt
+    pub open spec(checked) fn build_query_receipt(self, key: Key) -> QueryReceipt
         recommends self.wf()
         decreases self when self.wf()
     {
@@ -56,13 +56,13 @@ impl BetreeNode {
         }
     }
 
-    pub open spec fn i_at(self, key: Key) -> Message
+    pub open spec(checked) fn i_at(self, key: Key) -> Message
         recommends self.wf()
     {
         self.build_query_receipt(key).result()
     }
 
-    pub open spec fn i(self) -> TotalKMMap
+    pub open spec(checked) fn i(self) -> TotalKMMap
     {
         TotalKMMap(Map::new(|k: Key| true, |k| self.i_at(k)))
     }
@@ -139,18 +139,18 @@ impl BetreeNode {
     }
 } // end impl BetreeNode
 
-pub open spec fn map_apply(memtable: Memtable, base: TotalKMMap) -> TotalKMMap
+pub open spec(checked) fn map_apply(memtable: Memtable, base: TotalKMMap) -> TotalKMMap
 {
     TotalKMMap(Map::new(|k: Key| true, |k: Key| base[k].merge(memtable.query(k))))
 }
 
-pub open spec fn i_stamped_betree(stamped: StampedBetree) -> StampedMap
+pub open spec(checked) fn i_stamped_betree(stamped: StampedBetree) -> StampedMap
 {
     Stamped{value: stamped.value.i(), seq_end: stamped.seq_end}
 }
 
 impl QueryReceipt{
-    pub open spec fn drop_first(self) -> QueryReceipt
+    pub open spec(checked) fn drop_first(self) -> QueryReceipt
         recommends 1 < self.lines.len()
     {
         QueryReceipt{
@@ -270,7 +270,7 @@ impl Path{
 }
 
 impl PagedBetree::Label {
-    pub open spec fn i(self) -> AbstractMap::Label
+    pub open spec(checked) fn i(self) -> AbstractMap::Label
     {
         match self {
             PagedBetree::Label::Query{end_lsn, key, value} => AbstractMap::Label::QueryLabel{end_lsn: end_lsn, key: key, value: value},
@@ -300,11 +300,11 @@ pub proof fn composite_single_put(puts1: MsgHistory, puts2: MsgHistory, stamped_
 }
 
 impl PagedBetree::State {
-    pub open spec fn inv(self) -> bool {
+    pub open spec(checked) fn inv(self) -> bool {
         self.wf()
     }
 
-    pub open spec fn i(self) -> AbstractMap::State
+    pub open spec(checked) fn i(self) -> AbstractMap::State
     {
         AbstractMap::State{stamped_map: i_stamped_betree(self.root.push_memtable(self.memtable))}
     }

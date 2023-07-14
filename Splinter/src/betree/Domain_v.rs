@@ -12,13 +12,13 @@ pub enum Domain {
         end: Element},
 }
 
-pub open spec fn total_domain() -> Domain
+pub open spec(checked) fn total_domain() -> Domain
 {
     Domain::Domain{start: Element::min_elem(), end: Element::Max}
 }
 
 impl Domain {
-    pub open spec fn wf(self) -> bool
+    pub open spec(checked) fn wf(self) -> bool
     {
         &&& self.is_Domain() ==> {
             &&& Element::lt(self.get_Domain_start(), self.get_Domain_end())
@@ -27,14 +27,14 @@ impl Domain {
         }
     }
 
-    pub open spec fn contains(self, key: Key) -> bool
+    pub open spec(checked) fn contains(self, key: Key) -> bool
     {
         &&& self.is_Domain()
         &&& Element::lte(self.get_Domain_start(), to_element(key))
         &&& Element::lt(to_element(key), self.get_Domain_end())
     }
 
-    pub open spec fn key_set(self) -> Set<Key>
+    pub open spec(checked) fn key_set(self) -> Set<Key>
     {
         Set::new( |k| self.contains(k) )
     }
