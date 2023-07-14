@@ -19,11 +19,11 @@ pub struct Memtable {
 }
 
 impl Memtable {
-    pub open spec fn query(self, key: Key) -> Message {
+    pub open spec(checked) fn query(self, key: Key) -> Message {
         self.buffer.query(key)
     }
 
-    pub open spec fn apply_put(self, km: KeyedMessage) -> Memtable {
+    pub open spec(checked) fn apply_put(self, km: KeyedMessage) -> Memtable {
         Memtable{ 
             buffer: Buffer{
                 map: self.buffer.map.insert(km.key, self.query(km.key).merge(km.message))
@@ -32,7 +32,7 @@ impl Memtable {
         }
     }
 
-    pub open spec fn apply_puts(self, puts: MsgHistory) -> Memtable
+    pub open spec(checked) fn apply_puts(self, puts: MsgHistory) -> Memtable
         recommends puts.wf(), puts.can_follow(self.seq_end)
         decreases puts.seq_end when puts.wf()
     {
@@ -73,18 +73,18 @@ impl Memtable {
         }
     }
 
-    pub open spec fn empty_memtable(lsn: LSN) -> Memtable {
+    pub open spec(checked) fn empty_memtable(lsn: LSN) -> Memtable {
         Memtable{ 
             buffer: Buffer::empty(),
             seq_end: lsn
         }
     }
 
-    pub open spec fn drain(self) -> Memtable {
+    pub open spec(checked) fn drain(self) -> Memtable {
         Self::empty_memtable(self.seq_end)
     }
 
-    pub open spec fn is_empty(self) -> bool {
+    pub open spec(checked) fn is_empty(self) -> bool {
         self.buffer == Buffer::empty()
         // Note(Jialin): not suited here bc if map is not finite len has no meaning
         // we can write it as the following

@@ -20,7 +20,7 @@ use crate::journal::LinkedJournal_v::*;
 verus!{
 
 // impl JournalRecord {
-//     pub open spec fn i(self) -> PagedJournal_v::JournalRecord {
+//     pub open spec(checked) fn i(self) -> PagedJournal_v::JournalRecord {
 //     }
 // }
 
@@ -238,7 +238,7 @@ impl DiskView {
         self.decodable(root),
         self.acyclic(),
     ensures
-        // You know what build_tight_awesome is for? To package ensures conveniently with a spec fn!
+        // You know what build_tight_awesome is for? To package ensures conveniently with a spec(checked) fn!
         self.iptr(root) == self.build_tight(root).iptr(root)
     decreases self.the_rank_of(root),
     {
@@ -254,12 +254,12 @@ impl DiskView {
 }
 
 impl TruncatedJournal {
-    pub open spec fn next(self) -> Self
+    pub open spec(checked) fn next(self) -> Self
     {
         Self{ freshest_rec: self.disk_view.next(self.freshest_rec), ..self }
     }
 
-    pub open spec fn i(self) -> (out: PagedJournal_v::TruncatedJournal)
+    pub open spec(checked) fn i(self) -> (out: PagedJournal_v::TruncatedJournal)
     recommends
         self.decodable(),
     // ensures out.wf()
@@ -452,7 +452,7 @@ impl TruncatedJournal {
         // ensures self.i().can_crop(depth),
         self.crop(depth).can_discard_to(new_bdy),
     ensures
-        self.i().crop_head_records(depth).can_discard_to(new_bdy),    // spec prereq
+        self.i().crop_head_records(depth).can_discard_to(new_bdy),    // spec(checked) prereq
         self.i().crop_head_records(depth).discard_old_defn(new_bdy) == self.crop(depth).discard_old(new_bdy).i(),
     {
         // Proof plan:
@@ -472,13 +472,13 @@ impl TruncatedJournal {
         let G = |itj: PagedJournal_v::TruncatedJournal|
             if itj.wf() && itj.can_discard_to(new_bdy) { itj.discard_old_defn(new_bdy) } else { dummy.i() };
         
-        Self::mkfs_refines();   // didn't need this in dafny (spec ensures?). Both foralls below
+        Self::mkfs_refines();   // didn't need this in dafny (spec(checked) ensures?). Both foralls below
                                 // depend on it.
 
         assert forall |tjx| i(f(tjx))== #[trigger] F(i(tjx)) by {
             if tjx.decodable() && tjx.can_crop(depth) {
                 tjx.disk_view.pointer_after_crop_commutes_with_interpretation_no_some(tjx.freshest_rec, depth);
-                tjx.crop_ensures(depth);  // new spec ensures
+                tjx.crop_ensures(depth);  // new spec(checked) ensures
             } else {
                 if tjx.decodable() {
                     if tjx.i().can_crop(depth) {
@@ -489,20 +489,20 @@ impl TruncatedJournal {
         }
 
         // This 5-liner in Dafny involved 37 lines of debugging to find the 2 missing lines due to no
-        // spec ensures
+        // spec(checked) ensures
         assert forall |tjx| i(g(tjx))== #[trigger] G(i(tjx)) by {
             if tjx.decodable() && tjx.can_discard_to(new_bdy) {
                 tjx.discard_old_commutes(new_bdy);
-                tjx.iwf();  // new spec ensures
+                tjx.iwf();  // new spec(checked) ensures
             } 
         }
 
         Self::commute_transitivity(i, f, F, g, G);
 
-        self.crop_ensures(depth);   // typcial infuriating missing spec ensures
+        self.crop_ensures(depth);   // typcial infuriating missing spec(checked) ensures
         self.crop(depth).discard_old_decodable(new_bdy);    // Dafny didn't need it ... which is surprising
         self.disk_view.pointer_after_crop_commutes_with_interpretation_no_some(self.freshest_rec, depth);   // Dafny didn't need it ... which is surprising
-        self.i().crop_head_records_ensures(depth);  // typical infuriating missing spec ensures
+        self.i().crop_head_records_ensures(depth);  // typical infuriating missing spec(checked) ensures
         assert( G(F(i(self))) == self.i().crop_head_records(depth).discard_old_defn(new_bdy) ); // trigger
 
         self.linked_tj_can_crop_implies_paged_tj_can_crop(depth);
@@ -511,7 +511,7 @@ impl TruncatedJournal {
 }
 
 impl LinkedJournal::Label {
-    pub open spec fn i(self) -> PagedJournal::Label
+    pub open spec(checked) fn i(self) -> PagedJournal::Label
     {
         match self {
             Self::ReadForRecovery{messages} => PagedJournal::Label::ReadForRecovery{messages},
@@ -526,7 +526,7 @@ impl LinkedJournal::Label {
 }
 
 impl LinkedJournal::State {
-    pub open spec fn i(self) -> PagedJournal::State
+    pub open spec(checked) fn i(self) -> PagedJournal::State
     {
         if self.wf() && self.truncated_journal.disk_view.acyclic() {
             PagedJournal::State{

@@ -15,25 +15,25 @@ pub enum Element {
     Elem{e: nat}, // TODO: place holder
 }
 
-pub open spec fn to_key(elem: Element) -> Key
+pub open spec(checked) fn to_key(elem: Element) -> Key
     recommends elem.is_Elem()
 {
     Key(elem.get_Elem_e())
 }
 
-pub open spec fn to_element(key: Key) -> Element
+pub open spec(checked) fn to_element(key: Key) -> Element
 {
     Element::Elem{e: key.0}
 }
 
 impl Key {
     // TODO: place holder for seq comparison of bytes
-    pub open spec fn lte(a: Key, b: Key) -> bool
+    pub open spec(checked) fn lte(a: Key, b: Key) -> bool
     {
         a.0 <= b.0
     }
 
-    pub open spec fn lt(a: Key, b: Key) -> bool
+    pub open spec(checked) fn lt(a: Key, b: Key) -> bool
     {
         &&& Key::lte(a, b) 
         &&& a != b
@@ -41,13 +41,13 @@ impl Key {
 }
 
 impl Element {
-    pub open spec fn lte(a: Element, b: Element) -> bool 
+    pub open spec(checked) fn lte(a: Element, b: Element) -> bool 
     {
         ||| b.is_Max()
         ||| (a.is_Elem() && b.is_Elem() && Key::lte(to_key(a), to_key(b)))
     }
 
-    pub open spec fn lt(a: Element, b: Element) -> bool 
+    pub open spec(checked) fn lt(a: Element, b: Element) -> bool 
     {
         &&& Element::lte(a, b) 
         &&& a != b
@@ -85,17 +85,17 @@ impl Element {
         }
     }
 
-    pub open spec fn min_elem() -> Element
+    pub open spec(checked) fn min_elem() -> Element
     {
         Element::Elem{e: 0} // place holder 
     }
 
-    pub open spec fn is_sorted(run: Seq<Element>) -> bool
+    pub open spec(checked) fn is_sorted(run: Seq<Element>) -> bool
     {
         forall |i: int, j: int| 0 <= i <= j < run.len() ==> Element::lte(run[i], run[j])
     }
 
-    pub open spec fn is_strictly_sorted(run: Seq<Element>) -> bool
+    pub open spec(checked) fn is_strictly_sorted(run: Seq<Element>) -> bool
     {
         forall |i: int, j: int| 0 <= i < j < run.len() ==> Element::lt(run[i], run[j])
     }
@@ -112,7 +112,7 @@ impl Element {
         }
     }
 
-    pub open spec fn largest_lte(run: Seq<Element>, needle: Element) -> int
+    pub open spec(checked) fn largest_lte(run: Seq<Element>, needle: Element) -> int
         decreases run.len()
     {
         if run.len() == 0 || Element::lt(needle, run[0]) {

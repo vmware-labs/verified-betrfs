@@ -22,13 +22,13 @@ pub struct MsgHistory {
 }
 
 impl MsgHistory {
-  pub open spec fn wf(self) -> bool {
+  pub open spec(checked) fn wf(self) -> bool {
     &&& self.seq_start <= self.seq_end
     &&& self.contains_exactly(self.msgs.dom())
   }
 
   // Call this instead of using `==` when checking/asserting that
-  pub open spec fn ext_equal(self, other: MsgHistory) -> bool {
+  pub open spec(checked) fn ext_equal(self, other: MsgHistory) -> bool {
     &&& self.msgs =~= other.msgs
     &&& self.seq_start == other.seq_start
     &&& self.seq_end == other.seq_end
@@ -40,38 +40,38 @@ impl MsgHistory {
   {
   }
 
-  pub open spec fn contains(self, lsn: LSN) -> bool {
+  pub open spec(checked) fn contains(self, lsn: LSN) -> bool {
     self.seq_start <= lsn < self.seq_end
   }
 
-  pub open spec fn contains_key(self, key: Key) -> bool {
+  pub open spec(checked) fn contains_key(self, key: Key) -> bool {
     exists |lsn| #![auto] self.msgs[lsn].key == key
   }
 
-  pub open spec fn contains_exactly(self, lsns: Set<LSN>) -> bool {
+  pub open spec(checked) fn contains_exactly(self, lsns: Set<LSN>) -> bool {
     forall |lsn| lsns.contains(lsn) <==> self.contains(lsn)
   }
 
-  pub open spec fn is_empty(self) -> bool {
+  pub open spec(checked) fn is_empty(self) -> bool {
     self.seq_start == self.seq_end
   }
 
-  pub open spec fn len(self) -> nat
+  pub open spec(checked) fn len(self) -> nat
   recommends
     self.wf()
   {
     (self.seq_end - self.seq_start) as nat
   }
 
-  pub open spec fn can_follow(self, lsn: LSN) -> bool {
+  pub open spec(checked) fn can_follow(self, lsn: LSN) -> bool {
     self.seq_start == lsn
   }
 
-  pub open spec fn can_concat(self, other: MsgHistory) -> bool {
+  pub open spec(checked) fn can_concat(self, other: MsgHistory) -> bool {
     other.can_follow(self.seq_end)
   }
 
-  pub open spec fn concat(self, other: MsgHistory) -> MsgHistory 
+  pub open spec(checked) fn concat(self, other: MsgHistory) -> MsgHistory 
     recommends self.can_concat(other)
   {
     MsgHistory{ 
@@ -132,11 +132,11 @@ impl MsgHistory {
     }
   }
 
-  pub open spec fn can_discard_to(self, lsn: LSN) -> bool {
+  pub open spec(checked) fn can_discard_to(self, lsn: LSN) -> bool {
     self.seq_start <= lsn <= self.seq_end
   }
 
-  pub open spec fn discard_recent(self, lsn: LSN) -> MsgHistory 
+  pub open spec(checked) fn discard_recent(self, lsn: LSN) -> MsgHistory 
     recommends self.can_discard_to(lsn)
   {
     let keepMap = Map::new(
@@ -147,13 +147,13 @@ impl MsgHistory {
   }
 
   // Tenzin: I type these so much it's much easier to write and read shorthand
-  pub open spec fn _dr(self, lsn: LSN) -> MsgHistory
+  pub open spec(checked) fn _dr(self, lsn: LSN) -> MsgHistory
     recommends self.can_discard_to(lsn)
   {
     self.discard_recent(lsn)
   }
 
-  pub open spec fn apply_to_stamped_map(self, orig: StampedMap) -> StampedMap 
+  pub open spec(checked) fn apply_to_stamped_map(self, orig: StampedMap) -> StampedMap 
     recommends self.can_follow(orig.seq_end),
     decreases self.len() when self.wf()
   {
@@ -192,8 +192,8 @@ impl MsgHistory {
   }
 
   // TODO(verus): This 14 lines of proof is all basically free with the
-  // 'ensures' line in the spec definition in Dafny. Perhaps we should have an
-  // "invariant" clause in spec proofs that creates this lemma on the side?
+  // 'ensures' line in the spec(checked) definition in Dafny. Perhaps we should have an
+  // "invariant" clause in spec(checked) proofs that creates this lemma on the side?
   // And then there's the question of how to invoke the lemma; we'd like it to
   // get triggered automatically with mentions of the definition.
   //
@@ -214,7 +214,7 @@ impl MsgHistory {
     }
   }
 
-  pub open spec fn discard_old(self, lsn: LSN) -> MsgHistory
+  pub open spec(checked) fn discard_old(self, lsn: LSN) -> MsgHistory
     recommends self.can_discard_to(lsn)
   {
     let keepMap = Map::new(
@@ -224,13 +224,13 @@ impl MsgHistory {
     MsgHistory{ msgs: keepMap, seq_start: lsn, seq_end: self.seq_end }
   }
 
-  pub open spec fn _do(self, lsn: LSN) -> MsgHistory
+  pub open spec(checked) fn _do(self, lsn: LSN) -> MsgHistory
     recommends self.can_discard_to(lsn)
   {
     self.discard_old(lsn)
   }
 
-  pub open spec fn maybe_discard_old(self, lsn: LSN) -> MsgHistory
+  pub open spec(checked) fn maybe_discard_old(self, lsn: LSN) -> MsgHistory
     recommends lsn <= self.seq_end
   {
     if self.seq_start <= lsn {
@@ -270,21 +270,21 @@ impl MsgHistory {
 
   // Returns `true` iff the given MsgHistory is an exact slice of MsgHistory
   // within self (values must match at each LSN).
-  pub open spec fn includes_subseq(self, subseq: MsgHistory) -> bool {
+  pub open spec(checked) fn includes_subseq(self, subseq: MsgHistory) -> bool {
     &&& self.seq_start <= subseq.seq_start
     &&& subseq.seq_end <= self.seq_end
     &&& forall |lsn| #![auto] subseq.contains(lsn) ==> self.contains(lsn) && self.msgs[lsn] === subseq.msgs[lsn]
   }
 
-  pub open spec fn empty_history_at(lsn: LSN) -> MsgHistory {
+  pub open spec(checked) fn empty_history_at(lsn: LSN) -> MsgHistory {
     MsgHistory{ msgs: map![], seq_start: lsn, seq_end: lsn }
   }
 
-  pub open spec fn singleton_at(lsn: LSN, msg: KeyedMessage) -> MsgHistory {
+  pub open spec(checked) fn singleton_at(lsn: LSN, msg: KeyedMessage) -> MsgHistory {
     MsgHistory{ msgs: map![lsn => msg], seq_start: lsn, seq_end: lsn + 1 }
   }
   
-  pub open spec fn map_plus_history(stamped_map: StampedMap, history: MsgHistory) -> StampedMap
+  pub open spec(checked) fn map_plus_history(stamped_map: StampedMap, history: MsgHistory) -> StampedMap
     recommends
       stamped_map.value.wf(),
       history.wf(),

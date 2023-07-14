@@ -21,7 +21,7 @@ use crate::journal::PagedJournal_v::*;
 verus! {
 
 impl JournalRecord {
-    pub open spec fn i(self, boundary_lsn: LSN) -> MsgHistory
+    pub open spec(checked) fn i(self, boundary_lsn: LSN) -> MsgHistory
     decreases self
     {
         if self.message_seq.can_discard_to(boundary_lsn)
@@ -30,7 +30,7 @@ impl JournalRecord {
             { Self::i_opt(*self.prior_rec, boundary_lsn).concat(self.message_seq) }
     }
 
-    pub open spec fn i_opt(ojr: Option<Self>, boundary_lsn: LSN) -> MsgHistory
+    pub open spec(checked) fn i_opt(ojr: Option<Self>, boundary_lsn: LSN) -> MsgHistory
     decreases ojr
     {
         match ojr {
@@ -219,7 +219,7 @@ impl JournalRecord {
             let prior = *ojr.unwrap().prior_rec;
             Self::discard_old_journal_rec_ensures(prior, new_bdy);  // new manual invocation of what Dafny did with an ensures-broadcast
             // of the dozens of lines of debugging I wrote, here's one I had to do manually because
-            // I didn't have requires on spec fns.
+            // I didn't have requires on spec(checked) fns.
 //            Self::discard_old_journal_rec(prior, new_bdy).unwrap().i_lemma(new_bdy);
             let priornew = Self::i_opt(Self::discard_old_journal_rec(prior, new_bdy), new_bdy);
             priornew.concat_lemma(ojr.unwrap().message_seq);    // new manual invocation of what Dafny did with an ensures-broadcast
@@ -286,7 +286,7 @@ impl JournalRecord {
 }
 
 impl TruncatedJournal {
-    pub open spec fn i(self) -> MsgHistory
+    pub open spec(checked) fn i(self) -> MsgHistory
     {
         JournalRecord::i_opt(self.freshest_rec, self.boundary_lsn)
     }
@@ -337,7 +337,7 @@ impl TruncatedJournal {
 }
 
 impl PagedJournal::Label {
-    pub open spec fn wf(self) -> bool
+    pub open spec(checked) fn wf(self) -> bool
     {
         match self {
             PagedJournal::Label::FreezeForCommit{frozen_journal} => frozen_journal.wf(),
@@ -345,7 +345,7 @@ impl PagedJournal::Label {
         }
     }
 
-    pub open spec fn i(self) -> AbstractJournal::Label
+    pub open spec(checked) fn i(self) -> AbstractJournal::Label
     {
         match self {
             PagedJournal::Label::ReadForRecovery{messages}
@@ -365,7 +365,7 @@ impl PagedJournal::Label {
 }
 
 impl PagedJournal::State {
-    pub open spec fn i(self) -> AbstractJournal::State
+    pub open spec(checked) fn i(self) -> AbstractJournal::State
     {
         AbstractJournal::State{journal: self.truncated_journal.i().concat(self.unmarshalled_tail)}
     }

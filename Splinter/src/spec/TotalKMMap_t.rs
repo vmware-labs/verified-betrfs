@@ -10,14 +10,14 @@ verus!{
 #[verifier::ext_equal]
 pub struct TotalKMMap(pub Map<Key, Message>);
 
-pub open spec fn total_domain() -> Set<Key>
+pub open spec(checked) fn total_domain() -> Set<Key>
 {
     Set::new(|k:Key| true)
 }
 
 impl TotalKMMap
 {
-    pub open spec fn empty() -> TotalKMMap
+    pub open spec(checked) fn empty() -> TotalKMMap
     {
         // TODO(verus): Should not have to declare binder twice.
         TotalKMMap(Map::new(
@@ -27,26 +27,26 @@ impl TotalKMMap
     }
 
     // pass through to Map :v/
-    pub open spec fn spec_index(self, idx: Key) -> Message {
+    pub open spec(checked) fn spec_index(self, idx: Key) -> Message {
         self.0[idx]
     }
 
     // pass through to Map :v/
-    pub open spec fn insert(self, key: Key, value: Message) -> Self {
+    pub open spec(checked) fn insert(self, key: Key, value: Message) -> Self {
         TotalKMMap(self.0.insert(key, value))
     }
 
     // pass through to Map :v/
-    pub open spec fn dom(self) -> Set<Key> {
+    pub open spec(checked) fn dom(self) -> Set<Key> {
         self.0.dom()
     }
 
-    pub open spec fn wf(self) -> bool
+    pub open spec(checked) fn wf(self) -> bool
     {
         self.dom() == total_domain()
     }
 
-    pub open spec fn ext_equal(self, other: TotalKMMap) -> bool
+    pub open spec(checked) fn ext_equal(self, other: TotalKMMap) -> bool
     {
         self.0 =~= other.0
     }

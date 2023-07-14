@@ -17,13 +17,13 @@ use crate::disk::GenericDisk_v::*;
 use crate::allocation_layer::Likes_v::*;
 
 verus!{
-    pub open spec fn singleton_index(start: LSN, end: LSN, value: Address) -> Map<LSN, Address>
+    pub open spec(checked) fn singleton_index(start: LSN, end: LSN, value: Address) -> Map<LSN, Address>
     {
         Map::new(|x: LSN| start <= x < end, |x:LSN| value)
     }
 
     impl DiskView {
-        pub open spec fn build_lsn_addr_index(self, root: Pointer) -> Map<LSN, Address>
+        pub open spec(checked) fn build_lsn_addr_index(self, root: Pointer) -> Map<LSN, Address>
             recommends self.decodable(root), self.acyclic(),
                 root.is_Some() ==> self.boundary_lsn < self.entries[root.unwrap()].message_seq.seq_end
             decreases self.the_rank_of(root) when self.decodable(root) && self.acyclic()
@@ -40,7 +40,7 @@ verus!{
         }
     } // end of impl DiskView
 
-    pub open spec fn map_to_likes(lsn_addr_map: Map<LSN, Address>) -> Likes
+    pub open spec(checked) fn map_to_likes(lsn_addr_map: Map<LSN, Address>) -> Likes
         decreases lsn_addr_map.dom().len() when lsn_addr_map.dom().finite()
     {
         if lsn_addr_map.dom().len() == 0 {
@@ -53,13 +53,13 @@ verus!{
     }
 
     impl TruncatedJournal {
-        pub open spec fn build_lsn_addr_index(self) ->  Map<LSN, Address>
+        pub open spec(checked) fn build_lsn_addr_index(self) ->  Map<LSN, Address>
             recommends self.decodable()
         {
             self.disk_view.build_lsn_addr_index(self.freshest_rec)
         }
     
-        pub open spec fn transitive_likes(self) -> Likes 
+        pub open spec(checked) fn transitive_likes(self) -> Likes 
         {
             if !self.decodable() {
                 no_likes()

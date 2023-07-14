@@ -32,20 +32,20 @@ pub struct JournalRecord {
 }
 
 impl JournalRecord {
-    pub open spec fn wf(self) -> bool {
+    pub open spec(checked) fn wf(self) -> bool {
         &&& self.message_seq.wf()
         &&& !self.message_seq.is_empty()
     }
 
-    pub open spec fn has_link(self, boundary_lsn: LSN) -> bool {
+    pub open spec(checked) fn has_link(self, boundary_lsn: LSN) -> bool {
         boundary_lsn < self.message_seq.seq_start ==> self.cropped_prior(boundary_lsn).is_Some()
     }
 
-    pub open spec fn cropped_prior(self, boundary_lsn: LSN) -> Pointer {
+    pub open spec(checked) fn cropped_prior(self, boundary_lsn: LSN) -> Pointer {
         if boundary_lsn < self.message_seq.seq_start { self.prior_rec } else { None }
     }
 
-    pub open spec fn contains_lsn(self, boundary_lsn: LSN) -> bool {
+    pub open spec(checked) fn contains_lsn(self, boundary_lsn: LSN) -> bool {
         self.message_seq.seq_start <= boundary_lsn < self.message_seq.seq_end
     }
 }
@@ -65,26 +65,26 @@ pub struct DiskView {
 }
 
 impl DiskView {
-    pub open spec fn entries_wf(self) -> bool {
+    pub open spec(checked) fn entries_wf(self) -> bool {
         forall |addr| #[trigger] self.entries.contains_key(addr) ==> self.entries[addr].wf()
     }
 
-    pub open spec fn is_nondangling_pointer(self, ptr: Pointer) -> bool {
+    pub open spec(checked) fn is_nondangling_pointer(self, ptr: Pointer) -> bool {
         ptr.is_Some() ==> self.entries.contains_key(ptr.unwrap())
     }
 
-    pub open spec fn nondangling_pointers(self) -> bool {
+    pub open spec(checked) fn nondangling_pointers(self) -> bool {
         forall |addr| #[trigger] self.entries.contains_key(addr)
             ==> self.is_nondangling_pointer(self.entries[addr].cropped_prior(self.boundary_lsn))
     }
 
-    pub open spec fn this_block_can_concat(self, addr: Address) -> bool {
+    pub open spec(checked) fn this_block_can_concat(self, addr: Address) -> bool {
         let head = self.entries[addr];
         let next_ptr = head.cropped_prior(self.boundary_lsn);
         next_ptr.is_Some() ==> self.entries[next_ptr.unwrap()].message_seq.can_concat(head.message_seq)
     }
 
-    pub open spec fn blocks_can_concat(self) -> bool
+    pub open spec(checked) fn blocks_can_concat(self) -> bool
     recommends
         self.entries_wf(),
         self.nondangling_pointers(),
@@ -93,19 +93,19 @@ impl DiskView {
             ==> self.this_block_can_concat(addr)
     }
 
-    pub open spec fn blocks_each_have_link(self) -> bool
+    pub open spec(checked) fn blocks_each_have_link(self) -> bool
     {
         forall |addr| #[trigger] self.entries.contains_key(addr)
             ==> self.entries[addr].has_link(self.boundary_lsn)
     }
 
-    pub open spec fn block_in_bounds(self, ptr: Pointer) -> bool
+    pub open spec(checked) fn block_in_bounds(self, ptr: Pointer) -> bool
     {
         &&& self.is_nondangling_pointer(ptr)
         &&& (ptr.is_Some() ==> self.boundary_lsn < self.entries[ptr.unwrap()].message_seq.seq_end)
     }
 
-    pub open spec fn wf(self) -> bool
+    pub open spec(checked) fn wf(self) -> bool
     {
         &&& self.entries_wf()
         &&& self.nondangling_pointers()
@@ -113,7 +113,7 @@ impl DiskView {
         &&& self.blocks_each_have_link()
     }
 
-    pub open spec fn valid_ranking(self, ranking: Ranking) -> bool
+    pub open spec(checked) fn valid_ranking(self, ranking: Ranking) -> bool
     recommends
         self.wf(),
     {
@@ -123,14 +123,14 @@ impl DiskView {
             )
     }
 
-    pub open spec fn acyclic(self) -> bool
+    pub open spec(checked) fn acyclic(self) -> bool
     recommends
         self.wf(),
     {
         exists |ranking| self.valid_ranking(ranking)
     }
 
-    pub open spec fn the_ranking(self) -> Ranking
+    pub open spec(checked) fn the_ranking(self) -> Ranking
     recommends
         self.wf(),
         self.acyclic(),
@@ -138,7 +138,7 @@ impl DiskView {
         choose |ranking| self.valid_ranking(ranking)
     }
 
-    pub open spec fn decodable(self, ptr: Pointer) -> bool
+    pub open spec(checked) fn decodable(self, ptr: Pointer) -> bool
     {
         &&& self.wf()
         &&& self.is_nondangling_pointer(ptr)
@@ -147,7 +147,7 @@ impl DiskView {
     // NB it's interesting that LinkedBetree needs to pass rankings
     // around so it can reuse and reconstruct them, but the journal can
     // always get away with using some random old CHOOSEn ranking.
-    pub open spec fn the_rank_of(self, ptr: Pointer) -> nat
+    pub open spec(checked) fn the_rank_of(self, ptr: Pointer) -> nat
     recommends
         self.decodable(ptr),
     {
@@ -158,14 +158,14 @@ impl DiskView {
     }
 
     // Simply advance the boundary LSN
-    pub open spec fn discard_old(self, new_boundary: LSN) -> (out: Self)
+    pub open spec(checked) fn discard_old(self, new_boundary: LSN) -> (out: Self)
     recommends
         self.boundary_lsn <= new_boundary
     {
         Self{boundary_lsn: new_boundary, ..self}
     }
 
-    pub open spec fn is_sub_disk(self, bigger: Self) -> bool
+    pub open spec(checked) fn is_sub_disk(self, bigger: Self) -> bool
     {
         &&& bigger.boundary_lsn == self.boundary_lsn
         &&& self.entries.le(bigger.entries)
@@ -184,13 +184,13 @@ impl DiskView {
         }
     }
 
-    pub open spec fn is_sub_disk_with_newer_lsn(self, bigger: Self) -> bool
+    pub open spec(checked) fn is_sub_disk_with_newer_lsn(self, bigger: Self) -> bool
     {
         &&& bigger.boundary_lsn <= self.boundary_lsn
         &&& self.entries.le(bigger.entries)
     }
 
-    pub open spec fn build_tight(self, root: Pointer) -> (out: Self)
+    pub open spec(checked) fn build_tight(self, root: Pointer) -> (out: Self)
     recommends
         self.decodable(root),
         // TODO want ensures here
@@ -256,7 +256,7 @@ impl DiskView {
 //         }
 //     }
 
-    pub open spec fn representation(self, root: Pointer) -> (out: Set<Address>)
+    pub open spec(checked) fn representation(self, root: Pointer) -> (out: Set<Address>)
     recommends
         self.decodable(root),
         self.acyclic(),
@@ -302,7 +302,7 @@ impl DiskView {
         }
     }
 
-    pub open spec fn can_crop(self, root: Pointer, depth: nat) -> bool
+    pub open spec(checked) fn can_crop(self, root: Pointer, depth: nat) -> bool
     recommends
         self.decodable(root),
         self.block_in_bounds(root),
@@ -314,7 +314,7 @@ impl DiskView {
         }
     }
 
-    pub open spec fn pointer_after_crop(self, root: Pointer, depth: nat) -> (out: Pointer)
+    pub open spec(checked) fn pointer_after_crop(self, root: Pointer, depth: nat) -> (out: Pointer)
     recommends
         self.decodable(root),
         self.block_in_bounds(root),
@@ -369,7 +369,7 @@ impl DiskView {
     // proofs which the state machine macro demands we put inline.
     //////////////////////////////////////////////////////////////////////////
 
-    pub open spec fn iptr(self, ptr: Pointer) -> (out: Option<PagedJournal_v::JournalRecord>)
+    pub open spec(checked) fn iptr(self, ptr: Pointer) -> (out: Option<PagedJournal_v::JournalRecord>)
     recommends
         self.decodable(ptr),
         self.acyclic(),
@@ -410,7 +410,7 @@ impl DiskView {
         }
     }
 
-    pub open spec fn next(self, ptr: Pointer) -> Pointer
+    pub open spec(checked) fn next(self, ptr: Pointer) -> Pointer
     {
         self.entries[ptr.unwrap()].cropped_prior(self.boundary_lsn)
     }
@@ -464,7 +464,7 @@ impl DiskView {
             );
     }
 
-    pub open spec fn is_tight(self, root: Pointer) -> bool
+    pub open spec(checked) fn is_tight(self, root: Pointer) -> bool
     {
         &&& self.decodable(root)
         &&& self.acyclic()
@@ -620,17 +620,17 @@ pub struct TruncatedJournal {
 }
 
 impl TruncatedJournal {
-    pub open spec fn wf(self) -> bool {
+    pub open spec(checked) fn wf(self) -> bool {
         &&& self.disk_view.wf()
         &&& self.disk_view.is_nondangling_pointer(self.freshest_rec)
         &&& self.disk_view.block_in_bounds(self.freshest_rec)
     }
 
-    pub open spec fn seq_start(self) -> LSN {
+    pub open spec(checked) fn seq_start(self) -> LSN {
         self.disk_view.boundary_lsn
     }
 
-    pub open spec fn seq_end(self) -> LSN
+    pub open spec(checked) fn seq_end(self) -> LSN
     recommends
         self.disk_view.is_nondangling_pointer(self.freshest_rec),   // why not just wf()?
     {
@@ -640,14 +640,14 @@ impl TruncatedJournal {
             { self.disk_view.entries[self.freshest_rec.unwrap()].message_seq.seq_end }
     }
 
-    pub open spec fn can_discard_to(self, lsn: LSN) -> bool
+    pub open spec(checked) fn can_discard_to(self, lsn: LSN) -> bool
     recommends
         self.wf(),
     {
         self.seq_start() <= lsn <= self.seq_end()
     }
 
-    pub open spec fn discard_old(self, lsn: LSN) -> Self
+    pub open spec(checked) fn discard_old(self, lsn: LSN) -> Self
     recommends
         self.wf(),
         self.can_discard_to(lsn),
@@ -659,19 +659,19 @@ impl TruncatedJournal {
        }
     }
 
-    pub open spec fn decodable(self) -> bool
+    pub open spec(checked) fn decodable(self) -> bool
     {
         &&& self.wf()
         &&& self.disk_view.acyclic()
     }
 
-    pub open spec fn can_crop(self, depth: nat) -> bool
+    pub open spec(checked) fn can_crop(self, depth: nat) -> bool
     {
         &&& self.decodable()
         &&& self.disk_view.can_crop(self.freshest_rec, depth)
     }
 
-    pub open spec fn crop(self, depth: nat) -> Self
+    pub open spec(checked) fn crop(self, depth: nat) -> Self
     recommends
         self.can_crop(depth),
     {
@@ -697,7 +697,7 @@ impl TruncatedJournal {
         }
     }
 
-    pub open spec fn append_record(self, addr: Address, msgs: MsgHistory) -> (out: Self)
+    pub open spec(checked) fn append_record(self, addr: Address, msgs: MsgHistory) -> (out: Self)
     {
         Self{
             disk_view: DiskView {
@@ -719,7 +719,7 @@ impl TruncatedJournal {
 //     {
 //     }
 
-    pub open spec fn build_tight(self) -> (out: Self)
+    pub open spec(checked) fn build_tight(self) -> (out: Self)
     {
         TruncatedJournal{
             disk_view: self.disk_view.build_tight(self.freshest_rec),
@@ -727,7 +727,7 @@ impl TruncatedJournal {
         }
     }
 
-    pub open spec fn representation(self) -> (out: Set<Address>)
+    pub open spec(checked) fn representation(self) -> (out: Set<Address>)
     recommends
         self.disk_view.decodable(self.freshest_rec),
         self.disk_view.acyclic(),
@@ -748,7 +748,7 @@ impl TruncatedJournal {
 //         self.disk_view.representation_auto();
 //     }
 
-    pub open spec fn disk_is_tight_wrt_representation(self) -> bool
+    pub open spec(checked) fn disk_is_tight_wrt_representation(self) -> bool
     recommends
         self.disk_view.decodable(self.freshest_rec),
         self.disk_view.acyclic(),
@@ -756,7 +756,7 @@ impl TruncatedJournal {
         self.disk_view.entries.dom() == self.representation()
     }
 
-    pub open spec fn mkfs() -> (out: Self)
+    pub open spec(checked) fn mkfs() -> (out: Self)
     {
         Self{
             freshest_rec: None,
@@ -779,7 +779,7 @@ state_machine!{ LinkedJournal {
         pub unmarshalled_tail: MsgHistory,
     }
 
-    pub open spec fn wf(self) -> bool {
+    pub open spec(checked) fn wf(self) -> bool {
         &&& self.truncated_journal.wf()
         &&& self.unmarshalled_tail.wf()
 
@@ -787,19 +787,19 @@ state_machine!{ LinkedJournal {
         &&& self.truncated_journal.seq_end() == self.unmarshalled_tail.seq_start
     }
 
-    pub open spec fn seq_start(self) -> LSN
+    pub open spec(checked) fn seq_start(self) -> LSN
     {
         self.truncated_journal.seq_start()
     }
 
-    pub open spec fn seq_end(self) -> LSN
+    pub open spec(checked) fn seq_end(self) -> LSN
     recommends
         self.wf(),
     {
         self.unmarshalled_tail.seq_end
     }
     
-    pub open spec fn unused_addr(self, addr: Address) -> bool
+    pub open spec(checked) fn unused_addr(self, addr: Address) -> bool
     {
         // TODO reaching into truncatedJournal to find the diskView feels skeezy
         !self.truncated_journal.disk_view.entries.contains_key(addr)
@@ -819,11 +819,11 @@ state_machine!{ LinkedJournal {
     // unfortunate:
     // error: this item is not supported
 //     impl Label {
-//         pub open spec fn wf(self) -> bool {
+//         pub open spec(checked) fn wf(self) -> bool {
 //             self.is_FreezeForCommit() ==> self.get_FreezeForCommit().decodable()
 //         }
 //     }
-    pub open spec fn lbl_wf(lbl: Label) -> bool
+    pub open spec(checked) fn lbl_wf(lbl: Label) -> bool
     {
         match lbl {
             Label::ReadForRecovery{messages} => messages.wf(),
@@ -927,7 +927,7 @@ state_machine!{ LinkedJournal {
     }}
 
     #[invariant]
-    pub open spec fn inv(self) -> bool {
+    pub open spec(checked) fn inv(self) -> bool {
         &&& self.wf()
         &&& self.truncated_journal.decodable()
         &&& self.truncated_journal.disk_view.acyclic()

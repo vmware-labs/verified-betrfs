@@ -13,23 +13,23 @@ pub struct OffsetMap {
 }
 
 impl OffsetMap {
-    pub open spec fn is_total(self) -> bool {
+    pub open spec(checked) fn is_total(self) -> bool {
         total_keys(self.offsets.dom())
     }
 
-    pub open spec fn get(self, k: Key) -> nat
+    pub open spec(checked) fn get(self, k: Key) -> nat
         recommends self.is_total()
     {
         self.offsets[k]
     }
 
-    pub open spec fn filter_for_bottom(self) -> Set<Key>
+    pub open spec(checked) fn filter_for_bottom(self) -> Set<Key>
         recommends self.is_total()
     {
         Set::new(|k| self.offsets[k] == 0)
     }
 
-    pub open spec fn decrement(self, i: nat) -> OffsetMap
+    pub open spec(checked) fn decrement(self, i: nat) -> OffsetMap
         recommends self.is_total()
     {
         OffsetMap{ offsets: Map::new(|k| true, 

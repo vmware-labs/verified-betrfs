@@ -16,35 +16,35 @@ pub struct BufferSeq {
 }
 
 impl BufferSeq {
-    pub open spec fn empty() -> BufferSeq
+    pub open spec(checked) fn empty() -> BufferSeq
     {
         BufferSeq{ buffers: seq![] }
     }
 
-    pub open spec fn len(self) -> nat {
+    pub open spec(checked) fn len(self) -> nat {
         self.buffers.len()
     }
 
     #[verifier(inline)]
-    pub open spec fn spec_index(self, i: int) -> Buffer
+    pub open spec(checked) fn spec_index(self, i: int) -> Buffer
         recommends 0 <= i < self.len()
     {
         self.buffers[i]
     }
 
-    pub open spec fn slice(self, start: int, end: int) -> BufferSeq 
+    pub open spec(checked) fn slice(self, start: int, end: int) -> BufferSeq 
         recommends 0 <= start <= end <= self.len()
     {
         BufferSeq{ buffers: self.buffers.subrange(start, end) }
     }
 
-    pub open spec fn drop_first(self) -> BufferSeq
+    pub open spec(checked) fn drop_first(self) -> BufferSeq
         recommends 0 < self.len()
     {
         self.slice(1, self.len() as int)
     }
 
-    pub open spec fn query_from(self, key: Key, start: int) -> Message 
+    pub open spec(checked) fn query_from(self, key: Key, start: int) -> Message 
         recommends 0 <= start <= self.len()
         decreases self.len() - start when start <= self.len()
     {
@@ -56,7 +56,7 @@ impl BufferSeq {
         }
     }
 
-    pub open spec fn query(self, key: Key) -> Message {
+    pub open spec(checked) fn query(self, key: Key) -> Message {
         self.query_from(key, 0)
     }
 
@@ -67,22 +67,22 @@ impl BufferSeq {
         assert(self.query_from(key, 1) == Message::Update{delta: nop_delta()});
     }
 
-    pub open spec fn apply_filter(self, accept: Set<Key>) -> BufferSeq {
+    pub open spec(checked) fn apply_filter(self, accept: Set<Key>) -> BufferSeq {
         BufferSeq{ buffers: Seq::new(self.len(), |i: int| self.buffers[i].apply_filter(accept)) }
     }
 
-    pub open spec fn extend(self, new_buffers: BufferSeq) -> BufferSeq {
+    pub open spec(checked) fn extend(self, new_buffers: BufferSeq) -> BufferSeq {
         BufferSeq{ buffers: self.buffers + new_buffers.buffers }
     }
 
-    pub open spec fn update_subrange(self, start: int, end: int, new_buffer: Buffer) -> BufferSeq 
+    pub open spec(checked) fn update_subrange(self, start: int, end: int, new_buffer: Buffer) -> BufferSeq 
         recommends 0 <= start < end <= self.len()
     {
         let s = seq![new_buffer];
         BufferSeq{ buffers: self.buffers.subrange(0, start) + s + self.buffers.subrange(end, self.len() as int) }
     }
 
-    pub open spec fn i_from(self, idx: int) -> Buffer
+    pub open spec(checked) fn i_from(self, idx: int) -> Buffer
         recommends 0 <= idx <= self.len()
         decreases self.len() - idx when 0 <= idx <= self.len()
     {
@@ -93,12 +93,12 @@ impl BufferSeq {
         }
     }
 
-    pub open spec fn i(self) -> Buffer
+    pub open spec(checked) fn i(self) -> Buffer
     {
         self.i_from(0)
     }
 
-    pub open spec fn i_filtered_from(self, offset_map: OffsetMap, idx: int) -> Buffer
+    pub open spec(checked) fn i_filtered_from(self, offset_map: OffsetMap, idx: int) -> Buffer
         recommends offset_map.is_total(), 0 <= idx <= self.len() 
         decreases self.len() - idx when 0 <= idx <= self.len()
     {
@@ -111,13 +111,13 @@ impl BufferSeq {
         }
     }
 
-    pub open spec fn i_filtered(self, offset_map: OffsetMap) -> Buffer 
+    pub open spec(checked) fn i_filtered(self, offset_map: OffsetMap) -> Buffer 
       recommends offset_map.is_total()
     {
         self.i_filtered_from(offset_map, 0)
     }
 
-    pub open spec fn buffer_idx_for_key(self, offset_map: OffsetMap, from_idx: int, k: Key, buffer_idx: int) -> bool
+    pub open spec(checked) fn buffer_idx_for_key(self, offset_map: OffsetMap, from_idx: int, k: Key, buffer_idx: int) -> bool
         recommends offset_map.is_total()
     {
         &&& from_idx <= buffer_idx < self.len()

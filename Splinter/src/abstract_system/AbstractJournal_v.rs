@@ -13,7 +13,7 @@ state_machine!{ AbstractJournal {
     // Dafny Variables definition equivalent
     fields { pub journal: MsgHistory }
 
-    pub open spec fn wf(self) -> bool
+    pub open spec(checked) fn wf(self) -> bool
     {
       self.journal.wf()
     }
@@ -29,7 +29,7 @@ state_machine!{ AbstractJournal {
         InternalLabel,
     }
 
-    pub open spec fn can_end_at(self, lsn: LSN) -> bool {
+    pub open spec(checked) fn can_end_at(self, lsn: LSN) -> bool {
         self.journal.seq_end == lsn
     }
 
