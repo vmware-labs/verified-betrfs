@@ -74,7 +74,8 @@ verus! {
   {
     pub open spec(checked) fn ephemeral_seq_end(self) -> LSN
       recommends
-        self.ephemeral.is_Some()
+        self.ephemeral.is_Some(),
+        self.journal.ephemeral.is_Known(),
     {
       self.journal.i().seq_end
     }
@@ -113,6 +114,8 @@ verus! {
           sync_requests: sync_reqs,
         },
         None => CrashTolerantAsyncMap::State{
+          // This recommends should be provable from the stable_lsn let binding. :v(
+          // recommends self.journal.persistent.can_discard_to(stable_lsn)
           versions: floating_versions(self.mapadt.persistent, self.journal.persistent, stable_lsn),
           async_ephemeral: AsyncMap::State::init_ephemeral_state(),
           sync_requests: Map::empty(),
