@@ -210,7 +210,7 @@ impl DiskView {
         if ptr.is_Some() {
             self.iptr_framing(dv2, self.next(ptr));
         }
-        assume(false); // and now this thing is flaky
+        //assume(false); // and now this thing is flaky
     }
         
     pub proof fn build_tight_is_awesome(self, root: Pointer)
@@ -656,7 +656,8 @@ impl LinkedJournal::State {
         reveal(LinkedJournal::State::next);
 
         let step = choose |step| LinkedJournal::State::next_by(self, post, lbl, step);
-        assert( LinkedJournal::State::next_by(self, post, lbl, step) );
+//         assert( LinkedJournal::State::next_by(self, post, lbl, step) );
+        self.inv_next(post, lbl, step);
         match step {
             LinkedJournal::Step::read_for_recovery(depth) =>  {
                 let tj = self.truncated_journal;
@@ -677,12 +678,11 @@ impl LinkedJournal::State {
                 assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::put()) );
             }
             LinkedJournal::Step::discard_old() =>  {
-                assume(false);
-                assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::discard_old()) );
+                self.discard_old_refines(post, lbl, step);
             }
             LinkedJournal::Step::internal_journal_marshal(cut, addr) =>  {
-                assume(false);
-                assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::internal_journal_marshal(cut)) );
+                self.truncated_journal.disk_view.iptr_framing(post.truncated_journal.disk_view, self.truncated_journal.freshest_rec);
+                assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::internal_journal_marshal(cut)) ); // trigger
             }
             LinkedJournal::Step::internal_journal_no_op() =>  {
                 assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::internal_journal_no_op()) );
