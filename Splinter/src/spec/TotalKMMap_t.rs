@@ -18,6 +18,7 @@ pub open spec(checked) fn total_domain() -> Set<Key>
 impl TotalKMMap
 {
     pub open spec(checked) fn empty() -> TotalKMMap
+    // ensures wf()
     {
         // TODO(verus): Should not have to declare binder twice.
         TotalKMMap(Map::new(
@@ -27,17 +28,24 @@ impl TotalKMMap
     }
 
     // pass through to Map :v/
-    pub open spec(checked) fn spec_index(self, idx: Key) -> Message {
+    pub open spec(checked) fn spec_index(self, idx: Key) -> Message
+    recommends
+        self.wf(),
+    {
         self.0[idx]
     }
 
     // pass through to Map :v/
-    pub open spec(checked) fn insert(self, key: Key, value: Message) -> Self {
+    pub open spec(checked) fn insert(self, key: Key, value: Message) -> Self
+    // ensures wf() if recommends wf()
+    {
         TotalKMMap(self.0.insert(key, value))
     }
 
     // pass through to Map :v/
-    pub open spec(checked) fn dom(self) -> Set<Key> {
+    pub open spec(checked) fn dom(self) -> Set<Key>
+    // ensures forall?
+    {
         self.0.dom()
     }
 
@@ -46,6 +54,7 @@ impl TotalKMMap
         self.dom() == total_domain()
     }
 
+    // TODO(jonh): these silly wrappers can probably go away now that we have =~=?
     pub open spec(checked) fn ext_equal(self, other: TotalKMMap) -> bool
     {
         self.0 =~= other.0
