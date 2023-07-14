@@ -44,7 +44,7 @@ impl MsgHistory {
     self.seq_start <= lsn < self.seq_end
   }
 
-  pub open spec(checked) fn contains_key(self, key: Key) -> bool {
+  pub open spec/*(checked)*/ fn contains_key(self, key: Key) -> bool {
     exists |lsn| #![auto] self.msgs[lsn].key == key
   }
 
@@ -153,8 +153,9 @@ impl MsgHistory {
     self.discard_recent(lsn)
   }
 
-  pub open spec(checked) fn apply_to_stamped_map(self, orig: StampedMap) -> StampedMap 
-    recommends self.can_follow(orig.seq_end),
+  pub open spec/*(checked)*/ fn apply_to_stamped_map(self, orig: StampedMap) -> StampedMap 
+    recommends
+        self.can_follow(orig.seq_end),
     decreases self.len() when self.wf()
   {
     if self.is_empty() {
