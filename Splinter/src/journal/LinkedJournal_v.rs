@@ -499,10 +499,8 @@ impl DiskView {
     {
         if root.is_Some() {
             self.build_tight_builds_sub_disks(self.next(root));
-        } else {
-            assert( self.build_tight(root).is_sub_disk(self) ); // This line shouldn't be necessary
         }
-        assume( false ); // TODO(jonh): broke it with next() changes
+        assert( self.build_tight(root).is_sub_disk(self) ); // This line shouldn't be necessary
     }
 
     // Dafny didn't need this proof
@@ -522,7 +520,8 @@ impl DiskView {
             &&& #[trigger] other.is_sub_disk(tight)
         }) implies other =~= tight by {
             assert( tight.wf() );   // new trigger when we perturb DiskView::can_crop
-            assert( other.entries =~= tight.entries );
+            assert( forall |addr| !tight.entries.dom().contains(addr) );    // added to fight the flake
+            assert( other.entries =~~= tight.entries );  // flaky
         }
     }
 
