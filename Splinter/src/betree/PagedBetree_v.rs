@@ -72,7 +72,11 @@ impl BetreeNode {
         self.is_Node() ==> self.get_Node_children().wf()
     }
 
-    pub open spec(checked) fn child(self, key: Key) -> BetreeNode {
+    pub open spec(checked) fn child(self, key: Key) -> BetreeNode
+    recommends
+        self.wf(),
+        self.is_Node(),
+    {
         self.get_Node_children().map[key]
     }
 

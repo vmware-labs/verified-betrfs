@@ -107,6 +107,7 @@ impl BufferSeq {
         } else {
             let new_offset_map = offset_map.decrement(1);
             let bottom_buffer = self[idx].apply_filter(offset_map.filter_for_bottom());
+//            let _ = assert(new_offset_map.is_total());   // TODO(jonh): aargh what was the way to add proof text?
             bottom_buffer.merge(self.i_filtered_from(new_offset_map, idx+1))
         }
     }
@@ -118,7 +119,9 @@ impl BufferSeq {
     }
 
     pub open spec(checked) fn buffer_idx_for_key(self, offset_map: OffsetMap, from_idx: int, k: Key, buffer_idx: int) -> bool
-        recommends offset_map.is_total()
+    recommends
+        offset_map.is_total(),
+        0 <= from_idx,
     {
         &&& from_idx <= buffer_idx < self.len()
         &&& offset_map.offsets[k] <= buffer_idx - from_idx
