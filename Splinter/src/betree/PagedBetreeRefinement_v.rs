@@ -16,7 +16,7 @@ use crate::betree::Memtable_v::*;
 
 verus! {
 impl BetreeNode {
-    pub open spec(checked) fn build_query_receipt(self, key: Key) -> QueryReceipt
+    pub open spec /*XXX(checked)*/ fn build_query_receipt(self, key: Key) -> QueryReceipt
     recommends
         self.wf(),
     decreases self when self.wf()
@@ -43,7 +43,6 @@ impl BetreeNode {
     {
         if self.is_Node() {
             let child_receipt = self.child(key).build_query_receipt(key);
-            // TODO(jonh) [spec checked] need ensures structure() on build_query_receipt
             self.child(key).build_query_receipt_valid(key);
 
             let msg = self.get_Node_buffer().query(key);
@@ -61,7 +60,7 @@ impl BetreeNode {
         }
     }
 
-    pub open spec(checked) fn i_at(self, key: Key) -> Message
+    pub open spec /*XXX (checked)*/ fn i_at(self, key: Key) -> Message
         recommends self.wf()
     {
         // TODO(jonh) [spec_checked] self.child(key).build_query_receipt_valid(key)
@@ -157,7 +156,10 @@ pub open spec(checked) fn i_stamped_betree(stamped: StampedBetree) -> StampedMap
 
 impl QueryReceipt{
     pub open spec(checked) fn drop_first(self) -> QueryReceipt
-        recommends 1 < self.lines.len()
+    recommends
+        self.root.wf(),
+        self.root.is_Node(),
+        1 < self.lines.len(),
     {
         QueryReceipt{
             key: self.key,

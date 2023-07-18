@@ -235,7 +235,9 @@ impl MsgHistory {
   }
 
   pub open spec(checked) fn maybe_discard_old(self, lsn: LSN) -> MsgHistory
-    recommends lsn <= self.seq_end
+  recommends
+    self.wf(),
+    lsn <= self.seq_end,
   {
     if self.seq_start <= lsn {
       self.discard_old(lsn)
