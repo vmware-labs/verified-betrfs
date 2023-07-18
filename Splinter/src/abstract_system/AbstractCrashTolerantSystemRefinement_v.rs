@@ -134,6 +134,9 @@ verus! {
     }
 
     pub closed spec(checked) fn journal_overlaps_agree(j0: Journal, j1: Journal) -> bool
+    recommends
+        j0.wf(),
+        j1.wf(),
     {
         forall |lsn| #![auto] j0.contains(lsn) && j1.contains(lsn) ==> j0.msgs[lsn] == j1.msgs[lsn]
     }
@@ -167,6 +170,7 @@ verus! {
 
         pub open spec(checked) fn inv_ephemeral_geometry(self) -> bool
             recommends
+                self.wf(),
                 self.ephemeral.is_Some(),
         {
             // Ephemeral journal begins at persistent map
@@ -185,6 +189,7 @@ verus! {
 
         pub open spec(checked) fn inv_ephemeral_value_agreement(self) -> bool
             recommends
+                self.wf(),
                 self.ephemeral.is_Some(),
                 self.inv_ephemeral_geometry()
         {
@@ -210,6 +215,7 @@ verus! {
 
         pub open spec(checked) fn inv_frozen_map_geometry(self) -> bool
             recommends
+                self.wf(),
                 self.ephemeral.is_Some(),
                 self.map_is_frozen()
         {
@@ -221,6 +227,7 @@ verus! {
 
         pub open spec(checked) fn inv_frozen_map_value_agreement(self) -> bool
             recommends
+                self.wf(),
                 self.ephemeral.is_Some(),
                 self.inv_ephemeral_geometry(),
                 self.map_is_frozen(),
@@ -246,6 +253,7 @@ verus! {
             let if_journal = self.journal.in_flight.get_Some_0();
 
             // We need a well-behaved journal to relate in-flight state to.
+            &&& self.wf()
             &&& self.ephemeral.is_Some()
             &&& self.inv_ephemeral_geometry()
 

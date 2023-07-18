@@ -17,8 +17,9 @@ use crate::betree::Memtable_v::*;
 verus! {
 impl BetreeNode {
     pub open spec(checked) fn build_query_receipt(self, key: Key) -> QueryReceipt
-        recommends self.wf()
-        decreases self when self.wf()
+    recommends
+        self.wf(),
+    decreases self when self.wf()
     {
         if self.is_Nil() {
             let msg = Message::Define{value: default_value()}; 
@@ -26,6 +27,7 @@ impl BetreeNode {
             QueryReceipt{key: key, root: self, lines: seq![line]}
         } else {
             let child_receipt = self.child(key).build_query_receipt(key);
+        // TODO(jonh) [spec_checked] self.child(key).build_query_receipt_valid(key)
             let msg = self.get_Node_buffer().query(key);
             let line = QueryReceiptLine{node: self, result: child_receipt.result().merge(msg)};
             QueryReceipt{key: key, root: self, lines: seq![line] + child_receipt.lines}
@@ -33,12 +35,15 @@ impl BetreeNode {
     }
 
     pub proof fn build_query_receipt_valid(self, key: Key)
-        requires self.wf()
-        ensures self.build_query_receipt(key).valid()
-        decreases self
+    requires
+        self.wf(),
+    ensures
+        self.build_query_receipt(key).valid(),
+    decreases self
     {
         if self.is_Node() {
             let child_receipt = self.child(key).build_query_receipt(key);
+            // TODO(jonh) [spec checked] need ensures structure() on build_query_receipt
             self.child(key).build_query_receipt_valid(key);
 
             let msg = self.get_Node_buffer().query(key);
@@ -59,6 +64,7 @@ impl BetreeNode {
     pub open spec(checked) fn i_at(self, key: Key) -> Message
         recommends self.wf()
     {
+        // TODO(jonh) [spec_checked] self.child(key).build_query_receipt_valid(key)
         self.build_query_receipt(key).result()
     }
 

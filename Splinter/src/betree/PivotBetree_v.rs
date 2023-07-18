@@ -50,6 +50,8 @@ impl BetreeNode {
     }
 
     pub open spec(checked) fn my_domain(self) -> Domain
+    recommends
+        self.wf(),
     {
         Domain::Domain{
             start: self.get_Node_pivots().pivots[0],
@@ -59,6 +61,8 @@ impl BetreeNode {
 
     // equivalent to DomainRoutedToChild
     pub open spec(checked) fn child_domain(self, child_idx: nat) -> Domain
+    recommends
+        self.wf(),
     {
         Domain::Domain{
             start: self.get_Node_pivots().pivots[child_idx as int],

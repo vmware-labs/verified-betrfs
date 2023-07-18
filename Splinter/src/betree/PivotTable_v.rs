@@ -61,6 +61,7 @@ impl PivotTable {
 
     pub open spec(checked) fn can_insert(self, i: int, element: Element) -> bool
     {
+        &&& self.wf()
         &&& element.is_Elem()
         &&& 0 <= i <= self.len()
         &&& (i == 0 ==> Element::lt(element, self.pivots[0]))
@@ -93,13 +94,17 @@ impl PivotTable {
     }
   
     pub open spec(checked) fn bounded_key(self, key: Key) -> bool
+    recommends
+        self.wf(),
     {
         &&& Element::lte(self.pivots[0], to_element(key))
         &&& Element::lt(to_element(key), self.pivots.last())
     }
 
     pub open spec(checked) fn route(self, key: Key) -> int
-        recommends self.bounded_key(key)
+    recommends
+        self.wf(),
+        self.bounded_key(key),
     {
         Element::largest_lte(self.pivots, to_element(key))
     }
