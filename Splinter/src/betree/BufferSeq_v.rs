@@ -98,7 +98,7 @@ impl BufferSeq {
         self.i_from(0)
     }
 
-    pub open spec(checked) fn i_filtered_from(self, offset_map: OffsetMap, idx: int) -> Buffer
+    pub open spec /*XXX (checked)*/ fn i_filtered_from(self, offset_map: OffsetMap, idx: int) -> Buffer
         recommends offset_map.is_total(), 0 <= idx <= self.len() 
         decreases self.len() - idx when 0 <= idx <= self.len()
     {

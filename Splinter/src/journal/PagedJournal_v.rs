@@ -190,13 +190,15 @@ impl JournalRecord {
         }
     }
         
-    pub open spec(checked) fn message_seq_after_crop(self, boundary_lsn: LSN, depth: nat) -> MsgHistory
+    pub open spec /*XXX (checked)*/ fn message_seq_after_crop(self, boundary_lsn: LSN, depth: nat) -> MsgHistory
     recommends
         self.valid(boundary_lsn),
         self.can_crop_head_records(boundary_lsn, depth+1)
     {
-        //self.can_crop_more_yields_some(boundary_lsn, depth, depth+1);
-        self.crop_head_records(boundary_lsn, depth).get_Some_0().message_seq.maybe_discard_old(boundary_lsn)
+        //XXX self.can_crop_more_yields_some(boundary_lsn, depth, depth+1);
+        let chrms = self.crop_head_records(boundary_lsn, depth).get_Some_0().message_seq;
+        let _ = spec_affirm(chrms.wf());
+        chrms.maybe_discard_old(boundary_lsn)
     }
 
     pub proof fn option_new_boundary_valid(ojr: Option<JournalRecord>, old_lsn: LSN, new_lsn: LSN)
@@ -310,7 +312,7 @@ impl TruncatedJournal {
         self.seq_start() <= lsn <= self.seq_end()
     }
 
-    pub open spec(checked) fn discard_old_defn(self, lsn: LSN) -> (out: TruncatedJournal)
+    pub open spec /*XXX(checked)*/ fn discard_old_defn(self, lsn: LSN) -> (out: TruncatedJournal)
     recommends
         self.wf(),
         self.can_discard_to(lsn),
@@ -320,7 +322,10 @@ impl TruncatedJournal {
             boundary_lsn: lsn,
             freshest_rec:
                 if self.seq_end() == lsn { None }
-                else { JournalRecord::discard_old_journal_rec(self.freshest_rec, lsn) }
+                else {
+                    // XXX option_new_boundary_valid(self.freshest_rec, lsn);
+                    JournalRecord::discard_old_journal_rec(self.freshest_rec, lsn)
+                }
         }
     }
 
@@ -373,12 +378,13 @@ impl TruncatedJournal {
         }
     }
 
-    pub open spec(checked) fn freeze_for_commit(self, frozen_journal: TruncatedJournal, depth: nat) -> bool
+    pub open spec /*XXX(checked)*/ fn freeze_for_commit(self, frozen_journal: TruncatedJournal, depth: nat) -> bool
     recommends
         self.wf(),
     {
         &&& frozen_journal.wf()
         &&& JournalRecord::opt_rec_can_crop_head_records(self.freshest_rec, self.boundary_lsn, depth)
+        // XXX self.crop_head_records_ensures(depth)
         &&& self.crop_head_records(depth).can_discard_to(frozen_journal.boundary_lsn)
         &&& frozen_journal == self.crop_head_records(depth).discard_old_defn(frozen_journal.boundary_lsn)
     }

@@ -78,7 +78,12 @@ impl DiskView {
             ==> self.is_nondangling_pointer(self.entries[addr].cropped_prior(self.boundary_lsn))
     }
 
-    pub open spec(checked) fn this_block_can_concat(self, addr: Address) -> bool {
+    pub open spec(checked) fn this_block_can_concat(self, addr: Address) -> bool
+    recommends
+        self.entries_wf(),
+        self.nondangling_pointers(),
+        self.entries.contains_key(addr),
+    {
         let head = self.entries[addr];
         let next_ptr = head.cropped_prior(self.boundary_lsn);
         next_ptr.is_Some() ==> self.entries[next_ptr.unwrap()].message_seq.can_concat(head.message_seq)

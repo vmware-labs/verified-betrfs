@@ -22,6 +22,8 @@ verus! {
 
 impl JournalRecord {
     pub open spec(checked) fn i(self, boundary_lsn: LSN) -> MsgHistory
+    recommends
+        self.wf(),
     decreases self
     {
         if self.message_seq.can_discard_to(boundary_lsn)

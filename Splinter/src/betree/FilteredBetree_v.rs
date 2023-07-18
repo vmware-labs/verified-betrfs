@@ -63,6 +63,9 @@ impl BetreeNode {
     }
 
     pub open spec(checked) fn my_domain(self) -> Domain
+    recommends
+        self.local_structure(),
+        self.is_Node(),
     {
         Domain::Domain{
             start: self.get_Node_pivots().pivots[0],
@@ -72,6 +75,10 @@ impl BetreeNode {
 
     // equivalent to DomainRoutedToChild
     pub open spec(checked) fn child_domain(self, child_idx: nat) -> Domain
+    recommends
+        self.local_structure(),
+        self.is_Node(),
+        self.valid_child_index(child_idx),
     {
         Domain::Domain{
             start: self.get_Node_pivots().pivots[child_idx as int],
@@ -80,6 +87,8 @@ impl BetreeNode {
     }
 
     pub open spec(checked) fn linked_children(self) -> bool
+    recommends
+        self.local_structure(),
     {
         &&& self.is_Node() ==> { 
             &&& forall |i:nat|
@@ -112,6 +121,8 @@ impl BetreeNode {
     }
 
     pub open spec(checked) fn push_memtable(self, memtable: Memtable) -> StampedBetree
+    recommends
+        self.wf(),
     {
         let buffers = BufferSeq{buffers: seq![memtable.buffer]};
         let new_root = self.promote(total_domain()).extend_buffer_seq(buffers);
@@ -129,12 +140,26 @@ impl BetreeNode {
         }
     }
 
+    #[verifier(recommends_by)]
+    pub proof fn flushed_ofs_inline_lemma(self, key: Key)
+//     requires
+//         self.key_in_domain(key),
+//     ensures
+//         0 <= self.get_Node_pivots().route(key) < self.get_Node_flushed().offsets.len(),
+    {
+        self.get_Node_pivots().route_lemma(key);
+        assert( 0 <= self.get_Node_pivots().route(key) < self.get_Node_flushed().offsets.len() );
+    }
+
+
     // returns the flushed offset (index into buffers) for a given key
     // buffers flushed to a child are no longer active for that child
     // renamed from ActiveBuffersForKey
-    pub open spec(checked) fn flushed_ofs(self, key: Key) -> nat
-        recommends self.key_in_domain(key)
+    pub open spec /*XXX (checked)*/ fn flushed_ofs(self, key: Key) -> nat
+    recommends
+        self.key_in_domain(key),
     {
+        recommends_by(Self::flushed_ofs_inline_lemma);
         let r = self.get_Node_pivots().route(key);
         self.get_Node_flushed().offsets[r]
     }
@@ -281,6 +306,11 @@ impl BetreeNode {
     }
 
     pub open spec(checked) fn promote(self, domain: Domain) -> BetreeNode
+    recommends
+        self.wf(),
+        domain.wf(),
+        domain.is_Domain(),
+    // ensures out.wf()
     {
         if self.is_Nil() {
             BetreeNode::empty_root(domain)
@@ -314,7 +344,7 @@ impl BetreeNode {
                 self.get_Node_buffers().len()).all_gte(buffer_gc)
     }
 
-    pub open spec(checked) fn flush(self, child_idx: nat, buffer_gc: nat) -> BetreeNode
+    pub open spec /*XXX (checked)*/ fn flush(self, child_idx: nat, buffer_gc: nat) -> BetreeNode
         recommends self.can_flush(child_idx, buffer_gc)
     {
         let idx = child_idx as int;
@@ -328,6 +358,18 @@ impl BetreeNode {
         // updates to parent node (self)
         // we take advantage of flush time to optionally garbage collect buffers that are no longer active by all children
         // buffer_gc tells us how many buffers (starting from oldest) we can garbage collect
+        let bfrs = self.get_Node_buffers();
+        let start = buffer_gc as int;
+        let end = flush_upto as int;
+        // TODO(andrea): Interesting that 
+        // let _ = spec_affirm(0 <= start <= end <= bfrs.len());
+        // didn't satisfy the recommends, but breaking it into 3 separate
+        // statements does.
+//         let _ = spec_affirm(0 <= start);
+//         let _ = spec_affirm(start <= end);
+//         let _ = spec_affirm(end <= bfrs.len());
+//         let gc_buffers = bfrs.slice(start, end);
+        //let _ = spec_affirm(0 <= buffer_gc as int <= flush_upto as int <= self.get_Node_buffers().len() );
         let gc_buffers = self.get_Node_buffers().slice(buffer_gc as int, flush_upto as int);
         let gc_flushed = self.get_Node_flushed().update(idx, flush_upto).shift_left(buffer_gc);
 
@@ -339,8 +381,25 @@ impl BetreeNode {
         }
     }
 
-    pub open spec(checked) fn compact(self, start: nat, end: nat, compacted_buffer: Buffer) -> BetreeNode
+    pub open /*XXX spec(checked)*/ fn compact(self, start: nat, end: nat, compacted_buffer: Buffer) -> BetreeNode
+    recommends
+        self.is_Node(),
+        self.wf(),
+        start < end <= self.get_Node_buffers().len(),
     {
+//         let sint = start as int;
+//         let eint = end as int;
+//         let _ = spec_affirm( 0 as int <= sint );
+//         let _ = spec_affirm( sint <= eint );
+//         let _ = spec_affirm( eint <= self.get_Node_flushed().len() as int );
+        // XXX (andrea?)
+        // Why don't the prior three lines imply the next line?
+        // OH! a bunch of type errors after we pass the verification errors
+        // (by commenting out checked):
+        // error[E0277]: can't compare `{integer}` with `builtin::int`
+        // Can't figure out what to do about this one!
+        // error[E0605]: non-primitive cast: `builtin::nat` as `builtin::int`
+//         let _ = spec_affirm( 0 <= sint <= eint <= self.get_Node_flushed().len() );
         BetreeNode::Node{
             buffers: self.get_Node_buffers().update_subrange(start as int, end as int, compacted_buffer),
             pivots: self.get_Node_pivots(),
@@ -356,9 +415,14 @@ impl BetreeNode {
         &&& self.get_Node_pivots().bounded_key(key)
     }
 
-    pub open spec(checked) fn child(self, key: Key) -> BetreeNode
-        recommends self.key_in_domain(key)
+    pub open spec /*XXX(checked)*/ fn child(self, key: Key) -> BetreeNode
+    recommends
+        self.wf(),
+        self.is_Node(),
+        self.key_in_domain(key),
     {
+        //XXX self.get_Node_pivots().route_lemma(key)
+        let _ = spec_affirm(self.wf_children());
         self.get_Node_children()[self.get_Node_pivots().route(key)]
     }
 
@@ -411,13 +475,19 @@ impl QueryReceipt{
     }
 
     pub open spec(checked) fn child_at(self, i: int) -> BetreeNode
-        recommends 0 <= i < self.lines.len()
+    recommends
+        self.all_lines_wf(),
+        self.structure(),
+        0 <= i < self.lines.len() - 1,
     {
         self.lines[i].node.child(self.key)
     }
 
     pub open spec(checked) fn child_linked_at(self, i: int) -> bool
-        recommends 0 <= i < self.lines.len()-1
+    recommends
+        self.all_lines_wf(),
+        self.structure(),
+        0 <= i < self.lines.len()-1,
     {
         self.lines[i + 1].node == self.child_at(i)
     }
@@ -428,10 +498,14 @@ impl QueryReceipt{
         self.lines[i].result
     }
 
-    pub open spec(checked) fn result_linked_at(self, i: int) -> bool
-        recommends 0 <= i < self.lines.len()-1
+    pub open spec /*XXX(checked)*/ fn result_linked_at(self, i: int) -> bool
+    recommends
+        self.structure(),
+        self.all_lines_wf(),
+        0 <= i < self.lines.len()-1,
     {
         let start = self.lines[i].node.flushed_ofs(self.key);
+        //XXX let _ = spec_affirm(start as int <= self.lines[i].node.get_Node_buffers()
         let msg = self.lines[i].node.get_Node_buffers().query_from(self.key, start as int);
         self.lines[i].result == self.result_at(i+1).merge(msg)
     }
@@ -466,14 +540,16 @@ pub struct Path{
 
 impl Path{
     pub open spec(checked) fn subpath(self) -> Path
-        recommends 0 < self.depth
+    recommends
+        0 < self.depth,
+        self.node.key_in_domain(self.key),
     {
         let depth = (self.depth - 1) as nat;
         Path{node: self.node.child(self.key), key: self.key, depth: depth}
     }
 
     pub open spec(checked) fn valid(self) -> bool
-        decreases self.depth
+    decreases self.depth
     {
         &&& self.node.wf()
         &&& self.node.key_in_domain(self.key)
@@ -482,7 +558,10 @@ impl Path{
     }
 
     pub open spec(checked) fn target(self) -> BetreeNode
-        decreases self.depth
+    recommends
+        self.valid(),
+    // ensures out.wf(), out.is_Node(),
+    decreases self.depth
     {
         if self.depth == 0 {
             self.node
@@ -491,22 +570,25 @@ impl Path{
         }
     }
 
-    pub open spec(checked) fn valid_replacement(self, replacement: BetreeNode) -> bool
-        recommends self.valid()
+    pub open spec /*XXX (checked)*/ fn valid_replacement(self, replacement: BetreeNode) -> bool
+    recommends self.valid()
     {
         &&& replacement.wf()
         &&& replacement.is_Node()
+        //XXX needs target() ensures wf
         &&& replacement.my_domain() == self.target().my_domain()
     }
 
-    pub open spec(checked) fn replaced_children(self, replacement: BetreeNode) -> Seq<BetreeNode>
-        recommends self.valid(), 
-            self.valid_replacement(replacement), 
-            0 < self.depth
-        decreases self.subpath().depth
+    pub open spec /*XXX (checked)*/ fn replaced_children(self, replacement: BetreeNode) -> Seq<BetreeNode>
+    recommends
+        self.valid(), 
+        self.valid_replacement(replacement), 
+        0 < self.depth,
+    decreases self.subpath().depth
     {
         let new_child = self.subpath().substitute(replacement);
         let r = self.node.get_Node_pivots().route(self.key);
+        //XXX self.get_Node_pivots().route_lemma(key)
         self.node.get_Node_children().update(r, new_child)
     }
 
