@@ -148,15 +148,21 @@ impl BetreeNode {
         }
     }
 
+    pub proof fn i_buffer_domain(self)
+        requires self.wf(), self.is_Node()
+        ensures forall |k| #[trigger] self.i_buffer().map.contains_key(k) <==> 
+            exists |idx| self.get_Node_buffers().key_in_buffer(self.make_offset_map(), 0, k, idx)
+    {
+        self.get_Node_buffers().i_filtered_from_domain(self.make_offset_map(), 0);
+    }
+
     pub proof fn query_from_same_as_i_filtered(self, key: Key, buffer_idx: int, offset_map: OffsetMap)
         requires 
             self.wf(), 
             self.is_Node(),
             self.key_in_domain(key),
             0 <= buffer_idx <= self.get_Node_buffers().len(),
-            offset_map.is_total(),
-            self.flushed_ofs(key) <= buffer_idx ==> offset_map.offsets[key] == 0,
-            self.flushed_ofs(key) > buffer_idx ==> offset_map.offsets[key] == self.flushed_ofs(key) - buffer_idx
+            offset_map == self.make_offset_map(),
         ensures ({
             let start = self.flushed_ofs(key) as int;
             let query_idx = if buffer_idx < start { start } else { buffer_idx };
@@ -166,7 +172,7 @@ impl BetreeNode {
     {
         PivotTable::route_lemma_auto();
         if buffer_idx < self.get_Node_buffers().len() {
-            self.query_from_same_as_i_filtered(key, buffer_idx+1, offset_map.decrement(1));
+            self.query_from_same_as_i_filtered(key, buffer_idx+1, offset_map);
         }
     }
 
@@ -178,34 +184,16 @@ impl BetreeNode {
         self.query_from_same_as_i_filtered(key, 0, offset_map);
     }
 
-    // ifiltered from 
-
-    // pub open spec fn 
-
-    // pub open spec fn active_key_cond(self, k: Key, child_idx: int, buffer_idx: int) -> bool
-    //     recommends self.wf(), self.is_Node()
-    // {
-    //     &&& 0 <= buffer_idx < self.get_Node_buffers().len()
-    //     &&& 0 <= child_idx < self.get_Node_children().len()
-    //     &&& self.get_Node_flushed().offsets[child_idx] <= buffer_idx as nat
-    //     &&& self.child_domain(child_idx as nat).contains(k)
-    // }
-
-    // pub proof fn i_key_domain(self)
-    //     requires self.wf()
-    //     ensures forall |k| self.i_buffer().map.contains_key(k) 
-    //         ==> exists |child_idx, buffer_idx| #[trigger] self.active_key_cond(k, child_idx, buffer_idx)
-    // {
-    //     assert forall |k| self.i_buffer().map.contains_key(k)
-    //     implies exists |child_idx, buffer_idx| #[trigger] self.active_key_cond(k, child_idx, buffer_idx)
-    //     by {
-
-
-
-    //         assume(false);
-
-    //     }
-    // }
+    pub proof fn query_from_refines_auto()
+        ensures forall |k: Key, node: BetreeNode| #![auto] node.wf() && node.is_Node() && node.key_in_domain(k)
+            ==> node.get_Node_buffers().query_from(k, node.flushed_ofs(k) as int) == node.i().get_Node_buffer().query(k)
+    {
+        assert forall  #![auto] |k: Key, node: BetreeNode| node.wf() && node.is_Node() && node.key_in_domain(k)
+        implies node.get_Node_buffers().query_from(k, node.flushed_ofs(k) as int) == node.i().get_Node_buffer().query(k)
+        by {
+            node.query_from_refines(k);
+        }
+    }
 
     pub open spec fn children_have_matching_domains(self, other_children: Seq<BetreeNode>) -> bool
         recommends self.wf(), self.is_index()
@@ -217,6 +205,54 @@ impl BetreeNode {
             &&& other_children[i].is_Node()
             &&& other_children[i].my_domain() == self.get_Node_children()[i].my_domain()
         })
+    }
+
+    pub proof fn i_preserves_domain(self, other: BetreeNode, k: Key)
+        requires self.key_in_domain(k), other.key_in_domain(k),
+            self.flushed_ofs(k) == other.flushed_ofs(k),
+            self.get_Node_buffers() == other.get_Node_buffers()
+        ensures
+            self.i().get_Node_buffer().map.contains_key(k) == other.i().get_Node_buffer().map.contains_key(k),
+            self.i().get_Node_buffer().map.contains_key(k) ==> self.i().get_Node_buffer().map[k] == other.i().get_Node_buffer().map[k]
+    {
+        self.i_buffer_domain();
+        other.i_buffer_domain();
+
+        if self.i().get_Node_buffer().map.contains_key(k) {
+            let idx = choose |idx| self.get_Node_buffers().key_in_buffer(self.make_offset_map(), 0, k, idx);
+            assert(other.get_Node_buffers().key_in_buffer(other.make_offset_map(), 0, k, idx));
+            assert(other.i().get_Node_buffer().map.contains_key(k));
+        }
+        
+        if other.i().get_Node_buffer().map.contains_key(k) {
+            let idx = choose |idx| other.get_Node_buffers().key_in_buffer(other.make_offset_map(), 0, k, idx);
+            assert(self.get_Node_buffers().key_in_buffer(self.make_offset_map(), 0, k, idx));
+            assert(self.i().get_Node_buffer().map.contains_key(k));
+        }
+
+        BetreeNode::query_from_refines_auto();
+    }
+
+    pub proof fn i_preserves_domain_auto(self)
+    ensures forall |other: Self, k: Key| 
+            #![auto] self.key_in_domain(k) && other.key_in_domain(k)
+            && self.flushed_ofs(k) == other.flushed_ofs(k)
+            && self.get_Node_buffers() == other.get_Node_buffers()
+        ==> ({
+            &&& self.i().get_Node_buffer().map.contains_key(k) == other.i().get_Node_buffer().map.contains_key(k)
+            &&& self.i().get_Node_buffer().map.contains_key(k) ==> self.i().get_Node_buffer().map[k] == other.i().get_Node_buffer().map[k]
+        })
+    {
+        assert forall #![auto] |other: Self, k: Key| 
+            self.key_in_domain(k) && other.key_in_domain(k)
+            && self.flushed_ofs(k) == other.flushed_ofs(k)
+            && self.get_Node_buffers() == other.get_Node_buffers()
+        implies ({
+            &&& self.i().get_Node_buffer().map.contains_key(k) == other.i().get_Node_buffer().map.contains_key(k)
+            &&& self.i().get_Node_buffer().map.contains_key(k) ==> self.i().get_Node_buffer().map[k] == other.i().get_Node_buffer().map[k]
+        }) by {
+            self.i_preserves_domain(other, k);
+        }
     }
 
 //     pub proof fn active_keys_in_my_domain(self, buffer_idx: int)
@@ -356,295 +392,140 @@ impl BetreeNode {
 
         let (left, right) = self.split_leaf(split_key);
         let (i_left, i_right) = self.i().split_leaf(split_key);
-        assert(left.wf());
 
-        // assume(forall |k| left.i().get_Node_buffer().map.contains_key(k) ==> left.key_in_domain(k));
-        // assert(forall |k| i_left.get_Node_buffer().map.contains_key(k) ==> i_left.key_in_domain(k));
-        // assert(forall |k| left.key_in_domain(k) <==> i_left.key_in_domain(k));
+        left.i_buffer_domain();
+        right.i_buffer_domain();
+        self.i_buffer_domain();
+        self.i_preserves_domain_auto();
 
-        // can't do contains key
-        // if i contains key ==> that must mean that exists a buffer that contains the key
-        // let left_filter = Domain::Domain{ start: self.my_domain().get_Domain_starts(), end: to_element(split_key) };
-
-        assert forall |k|
-        ({
-            &&& #[trigger] left.i().get_Node_buffer().map.contains_key(k) <==> i_left.get_Node_buffer().map.contains_key(k)
-            &&& left.i().get_Node_buffer().query(k) == i_left.get_Node_buffer().query(k)
-        }) by {
-            if left.i().get_Node_buffer().map.contains_key(k) {
-                assume(false);
-            }
-
-            if i_left.get_Node_buffer().map.contains_key(k) {
-                // assert(left.i().get_Node_buffer().map.contains_key(k));
-                // assert(self.i().get_Node_buffer().map.contains_key(k));
-                // assert(exists |buffer_idx| self.buffer_idx_for_key(offset_map, 0, k, buffer_idx)); 
-                // contains key the nmust be 
-                // query refines is doable
-
-                // assert(self.i().get_Node_buffer().map.contains_key(k));
-                // assert(i_left.get_Node_buffer().query(k) == self.i().get_Node_buffer().query(k));
-                // assert(self.flushed_ofs(k) == left.flushed_ofs(k));
-
-                self.query_from_refines(k);
-                // assert(self.i().get_Node_buffer().query(k) == self.get_Node_buffers().query_from(k, self.flushed_ofs(k) as int));
-                left.query_from_refines(k);
-                // assert(left.i().get_Node_buffer().query(k) == left.get_Node_buffers().query_from(k, left.flushed_ofs(k) as int));
-
-                assert(left.i().get_Node_buffer().query(k) == i_left.get_Node_buffer().query(k));
-                assume(false);
-            }
-        }
-
-        assert(left.i().get_Node_buffer().map =~= i_left.get_Node_buffer().map);
-        
-        // left.i().get_Node_buffer().map[k].contains_key(k) <==> i_left.get_Node_buffer().map[k]
-        // // 
-        // by {
-        //     assume(false);
-        // }
-        // ifiltered
-
-        // pub proof fn query_from_refines(self, key: Key)
-        // requires self.wf(), self.is_Node(), self.key_in_domain(key),
-        // ensures ({
-        //     let start = self.flushed_ofs(key);
-        //     let msg = self.get_Node_buffers().query_from(key, start as int);
-        //     &&& msg == self.i().get_Node_buffer().query(key)
-
-        // assert forall |i| 0 <= i < left.get_Node_buffers().len()
-        // implies #[trigger] left.i_buffer(i) == i_left.get_Node_buffers()[i]
-        // by {
-        //     let active_keys = Set::new(|k: Key| self.active_key_cond(k, 0, i));
-        //     let left_active_keys = Set::new(|k: Key| left.active_key_cond(k, 0, i));
-        //     assert(self.active_keys(i) =~= active_keys);
-        //     assert(left.active_keys(i) =~= left_active_keys);
-        //     assert(left.i_buffer(i) =~= i_left.get_Node_buffers()[i]);
-        // }
-        // assert(left.i().get_Node_buffers() =~= i_left.get_Node_buffers());
-
-        // assert forall |i| 0 <= i < right.get_Node_buffers().len()
-        // implies #[trigger] right.i_buffer(i) =~= i_right.get_Node_buffers()[i]
-        // by {
-        //     let active_keys = Set::new(|k: Key| self.active_key_cond(k, 0, i));
-        //     let right_active_keys = Set::new(|k: Key| right.active_key_cond(k, 0, i));
-        //     assert(self.active_keys(i) =~= active_keys);
-        //     assert(right.active_keys(i) =~= right_active_keys);
-        // }
-        // assert(right.i().get_Node_buffers() =~= i_right.get_Node_buffers());
-        assume(false);
+        assert(left.i().get_Node_buffer() =~= i_left.get_Node_buffer());
+        assert(right.i().get_Node_buffer() =~= i_right.get_Node_buffer());
     }
     
-//     pub proof fn split_index_commutes_with_i(self, pivot_idx: nat)
-//         requires self.can_split_index(pivot_idx)
-//         ensures
-//             self.split_index(pivot_idx).0.i() == self.i().split_index(pivot_idx).0,
-//             self.split_index(pivot_idx).1.i() == self.i().split_index(pivot_idx).1,
-//     {
-//         BetreeNode::i_wf_auto();
-//         BetreeNode::i_children_lemma_auto();
+    #[verifier::spinoff_prover]
+    pub proof fn split_index_commutes_with_i(self, pivot_idx: nat)
+        requires self.can_split_index(pivot_idx)
+        ensures
+            self.split_index(pivot_idx).0.i() == self.i().split_index(pivot_idx).0,
+            self.split_index(pivot_idx).1.i() == self.i().split_index(pivot_idx).1,
+    {
+        BetreeNode::i_wf_auto();
+        BetreeNode::i_children_lemma_auto();
+        PivotTable::route_lemma_auto();
+        PivotTable::route_is_lemma_auto();
 
-//         Element::lt_transitive_forall();
-//         Element::lte_transitive_forall();
+        Element::lt_transitive_forall();
+        Element::lte_transitive_forall();
 
-//         let (left, right) = self.split_index(pivot_idx);
-//         let (i_left, i_right) = self.i().split_index(pivot_idx);
+        let (left, right) = self.split_index(pivot_idx);
+        let (i_left, i_right) = self.i().split_index(pivot_idx);
 
-//         let split_element = self.get_Node_pivots().pivots[pivot_idx as int];
-//         let left_filter = Domain::Domain{ start: self.my_domain().get_Domain_start(), end: split_element };
-//         let right_filter = Domain::Domain{ start: split_element, end: self.my_domain().get_Domain_end() };
+        self.i_buffer_domain();
+        left.i_buffer_domain();
+        right.i_buffer_domain();
 
-//         assert forall |i| 0 <= i < left.get_Node_buffers().len()
-//         implies #[trigger] left.i_buffer(i) =~= i_left.get_Node_buffers()[i]
-//         by {
-//             assert forall |k| #[trigger] left.i_buffer(i).map.contains_key(k) 
-//                 <==> i_left.get_Node_buffers()[i].map.contains_key(k)
-//             by {
-//                 if left.i_buffer(i).map.contains_key(k) {
-//                     assert(left.active_keys(i).contains(k));
-//                     let child_idx = choose |child_idx| left.active_key_cond(k, child_idx, i);
-//                     let child_domain = self.child_domain(child_idx as nat);
+        assert(left.i().get_Node_buffer() =~= i_left.get_Node_buffer()) 
+        by {
+            self.i_preserves_domain_auto();
+            left.i_preserves_domain_auto();
+        }
 
-//                     assert(self.active_key_cond(k, child_idx, i));
-//                     assert(child_domain.contains(k));
+        assert(right.i().get_Node_buffer() =~= i_right.get_Node_buffer())
+        by {
+            self.i_preserves_domain_auto();
+            right.i_preserves_domain_auto();
+        }
 
-//                     if child_idx > 0 {
-//                         assert(Element::lt(left_filter.get_Domain_start(), child_domain.get_Domain_start()));
-//                     }
-//                     if child_idx + 1 < pivot_idx {
-//                         assert(Element::lt(child_domain.get_Domain_end(), left_filter.get_Domain_end()));
-//                     }
-//                     assert(left_filter.contains(k));
-//                     assert(i_left.get_Node_buffers()[i].map.contains_key(k));
-//                 }
+        assert(left.i().get_Node_children() =~= i_left.get_Node_children());
+        assert(right.i().get_Node_children() =~= i_right.get_Node_children());
+    }
 
-//                 if i_left.get_Node_buffers()[i].map.contains_key(k) {
-//                     assert(left_filter.contains(k));
+    #[verifier::spinoff_prover]
+    pub proof fn split_parent_buffers_commutes_with_i(self, request: SplitRequest)
+        requires self.can_split_parent(request), self.i().can_split_parent(request)
+        ensures self.i().split_parent(request).get_Node_buffer() == self.split_parent(request).i().get_Node_buffer()
+    {
+        self.split_parent_wf(request);
+        self.i().split_parent_wf(request);
 
-//                     let child_idx = choose |child_idx| self.active_key_cond(k, child_idx, i);
-//                     if child_idx < left.get_Node_children().len() {
-//                         assert(left.active_key_cond(k, child_idx, i));
-//                     } else {
-//                         let child_domain = self.child_domain(child_idx as nat);
-//                         assert(child_domain.contains(k));
-//                         assert(child_domain.get_Domain_start() == self.get_Node_pivots().pivots[child_idx]);
+        BetreeNode::i_wf_auto();
+        PivotTable::route_lemma_auto();
+        Element::lt_transitive_forall();
 
-//                         if pivot_idx < child_idx {
-//                             assert(Element::lt(left_filter.get_Domain_end(), child_domain.get_Domain_start()));
-//                         }
-//                         assert(Element::lte(child_domain.get_Domain_start(), split_element));
-//                         assert(false);
-//                     }
-//                 }
-//             }
-//         }
-//         assert(left.i().get_Node_buffers() =~= i_left.get_Node_buffers());
-//         assert(left.i().get_Node_children() =~= i_left.get_Node_children());
+        let new_parent = self.split_parent(request);
+        assert(self.get_Node_buffers() == new_parent.get_Node_buffers());
 
+        let i_new_parent = self.i().split_parent(request);
+        let split_child_idx = request.get_child_idx() as int;
 
-//         assert forall |i| 0 <= i < right.get_Node_buffers().len()
-//         implies #[trigger] right.i_buffer(i) =~= i_right.get_Node_buffers()[i]
-//         by {
-//             assert forall |k | #[trigger] right.i_buffer(i).map.contains_key(k) 
-//                 <==> i_right.get_Node_buffers()[i].map.contains_key(k)
-//             by {
-//                 let left_len = left.get_Node_children().len();
-//                 if right.i_buffer(i).map.contains_key(k) {
-//                     assert(right.active_keys(i).contains(k));
-//                     let child_idx = choose |child_idx| right.active_key_cond(k, child_idx, i);
-//                     let old_child_idx = left_len + child_idx;
-//                     let child_domain = self.child_domain(old_child_idx as nat);
+        self.i_buffer_domain();
+        new_parent.i_buffer_domain();
 
-//                     assert(self.active_key_cond(k, old_child_idx, i));
-//                     assert(child_domain.contains(k));
+        assert forall |k| 
+        ({
+            &&& new_parent.i().get_Node_buffer().map.contains_key(k) <==> #[trigger] i_new_parent.get_Node_buffer().map.contains_key(k)
+            &&& new_parent.i().get_Node_buffer().map.contains_key(k) ==> 
+                new_parent.i().get_Node_buffer().map[k] == i_new_parent.get_Node_buffer().map[k]
+        }) by {
+            if new_parent.i().get_Node_buffer().map.contains_key(k) {
+                let r = new_parent.get_Node_pivots().route(k);
+                if r <= split_child_idx {
+                    self.get_Node_pivots().route_is_lemma(k, r);
+                } else {
+                    assert(Element::lt(new_parent.get_Node_pivots().pivots[r-1], new_parent.get_Node_pivots().pivots[r]));
+                    self.get_Node_pivots().route_is_lemma(k, r-1);
+                }
+                assert(self.flushed_ofs(k) == new_parent.flushed_ofs(k));
+                new_parent.i_preserves_domain(self, k);
+            }
 
-//                     if child_idx > 0 {
-//                         assert(Element::lt(right_filter.get_Domain_start(), child_domain.get_Domain_start()));
-//                     }
+            if i_new_parent.get_Node_buffer().map.contains_key(k) {
+                assert(self.i().get_Node_buffer().map.contains_key(k));
+                assert(self.key_in_domain(k));
+                assert(new_parent.key_in_domain(k));
 
-//                     assert(Element::lte(right_filter.get_Domain_start(), to_element(k)));
-//                     assert(Element::lt(to_element(k), child_domain.get_Domain_end()));
+                let r = self.get_Node_pivots().route(k);
+                if r < split_child_idx {
+                    new_parent.get_Node_pivots().route_is_lemma(k, r);
+                } else if r == split_child_idx {
+                    if Element::lt(to_element(k), new_parent.get_Node_pivots().pivots[r+1]) {
+                        new_parent.get_Node_pivots().route_is_lemma(k, r);
+                    } else {
+                        new_parent.get_Node_pivots().route_is_lemma(k, r+1);
+                    }
+                } else {
+                    new_parent.get_Node_pivots().route_is_lemma(k, r+1);
+                }
+                assert(self.flushed_ofs(k) == new_parent.flushed_ofs(k));
+                self.i_preserves_domain(new_parent, k);
+            }
+        }
+        assert(new_parent.i().get_Node_buffer().map.dom() =~= i_new_parent.get_Node_buffer().map.dom());
+        assert(new_parent.i().get_Node_buffer() =~= i_new_parent.get_Node_buffer());
+    }
 
-//                     if child_idx + 1 < right.get_Node_children().len() {
-//                         assert(Element::lt(child_domain.get_Domain_end(), right_filter.get_Domain_end()));
-//                     }
-//                     assert(right_filter.contains(k));
-//                 }
+    pub proof fn split_parent_commutes_with_i(self, request: SplitRequest)
+        requires self.can_split_parent(request)
+        ensures 
+            self.i().can_split_parent(request),
+            self.i().split_parent(request) == self.split_parent(request).i()
+    {
+        self.split_parent_wf(request);
+        BetreeNode::i_wf_auto();
+        BetreeNode::i_children_lemma_auto();
 
-//                 if i_right.get_Node_buffers()[i].map.contains_key(k) {
-//                     assert(right_filter.contains(k));
-//                     let old_child_idx = choose |old_child_idx| self.active_key_cond(k, old_child_idx, i);
-//                     if old_child_idx < left.get_Node_children().len() {
-//                         let child_domain = self.child_domain(old_child_idx as nat);
-//                         assert(child_domain.contains(k));
-//                         if old_child_idx + 1 < pivot_idx {
-//                             assert(Element::lt(child_domain.get_Domain_end(), right_filter.get_Domain_start()));
-//                         }
-//                         assert(Element::lte(right_filter.get_Domain_start(), to_element(k)));
-//                         assert(false);
-//                     } else {
-//                         assert(right.active_key_cond(k, old_child_idx-left_len, i));
-//                         assert(right.i_buffer(i).map.contains_key(k));
-//                     }
-//                 }
-//             }
-//         }
-//         assert(right.i().get_Node_buffers() =~= i_right.get_Node_buffers());
-//         assert(right.i().get_Node_children() =~= i_right.get_Node_children());
-//     }
+        let split_child_idx = request.get_child_idx() as int;
+        let child = self.get_Node_children()[request.get_child_idx() as int];
 
-//     #[verifier::spinoff_prover]
-//     pub proof fn split_parent_buffers_commutes_with_i(self, request: SplitRequest)
-//         requires self.can_split_parent(request), self.i().can_split_parent(request)
-//         ensures self.i().split_parent(request).get_Node_buffers() == self.split_parent(request).i().get_Node_buffers()
-//     {
-//         self.split_parent_wf(request);
-//         BetreeNode::i_wf_auto();
+        if request.is_SplitLeaf() {
+            child.split_leaf_commutes_with_i(request.get_SplitLeaf_split_key());
+        } else {
+            child.split_index_commutes_with_i(request.get_SplitIndex_child_pivot_idx());
+        }
 
-//         let new_parent = self.split_parent(request);
-//         let i_new_parent = self.i().split_parent(request);
-//         assert(self.get_Node_pivots().len()+1 == new_parent.get_Node_pivots().len());
-
-//         let split_child_idx = request.get_child_idx() as int;
-//         let split_child_domain = self.child_domain(split_child_idx as nat);
-//         let new_left_child_domain = new_parent.child_domain(split_child_idx as nat);
-//         let new_right_child_domain = new_parent.child_domain((split_child_idx+1)as nat);
-
-//         assert(split_child_domain.get_Domain_start() == new_left_child_domain.get_Domain_start());
-//         assert(split_child_domain.get_Domain_end() == new_right_child_domain.get_Domain_end());
-//         assert(Element::lt(new_left_child_domain.get_Domain_end(), split_child_domain.get_Domain_end()));
-//         assert(Element::lt(split_child_domain.get_Domain_start(), new_right_child_domain.get_Domain_start()));
-        
-//         assert forall |i| 0 <= i < new_parent.get_Node_buffers().len()
-//         implies #[trigger] new_parent.i_buffer(i) =~= self.i().get_Node_buffers()[i]
-//         by {
-//             assert forall |k| #[trigger] new_parent.active_keys(i).contains(k) <==> self.active_keys(i).contains(k)
-//             by {
-//                 if new_parent.active_keys(i).contains(k) && !self.active_keys(i).contains(k)
-//                 {
-//                     let new_child_idx = choose |new_child_idx| new_parent.active_key_cond(k, new_child_idx, i);
-//                     if new_child_idx < split_child_idx {
-//                         assert(self.active_key_cond(k, new_child_idx, i));
-//                         assert(false);
-//                     } else if new_child_idx > split_child_idx+1 {
-//                         assert(self.active_key_cond(k, new_child_idx-1, i));
-//                         assert(false);
-//                     } else {
-//                         assert(self.active_key_cond(k, split_child_idx, i));
-//                         assert(false);
-//                     }
-//                 }
-
-//                 if !new_parent.active_keys(i).contains(k) && self.active_keys(i).contains(k) 
-//                 {
-//                     let child_idx = choose |child_idx| self.active_key_cond(k, child_idx, i);
-//                     if child_idx < split_child_idx {
-//                         assert(new_parent.active_key_cond(k, child_idx, i));
-//                         assert(false);
-//                     } else if child_idx > split_child_idx {
-//                         assert(new_parent.active_key_cond(k, child_idx+1, i));
-//                         assert(false);
-//                     } else {
-//                         assert(split_child_domain.contains(k));
-//                         if Element::lt(to_element(k), new_left_child_domain.get_Domain_end()) {
-//                             assert(new_left_child_domain.contains(k));
-//                             assert(new_parent.active_key_cond(k, child_idx, i));
-//                             assert(false);
-//                         } else {
-//                             assert(new_right_child_domain.contains(k));
-//                             assert(new_parent.active_key_cond(k, child_idx+1, i));
-//                             assert(false);
-//                         }
-//                     }
-//                 }
-//             }
-//         }
-//         assert(new_parent.i().get_Node_buffers() =~= self.i().get_Node_buffers());
-//         assert(self.i().get_Node_buffers() =~= i_new_parent.get_Node_buffers());
-//     }
-
-//     pub proof fn split_parent_commutes_with_i(self, request: SplitRequest)
-//         requires self.can_split_parent(request)
-//         ensures 
-//             self.i().can_split_parent(request),
-//             self.i().split_parent(request) == self.split_parent(request).i()
-//     {
-//         self.split_parent_wf(request);
-//         BetreeNode::i_wf_auto();
-//         BetreeNode::i_children_lemma_auto();
-
-//         let split_child_idx = request.get_child_idx() as int;
-//         let child = self.get_Node_children()[request.get_child_idx() as int];
-
-//         if request.is_SplitLeaf() {
-//             child.split_leaf_commutes_with_i(request.get_SplitLeaf_split_key());
-//         } else {
-//             child.split_index_commutes_with_i(request.get_SplitIndex_child_pivot_idx());
-//         }
-//         assert(self.split_parent(request).i().get_Node_children() =~= self.i().split_parent(request).get_Node_children());      
-  
-//         self.split_parent_buffers_commutes_with_i(request);
-//     }
+        self.split_parent_buffers_commutes_with_i(request);
+        assert(self.split_parent(request).i().get_Node_children() =~= self.i().split_parent(request).get_Node_children());
+    }
 
     pub proof fn flush_wf(self, child_idx: nat, buffer_gc: nat)
         requires self.can_flush(child_idx, buffer_gc)
@@ -827,6 +708,7 @@ impl Path{
         }
     }
 
+    #[verifier::spinoff_prover]
     pub proof fn replaced_children_matching_domains(self, replacement: BetreeNode)
         requires self.valid(), self.valid_replacement(replacement), 0 < self.depth
         ensures self.node.children_have_matching_domains(self.replaced_children(replacement))
@@ -838,6 +720,7 @@ impl Path{
         let old_children = self.node.get_Node_children();
         let new_children = self.replaced_children(replacement);
         assert(old_children.len() == new_children.len());
+        assert(forall |i| #![auto] 0 <= i < new_children.len() ==> new_children[i].wf());
         
         if 0 < self.subpath().depth {
             self.subpath().replaced_children_matching_domains(replacement);
@@ -872,28 +755,7 @@ impl Path{
             assert(self.substitute(replacement).i().get_Node_children()
                 =~= self.i().substitute(replacement.i()).get_Node_children()
             );
-
-            // assert forall |i| 0 <= i < self.node.get_Node_buffers().len()
-            // implies #[trigger] self.substitute(replacement).i().get_Node_buffers()[i] == self.node.i().get_Node_buffers()[i]
-            // by {
-            //     let a = self.substitute(replacement).active_keys(i);
-            //     let b = self.node.active_keys(i);
-
-            //     self.replaced_children_matching_domains(replacement);
-            //     assert forall |k: Key| a.contains(k) <==> b.contains(k)
-            //     by {
-            //         if a.contains(k) {
-            //             let child_idx = choose |child_idx| self.substitute(replacement).active_key_cond(k, child_idx, i);
-            //             assert(self.node.active_key_cond(k, child_idx, i));
-            //         }
-            //         if b.contains(k) {
-            //             let child_idx = choose |child_idx| self.node.active_key_cond(k, child_idx, i);
-            //             assert(self.substitute(replacement).active_key_cond(k, child_idx, i));
-            //         }
-            //     }
-            //     assert(self.substitute(replacement).active_keys(i) =~= self.node.active_keys(i));
-            // }
-            assume(self.substitute(replacement).i().get_Node_buffer() =~= self.node.i().get_Node_buffer()); // TODO
+            assert(self.substitute(replacement).make_offset_map() =~= self.node.make_offset_map());
         }
     }
 }
@@ -1065,24 +927,24 @@ impl FilteredBetree::State {
         assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_grow()));
     }
 
-//     pub proof fn internal_split_refines(self, post: Self, lbl: FilteredBetree::Label, path: Path, request: SplitRequest)
-//         requires self.inv(), FilteredBetree::State::internal_split(self, post, lbl, path, request)
-//         ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i())
-//     {
-//         reveal(PivotBetree::State::next);
-//         reveal(PivotBetree::State::next_by);
+    pub proof fn internal_split_refines(self, post: Self, lbl: FilteredBetree::Label, path: Path, request: SplitRequest)
+        requires self.inv(), FilteredBetree::State::internal_split(self, post, lbl, path, request)
+        ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(PivotBetree::State::next);
+        reveal(PivotBetree::State::next_by);
 
-//         BetreeNode::i_wf_auto();
+        BetreeNode::i_wf_auto();
 
-//         path.target().split_parent_wf(request);
-//         path.substitute_refines(path.target().split_parent(request));
+        path.target().split_parent_wf(request);
+        path.substitute_refines(path.target().split_parent(request));
 
-//         path.i_valid();
-//         path.target_commutes_with_i();
-//         path.target().split_parent_commutes_with_i(request);
+        path.i_valid();
+        path.target_commutes_with_i();
+        path.target().split_parent_commutes_with_i(request);
 
-//         assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_split(path.i(), request)));
-//     }
+        assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_split(path.i(), request)));
+    }
 
 //     pub proof fn internal_flush_refines(self, post: Self, lbl: FilteredBetree::Label, path: Path, child_idx: nat, buffer_gc: nat)
 //         requires self.inv(), FilteredBetree::State::internal_flush(self, post, lbl, path, child_idx, buffer_gc)
@@ -1132,27 +994,27 @@ impl FilteredBetree::State {
         assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_noop()));
     }
 
-//     pub proof fn next_refines(self, post: Self, lbl: FilteredBetree::Label)
-//         requires self.inv(), FilteredBetree::State::next(self, post, lbl),
-//         ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i()),
-//     {
-//         reveal(FilteredBetree::State::next);
-//         reveal(FilteredBetree::State::next_by);
+    pub proof fn next_refines(self, post: Self, lbl: FilteredBetree::Label)
+        requires self.inv(), FilteredBetree::State::next(self, post, lbl),
+        ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i()),
+    {
+        reveal(FilteredBetree::State::next);
+        reveal(FilteredBetree::State::next_by);
 
-//         match choose |step| FilteredBetree::State::next_by(self, post, lbl, step)
-//         {
-//             FilteredBetree::Step::query(receipt) => { self.query_refines(post, lbl, receipt); } 
-//             FilteredBetree::Step::put() => { self.put_refines(post, lbl); }
-//             FilteredBetree::Step::freeze_as() => { self.freeze_as_refines(post, lbl); }
-//             FilteredBetree::Step::internal_flush_memtable() => { self.internal_flush_memtable_refines(post, lbl); }
-//             FilteredBetree::Step::internal_grow() => { self.internal_grow_refines(post, lbl); }
-//             FilteredBetree::Step::internal_split(path, split_request) => { self.internal_split_refines(post, lbl, path, split_request); }
-//             FilteredBetree::Step::internal_flush(path, child_idx, buffer_gc) => { self.internal_flush_refines(post, lbl, path, child_idx, buffer_gc); }
-//             // FilteredBetree::Step::internal_compact(path, compacted_buffers) => { self.internal_compact_refines(post, lbl, path, compacted_buffers); }
-//             FilteredBetree::Step::internal_noop() => { self.internal_noop_noop(post, lbl); }
-//             _ => { assume(false); } 
-//         }
-//     }
+        match choose |step| FilteredBetree::State::next_by(self, post, lbl, step)
+        {
+            FilteredBetree::Step::query(receipt) => { self.query_refines(post, lbl, receipt); } 
+            FilteredBetree::Step::put() => { self.put_refines(post, lbl); }
+            FilteredBetree::Step::freeze_as() => { self.freeze_as_refines(post, lbl); }
+            // FilteredBetree::Step::internal_flush_memtable() => { self.internal_flush_memtable_refines(post, lbl); }
+            FilteredBetree::Step::internal_grow() => { self.internal_grow_refines(post, lbl); }
+            FilteredBetree::Step::internal_split(path, split_request) => { self.internal_split_refines(post, lbl, path, split_request); }
+            // FilteredBetree::Step::internal_flush(path, child_idx, buffer_gc) => { self.internal_flush_refines(post, lbl, path, child_idx, buffer_gc); }
+            // FilteredBetree::Step::internal_compact(path, compacted_buffers) => { self.internal_compact_refines(post, lbl, path, compacted_buffers); }
+            FilteredBetree::Step::internal_noop() => { self.internal_noop_noop(post, lbl); }
+            _ => { assume(false); } 
+        }
+    }
 } // end impl FilteredBetree::State
 
 }//verus

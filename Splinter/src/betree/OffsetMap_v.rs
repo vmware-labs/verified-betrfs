@@ -8,6 +8,7 @@ use crate::betree::Buffer_v::*;
 
 verus! {
 
+#[verifier::ext_equal]
 pub struct OffsetMap {
     pub offsets: Map<Key, nat>
 }
@@ -23,10 +24,10 @@ impl OffsetMap {
         self.offsets[k]
     }
 
-    pub open spec fn filter_for_bottom(self) -> Set<Key>
+    pub open spec fn active_keys(self, offset: nat) -> Set<Key>
         recommends self.is_total()
     {
-        Set::new(|k| self.offsets[k] == 0)
+        Set::new(|k| self.offsets[k] <= offset)
     }
 
     pub open spec fn decrement(self, i: nat) -> OffsetMap

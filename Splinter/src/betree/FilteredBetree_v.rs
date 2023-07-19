@@ -193,7 +193,6 @@ impl BetreeNode {
         recommends self.can_split_index(pivot_idx)
     {
         let idx = pivot_idx as int;
-        let split_element = self.get_Node_pivots().pivots[idx];
         let new_left = BetreeNode::Node{
             buffers: self.get_Node_buffers(),
             pivots: self.get_Node_pivots().subrange(0, idx+1),

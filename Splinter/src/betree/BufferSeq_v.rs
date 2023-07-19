@@ -105,9 +105,8 @@ impl BufferSeq {
         if self.len() == idx {
             Buffer::empty()
         } else {
-            let new_offset_map = offset_map.decrement(1);
-            let bottom_buffer = self[idx].apply_filter(offset_map.filter_for_bottom());
-            bottom_buffer.merge(self.i_filtered_from(new_offset_map, idx+1))
+            let bottom_buffer = self[idx].apply_filter(offset_map.active_keys(idx as nat));
+            bottom_buffer.merge(self.i_filtered_from(offset_map, idx+1))
         }
     }
 
@@ -117,32 +116,57 @@ impl BufferSeq {
         self.i_filtered_from(offset_map, 0)
     }
 
-    pub open spec fn buffer_idx_for_key(self, offset_map: OffsetMap, from_idx: int, k: Key, buffer_idx: int) -> bool
+    pub open spec fn key_in_buffer(self, offset_map: OffsetMap, from_idx: int, k: Key, buffer_idx: int) -> bool
         recommends offset_map.is_total()
     {
         &&& from_idx <= buffer_idx < self.len()
-        &&& offset_map.offsets[k] <= buffer_idx - from_idx
+        &&& offset_map.offsets[k] <= buffer_idx
         &&& self[buffer_idx].map.contains_key(k)
     }
 
     pub proof fn i_filtered_from_domain(self, offset_map: OffsetMap, idx: int)
         requires offset_map.is_total(), 0 <= idx <= self.len()
         ensures forall |k| self.i_filtered_from(offset_map, idx).map.contains_key(k)
-            <==> exists |buffer_idx| self.buffer_idx_for_key(offset_map, idx, k, buffer_idx)
+            <==> exists |buffer_idx| self.key_in_buffer(offset_map, idx, k, buffer_idx)
+        decreases self.len() - idx
     {
-        assume(false);
+        let result = self.i_filtered_from(offset_map, idx);
+        assert forall |k| #[trigger] result.map.contains_key(k)
+            <==> exists |buffer_idx| self.key_in_buffer(offset_map, idx, k, buffer_idx)
+        by {
+            if result.map.contains_key(k) {
+                assert(idx < self.len()); // trigger
+                if self.key_in_buffer(offset_map, idx, k, idx) {
+                } else {
+                    let sub_result = self.i_filtered_from(offset_map, idx+1);
+                    self.i_filtered_from_domain(offset_map, idx+1);
+                    assert(sub_result.map.contains_key(k));
+
+                    let next_idx = idx + 1; // TODO(verus): temp measure before forall_arith pr is merged
+                    let buffer_idx = choose |buffer_idx| self.key_in_buffer(offset_map, next_idx, k, buffer_idx);
+                    assert(self.key_in_buffer(offset_map, idx, k, buffer_idx));
+                }
+            } 
+            if exists |buffer_idx| self.key_in_buffer(offset_map, idx, k, buffer_idx) {
+                let buffer_idx = choose |buffer_idx| self.key_in_buffer(offset_map, idx, k, buffer_idx);
+                if buffer_idx == idx {
+                    assert(result.map.contains_key(k));
+                } else {
+                    let sub_result = self.i_filtered_from(offset_map, idx+1);
+                    self.i_filtered_from_domain(offset_map, idx+1);
+                    assert(self.key_in_buffer(offset_map, idx+1, k, buffer_idx)); // trigger
+                }
+            }
+        }
     }
 
-    // kept key for each buffer_idx
-    // 
-
-    pub proof fn i_filtered_domain(self, offset_map: OffsetMap) 
-        requires offset_map.is_total()
-        ensures forall |k| self.i_filtered(offset_map).map.contains_key(k)
-            <==> exists |buffer_idx| self.buffer_idx_for_key(offset_map, 0, k, buffer_idx)
-    {
-        self.i_filtered_from_domain(offset_map, 0)
-    }
+    // pub proof fn i_filtered_domain(self, offset_map: OffsetMap) 
+    //     requires offset_map.is_total()
+    //     ensures forall |k| self.i_filtered(offset_map).map.contains_key(k)
+    //         <==> exists |buffer_idx| self.key_in_buffer(offset_map, 0, k, buffer_idx)
+    // {
+    //     self.i_filtered_from_domain(offset_map, 0)
+    // }
 
     // pub proof fn common_buffer_seqs(a: BufferSeq, b: BufferSeq, a_start: int, b_delta: int, key: Key)
     //     requires 0 <= a_start <= a.len(), 0 <= a_start+b_delta <= b.len(), 
