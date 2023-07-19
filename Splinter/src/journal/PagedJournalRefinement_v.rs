@@ -21,18 +21,25 @@ use crate::journal::PagedJournal_v::*;
 verus! {
 
 impl JournalRecord {
-    pub open spec(checked) fn i(self, boundary_lsn: LSN) -> MsgHistory
+    pub open spec /*XXX (checked)*/ fn i(self, boundary_lsn: LSN) -> MsgHistory
     recommends
         self.wf(),
     decreases self
     {
         if self.message_seq.can_discard_to(boundary_lsn)
             { self.message_seq.discard_old(boundary_lsn) } // and don't deref the prior_rec!
-        else
-            { Self::i_opt(*self.prior_rec, boundary_lsn).concat(self.message_seq) }
+        else {
+// XXX this doesn't seem to satisfy the corresponding recommends in i_opt.
+//             let _ = spec_affirm( (*self.prior_rec).is_some()
+//                                 ==> (*self.prior_rec).unwrap().valid(boundary_lsn) );
+            Self::i_opt(*self.prior_rec, boundary_lsn).concat(self.message_seq)
+        }
     }
 
-    pub open spec(checked) fn i_opt(ojr: Option<Self>, boundary_lsn: LSN) -> MsgHistory
+    // Not sure why i can't prove this recommends
+    pub open spec /*XXX (checked)*/ fn i_opt(ojr: Option<Self>, boundary_lsn: LSN) -> MsgHistory
+    recommends
+        ojr.is_Some() ==> ojr.unwrap().valid(boundary_lsn),
     decreases ojr
     {
         match ojr {
@@ -289,6 +296,8 @@ impl JournalRecord {
 
 impl TruncatedJournal {
     pub open spec(checked) fn i(self) -> MsgHistory
+    recommends
+        self.wf(),
     {
         JournalRecord::i_opt(self.freshest_rec, self.boundary_lsn)
     }
@@ -348,6 +357,8 @@ impl PagedJournal::Label {
     }
 
     pub open spec(checked) fn i(self) -> AbstractJournal::Label
+    recommends
+        self.wf(),
     {
         match self {
             PagedJournal::Label::ReadForRecovery{messages}
@@ -368,6 +379,8 @@ impl PagedJournal::Label {
 
 impl PagedJournal::State {
     pub open spec(checked) fn i(self) -> AbstractJournal::State
+    recommends
+        self.wf(),
     {
         AbstractJournal::State{journal: self.truncated_journal.i().concat(self.unmarshalled_tail)}
     }

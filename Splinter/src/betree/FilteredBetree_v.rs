@@ -176,7 +176,7 @@ impl BetreeNode {
     pub open spec(checked) fn is_index(self) -> bool
     {
         &&& self.is_Node()
-        &&& forall |i| 0 <= i < self.get_Node_children().len() ==> self.get_Node_children()[i].is_Node()
+        &&& forall |i| 0 <= i < self.get_Node_children().len() ==> (#[trigger] self.get_Node_children()[i]).is_Node()
     }
 
     pub open spec(checked) fn can_split_leaf(self, split_key: Key) -> bool

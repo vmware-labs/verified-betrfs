@@ -255,6 +255,9 @@ impl DiskView {
 
 impl TruncatedJournal {
     pub open spec(checked) fn next(self) -> Self
+    recommends
+        self.wf(),
+        self.freshest_rec.is_Some(),
     {
         Self{ freshest_rec: self.disk_view.next(self.freshest_rec), ..self }
     }
@@ -511,7 +514,17 @@ impl TruncatedJournal {
 }
 
 impl LinkedJournal::Label {
+    pub open spec(checked) fn wf(self) -> bool
+    {
+        match self {
+            Self::FreezeForCommit{frozen_journal} => frozen_journal.decodable(),
+            _ => true,
+        }
+    }
+
     pub open spec(checked) fn i(self) -> PagedJournal::Label
+    recommends
+        self.wf(),
     {
         match self {
             Self::ReadForRecovery{messages} => PagedJournal::Label::ReadForRecovery{messages},

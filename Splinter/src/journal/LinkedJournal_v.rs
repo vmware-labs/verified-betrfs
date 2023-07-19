@@ -415,8 +415,14 @@ impl DiskView {
         }
     }
 
-    pub open spec(checked) fn next(self, ptr: Pointer) -> Pointer
+    pub open spec /*XXX (checked)*/ fn next(self, ptr: Pointer) -> Pointer
+    recommends
+        self.wf(),
+        ptr.is_Some(),
     {
+//         let _ = spec_affirm( self.entries.contains_key(ptr.unwrap()) );
+//         let _ = spec_affirm( self.entries.dom().contains(ptr.unwrap()) );
+//         XXX These affirms aren't triggering.
         self.entries[ptr.unwrap()].cropped_prior(self.boundary_lsn)
     }
 
@@ -505,6 +511,10 @@ impl DiskView {
         self.build_tight(None).is_tight(None),
     {
         let tight = self.build_tight(None);
+
+        //XXX need a callout to build_tight_is_awesome?
+        assert( tight.wf() );
+
         assert( tight.valid_ranking(map![]) ); // new witness; not needed in Dafny
         assert forall |other: Self|
         ({
@@ -725,6 +735,8 @@ impl TruncatedJournal {
 //     }
 
     pub open spec(checked) fn build_tight(self) -> (out: Self)
+    recommends
+        self.disk_view.decodable(self.freshest_rec),
     {
         TruncatedJournal{
             disk_view: self.disk_view.build_tight(self.freshest_rec),

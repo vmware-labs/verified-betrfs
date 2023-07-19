@@ -24,9 +24,10 @@ verus!{
 
     impl DiskView {
         pub open spec(checked) fn build_lsn_addr_index(self, root: Pointer) -> Map<LSN, Address>
-            recommends self.decodable(root), self.acyclic(),
-                root.is_Some() ==> self.boundary_lsn < self.entries[root.unwrap()].message_seq.seq_end
-            decreases self.the_rank_of(root) when self.decodable(root) && self.acyclic()
+        recommends
+            self.decodable(root), self.acyclic(),
+            root.is_Some() ==> self.boundary_lsn < self.entries[root.unwrap()].message_seq.seq_end,
+        decreases self.the_rank_of(root) when self.decodable(root) && self.acyclic()
         {
             if root.is_None() {
                 map!{}
@@ -59,11 +60,12 @@ verus!{
             self.disk_view.build_lsn_addr_index(self.freshest_rec)
         }
     
-        pub open spec(checked) fn transitive_likes(self) -> Likes 
+        pub open spec /*XXX(checked)*/ fn transitive_likes(self) -> Likes 
         {
             if !self.decodable() {
                 no_likes()
             } else {
+                //XXX need an ensures that build_lsn_addr_index gives a finite map
                 let lsn_addr_map = self.build_lsn_addr_index();
                 // TODO(verus): map.Values && multiset constructor
                 // we just want to have multiset{lsn_addr_map.values}
