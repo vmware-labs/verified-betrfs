@@ -610,7 +610,47 @@ impl BetreeNode {
         assert(buffers_to_child.i().apply_filter(child_domain.key_set()) =~= self.i_buffer().apply_filter(child_domain.key_set()));
         assert(self.flush(child_idx, buffer_gc).i().get_Node_children() =~= self.i().flush(child_idx).get_Node_children());
 
-        assume(self.flush(child_idx, buffer_gc).i().get_Node_buffer() =~= self.i().flush(child_idx).get_Node_buffer());
+        let a = self.flush(child_idx, buffer_gc);
+        let b = self.i().flush(child_idx);
+        let keep_keys = all_keys().difference(child_domain.key_set());
+
+        a.i_buffer_domain();
+
+        assert forall |k|
+        ({
+            &&& #[trigger] a.i().get_Node_buffer().map.contains_key(k) <==> b.get_Node_buffer().map.contains_key(k)
+            &&& a.i().get_Node_buffer().map.contains_key(k) ==> a.i().get_Node_buffer().map[k] == b.get_Node_buffer().map[k]
+        }) by {
+            if a.i().get_Node_buffer().map.contains_key(k) {
+                if child_domain.contains(k) {
+                    a.get_Node_pivots().route_is_lemma(k, child_idx as int);
+                    assert(a.flushed_ofs(k) == a.get_Node_buffers().len());
+                    assert(false);
+                }
+                assert(keep_keys.contains(k));
+                let idx = choose |idx| a.get_Node_buffers().key_in_buffer_filtered(a.make_offset_map(), 0, k, idx);
+                let r = a.get_Node_pivots().route(k);
+                assert(r != child_idx);
+                assert(a.flushed_ofs(k) == self.flushed_ofs(k) - buffer_gc);
+                assert(self.get_Node_buffers().key_in_buffer_filtered(self.make_offset_map(), 0, k, idx + buffer_gc));
+                assert(b.get_Node_buffer().map.contains_key(k));
+
+                self.query_from_refines(k);
+                a.query_from_refines(k);
+                BufferSeq::common_buffer_seqs(a.get_Node_buffers(), self.get_Node_buffers(), a.flushed_ofs(k) as int, buffer_gc as int, k);
+            }
+
+            if b.get_Node_buffer().map.contains_key(k) {
+                assert(keep_keys.contains(k));
+                assert(self.key_in_domain(k));
+                assert(a.flushed_ofs(k) == self.flushed_ofs(k) - buffer_gc);
+                let idx = choose |idx| self.get_Node_buffers().key_in_buffer_filtered(self.make_offset_map(), 0, k, idx);
+                assert(a.get_Node_buffers().key_in_buffer_filtered(a.make_offset_map(), 0, k, idx - buffer_gc));
+                assert(a.i().get_Node_buffer().map.contains_key(k));
+            }
+        }
+        assert(a.i().get_Node_buffer().map.dom() =~= b.get_Node_buffer().map.dom());
+        assert(a.i().get_Node_buffer() =~= b.get_Node_buffer());
     }
 
 } // end impl BetreeNode
