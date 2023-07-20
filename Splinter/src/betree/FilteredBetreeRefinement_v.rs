@@ -255,31 +255,28 @@ impl BetreeNode {
         }
     }
 
-//     pub proof fn active_keys_in_my_domain(self, buffer_idx: int)
-//         requires self.wf(), self.is_Node(), 0 <= buffer_idx < self.get_Node_buffers().len()
-//         ensures forall |k| self.active_keys(buffer_idx).contains(k) ==> #[trigger] self.my_domain().contains(k)
-//     {
-//         assert forall |k| self.active_keys(buffer_idx).contains(k)
-//         implies #[trigger] self.my_domain().contains(k)
-//         by {
-//             let child_idx = choose |child_idx| self.active_key_cond(k, child_idx, buffer_idx);
-//             let child_domain = self.child_domain(child_idx as nat);
-
-//             assert(child_domain.contains(k));
-//             if self.get_Node_pivots().num_ranges() == 1 {
-//                 assert(child_domain == self.my_domain());
-//             } else {
-//                 if child_idx == 0 {
-//                     assert(Element::lt(child_domain.get_Domain_end(), self.my_domain().get_Domain_end()));
-//                 } else if child_idx + 1 == self.get_Node_pivots().num_ranges() {
-//                     assert(Element::lt(self.my_domain().get_Domain_start(), child_domain.get_Domain_start()));
-//                 } else {
-//                     assert(Element::lt(self.my_domain().get_Domain_start(), child_domain.get_Domain_start()));
-//                     assert(Element::lt(child_domain.get_Domain_end(), self.my_domain().get_Domain_end()));
-//                 }
-//             }
-//         }
-//     }
+    pub proof fn child_domain_implies_key_in_domain(self, child_idx: nat)
+        requires self.wf(), self.is_Node(), child_idx < self.get_Node_children().len() 
+        ensures forall |k: Key| #![auto] self.child_domain(child_idx).contains(k) ==> self.key_in_domain(k)
+    {
+        let child_domain = self.child_domain(child_idx);
+        assert forall #![auto] |k: Key| child_domain.contains(k)
+        implies self.key_in_domain(k)
+        by {
+            if self.get_Node_pivots().num_ranges() == 1 {
+                assert(child_domain == self.my_domain());
+            } else {
+                if child_idx == 0 {
+                    assert(Element::lt(child_domain.get_Domain_end(), self.my_domain().get_Domain_end()));
+                } else if child_idx + 1 == self.get_Node_pivots().num_ranges() {
+                    assert(Element::lt(self.my_domain().get_Domain_start(), child_domain.get_Domain_start()));
+                } else {
+                    assert(Element::lt(self.my_domain().get_Domain_start(), child_domain.get_Domain_start()));
+                    assert(Element::lt(child_domain.get_Domain_end(), self.my_domain().get_Domain_end()));
+                }
+            }
+        }
+    }
 
     pub proof fn extend_buffer_seq_refines_merge_buffer(self, buffers: BufferSeq)
         requires self.wf(), self.is_Node()
@@ -553,33 +550,64 @@ impl BetreeNode {
         assert(new_child.wf());
     }
 
-//     pub proof fn flush_commutes_with_i(self, child_idx: nat, buffer_gc: nat)
-//         requires self.can_flush(child_idx, buffer_gc)
-//         ensures self.flush(child_idx, buffer_gc).i() == self.i().flush(child_idx)
-//     {
-//         assume(false);
-//         // self.flush_wf(child_idx, buffer_gc);
-//         // BetreeNode::i_wf_auto();
-//         // BetreeNode::i_children_lemma_auto();
+    pub proof fn flush_commutes_with_i(self, child_idx: nat, buffer_gc: nat)
+        requires self.can_flush(child_idx, buffer_gc)
+        ensures self.flush(child_idx, buffer_gc).i() == self.i().flush(child_idx)
+    {
+        self.flush_wf(child_idx, buffer_gc);
+        BetreeNode::i_wf_auto();
+        BetreeNode::i_children_lemma_auto();
+        PivotTable::route_lemma_auto();
 
-//         // let idx = child_idx as int;
-//         // let flush_upto = self.get_Node_buffers().len();
+        let idx = child_idx as int;
+        let flush_upto = self.get_Node_buffers().len();
 
-//         // let flushed_ofs = self.get_Node_flushed().offsets[idx];
-//         // let buffers_to_child = self.get_Node_buffers().slice(flushed_ofs as int, flush_upto as int);
+        let flushed_ofs = self.get_Node_flushed().offsets[idx];
+        let buffers_to_child = self.get_Node_buffers().slice(flushed_ofs as int, flush_upto as int);
 
-//         // let child = self.get_Node_children()[idx];
-//         // let child_domain = self.child_domain(child_idx);
-//         // let new_child = child.promote(child_domain).extend_buffer_seq(buffers_to_child);
+        let child = self.get_Node_children()[idx];
+        let child_domain = self.child_domain(child_idx);
+        let new_child = child.promote(child_domain).extend_buffer_seq(buffers_to_child);
 
-//         // assert(child.wf()); // trigger
-//         // child.promote_commutes_with_i(child_domain);
-//         // assert(child.promote(child_domain).i() == child.i().promote(child_domain));
-//         // child.promote(child_domain).extend_buffer_seq_commutes_with_i(buffers_to_child);
-//         // assert(new_child.i() == child.i().promote(child_domain).extend_buffer_seq(buffers_to_child.apply_filter(child_domain.key_set())));
+        assert(child.wf()); // trigger
+        child.promote_commutes_with_i(child_domain);
+        assert(child.promote(child_domain).i() == child.i().promote(child_domain));
+        child.promote(child_domain).extend_buffer_seq_refines_merge_buffer(buffers_to_child);
+        assert(new_child.i() == child.i().promote(child_domain).merge_buffer(buffers_to_child.i().apply_filter(child_domain.key_set())));
 
-//         // assert(self.i().child_domain(child_idx) == child_domain);
-//      }   
+        self.child_domain_implies_key_in_domain(child_idx);
+        assert forall #![auto] |k| child_domain.contains(k)
+        implies ({
+            &&& buffers_to_child.i().map.contains_key(k) <==> self.i_buffer().map.contains_key(k)
+            &&& buffers_to_child.i().query(k) == self.i_buffer().query(k)
+        }) by {
+            assert(self.key_in_domain(k));
+            assume(false);
+        }
+        assert(buffers_to_child.i().apply_filter(child_domain.key_set()) =~= self.i_buffer().apply_filter(child_domain.key_set()));
+        assert(self.flush(child_idx, buffer_gc).i().get_Node_children() =~= self.i().flush(child_idx).get_Node_children());
+
+        //         let gc_buffers = self.get_Node_buffers().slice(buffer_gc as int, flush_upto as int);
+        // self.flush(child_idx, buffer_gc).i_buffer() == self.get_Node_buffer().apply_filter(keep_keys);
+        // TODO: show that domain keys in flush are within keep keys
+        // let keep_keys = all_keys().difference(child_domain.key_set());
+        // assert forall #![auto] |k| keep_keys.contains(k)
+        // implies ({
+        //     // &&& self.key_in_domain(k)
+        //     &&& self.flush(child_idx, buffer_gc).i().get_Node_buffer().map.contains_key(k) <==> self.i_buffer().map.contains_key(k)
+        //     // &&& self.flush(child_idx, buffer_gc).i().get_Node_buffer().query(k) == self.i_buffer().query(k)
+        // }) by {
+        //     assume(false);
+        // }
+
+        // assert(self.flush(child_idx, buffer_gc).i().get_Node_buffer().map.dom() =~= self.flush(child_idx, buffer_gc).i().get_Node_buffer().apply_filter(keep_keys).map.dom());
+
+        // assert(self.flush(child_idx, buffer_gc).i().get_Node_buffer().map.dom() =~= self.i().flush(child_idx).get_Node_buffer().map.dom());
+        // assert(self.flush(child_idx, buffer_gc).i().get_Node_buffer() =~= self.i().flush(child_idx).get_Node_buffer());
+
+        assume(false);
+
+    }
 
 } // end impl BetreeNode
 
@@ -772,47 +800,6 @@ impl FilteredBetree::Label {
         }
     }
 } // end impl FilteredBetree::Label
-
-// // pub proof fn flush_commutes_with_i(path: Path, child_idx: nat)
-// //     requires path.valid(), path.target().can_flush(child_idx)
-// //     ensures path.target().i().flush(path.target().child_domain(child_idx).key_set())
-// //         == path.target().flush(child_idx).i()
-// // {
-// //     let target = path.target();
-// //     path.target_wf();
-// //     target.flush_wf(child_idx);
-
-// //     let child = target.get_Node_children()[child_idx as int];
-// //     let child_domain = target.child_domain(child_idx);
-// //     let moved_buffers = target.get_Node_buffers().apply_filter(child_domain.key_set());
-
-// //     if child.is_Nil() {
-// //         child.nil_promote_and_extend_commutes_with_i(child_domain, moved_buffers);
-// //     } else {
-// //         child.node_promote_and_extend_commutes_with_i(child_domain, moved_buffers);
-// //     }
-
-// //     assert forall |k| true
-// //     implies #[trigger] target.flush(child_idx).i().get_Node_children().map[k] 
-// //         == target.i().flush(child_domain.key_set()).get_Node_children().map[k]
-// //     by {
-// //         target.i_children_lemma();
-// //         target.flush(child_idx).i_children_lemma();
-
-// //         if child_domain.contains(k) {
-// //             target.flush(child_idx).get_Node_pivots().route_is_lemma(k, child_idx as int);
-// //             assert(target.key_in_domain(k));
-// //         } else {
-// //             if target.my_domain().contains(k) {
-// //                 let r = target.get_Node_pivots().route(k);
-// //                 target.get_Node_pivots().route_lemma(k);
-// //             }
-// //         }
-// //     }
-
-// //     assert(target.flush(child_idx).i().get_Node_children().map =~= 
-// //         target.i().flush(child_domain.key_set()).get_Node_children().map);
-// // }
 
 // // pub proof fn compact_commutes_with_i(path: Path, compacted_buffers: BufferSeq)
 // //     requires path.valid(), path.target().is_Node(),
