@@ -575,38 +575,42 @@ impl BetreeNode {
         child.promote(child_domain).extend_buffer_seq_refines_merge_buffer(buffers_to_child);
         assert(new_child.i() == child.i().promote(child_domain).merge_buffer(buffers_to_child.i().apply_filter(child_domain.key_set())));
 
+        self.i_buffer_domain();
         self.child_domain_implies_key_in_domain(child_idx);
+
         assert forall #![auto] |k| child_domain.contains(k)
         implies ({
             &&& buffers_to_child.i().map.contains_key(k) <==> self.i_buffer().map.contains_key(k)
             &&& buffers_to_child.i().query(k) == self.i_buffer().query(k)
         }) by {
-            assert(self.key_in_domain(k));
-            assume(false);
+            self.get_Node_pivots().route_is_lemma(k, idx);
+            assert(self.flushed_ofs(k) == flushed_ofs);
+
+            if buffers_to_child.i().map.contains_key(k) {
+                buffers_to_child.i_from_domain(0);
+                let buffer_idx = choose |buffer_idx| buffers_to_child.key_in_buffer(0, k, buffer_idx);
+                assert(self.get_Node_buffers().key_in_buffer(flushed_ofs as int, k, buffer_idx + flushed_ofs));
+                assert(self.get_Node_buffers().key_in_buffer_filtered(self.make_offset_map(), 0, k, buffer_idx + flushed_ofs));
+                assert(self.i_buffer().map.contains_key(k));
+            }
+
+            if self.i_buffer().map.contains_key(k) {
+                let buffer_idx = choose |buffer_idx| self.get_Node_buffers().key_in_buffer_filtered(self.make_offset_map(), 0, k, buffer_idx);
+                assert(buffers_to_child.key_in_buffer(0, k, buffer_idx-flushed_ofs));
+                buffers_to_child.i_from_domain(0);
+                assert(buffers_to_child.i().map.contains_key(k));
+            }
+
+            buffers_to_child.query_agrees_with_i(k, 0);
+            self.query_from_refines(k);
+            assert(buffers_to_child.query(k) == buffers_to_child.i().query(k));
+            assert(self.i_buffer().query(k) == self.get_Node_buffers().query_from(k, flushed_ofs as int));
+            BufferSeq::common_buffer_seqs(buffers_to_child, self.get_Node_buffers(), 0, flushed_ofs as int, k);
         }
         assert(buffers_to_child.i().apply_filter(child_domain.key_set()) =~= self.i_buffer().apply_filter(child_domain.key_set()));
         assert(self.flush(child_idx, buffer_gc).i().get_Node_children() =~= self.i().flush(child_idx).get_Node_children());
 
-        //         let gc_buffers = self.get_Node_buffers().slice(buffer_gc as int, flush_upto as int);
-        // self.flush(child_idx, buffer_gc).i_buffer() == self.get_Node_buffer().apply_filter(keep_keys);
-        // TODO: show that domain keys in flush are within keep keys
-        // let keep_keys = all_keys().difference(child_domain.key_set());
-        // assert forall #![auto] |k| keep_keys.contains(k)
-        // implies ({
-        //     // &&& self.key_in_domain(k)
-        //     &&& self.flush(child_idx, buffer_gc).i().get_Node_buffer().map.contains_key(k) <==> self.i_buffer().map.contains_key(k)
-        //     // &&& self.flush(child_idx, buffer_gc).i().get_Node_buffer().query(k) == self.i_buffer().query(k)
-        // }) by {
-        //     assume(false);
-        // }
-
-        // assert(self.flush(child_idx, buffer_gc).i().get_Node_buffer().map.dom() =~= self.flush(child_idx, buffer_gc).i().get_Node_buffer().apply_filter(keep_keys).map.dom());
-
-        // assert(self.flush(child_idx, buffer_gc).i().get_Node_buffer().map.dom() =~= self.i().flush(child_idx).get_Node_buffer().map.dom());
-        // assert(self.flush(child_idx, buffer_gc).i().get_Node_buffer() =~= self.i().flush(child_idx).get_Node_buffer());
-
-        assume(false);
-
+        assume(self.flush(child_idx, buffer_gc).i().get_Node_buffer() =~= self.i().flush(child_idx).get_Node_buffer());
     }
 
 } // end impl BetreeNode
@@ -935,23 +939,23 @@ impl FilteredBetree::State {
         assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_split(path.i(), request)));
     }
 
-//     pub proof fn internal_flush_refines(self, post: Self, lbl: FilteredBetree::Label, path: Path, child_idx: nat, buffer_gc: nat)
-//         requires self.inv(), FilteredBetree::State::internal_flush(self, post, lbl, path, child_idx, buffer_gc)
-//         ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i())
-//     {
-//         reveal(PivotBetree::State::next);
-//         reveal(PivotBetree::State::next_by);
+    pub proof fn internal_flush_refines(self, post: Self, lbl: FilteredBetree::Label, path: Path, child_idx: nat, buffer_gc: nat)
+        requires self.inv(), FilteredBetree::State::internal_flush(self, post, lbl, path, child_idx, buffer_gc)
+        ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(PivotBetree::State::next);
+        reveal(PivotBetree::State::next_by);
 
-//         BetreeNode::i_wf_auto();
-//         path.target().flush_wf(child_idx, buffer_gc);
-//         path.substitute_refines(path.target().flush(child_idx, buffer_gc));
+        BetreeNode::i_wf_auto();
+        path.target().flush_wf(child_idx, buffer_gc);
+        path.substitute_refines(path.target().flush(child_idx, buffer_gc));
 
-//         path.i_valid();
-//         path.target_commutes_with_i();
-//         path.target().flush_commutes_with_i(child_idx, buffer_gc);
+        path.i_valid();
+        path.target_commutes_with_i();
+        path.target().flush_commutes_with_i(child_idx, buffer_gc);
 
-//         assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_flush(path.i(), child_idx)));
-//     }
+        assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_flush(path.i(), child_idx)));
+    }
 
 // //     pub proof fn internal_compact_refines(self, post: Self, lbl: FilteredBetree::Label, path: Path, compacted_buffers: BufferSeq)
 // //         requires self.inv(), FilteredBetree::State::internal_compact(self, post, lbl, path, compacted_buffers)
@@ -998,7 +1002,7 @@ impl FilteredBetree::State {
             FilteredBetree::Step::internal_flush_memtable() => { self.internal_flush_memtable_refines(post, lbl); }
             FilteredBetree::Step::internal_grow() => { self.internal_grow_refines(post, lbl); }
             FilteredBetree::Step::internal_split(path, split_request) => { self.internal_split_refines(post, lbl, path, split_request); }
-            // FilteredBetree::Step::internal_flush(path, child_idx, buffer_gc) => { self.internal_flush_refines(post, lbl, path, child_idx, buffer_gc); }
+            FilteredBetree::Step::internal_flush(path, child_idx, buffer_gc) => { self.internal_flush_refines(post, lbl, path, child_idx, buffer_gc); }
             // FilteredBetree::Step::internal_compact(path, compacted_buffers) => { self.internal_compact_refines(post, lbl, path, compacted_buffers); }
             FilteredBetree::Step::internal_noop() => { self.internal_noop_noop(post, lbl); }
             _ => { assume(false); } 
