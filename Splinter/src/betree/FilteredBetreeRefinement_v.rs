@@ -362,7 +362,7 @@ impl BetreeNode {
         self.get_Node_pivots().insert_wf(child_idx as int + 1, self.split_element(request));
     }
 
-    #[verifier::spinoff_prover]
+    // #[verifier::spinoff_prover]
     pub proof fn split_leaf_commutes_with_i(self, split_key: Key)
         requires self.can_split_leaf(split_key)
         ensures 
@@ -423,10 +423,13 @@ impl BetreeNode {
         assert(right.i().get_Node_children() =~= i_right.get_Node_children());
     }
 
-    // #[verifier::spinoff_prover]
-    pub proof fn split_parent_buffers_commutes_with_i(self, request: SplitRequest)
+    pub proof fn split_parent_buffers_commutes_with_i_key(self, request: SplitRequest, k: Key)
         requires self.can_split_parent(request), self.i().can_split_parent(request)
-        ensures self.i().split_parent(request).get_Node_buffer() == self.split_parent(request).i().get_Node_buffer()
+        ensures 
+            self.split_parent(request).i().get_Node_buffer().map.contains_key(k) 
+                == self.i().split_parent(request).get_Node_buffer().map.contains_key(k),
+            self.split_parent(request).i().get_Node_buffer().map.contains_key(k) ==> 
+                self.split_parent(request).i().get_Node_buffer().map[k] ==  self.i().split_parent(request).get_Node_buffer().map[k]
     {
         self.split_parent_wf(request);
         self.i().split_parent_wf(request);
@@ -438,47 +441,61 @@ impl BetreeNode {
         let i_new_parent = self.i().split_parent(request);
         let split_child_idx = request.get_child_idx() as int;
 
+        self.i_buffer_domain();
+        new_parent.i_buffer_domain();
+
+        if new_parent.i().get_Node_buffer().map.contains_key(k) {
+            let r = new_parent.get_Node_pivots().route(k);
+            if r <= split_child_idx {
+                self.get_Node_pivots().route_is_lemma(k, r);
+            } else {
+                assert(Element::lt(new_parent.get_Node_pivots().pivots[r-1], new_parent.get_Node_pivots().pivots[r]));
+                self.get_Node_pivots().route_is_lemma(k, r-1);
+            }
+            assert(self.flushed_ofs(k) == new_parent.flushed_ofs(k));
+            new_parent.i_preserves_domain(self, k);
+        }
+
+        if i_new_parent.get_Node_buffer().map.contains_key(k) {
+            assert(self.i().get_Node_buffer().map.contains_key(k));
+            assert(self.key_in_domain(k));
+            assert(new_parent.key_in_domain(k));
+
+            let r = self.get_Node_pivots().route(k);
+            if r < split_child_idx {
+                new_parent.get_Node_pivots().route_is_lemma(k, r);
+            } else if r == split_child_idx {
+                if Element::lt(to_element(k), new_parent.get_Node_pivots().pivots[r+1]) {
+                    new_parent.get_Node_pivots().route_is_lemma(k, r);
+                } else {
+                    new_parent.get_Node_pivots().route_is_lemma(k, r+1);
+                }
+            } else {
+                new_parent.get_Node_pivots().route_is_lemma(k, r+1);
+            }
+            assert(self.flushed_ofs(k) == new_parent.flushed_ofs(k));
+            self.i_preserves_domain(new_parent, k);
+        }
+    }
+
+    #[verifier::spinoff_prover]
+    pub proof fn split_parent_buffers_commutes_with_i(self, request: SplitRequest)
+        requires self.can_split_parent(request), self.i().can_split_parent(request)
+        ensures self.i().split_parent(request).get_Node_buffer() == self.split_parent(request).i().get_Node_buffer()
+    {
+        self.split_parent_wf(request);
+        self.i().split_parent_wf(request);
+        BetreeNode::i_wf_auto();
+
+        let new_parent = self.split_parent(request);
+        let i_new_parent = self.i().split_parent(request);
         assert forall |k| 
         ({
             &&& new_parent.i().get_Node_buffer().map.contains_key(k) <==> #[trigger] i_new_parent.get_Node_buffer().map.contains_key(k)
             &&& new_parent.i().get_Node_buffer().map.contains_key(k) ==> 
                 new_parent.i().get_Node_buffer().map[k] == i_new_parent.get_Node_buffer().map[k]
         }) by {
-            self.i_buffer_domain();
-            new_parent.i_buffer_domain();
-
-            if new_parent.i().get_Node_buffer().map.contains_key(k) {
-                let r = new_parent.get_Node_pivots().route(k);
-                if r <= split_child_idx {
-                    self.get_Node_pivots().route_is_lemma(k, r);
-                } else {
-                    assert(Element::lt(new_parent.get_Node_pivots().pivots[r-1], new_parent.get_Node_pivots().pivots[r]));
-                    self.get_Node_pivots().route_is_lemma(k, r-1);
-                }
-                assert(self.flushed_ofs(k) == new_parent.flushed_ofs(k));
-                new_parent.i_preserves_domain(self, k);
-            }
-
-            if i_new_parent.get_Node_buffer().map.contains_key(k) {
-                assert(self.i().get_Node_buffer().map.contains_key(k));
-                assert(self.key_in_domain(k));
-                assert(new_parent.key_in_domain(k));
-
-                let r = self.get_Node_pivots().route(k);
-                if r < split_child_idx {
-                    new_parent.get_Node_pivots().route_is_lemma(k, r);
-                } else if r == split_child_idx {
-                    if Element::lt(to_element(k), new_parent.get_Node_pivots().pivots[r+1]) {
-                        new_parent.get_Node_pivots().route_is_lemma(k, r);
-                    } else {
-                        new_parent.get_Node_pivots().route_is_lemma(k, r+1);
-                    }
-                } else {
-                    new_parent.get_Node_pivots().route_is_lemma(k, r+1);
-                }
-                assert(self.flushed_ofs(k) == new_parent.flushed_ofs(k));
-                self.i_preserves_domain(new_parent, k);
-            }
+            self.split_parent_buffers_commutes_with_i_key(request, k);
         }
         assert(new_parent.i().get_Node_buffer().map.dom() =~= i_new_parent.get_Node_buffer().map.dom());
         assert(new_parent.i().get_Node_buffer() =~= i_new_parent.get_Node_buffer());

@@ -47,6 +47,13 @@ impl PivotTable {
         self.pivots.len()
     }
 
+    #[verifier(inline)]
+    pub open spec(checked) fn spec_index(self, i: int) -> Element
+        recommends 0 <= i < self.len()
+    {
+        self.pivots[i]
+    }
+
     pub open spec(checked) fn update(self, i: int, element: Element) -> PivotTable
         recommends 0 <= i < self.len()
     {
