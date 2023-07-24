@@ -28,7 +28,7 @@ impl BetreeNode {
         self.get_Node_buffers().i_filtered(offset_map)
     }
 
-    pub open spec(checked) fn i_children_seq(self, start: int) -> Seq<PivotBetree_v::BetreeNode>
+    pub open spec /*XXX(checked)*/ fn i_children_seq(self, start: int) -> Seq<PivotBetree_v::BetreeNode>
     recommends self.is_Node(), 0 <= start <= self.get_Node_children().len()
     decreases self, 0nat, self.get_Node_children().len()-start 
         when self.is_Node() && 0 <= start <= self.get_Node_children().len()
@@ -36,6 +36,7 @@ impl BetreeNode {
         if start == self.get_Node_children().len() {
             seq![]
         } else {
+            //XXX need to instantiate linked_children
             let child = self.get_Node_children()[start].i();
             seq![child] + self.i_children_seq(start+1)
         }
@@ -49,8 +50,9 @@ impl BetreeNode {
     }
 
     pub open spec(checked) fn i(self) -> PivotBetree_v::BetreeNode
-        recommends self.wf()
-        decreases self
+    recommends
+        self.wf(),
+    decreases self
     {
         if self.is_Nil() {
             PivotBetree_v::BetreeNode::Nil{}
@@ -207,7 +209,7 @@ impl BetreeNode {
     //     }
     // }
 
-    pub open spec(checked) fn children_have_matching_domains(self, other_children: Seq<BetreeNode>) -> bool
+    pub open spec /*XXX(checked)*/ fn children_have_matching_domains(self, other_children: Seq<BetreeNode>) -> bool
         recommends self.wf(), self.is_index()
     {
         &&& other_children.len() == self.get_Node_children().len()
@@ -215,6 +217,7 @@ impl BetreeNode {
         &&& (forall |i:int| #![auto] 0 <= i < self.get_Node_children().len() ==> {
             &&& other_children[i].wf()
             &&& other_children[i].is_Node()
+            //XXX need to instantiate linked_children
             &&& other_children[i].my_domain() == self.get_Node_children()[i].my_domain()
         })
     }
@@ -701,7 +704,10 @@ impl BetreeNode {
 
 } // end impl BetreeNode
 
+// TODO(jialin): Why isn't this just impl StampedBetree { fn i() }?
 pub open spec(checked) fn i_stamped_betree(stamped: StampedBetree) -> PivotBetree_v::StampedBetree
+recommends
+    stamped.value.wf(),
 {
     Stamped{value: stamped.value.i(), seq_end: stamped.seq_end}
 }
@@ -755,6 +761,8 @@ impl QueryReceipt{
 
 impl Path{
     pub open spec(checked) fn i(self) -> PivotBetree_v::Path
+    recommends
+        self.valid(),
     {
         PivotBetree_v::Path{node: self.node.i(), key: self.key, depth: self.depth}
     }
@@ -904,7 +912,10 @@ impl FilteredBetree::Label {
         match self {
             FilteredBetree::Label::Query{end_lsn, key, value} => PivotBetree::Label::Query{end_lsn: end_lsn, key: key, value: value},
             FilteredBetree::Label::Put{puts} => PivotBetree::Label::Put{puts: puts},
-            FilteredBetree::Label::FreezeAs{stamped_betree} => PivotBetree::Label::FreezeAs{stamped_betree: i_stamped_betree(stamped_betree)},
+            FilteredBetree::Label::FreezeAs{stamped_betree} =>
+                PivotBetree::Label::FreezeAs{stamped_betree:
+                    if stamped_betree.value.wf() { i_stamped_betree(stamped_betree) }
+                    else { arbitrary() } },
             FilteredBetree::Label::Internal{} => PivotBetree::Label::Internal{},
         }
     }
@@ -981,6 +992,8 @@ impl FilteredBetree::State {
     }
 
     pub open spec(checked) fn i(self) -> PivotBetree::State
+    recommends
+        self.wf(),
     {
         PivotBetree::State{root: self.root.i(), memtable: self.memtable}
     }
