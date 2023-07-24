@@ -362,6 +362,14 @@ impl BetreeNode {
         self.get_Node_pivots().insert_wf(child_idx as int + 1, self.split_element(request));
     }
 
+    pub proof fn can_split_leaf_commutes_with_i(self, split_key: Key)
+    requires
+        self.can_split_leaf(split_key),
+    ensures
+        self.i().can_split_leaf(split_key),
+    {
+    }
+
     // #[verifier::spinoff_prover]
     pub proof fn split_leaf_commutes_with_i(self, split_key: Key)
         requires self.can_split_leaf(split_key)
@@ -373,6 +381,7 @@ impl BetreeNode {
         PivotTable::route_lemma_auto();
 
         let (left, right) = self.split_leaf(split_key);
+        self.can_split_leaf_commutes_with_i(split_key);
         let (i_left, i_right) = self.i().split_leaf(split_key);
 
         left.i_buffer_domain();
