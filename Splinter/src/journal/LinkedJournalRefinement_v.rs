@@ -63,6 +63,13 @@ impl DiskView {
         // Well actually, sometimes with == it completes the proof, but (AAAARGH) it's super flaky.
         // trying =~=...
         //assume(false); // Goodness this is hella flaky.
+        if post.iptr(ptr).is_None() {
+            assert( PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn).is_None() );
+        } else {
+            assert( PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn).is_Some() );
+//             assert( post.iptr(ptr).unwrap().message_seq =~= PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn).unwrap().message_seq );
+//             assert( post.iptr(ptr).unwrap().prior_rec =~= PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn).unwrap().prior_rec );
+        }
         assert( post.iptr(ptr) =~= PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn) );
     }
 
