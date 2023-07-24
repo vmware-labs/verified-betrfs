@@ -11,21 +11,13 @@ verification results:: verified: 266 errors: 0
 find src -name \*.rs | xargs grep '\<spec\> ' --color | wc -l
 421
 
-# With changes
-find src -name \*.rs | xargs sed -i 's/\<spec\> /spec(checked) /'
+# In this version of the experiment
+# checked_results comes from running sample() on the repo in its current state
+# unchecked_results comes from first using find|xargs sed to remove `(checked)`
 
-/home/jonh/verus/source/target-verus/release/verus --time --expand-errors --multiple-errors 500 src/bundle.rs
-error: aborting due to 5 previous errors; 84 warnings emitted
-verification results:: verified: 263 errors: 3
-
-[ ] Why did it abort? I gave it a budget of 500.
-[ ] There are 84 failures. Happy to fix them, but they may be inflating the output a bit.
-[ ] Got two copies of "note: function body check has been running for 2 seconds"
-
-unchecked: μ=7.84 σ=0.06
-checked: μ=13.69 σ=0.14
-cost: 5.9s 74.7%
-
+unchecked: μ=5.74 σ=0.14
+checked: μ=5.74 σ=0.21
+cost: -0.0s -0.0%
 """
 
 def sample():
