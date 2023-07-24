@@ -338,7 +338,29 @@ impl BetreeNode {
         }
     }
 
+    pub open spec fn compact_key_range(self, start: nat, end: nat, k: Key) -> bool
+        recommends self.wf(), self.is_Node(), start < end <= self.get_Node_buffers().len()
+    {
+        &&& self.key_in_domain(k)
+        &&& self.flushed_ofs(k) <= end
+        &&& exists |buffer_idx| self.get_Node_buffers().slice(start as int, end as int
+            ).key_in_buffer_filtered(self.make_offset_map().decrement(start), 0, k, buffer_idx)
+    }
+
+    pub open spec fn can_compact(self, start: nat, end: nat, compacted_buffer: Buffer) -> bool 
+    {
+        &&& self.wf()
+        &&& self.is_Node()
+        &&& start < end <= self.get_Node_buffers().len()
+        &&& forall |k| #![auto] compacted_buffer.map.contains_key(k) <==> self.compact_key_range(start, end, k)
+        &&& forall |k| #![auto] compacted_buffer.map.contains_key(k) ==> ({
+            let from = if self.flushed_ofs(k) <= start { 0 } else { self.flushed_ofs(k)-start };
+            &&& compacted_buffer.query(k) == self.get_Node_buffers().slice(start as int, end as int).query_from(k, from)
+        })
+    }
+
     pub open spec fn compact(self, start: nat, end: nat, compacted_buffer: Buffer) -> BetreeNode
+        recommends self.can_compact(start, end, compacted_buffer)
     {
         BetreeNode::Node{
             buffers: self.get_Node_buffers().update_subrange(start as int, end as int, compacted_buffer),
@@ -599,9 +621,7 @@ state_machine!{ FilteredBetree {
     transition!{ internal_compact(lbl: Label, path: Path, start: nat, end: nat, compacted_buffer: Buffer) {
         require let Label::Internal{} = lbl;
         require path.valid();
-        require let BetreeNode::Node{buffers, pivots, children, flushed} = path.target();
-        require start < end <= buffers.len();
-        require compacted_buffer == buffers.slice(start as int, end as int).i_filtered(path.target().make_offset_map().decrement(start));
+        require path.target().can_compact(start, end, compacted_buffer);
         require path.node == pre.root;
         update root = path.substitute(path.target().compact(start, end, compacted_buffer));
     }}

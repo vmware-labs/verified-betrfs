@@ -202,6 +202,23 @@ impl BufferSeq {
         }
     }
 
+    pub proof fn query_from_same_as_i_filtered(self, k: Key, buffer_idx: int, offset_map: OffsetMap)
+        requires
+            offset_map.is_total(),
+            0 <= buffer_idx <= self.len(),
+            offset_map.offsets[k] <= self.len(),
+        ensures ({
+            let start = offset_map.offsets[k] as int;
+            &&& start <= buffer_idx ==> self.i_filtered_from(offset_map, buffer_idx).query(k) == self.query_from(k, buffer_idx)
+            &&& start > buffer_idx ==> self.i_filtered_from(offset_map, buffer_idx).query(k) == self.query_from(k, start)
+        })
+        decreases self.len() - buffer_idx
+    {
+        if buffer_idx < self.len() {
+            self.query_from_same_as_i_filtered(k, buffer_idx+1, offset_map);
+        }
+    }
+
     pub proof fn common_buffer_seqs(a: BufferSeq, b: BufferSeq, a_start: int, b_delta: int, key: Key)
         requires 0 <= a_start <= a.len(), 0 <= a_start+b_delta <= b.len(), 
             a.len()-a_start == b.len()-a_start-b_delta,
@@ -227,16 +244,15 @@ impl BufferSeq {
         }
     }
 
-    // pub proof fn filtered_buffer_seq_query_lemma(self, filter: Set<Key>, key: Key, start: int)
-    //     requires 0 <= start <= self.len()
-    //     ensures self.apply_filter(filter).query_from(key, start)
-    //         == if filter.contains(key) { self.query_from(key, start) } 
-    //             else { Message::Update{delta: nop_delta()} }
-    //     decreases self.len() - start
-    // {
-    //     if start < self.len() {
-    //         self.filtered_buffer_seq_query_lemma(filter, key, start+1);
-    //     }
-    // }
+    pub proof fn not_present_query_lemma(self, k: Key, start: int)
+        requires 0 <= start <= self.len(),
+            forall |i| #![auto] start <= i < self.len() ==> !self[i].map.contains_key(k)
+        ensures self.query_from(k, start) == (Message::Update{ delta: nop_delta() })
+        decreases self.len()-start
+    {
+        if start < self.len() {
+            self.not_present_query_lemma(k, start+1);
+        }
+    }
 } // end impl BufferSeq
 }  // end verus!

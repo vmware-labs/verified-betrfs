@@ -156,32 +156,13 @@ impl BetreeNode {
         self.get_Node_buffers().i_filtered_from_domain(self.make_offset_map(), 0);
     }
 
-    pub proof fn query_from_same_as_i_filtered(self, key: Key, buffer_idx: int, offset_map: OffsetMap)
-        requires 
-            self.wf(), 
-            self.is_Node(),
-            self.key_in_domain(key),
-            0 <= buffer_idx <= self.get_Node_buffers().len(),
-            offset_map == self.make_offset_map(),
-        ensures ({
-            let start = self.flushed_ofs(key) as int;
-            let query_idx = if buffer_idx < start { start } else { buffer_idx };
-            &&& self.get_Node_buffers().i_filtered_from(offset_map, buffer_idx).query(key) == self.get_Node_buffers().query_from(key, query_idx)
-        })
-        decreases self.get_Node_buffers().len() - buffer_idx
-    {
-        PivotTable::route_lemma_auto();
-        if buffer_idx < self.get_Node_buffers().len() {
-            self.query_from_same_as_i_filtered(key, buffer_idx+1, offset_map);
-        }
-    }
-
     pub proof fn query_from_refines(self, key: Key)
         requires self.wf(), self.is_Node(), self.key_in_domain(key),
         ensures self.get_Node_buffers().query_from(key, self.flushed_ofs(key) as int) == self.i().get_Node_buffer().query(key)
     {
+        PivotTable::route_lemma_auto();
         let offset_map = self.make_offset_map();
-        self.query_from_same_as_i_filtered(key, 0, offset_map);
+        self.get_Node_buffers().query_from_same_as_i_filtered(key, 0, offset_map);
     }
 
     pub proof fn query_from_refines_auto()
@@ -446,17 +427,13 @@ impl BetreeNode {
     {
         self.split_parent_wf(request);
         self.i().split_parent_wf(request);
-
         BetreeNode::i_wf_auto();
-        PivotTable::route_lemma_auto();
         Element::lt_transitive_forall();
+        PivotTable::route_lemma_auto();
 
         let new_parent = self.split_parent(request);
         let i_new_parent = self.i().split_parent(request);
         let split_child_idx = request.get_child_idx() as int;
-
-        self.i_buffer_domain();
-        new_parent.i_buffer_domain();
 
         assert forall |k| 
         ({
@@ -464,6 +441,9 @@ impl BetreeNode {
             &&& new_parent.i().get_Node_buffer().map.contains_key(k) ==> 
                 new_parent.i().get_Node_buffer().map[k] == i_new_parent.get_Node_buffer().map[k]
         }) by {
+            self.i_buffer_domain();
+            new_parent.i_buffer_domain();
+
             if new_parent.i().get_Node_buffer().map.contains_key(k) {
                 let r = new_parent.get_Node_pivots().route(k);
                 if r <= split_child_idx {
@@ -653,6 +633,149 @@ impl BetreeNode {
         assert(a.i().get_Node_buffer() =~= b.get_Node_buffer());
     }
 
+    pub proof fn compact_wf(self, start: nat, end: nat, compacted_buffer: Buffer)
+        requires self.can_compact(start, end, compacted_buffer)
+        ensures self.compact(start, end, compacted_buffer).wf()
+    {
+    }
+
+    pub proof fn compact_buffer_property(self, start: nat, end: nat, compacted_buffer: Buffer)
+        requires self.can_compact(start, end, compacted_buffer)
+        ensures compacted_buffer == self.get_Node_buffers().slice(start as int, end as int).i_filtered(self.make_offset_map().decrement(start))
+    {
+        let slice_ofs_map = self.make_offset_map().decrement(start);
+        let compact_slice = self.get_Node_buffers().slice(start as int, end as int);
+        let compact_slice_i = compact_slice.i_filtered(slice_ofs_map);
+
+        compact_slice.i_filtered_from_domain(slice_ofs_map, 0);
+        assert forall |k| #[trigger] compacted_buffer.map.contains_key(k)
+        implies compacted_buffer.map[k] == compact_slice_i.map[k] 
+        by {
+            compact_slice.query_from_same_as_i_filtered(k, 0, slice_ofs_map);
+        }
+        assert(compacted_buffer =~= compact_slice_i);
+    }
+
+    pub proof fn compact_commutes_with_i(self, start: nat, end: nat, compacted_buffer: Buffer)
+        requires self.can_compact(start, end, compacted_buffer)
+        ensures self.compact(start, end, compacted_buffer).i() == self.i()
+    {
+        let result = self.compact(start, end, compacted_buffer);
+
+        BetreeNode::i_wf_auto();
+        BetreeNode::i_children_lemma_auto();
+        PivotTable::route_lemma_auto();
+
+        assert(result.i().get_Node_children() =~= self.i().get_Node_children());
+
+        let ofs_map = self.make_offset_map();
+        let slice_ofs_map = ofs_map.decrement(start);
+        let result_ofs_map = result.make_offset_map();
+        let compact_slice = self.get_Node_buffers().slice(start as int, end as int);
+
+        self.compact_buffer_property(start, end, compacted_buffer);
+
+        assert forall |k|
+        ({
+            &&& #[trigger] result.i().get_Node_buffer().map.contains_key(k) <==> self.i().get_Node_buffer().map.contains_key(k)
+            &&& result.i().get_Node_buffer().map.contains_key(k) ==> result.i().get_Node_buffer().map[k] == self.i().get_Node_buffer().map[k]
+        }) by {
+            result.i_buffer_domain();
+            self.i_buffer_domain();
+            compact_slice.i_filtered_from_domain(slice_ofs_map, 0);
+
+            if result.i().get_Node_buffer().map.contains_key(k) {
+                assert(self.key_in_domain(k));
+                let idx = choose |idx| result.get_Node_buffers().key_in_buffer_filtered(result_ofs_map, 0, k, idx);
+                if idx < start {
+                    assert(self.get_Node_buffers().key_in_buffer_filtered(ofs_map, 0, k, idx));
+                } else if idx < start+1 {
+                    let slice_idx = choose |slice_idx| compact_slice.key_in_buffer_filtered(slice_ofs_map, 0, k, slice_idx);
+                    assert(self.get_Node_buffers().key_in_buffer_filtered(ofs_map, 0, k, start + slice_idx));
+                } else {
+                    assert(self.get_Node_buffers().key_in_buffer_filtered(ofs_map, 0, k, idx + (end - start - 1)));
+                }
+                assert(self.i().get_Node_buffer().map.contains_key(k));
+
+                self.query_from_refines(k);
+                result.query_from_refines(k);
+
+                let ofs = self.flushed_ofs(k) as int;
+                let compacted_bufferseq = BufferSeq{buffers: seq![compacted_buffer]};
+                assert(compacted_bufferseq.query_from(k, 1) == Message::Update{delta: nop_delta()});
+                assert(compacted_buffer.query(k) == compacted_bufferseq.query_from(k, 0));
+
+                if ofs < start {
+                    if !compacted_buffer.map.contains_key(k) {
+                        assert forall #![auto] |i| 0 <= i < compact_slice.len()
+                        implies !compact_slice[i].map.contains_key(k)
+                        by {
+                            if compact_slice[i].map.contains_key(k) {
+                                assert(compact_slice.key_in_buffer_filtered(slice_ofs_map, 0, k, i));
+                                assert(false);
+                            }
+                        }
+                        compact_slice.not_present_query_lemma(k, 0);
+                    }
+                    assert(compact_slice.query(k) == compacted_buffer.query(k));
+
+                    let left = self.get_Node_buffers().slice(0, start as int);
+                    BufferSeq::extend_buffer_seq_lemma(compact_slice, left, k, ofs);
+                    BufferSeq::extend_buffer_seq_lemma(compacted_bufferseq, left, k, ofs);
+
+                    assert(left.extend(compact_slice) =~= self.get_Node_buffers().slice(0, end as int));
+                    assert(left.extend(compacted_bufferseq) =~= result.get_Node_buffers().slice(0, start as int + 1));
+
+                    let right = self.get_Node_buffers().slice(end as int, self.get_Node_buffers().len() as int);
+                    BufferSeq::extend_buffer_seq_lemma(right, self.get_Node_buffers().slice(0, end as int), k, ofs);
+                    BufferSeq::extend_buffer_seq_lemma(right, result.get_Node_buffers().slice(0, start as int + 1), k, ofs);
+
+                    assert(self.get_Node_buffers().slice(0, end as int).extend(right) =~= self.get_Node_buffers());
+                    assert(result.get_Node_buffers().slice(0, start as int + 1).extend(right) =~= result.get_Node_buffers());
+                    assert(result.i().get_Node_buffer().map[k] == self.i().get_Node_buffer().map[k]);
+                } else if ofs < end {
+                    if !compacted_buffer.map.contains_key(k) {
+                        assert forall #![auto] |i| ofs-start <= i < compact_slice.len()
+                        implies !compact_slice[i].map.contains_key(k)
+                        by {
+                            if compact_slice[i].map.contains_key(k) {
+                                assert(compact_slice.key_in_buffer_filtered(slice_ofs_map, 0, k, i));
+                                assert(false);
+                            }
+                        }
+                        compact_slice.not_present_query_lemma(k, ofs-start);
+                    }
+                    assert(compact_slice.query_from(k, ofs-start) == compacted_buffer.query(k));
+
+                    let right = self.get_Node_buffers().slice(end as int, self.get_Node_buffers().len() as int);
+                    BufferSeq::extend_buffer_seq_lemma(right, compacted_bufferseq, k, 0);
+                    BufferSeq::extend_buffer_seq_lemma(right, compact_slice, k, ofs-start);
+                    BufferSeq::common_buffer_seqs(compact_slice.extend(right), self.get_Node_buffers(), ofs-start, start as int, k);
+                    BufferSeq::common_buffer_seqs(compacted_bufferseq.extend(right), result.get_Node_buffers(), 0, start as int, k);
+                    assert(result.i().get_Node_buffer().map[k] == self.i().get_Node_buffer().map[k]);
+                } else {
+                    BufferSeq::common_buffer_seqs(self.get_Node_buffers(), result.get_Node_buffers(), ofs, start+1-end, k);
+                }
+            }
+
+            if self.i().get_Node_buffer().map.contains_key(k) {
+                let idx = choose |idx| self.get_Node_buffers().key_in_buffer_filtered(ofs_map, 0, k, idx);
+                if idx < start {
+                    assert(result.get_Node_buffers().key_in_buffer_filtered(result_ofs_map, 0, k, idx));
+                } else if idx < end {
+                    assert(compact_slice.key_in_buffer_filtered(slice_ofs_map, 0, k, idx-start));
+                    assert(result.get_Node_buffers().key_in_buffer_filtered(result_ofs_map, 0, k, start as int));
+                } else {
+                    assert(result.get_Node_buffers().key_in_buffer_filtered(result_ofs_map, 0, k, idx - (end - start - 1)));
+                }
+                assert(result.i().get_Node_buffer().map.contains_key(k));
+            }
+        }
+        assert(result.i().get_Node_buffer().map.dom() =~= self.i().get_Node_buffer().map.dom());
+        assert(result.i().get_Node_buffer() =~= self.i().get_Node_buffer());
+
+
+    }
 } // end impl BetreeNode
 
 pub open spec fn i_stamped_betree(stamped: StampedBetree) -> PivotBetree_v::StampedBetree
@@ -831,6 +954,27 @@ impl Path{
             assert(self.substitute(replacement).make_offset_map() =~= self.node.make_offset_map());
         }
     }
+
+    pub proof fn substitute_noop(self, replacement: BetreeNode)
+        requires self.valid(), replacement.wf(), 
+            self.target().i() == replacement.i()
+        ensures 
+            self.substitute(replacement).wf(),
+            self.substitute(replacement).i() == self.node.i()
+        decreases self.depth
+    {
+        self.target_wf();
+        self.substitute_preserves_wf(replacement);
+
+        PivotTable::route_lemma_auto();
+        BetreeNode::i_children_lemma_auto();
+
+        if 0 < self.depth {
+            self.subpath().substitute_noop(replacement);
+            assert(self.substitute(replacement).i().get_Node_children() =~= self.node.i().get_Node_children());
+            assert(self.substitute(replacement).make_offset_map() =~= self.node.make_offset_map());
+        }
+    }
 }
 
 impl FilteredBetree::Label {
@@ -844,29 +988,6 @@ impl FilteredBetree::Label {
         }
     }
 } // end impl FilteredBetree::Label
-
-// // pub proof fn compact_commutes_with_i(path: Path, compacted_buffers: BufferSeq)
-// //     requires path.valid(), path.target().is_Node(),
-// //         path.target().get_Node_buffers().i() == compacted_buffers.i()
-// //     ensures path.target().i().compact(compacted_buffers)
-// //         == path.target().compact(compacted_buffers).i()
-// // {
-// //     let target = path.target();
-// //     path.target_wf();
-
-// //     assert forall |k| true
-// //     implies #[trigger] target.compact(compacted_buffers).i().get_Node_children().map[k] 
-// //         == target.i().compact(compacted_buffers).get_Node_children().map[k]
-// //     by {
-// //         if target.my_domain().contains(k) {
-// //             target.i_children_lemma();
-// //             target.compact(compacted_buffers).i_children_lemma();
-// //         }
-// //     }
-
-// //     assert(target.compact(compacted_buffers).i().get_Node_children().map =~= 
-// //         target.i().compact(compacted_buffers).get_Node_children().map);
-// // }
 
 impl FilteredBetree::State {
     pub open spec fn inv(self) -> bool {
@@ -997,24 +1118,20 @@ impl FilteredBetree::State {
         assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_flush(path.i(), child_idx)));
     }
 
-// //     pub proof fn internal_compact_refines(self, post: Self, lbl: FilteredBetree::Label, path: Path, compacted_buffers: BufferSeq)
-// //         requires self.inv(), FilteredBetree::State::internal_compact(self, post, lbl, path, compacted_buffers)
-// //         ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i())
-// //     {
-// //         reveal(PivotBetree::State::next);
-// //         reveal(PivotBetree::State::next_by);
+    pub proof fn internal_compact_refines(self, post: Self, lbl: FilteredBetree::Label, path: Path, start: nat, end: nat, compacted_buffer: Buffer)
+        requires self.inv(), FilteredBetree::State::internal_compact(self, post, lbl, path, start, end, compacted_buffer)
+        ensures post.inv(), PivotBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(PivotBetree::State::next);
+        reveal(PivotBetree::State::next_by);
 
-// //         self.root.i_wf();
-// //         path.target_wf();
-// //         path.substitute_refines(path.target().compact(compacted_buffers));
+        BetreeNode::i_wf_auto();
+        path.target().compact_wf(start, end, compacted_buffer);
+        path.target().compact_commutes_with_i(start, end, compacted_buffer);
+        path.substitute_noop(path.target().compact(start, end, compacted_buffer));        
 
-// //         post.root.i_wf();
-// //         path.i_valid();
-// //         path.target_commutes_with_i();
-
-// //         compact_commutes_with_i(path, compacted_buffers);
-// //         assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_compact(path.i(), compacted_buffers)));
-// //     }
+        assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_noop()));
+    }
 
     pub proof fn internal_noop_noop(self, post: Self, lbl: FilteredBetree::Label)
         requires self.inv(), FilteredBetree::State::internal_noop(self, post, lbl)
@@ -1043,9 +1160,9 @@ impl FilteredBetree::State {
             FilteredBetree::Step::internal_grow() => { self.internal_grow_refines(post, lbl); }
             FilteredBetree::Step::internal_split(path, split_request) => { self.internal_split_refines(post, lbl, path, split_request); }
             FilteredBetree::Step::internal_flush(path, child_idx, buffer_gc) => { self.internal_flush_refines(post, lbl, path, child_idx, buffer_gc); }
-            // FilteredBetree::Step::internal_compact(path, compacted_buffers) => { self.internal_compact_refines(post, lbl, path, compacted_buffers); }
+            FilteredBetree::Step::internal_compact(path, start, end, compacted_buffer) => { self.internal_compact_refines(post, lbl, path, start, end, compacted_buffer); }
             FilteredBetree::Step::internal_noop() => { self.internal_noop_noop(post, lbl); }
-            _ => { assume(false); } 
+            _ => { assert(false); } 
         }
     }
 } // end impl FilteredBetree::State
