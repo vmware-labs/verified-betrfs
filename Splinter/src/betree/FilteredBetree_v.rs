@@ -401,7 +401,7 @@ impl BetreeNode {
         })
     }
 
-    pub open spec(checked) fn compact(self, start: nat, end: nat, compacted_buffer: Buffer) -> BetreeNode
+    pub open spec /*XXX(checked)*/ fn compact(self, start: nat, end: nat, compacted_buffer: Buffer) -> BetreeNode
     recommends
         self.can_compact(start, end, compacted_buffer),
     {
