@@ -130,14 +130,17 @@ impl BetreeNode {
         }
     }
 
-    pub open spec(checked) fn children_have_matching_domains(self, other_children: Seq<BetreeNode>) -> bool
-        recommends self.wf(), self.is_index()
+    pub open spec /*XXX(checked)*/ fn children_have_matching_domains(self, other_children: Seq<BetreeNode>) -> bool
+    recommends
+        self.wf(),
+        self.is_index(),
     {
         &&& other_children.len() == self.get_Node_children().len()
         &&& forall |i:int| #![auto] 0 <= i < other_children.len() ==> other_children[i].wf()
         &&& (forall |i:int| #![auto] 0 <= i < self.get_Node_children().len() ==> {
             &&& other_children[i].wf()
             &&& other_children[i].is_Node()
+            //XXX self.get_Node_children()[i] is wf by instantiating linked_children
             &&& other_children[i].my_domain() == self.get_Node_children()[i].my_domain()
         })
     }
@@ -471,7 +474,7 @@ impl QueryReceipt{
 }
 
 impl Path{
-    pub open spec(checked) fn routing(self) -> Seq<Set<Key>>
+    pub open spec /*XXX(checked)*/ fn routing(self) -> Seq<Set<Key>>
         recommends self.valid()
         decreases self.depth
     {
@@ -479,6 +482,7 @@ impl Path{
             seq![]
         } else {
             let pivots = self.node.get_Node_pivots();
+            //XXX self.get_Node_pivots().route_lemma(key)
             let keys = pivots.pivot_range_keyset(pivots.route(self.key));
             seq![keys] + self.subpath().routing() 
         }
@@ -494,8 +498,9 @@ impl Path{
         }
     }
 
-    pub open spec(checked) fn i(self) -> PagedBetree_v::Path
+    pub open spec/*XXX(checked)*/ fn i(self) -> PagedBetree_v::Path
     {
+        //XXX call routing_lemma?
         PagedBetree_v::Path{node: self.node.i(), key: self.key, routing: self.routing()}
     }
 

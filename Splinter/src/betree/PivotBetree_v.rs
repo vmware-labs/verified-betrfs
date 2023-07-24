@@ -51,8 +51,10 @@ impl BetreeNode {
 
     pub open spec(checked) fn my_domain(self) -> Domain
     recommends
-        self.wf(),
+        self.local_structure(),
+        self.is_Node(),
     {
+        let _ = spec_affirm(0 < self.get_Node_pivots().num_ranges());
         Domain::Domain{
             start: self.get_Node_pivots().pivots[0],
             end: self.get_Node_pivots().pivots.last()
@@ -62,7 +64,9 @@ impl BetreeNode {
     // equivalent to DomainRoutedToChild
     pub open spec(checked) fn child_domain(self, child_idx: nat) -> Domain
     recommends
-        self.wf(),
+        self.local_structure(),
+        self.is_Node(),
+        0 <= child_idx < self.get_Node_children().len(),
     {
         Domain::Domain{
             start: self.get_Node_pivots().pivots[child_idx as int],
@@ -71,6 +75,8 @@ impl BetreeNode {
     }
 
     pub open spec(checked) fn linked_children(self) -> bool
+    recommends
+        self.local_structure(),
     {
         &&& self.is_Node() ==> { 
             &&& forall |i:nat|
@@ -113,6 +119,8 @@ impl BetreeNode {
     }
 
     pub open spec(checked) fn push_memtable(self, memtable: Memtable) -> StampedBetree
+    recommends
+        self.wf(),
     {
         let new_root = self.promote(total_domain()).merge_buffer(memtable.buffer);
         Stamped{value: new_root, seq_end: memtable.seq_end}
@@ -128,7 +136,7 @@ impl BetreeNode {
     pub open spec(checked) fn is_index(self) -> bool
     {
         &&& self.is_Node()
-        &&& forall |i| 0 <= i < self.get_Node_children().len() ==> self.get_Node_children()[i].is_Node()
+        &&& forall |i| #![auto] 0 <= i < self.get_Node_children().len() ==> self.get_Node_children()[i].is_Node()
     }
 
     pub open spec(checked) fn can_split_leaf(self, split_key: Key) -> bool
@@ -255,6 +263,10 @@ impl BetreeNode {
     }
 
     pub open spec(checked) fn promote(self, domain: Domain) -> BetreeNode
+    recommends
+        self.wf(),
+        domain.wf(),
+        domain.is_Domain(),
     {
         if self.is_Nil() {
             BetreeNode::empty_root(domain)
@@ -270,7 +282,7 @@ impl BetreeNode {
         &&& self.valid_child_index(child_idx)
     }
 
-    pub open spec(checked) fn flush(self, child_idx: nat) -> BetreeNode
+    pub open spec /*XXX(checked)*/ fn flush(self, child_idx: nat) -> BetreeNode
         recommends self.can_flush(child_idx)
     {
         let child_domain = self.child_domain(child_idx);
@@ -279,6 +291,7 @@ impl BetreeNode {
         let moved_buffer = self.get_Node_buffer().apply_filter(child_domain.key_set());
 
         let old_child = self.get_Node_children()[child_idx as int];
+        //XXX promote ensures wf
         let new_child = old_child.promote(child_domain).merge_buffer(moved_buffer);
 
         BetreeNode::Node{
@@ -295,9 +308,13 @@ impl BetreeNode {
         &&& self.get_Node_pivots().bounded_key(key)
     }
 
-    pub open spec(checked) fn child(self, key: Key) -> BetreeNode
-        recommends self.key_in_domain(key)
+    pub open spec /*XXX(checked)*/ fn child(self, key: Key) -> BetreeNode
+    recommends
+        self.wf(),
+        self.is_Node(),
+        self.key_in_domain(key),
     {
+        //XXX self.get_Node_pivots().route_lemma(key)
         self.get_Node_children()[self.get_Node_pivots().route(key)]
     }
 } // end impl BetreeNode
@@ -339,13 +356,19 @@ impl QueryReceipt{
     }
 
     pub open spec(checked) fn child_at(self, i: int) -> BetreeNode
-        recommends 0 <= i < self.lines.len()
+    recommends
+        self.all_lines_wf(),
+        self.structure(),
+        0 <= i < self.lines.len() - 1,
     {
         self.lines[i].node.child(self.key)
     }
 
     pub open spec(checked) fn child_linked_at(self, i: int) -> bool
-        recommends 0 <= i < self.lines.len()-1
+    recommends
+        self.all_lines_wf(),
+        self.structure(),
+        0 <= i < self.lines.len()-1,
     {
         self.lines[i+1].node == self.child_at(i)
     }
@@ -357,6 +380,10 @@ impl QueryReceipt{
     }
 
     pub open spec(checked) fn result_linked_at(self, i:int) -> bool
+    recommends
+        self.all_lines_wf(),
+        self.structure(),
+        0 <= i < self.lines.len()-1,
     {
         let msg = self.lines[i].node.get_Node_buffer().query(self.key);
         self.lines[i].result == self.result_at(i+1).merge(msg)
@@ -392,7 +419,9 @@ pub struct Path{
 
 impl Path{
     pub open spec(checked) fn subpath(self) -> Path
-        recommends 0 < self.depth
+    recommends
+        0 < self.depth,
+        self.node.key_in_domain(self.key),
     {
         let depth = (self.depth - 1) as nat;
         Path{node: self.node.child(self.key), key: self.key, depth: depth}
@@ -408,7 +437,9 @@ impl Path{
     }
 
     pub open spec(checked) fn target(self) -> BetreeNode
-        decreases self.depth
+    recommends
+        self.valid(),
+    decreases self.depth
     {
         if self.depth == 0 {
             self.node
@@ -417,7 +448,19 @@ impl Path{
         }
     }
 
-    pub open spec(checked) fn valid_replacement(self, replacement: BetreeNode) -> bool
+    // TODO(jonh): kill this boilerplate
+    pub proof fn target_ensures(self)
+    requires
+        self.valid()
+    ensures
+        self.target().wf(),
+        self.target().is_Node(),
+    {
+        assume(false); // XXX
+    }
+
+    //XXX apply target_ensures
+    pub open spec/*XXX(checked)*/ fn valid_replacement(self, replacement: BetreeNode) -> bool
         recommends self.valid()
     {
         &&& replacement.wf()
@@ -425,14 +468,16 @@ impl Path{
         &&& replacement.my_domain() == self.target().my_domain()
     }
 
-    pub open spec(checked) fn replaced_children(self, replacement: BetreeNode) -> Seq<BetreeNode>
-        recommends self.valid(), 
-            self.valid_replacement(replacement), 
-            0 < self.depth
-        decreases self.subpath().depth
+    pub open spec /*XXX (checked)*/ fn replaced_children(self, replacement: BetreeNode) -> Seq<BetreeNode>
+    recommends
+        self.valid(), 
+        self.valid_replacement(replacement), 
+        0 < self.depth
+    decreases self.subpath().depth
     {
         let new_child = self.subpath().substitute(replacement);
         let r = self.node.get_Node_pivots().route(self.key);
+        //XXX self.get_Node_pivots().route_lemma(key)
         self.node.get_Node_children().update(r, new_child)
     }
 

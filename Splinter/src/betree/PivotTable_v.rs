@@ -39,7 +39,7 @@ impl PivotTable {
     {
         &&& self.num_ranges() > 0
         &&& Element::is_strictly_sorted(self.pivots)
-        &&& (forall |i: int| 0 <= i < self.num_ranges() ==> self.pivots[i].is_Elem())
+        &&& (forall |i: int| 0 <= i < self.num_ranges() ==> (#[trigger] self.pivots[i]).is_Elem())
     }
 
     pub open spec(checked) fn len(self) -> nat
