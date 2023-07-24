@@ -279,7 +279,7 @@ impl BetreeNode {
         }
     }
 
-    #[verifier::spinoff_prover]
+    // #[verifier::spinoff_prover]
     pub proof fn split_commutes_with_i_right(self, request: SplitRequest, key: Key)
         requires
             self.can_split_parent(request),

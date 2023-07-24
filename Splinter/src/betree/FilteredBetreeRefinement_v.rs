@@ -362,15 +362,6 @@ impl BetreeNode {
         self.get_Node_pivots().insert_wf(child_idx as int + 1, self.split_element(request));
     }
 
-    pub proof fn can_split_leaf_commutes_with_i(self, split_key: Key)
-    requires
-        self.can_split_leaf(split_key),
-    ensures
-        self.i().can_split_leaf(split_key),
-    {
-    }
-
-    // #[verifier::spinoff_prover]
     pub proof fn split_leaf_commutes_with_i(self, split_key: Key)
         requires self.can_split_leaf(split_key)
         ensures 
@@ -381,7 +372,6 @@ impl BetreeNode {
         PivotTable::route_lemma_auto();
 
         let (left, right) = self.split_leaf(split_key);
-        self.can_split_leaf_commutes_with_i(split_key);
         let (i_left, i_right) = self.i().split_leaf(split_key);
 
         left.i_buffer_domain();
@@ -666,6 +656,8 @@ impl BetreeNode {
         requires self.can_compact(start, end, compacted_buffer)
         ensures self.compact(start, end, compacted_buffer).wf()
     {
+        let result = self.compact(start, end, compacted_buffer);
+        assert(result.local_structure());
     }
 
     pub proof fn compact_buffer_property(self, start: nat, end: nat, compacted_buffer: Buffer)
@@ -685,6 +677,7 @@ impl BetreeNode {
         assert(compacted_buffer =~= compact_slice_i);
     }
 
+    #[verifier::spinoff_prover]
     pub proof fn compact_commutes_with_i(self, start: nat, end: nat, compacted_buffer: Buffer)
         requires self.can_compact(start, end, compacted_buffer)
         ensures self.compact(start, end, compacted_buffer).i() == self.i()
@@ -802,8 +795,6 @@ impl BetreeNode {
         }
         assert(result.i().get_Node_buffer().map.dom() =~= self.i().get_Node_buffer().map.dom());
         assert(result.i().get_Node_buffer() =~= self.i().get_Node_buffer());
-
-
     }
 } // end impl BetreeNode
 

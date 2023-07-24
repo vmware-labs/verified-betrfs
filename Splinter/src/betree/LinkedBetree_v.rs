@@ -380,7 +380,7 @@ impl DiskView {
         forall |addr| #[trigger] self.entries.contains_key(addr) ==> self.entries[addr].wf()
     }
 
-    pub open spec(checked) fn is_nondangling_pointer(self, ptr: Pointer) -> bool
+    pub open spec(checked) fn is_nondangling_ptr(self, ptr: Pointer) -> bool
     {
         ptr.is_Some() ==> self.entries.contains_key(ptr.get_Some_0())
     }
@@ -388,7 +388,7 @@ impl DiskView {
     pub open spec(checked) fn node_has_nondangling_child_ptrs(self, node: BetreeNode) -> bool
         recommends self.entries_wf(), node.wf()
     {
-        forall |i| #[trigger] node.valid_child_index(i) ==> self.is_nondangling_pointer(node.children[i as int])
+        forall |i| #[trigger] node.valid_child_index(i) ==> self.is_nondangling_ptr(node.children[i as int])
     }
 
     pub open spec(checked) fn child_linked(self, node: BetreeNode, idx: nat) -> bool
@@ -400,7 +400,44 @@ impl DiskView {
         &&& child_ptr.is_Some() ==> self.entries[child_ptr.get_Some_0()].my_domain() == node.child_domain(idx)
     }
 
+    pub open spec(checked) fn node_has_linked_children(self, node: BetreeNode) -> bool
+        recommends self.entries_wf(), node.wf(), self.node_has_nondangling_child_ptrs(node)
+    {
+        forall |i| #[trigger] node.valid_child_index(i) ==> self.child_linked(node, i)
+    }
+
+    pub open spec(checked) fn healthy_child_ptrs(self) -> bool
+        recommends self.entries_wf()
+    {
+        &&& forall |addr| #[trigger] self.entries.contains_key(addr) ==> ({
+            &&& self.node_has_nondangling_child_ptrs(self.entries[addr])
+            &&& self.node_has_linked_children(self.entries[addr])
+        })
+    }
+
+    pub open spec(checked) fn wf(self) -> bool
+    {
+        &&& self.entries_wf()
+        &&& self.healthy_child_ptrs()
+    }
+
+    pub open spec(checked) fn get(self, ptr: Pointer) -> BetreeNode
+        recommends self.is_nondangling_ptr(ptr), ptr.is_Some()
+    {
+        self.entries[ptr.get_Some_0()]
+    }
+
+    pub open spec(checked) fn agrees_with_disk(self, other: DiskView) -> bool
+    {
+        self.entries.agrees(other.entries)
+    }
+
+    pub open spec(checked) fn is_subdisk(self, bigger: DiskView) -> bool
+    {
+        self.entries.le(bigger.entries)  
+    }
 }
+
 // pub struct QueryReceiptLine{
 //     pub node: BetreeNode,
 //     pub result: Message
