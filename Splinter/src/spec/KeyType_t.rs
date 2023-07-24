@@ -123,7 +123,9 @@ impl Element {
     }
 
     pub proof fn largest_lte_lemma(run: Seq<Element>, needle: Element, out: int)
-        requires Self::is_sorted(run), out == Self::largest_lte(run, needle)
+        requires
+            Self::is_sorted(run),
+            out == Self::largest_lte(run, needle),
         ensures -1 <= out < run.len(),
             forall |i: int| #![auto] 0 <= i <= out ==> Self::lte(run[i], needle),
             forall |i: int| #![auto] out < i < run.len() ==> Self::lt(needle, run[i]),
@@ -159,7 +161,7 @@ impl Element {
                 if run.len() == 1 {
                     assert(out == 0);
                 } else {
-                    assert(Element::lt(run[0], run[1]));
+                    assert(Element::lte(run[0], run[1])); // We want ::lt, but it's ::lte that triggers is_sorted.
                     assert(sub_run[0] == run[1]);
                     assert(out == 0);
                 }
