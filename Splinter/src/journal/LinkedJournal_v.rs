@@ -523,8 +523,9 @@ impl DiskView {
             &&& tight.iptr(None) == other.iptr(None)
             &&& #[trigger] other.is_sub_disk(tight)
         }) implies other =~= tight by {
-            assert( tight.wf() );   // new trigger when we perturb DiskView::can_crop
-            assert( forall |addr| !tight.entries.dom().contains(addr) );    // added to fight the flake
+            //assert( tight.wf() );   // new trigger when we perturb DiskView::can_crop
+            //assert( forall |addr| !tight.entries.dom().contains(addr) );    // added to fight the flake
+            assert( tight.entries.dom() =~~= other.entries.dom() );
             assert( other.entries =~~= tight.entries );  // flaky
         }
     }
