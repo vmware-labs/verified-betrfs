@@ -10,7 +10,8 @@ use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 use crate::disk::GenericDisk_v::*;
 use crate::betree::Buffer_v::*;
-use crate::betree::BufferSeq_v::*;
+use crate::betree::LinkedBufferSeq_v;
+use crate::betree::LinkedBufferSeq_v::BufferSeq;
 use crate::betree::BufferOffsets_v::*;
 use crate::betree::OffsetMap_v::*;
 use crate::betree::Memtable_v::*;
@@ -183,55 +184,6 @@ impl BetreeNode {
         (new_left, new_right)
     }
 
-    // pub open spec(checked) fn can_split_parent(self, request: SplitRequest) -> bool
-    // {
-    //     &&& self.wf()
-    //     &&& self.is_Node()
-    //     &&& 
-    //     &&& match request {
-    //         SplitRequest::SplitLeaf{child_idx, split_key} => {
-    //             &&& self.valid_child_index(child_idx)
-    //             &&& self.children[child_idx as int].can_split_leaf(split_key)
-    //         }
-    //         SplitRequest::SplitIndex{child_idx, child_pivot_idx} => {
-    //             &&& self.valid_child_index(child_idx)
-    //             &&& self.children[child_idx as int].can_split_index(child_pivot_idx)
-    //         }
-    //     }
-    // }
-
-    // pub open spec(checked) fn split_parent(self, request: SplitRequest) -> BetreeNode
-    //     recommends self.can_split_parent(request)
-    // {
-    //     match request {
-    //         SplitRequest::SplitLeaf{child_idx, split_key} => {
-    //             let idx = child_idx as int;
-    //             let old_child = self.children[idx];
-    //             let (new_left_child, new_right_child) = old_child.split_leaf(split_key);
-
-    //             BetreeNode{
-    //                 buffers: self.buffers,
-    //                 pivots: self.pivots.insert(idx+1, to_element(split_key)),
-    //                 children: self.children.update(idx, new_left_child).insert(idx+1, new_right_child),
-    //                 flushed: self.flushed.dup(idx)
-    //             }
-    //         }
-    //         SplitRequest::SplitIndex{child_idx, child_pivot_idx} => {
-    //             let idx = child_idx as int;
-    //             let old_child = self.children[idx];
-    //             let (new_left_child, new_right_child) = old_child.split_index(child_pivot_idx);
-    //             let split_element = old_child.pivots.pivots[child_pivot_idx as int];
-
-    //             BetreeNode{
-    //                 buffers: self.buffers,
-    //                 pivots: self.pivots.insert(idx+1, split_element),
-    //                 children: self.children.update(idx, new_left_child).insert(idx+1, new_right_child),
-    //                 flushed: self.flushed.dup(idx)
-    //             }
-    //         }
-    //     }
-    // }
-
     pub open spec(checked) fn empty_root(domain: Domain) -> BetreeNode
         recommends domain.wf(), domain.is_Domain()
     {
@@ -382,7 +334,7 @@ impl DiskView {
 
     pub open spec(checked) fn is_nondangling_ptr(self, ptr: Pointer) -> bool
     {
-        ptr.is_Some() ==> self.entries.contains_key(ptr.get_Some_0())
+        ptr.is_Some() ==> self.entries.contains_key(ptr.unwrap())
     }
 
     pub open spec(checked) fn node_has_nondangling_child_ptrs(self, node: BetreeNode) -> bool
@@ -397,7 +349,7 @@ impl DiskView {
             self.node_has_nondangling_child_ptrs(node),
     {
         let child_ptr = node.children[idx as int];
-        &&& child_ptr.is_Some() ==> self.entries[child_ptr.get_Some_0()].my_domain() == node.child_domain(idx)
+        &&& child_ptr.is_Some() ==> self.entries[child_ptr.unwrap()].my_domain() == node.child_domain(idx)
     }
 
     pub open spec(checked) fn node_has_linked_children(self, node: BetreeNode) -> bool
@@ -424,7 +376,7 @@ impl DiskView {
     pub open spec(checked) fn get(self, ptr: Pointer) -> BetreeNode
         recommends self.is_nondangling_ptr(ptr), ptr.is_Some()
     {
-        self.entries[ptr.get_Some_0()]
+        self.entries[ptr.unwrap()]
     }
 
     pub open spec(checked) fn agrees_with_disk(self, other: DiskView) -> bool
@@ -436,7 +388,293 @@ impl DiskView {
     {
         self.entries.le(bigger.entries)  
     }
+
+    pub open spec(checked) fn node_children_respects_rank(self, ranking: Ranking, addr: Address) -> bool
+        recommends self.wf(), self.entries.contains_key(addr), ranking.contains_key(addr)
+    {
+        let node = self.entries[addr];
+        &&& forall |idx| #[trigger] node.valid_child_index(idx) && node.children[idx as int].is_Some() 
+            ==> ({
+                let child_addr = node.children[idx as int].unwrap();
+                &&& ranking.contains_key(child_addr)
+                &&& ranking[child_addr] < ranking[addr]
+            })
+    }
+
+    pub open spec(checked) fn valid_ranking(self, ranking: Ranking) -> bool
+    {
+        &&& self.wf()
+        &&& forall |addr| #![auto] self.entries.contains_key(addr) && ranking.contains_key(addr)
+            ==> self.node_children_respects_rank(ranking, addr)
+    }
+
+    pub open spec(checked) fn is_fresh(self, addrs: Set<Address>) -> bool 
+    {
+        self.entries.dom().disjoint(addrs)
+    }
+
+    pub open spec(checked) fn modify_disk(self, addr: Address, node: BetreeNode) -> DiskView
+    {
+        DiskView{ entries: self.entries.insert(addr, node) }
+    }
 }
+
+pub open spec(checked) fn empty_disk() -> DiskView
+{
+    DiskView{ entries: Map::empty() }
+}
+
+pub struct SplitAddrs {
+    pub left: Address,
+    pub right: Address,
+    pub parent: Address
+}
+
+impl SplitAddrs {
+    pub open spec(checked) fn unique_elems(self) -> bool
+    {
+        &&& self.left != self.right
+        &&& self.right != self.parent
+        &&& self.parent != self.left
+    }
+
+    pub open spec(checked) fn repr(self) -> Set<Address>
+    {
+        set!{self.left, self.right, self.parent}
+    }
+}
+
+pub type BufferDiskView = LinkedBufferSeq_v::DiskView;
+
+pub struct LinkedBetree {
+    pub root: Pointer,
+    pub dv: DiskView,
+    pub buffer_dv: BufferDiskView
+}
+
+impl LinkedBetree {
+    pub open spec(checked) fn wf(self) -> bool
+    {
+        &&& self.dv.wf()
+        &&& self.dv.is_nondangling_ptr(self.root)
+        &&& self.dv.is_fresh(self.buffer_dv.repr())
+    }
+
+    pub open spec(checked) fn has_root(self) -> bool
+    {
+        &&& self.root.is_Some()
+        &&& self.dv.is_nondangling_ptr(self.root)
+    }
+
+    pub open spec(checked) fn root(self) -> BetreeNode
+        recommends self.has_root()
+    {
+        self.dv.get(self.root)
+    }
+
+    pub open spec(checked) fn valid_ranking(self, ranking: Ranking) -> bool
+    {
+        &&& self.wf()
+        &&& self.dv.valid_ranking(ranking)
+        &&& self.has_root() ==> ranking.contains_key(self.root.unwrap())
+    }
+
+    pub open spec(checked) fn acyclic(self) -> bool
+    {
+        &&& self.wf()
+        &&& exists |ranking| self.valid_ranking(ranking)
+    }
+
+    pub open spec(checked) fn the_ranking(self) -> Ranking
+        recommends self.acyclic()
+    {
+        let ranking = choose |ranking| self.valid_ranking(ranking);
+        ranking
+    }
+
+    pub open spec(checked) fn is_fresh(self, addrs: Set<Address>) -> bool
+    {
+        &&& self.dv.is_fresh(addrs)
+        &&& self.buffer_dv.is_fresh(addrs)
+    }
+
+    pub open spec(checked) fn child_at_idx(self, idx: nat) -> LinkedBetree
+        recommends self.wf(), self.has_root(), self.root().valid_child_index(idx)
+    {
+        LinkedBetree{ root: self.root().children[idx as int], dv: self.dv, buffer_dv: self.buffer_dv }
+    }
+
+    pub open spec(checked) fn child_for_key(self, k: Key) -> LinkedBetree
+        recommends self.has_root(), self.root().key_in_domain(k)
+    {
+        LinkedBetree{ root: self.root().child_ptr(k), dv: self.dv, buffer_dv: self.buffer_dv }
+    }
+
+    pub open spec(checked) fn get_rank(self, ranking: Ranking) -> nat
+        recommends self.wf()
+    {
+        if self.has_root() && ranking.contains_key(self.root.unwrap()) {
+            ranking[self.root.unwrap()] + 1
+        } else {
+            0
+        }
+    }
+
+    pub open spec(checked) fn child_count(self) -> nat
+        recommends self.wf()
+    {
+        if self.has_root() { self.root().children.len() } else { 0 }
+    }
+
+    pub open spec(checked) fn can_recurse_for_reachable(self, ranking: Ranking, child_idx: nat) -> bool
+    {
+        &&& self.wf()
+        &&& self.has_root()
+        &&& self.valid_ranking(ranking)
+        &&& child_idx <= self.child_count()
+    }
+
+    #[verifier::decreases_by]
+    pub proof fn reachable_addrs_using_ranking_recur_proof(self, ranking: Ranking, child_idx: nat)
+    {
+        if child_idx < self.child_count() {
+            assert(self.root().valid_child_index(child_idx)); // trigger
+        }
+    }
+
+    // TODO(verus): workaround since verus doesn't support mutually recursive closure
+    pub open spec(checked) fn reachable_addrs_using_ranking_recur(self, ranking: Ranking, child_idx: nat) -> Set<Address>
+        recommends self.can_recurse_for_reachable(ranking, child_idx)
+        decreases self.get_rank(ranking), self.child_count()-child_idx when self.can_recurse_for_reachable(ranking, child_idx) 
+            via Self::reachable_addrs_using_ranking_recur_proof
+    {
+        if child_idx == self.child_count() {
+            set!{}
+        } else {
+            let child_addrs = self.child_at_idx(child_idx).reachable_addrs_using_ranking(ranking);
+            let right_subtree_addrs = self.reachable_addrs_using_ranking_recur(ranking, child_idx + 1);
+            child_addrs + right_subtree_addrs
+        }
+    }
+
+    pub open spec(checked) fn reachable_addrs_using_ranking(self, ranking: Ranking) -> Set<Address>
+        recommends self.wf(), self.valid_ranking(ranking)
+        decreases self.get_rank(ranking) when self.wf() && self.valid_ranking(ranking)
+    {
+        if self.has_root() {
+            let sub_tree_addrs = self.reachable_addrs_using_ranking_recur(ranking, 0);
+            let root_addr = set!{ self.root.unwrap() };
+            root_addr + sub_tree_addrs
+        } else {
+            set!{}
+        }
+    }
+
+    // repr of all reachable betree nodes
+    pub open spec(checked) fn betree_repr(self) -> Set<Address>
+        recommends self.acyclic()
+    {
+        self.reachable_addrs_using_ranking(self.the_ranking())
+    }
+
+    // TODO(Jialin): can change to decreases by when we prove that all address from betree_addr is nondangling ptr
+    pub open spec/*XXX (checked)*/ fn reachable_buffer(self, addr: Address, buffer_addr: Address) -> bool
+        recommends self.acyclic()
+    {
+        &&& self.betree_repr().contains(addr) 
+        && self.dv.get(Some(addr)).buffers.repr().contains(buffer_addr)
+    }
+
+    // repr of all reachable buffers
+    pub open spec(checked) fn buffer_repr(self) -> Set<Address>
+        recommends self.acyclic()
+    {
+        let betree_addrs = self.betree_repr();
+        Set::new(|buffer_addr| exists |addr| self.reachable_buffer(addr, buffer_addr))
+    }
+
+    pub open spec(checked) fn build_tight_tree(self) -> LinkedBetree
+    {
+        if self.acyclic() {
+            let tight_dv = DiskView{ entries: self.dv.entries.restrict(self.betree_repr()) };
+            let tight_buffer_dv = BufferDiskView{ entries: self.buffer_dv.entries.restrict(self.buffer_repr()) };
+            LinkedBetree{ root: self.root, dv: tight_dv, buffer_dv: tight_buffer_dv }
+        } else {
+            self
+        }
+    }
+
+    pub open spec(checked) fn disk_tight_wrt_betree_repr(self) -> bool
+        recommends self.acyclic()
+    {
+        self.dv.entries.dom() =~= self.betree_repr()
+    }
+
+
+    // operations on linked betree:
+
+    pub open spec(checked) fn can_split_parent(self, request: SplitRequest) -> bool
+    {
+        &&& self.wf()
+        &&& self.has_root()
+        &&& self.root().valid_child_index(request.get_child_idx())
+        &&& self.child_at_idx(request.get_child_idx()).has_root()
+        &&& match request {
+            SplitRequest::SplitLeaf{child_idx, split_key} => {
+                &&& self.child_at_idx(child_idx).root().can_split_leaf(split_key)
+            }
+            SplitRequest::SplitIndex{child_idx, child_pivot_idx} => {
+                &&& self.child_at_idx(child_idx).root().can_split_index(child_pivot_idx)                
+            }
+        }
+    }
+
+    // NOTE: recommmends check sucks here
+    pub open spec(checked) fn split_parent(self, request: SplitRequest, new_addrs: SplitAddrs) -> LinkedBetree
+        recommends self.can_split_parent(request)
+    {
+        match request {
+            SplitRequest::SplitLeaf{child_idx, split_key} => {
+                let (new_left_child, new_right_child) = self.child_at_idx(child_idx).root().split_leaf(split_key);
+                let new_children = self.root().children.update(child_idx as int, Some(new_addrs.left)
+                    ).insert(child_idx as int + 1, Some(new_addrs.right));
+
+                let new_parent = BetreeNode{
+                    buffers: self.root().buffers,
+                    pivots: self.root().pivots.insert(child_idx as int + 1, to_element(split_key)),
+                    children: new_children,
+                    flushed: self.root().flushed.dup(child_idx as int)
+                };
+
+                let new_dv = self.dv.modify_disk(new_addrs.left, new_left_child
+                    ).modify_disk(new_addrs.right, new_right_child
+                    ).modify_disk(new_addrs.parent, new_parent);
+
+                LinkedBetree{root: Some(new_addrs.parent), dv: new_dv, buffer_dv: self.buffer_dv }
+            }
+            SplitRequest::SplitIndex{child_idx, child_pivot_idx} => {
+                let (new_left_child, new_right_child) = self.child_at_idx(child_idx).root().split_index(child_pivot_idx);
+                let new_children = self.root().children.update(child_idx as int, Some(new_addrs.left)
+                    ).insert(child_idx as int + 1, Some(new_addrs.right));
+
+                // NOTE(Jialin): literally needs to match the syntax for the recommend check to be recognized
+                let new_parent = BetreeNode{
+                    buffers: self.root().buffers,
+                    pivots: self.root().pivots.insert(child_idx as int + 1, 
+                            self.child_at_idx(child_idx).root().pivots[child_pivot_idx as int]), 
+                    children: new_children,
+                    flushed: self.root().flushed.dup(child_idx as int)
+                };
+
+                let new_dv = self.dv.modify_disk(new_addrs.left, new_left_child
+                    ).modify_disk(new_addrs.right, new_right_child
+                    ).modify_disk(new_addrs.parent, new_parent);
+
+                LinkedBetree{root: Some(new_addrs.parent), dv: new_dv, buffer_dv: self.buffer_dv }
+            }
+        }
+    }
+} // end of LinkedBetree impl
 
 // pub struct QueryReceiptLine{
 //     pub node: BetreeNode,

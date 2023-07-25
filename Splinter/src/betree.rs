@@ -13,3 +13,4 @@ pub mod BufferOffsets_v;
 pub mod FilteredBetree_v;
 pub mod FilteredBetreeRefinement_v;
 pub mod LinkedBetree_v;
+pub mod LinkedBufferSeq_v;
