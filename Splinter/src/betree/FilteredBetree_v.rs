@@ -58,7 +58,7 @@ impl BetreeNode {
     pub open spec(checked) fn valid_child_index(self, child_idx: nat) -> bool
     {
         &&& self.is_Node()
-        &&& child_idx < self.get_Node_pivots().num_ranges()   
+        &&& child_idx < self.get_Node_children().len()   
     }
 
     pub open spec(checked) fn my_domain(self) -> Domain
@@ -87,17 +87,15 @@ impl BetreeNode {
 
     pub open spec(checked) fn linked_children(self) -> bool
     recommends
-        self.local_structure(),
+        self.local_structure(), self.is_Node()
     {
-        &&& self.is_Node() ==> { 
-            &&& forall |i:nat|
-            ( 
-                self.valid_child_index(i) 
-                && (#[trigger] self.get_Node_children()[i as int].is_Node())
-                && self.get_Node_children()[i as int].local_structure() 
-            ) ==> {
-                self.get_Node_children()[i as int].my_domain() == self.child_domain(i)
-            }
+        &&& forall |i|
+        ( 
+            (#[trigger] self.valid_child_index(i))
+            && self.get_Node_children()[i as int].is_Node()
+            && self.get_Node_children()[i as int].local_structure() 
+        ) ==> {
+            self.get_Node_children()[i as int].my_domain() == self.child_domain(i)
         }
     }
 
@@ -105,8 +103,8 @@ impl BetreeNode {
         recommends self.is_Node()
         decreases self, 0nat when self.is_Node()
     {
-        let children = self.get_Node_children();
-        forall |i:int| #![auto] 0 <= i < children.len() ==> children[i].wf()
+        &&& (forall |i| (#[trigger] self.valid_child_index(i))
+            ==> self.get_Node_children()[i as int].wf())
     }
 
     pub open spec(checked) fn wf(self) -> bool
