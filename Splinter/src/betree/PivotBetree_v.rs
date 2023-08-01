@@ -76,17 +76,15 @@ impl BetreeNode {
 
     pub open spec(checked) fn linked_children(self) -> bool
     recommends
-        self.local_structure(),
+        self.local_structure(), self.is_Node()
     {
-        &&& self.is_Node() ==> { 
-            &&& forall |i:nat|
-            ( 
-                self.valid_child_index(i)
-                && ((#[trigger] self.get_Node_children()[i as int].is_Node()))
-                && self.get_Node_children()[i as int].local_structure() 
-            ) ==> {
-                self.get_Node_children()[i as int].my_domain() == self.child_domain(i)
-            }
+       &&& forall |i|
+        ( 
+            (#[trigger] self.valid_child_index(i))
+            && self.get_Node_children()[i as int].is_Node()
+            && self.get_Node_children()[i as int].local_structure() 
+        ) ==> {
+            self.get_Node_children()[i as int].my_domain() == self.child_domain(i)
         }
     }
 
@@ -94,8 +92,8 @@ impl BetreeNode {
         recommends self.is_Node()
         decreases self, 0nat when self.is_Node()
     {
-        &&& (forall |i:int| #![auto] 0 <= i < self.get_Node_children().len() 
-            ==> self.get_Node_children()[i].wf())
+        &&& (forall |i| #[trigger] self.valid_child_index(i)
+            ==> self.get_Node_children()[i as int].wf())
     }
 
     pub open spec(checked) fn wf(self) -> bool
@@ -136,7 +134,7 @@ impl BetreeNode {
     pub open spec(checked) fn is_index(self) -> bool
     {
         &&& self.is_Node()
-        &&& forall |i| #![auto] 0 <= i < self.get_Node_children().len() ==> self.get_Node_children()[i].is_Node()
+        &&& forall |i| #[trigger] self.valid_child_index(i) ==> self.get_Node_children()[i as int].is_Node()
     }
 
     pub open spec(checked) fn can_split_leaf(self, split_key: Key) -> bool
