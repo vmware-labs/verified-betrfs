@@ -110,16 +110,12 @@ impl BufferSeq {
         }
     }
 
-//     pub open spec(checked) fn query(self, key: Key) -> Message {
-//         self.query_from(key, 0)
-//     }
-
-//     pub open spec(checked) fn update_subrange(self, start: int, end: int, new_buffer: Buffer) -> BufferSeq 
-//         recommends 0 <= start < end <= self.len()
-//     {
-//         let s = seq![new_buffer];
-//         BufferSeq{ buffers: self.buffers.subrange(0, start) + s + self.buffers.subrange(end, self.len() as int) }
-//     }
+    pub open spec(checked) fn update_subrange(self, start: int, end: int, new_buffer_addr: Address) -> BufferSeq 
+        recommends 0 <= start < end <= self.len()
+    {
+        let s = seq![new_buffer_addr];
+        BufferSeq{ buffers: self.buffers.subrange(0, start) + s + self.buffers.subrange(end, self.len() as int) }
+    }
 
 //     pub open spec(checked) fn i_from(self, idx: int) -> Buffer
 //         recommends 0 <= idx <= self.len()
@@ -137,11 +133,12 @@ impl BufferSeq {
 //         self.i_from(0)
 //     }
 
-//     pub open spec fn key_in_buffer(self, from_idx: int, k: Key, buffer_idx: int) -> bool
-//     {
-//         &&& from_idx <= buffer_idx < self.len()
-//         &&& self[buffer_idx].map.contains_key(k)
-//     }
+    pub open spec fn key_in_buffer(self, dv: DiskView, from_idx: int, k: Key, buffer_idx: int) -> bool
+    {
+        &&& from_idx <= buffer_idx < self.len()
+        &&& dv.entries.contains_key(self[buffer_idx])
+        &&& dv.get(self[buffer_idx]).map.contains_key(k)
+    }
 
     pub open spec /*XXX (checked)*/ fn i_filtered_from(self, dv: DiskView, offset_map: OffsetMap, idx: int) -> Buffer
         recommends offset_map.is_total(), 0 <= idx <= self.len() 
@@ -165,14 +162,13 @@ impl BufferSeq {
         self.i_filtered_from(dv, offset_map, 0)
     }
 
-//     pub open spec(checked) fn key_in_buffer_filtered(self, offset_map: OffsetMap, from_idx: int, k: Key, buffer_idx: int) -> bool
-//     recommends
-//         offset_map.is_total(),
-//         0 <= from_idx,
-//     {
-//         &&& self.key_in_buffer(from_idx, k, buffer_idx)
-//         &&& offset_map.offsets[k] <= buffer_idx
-//     }
+    pub open spec(checked) fn key_in_buffer_filtered(self, dv: DiskView, offset_map: OffsetMap, 
+        from_idx: int, k: Key, buffer_idx: int) -> bool
+        recommends 0 <= from_idx, offset_map.is_total()
+    {
+        &&& self.key_in_buffer(dv, from_idx, k, buffer_idx)
+        &&& offset_map.offsets[k] <= buffer_idx
+    }
 
 //     pub proof fn query_agrees_with_i(self, k: Key, start: int)
 //         requires 0 <= start <= self.len(), 

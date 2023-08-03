@@ -1128,8 +1128,8 @@ impl FilteredBetree::State {
         promote.extend_buffer_seq_wf(buffers);
         promote.extend_buffer_seq_refines_merge_buffer(buffers);
 
-        let a = self.root.push_memtable(self.memtable).value.i();
-        let b = self.root.i().push_memtable(self.memtable).value;
+        let a = self.root.push_memtable(self.memtable).i();
+        let b = self.root.i().push_memtable(self.memtable);
         
         BetreeNode::i_children_lemma_auto();
         assert(a.get_Node_children() =~= b.get_Node_children());

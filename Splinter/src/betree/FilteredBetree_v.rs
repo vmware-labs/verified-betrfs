@@ -117,13 +117,12 @@ impl BetreeNode {
         }
     }
 
-    pub open spec(checked) fn push_memtable(self, memtable: Memtable) -> StampedBetree
+    pub open spec(checked) fn push_memtable(self, memtable: Memtable) -> BetreeNode
     recommends
         self.wf(),
     {
         let buffers = BufferSeq{buffers: seq![memtable.buffer]};
-        let new_root = self.promote(total_domain()).extend_buffer_seq(buffers);
-        Stamped{value: new_root, seq_end: memtable.seq_end}
+        self.promote(total_domain()).extend_buffer_seq(buffers)
     }
 
     pub open spec(checked) fn extend_buffer_seq(self, buffers: BufferSeq) -> BetreeNode
@@ -306,7 +305,6 @@ impl BetreeNode {
         self.wf(),
         domain.wf(),
         domain.is_Domain(),
-    // ensures out.wf()
     {
         if self.is_Nil() {
             BetreeNode::empty_root(domain)
@@ -314,22 +312,6 @@ impl BetreeNode {
             self
         }
     }
-
-    // pub open spec(checked) fn active_key_cond(self, k: Key, child_idx: int, buffer_idx: int) -> bool
-    //     recommends self.wf(), self.is_Node(), 
-    //         0 <= buffer_idx < self.get_Node_buffers().len()
-    // {
-    //     &&& 0 <= child_idx < self.get_Node_children().len()
-    //     &&& self.get_Node_flushed().offsets[child_idx] <= buffer_idx as nat
-    //     &&& self.child_domain(child_idx as nat).contains(k)
-    // }
-
-    // pub open spec(checked) fn active_keys(self, buffer_idx: int) -> Set<Key>
-    //     recommends self.wf(), self.is_Node(), 
-    //         0 <= buffer_idx < self.get_Node_buffers().len()
-    // {
-    //     Set::new(|k: Key| exists |child_idx| self.active_key_cond(k, child_idx, buffer_idx))
-    // }
 
     pub open spec(checked) fn can_flush(self, child_idx: nat, buffer_gc: nat) -> bool
     {
@@ -669,7 +651,7 @@ state_machine!{ FilteredBetree {
         require let Label::Internal{} = lbl;
         require pre.wf();
         update memtable = pre.memtable.drain();
-        update root = pre.root.push_memtable(pre.memtable).value;
+        update root = pre.root.push_memtable(pre.memtable);
     }}
 
     transition!{ internal_grow(lbl: Label) {

@@ -739,12 +739,12 @@ impl PivotBetree::State {
         self.root.i_wf();
         self.root.promote_and_merge_wf(total_domain(), self.memtable.buffer);
 
-        let a = self.root.push_memtable(self.memtable).value.i();
+        let a = self.root.push_memtable(self.memtable).i();
         let b = self.root.i().push_memtable(self.memtable).value;
 
         BetreeNode::empty_root_refines();
         let equiv_children_node = if self.root.is_Node() { self.root } else { BetreeNode::empty_root(total_domain()) };
-        equiv_children_node.i_children_seq_same(self.root.push_memtable(self.memtable).value, 0);
+        equiv_children_node.i_children_seq_same(self.root.push_memtable(self.memtable), 0);
 
         assert(a.get_Node_buffer() =~= b.get_Node_buffer());
         assert(a.get_Node_children().map =~= b.get_Node_children().map);

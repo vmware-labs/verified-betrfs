@@ -27,12 +27,6 @@ verus! {
 // the abstract Branch type. A refining state machine replaces single-node branches with
 // b+trees.
 
-// pub type StampedBetree = Stamped<BetreeNode>;
-
-// pub open spec(checked) fn empty_image() -> StampedBetree {
-//     Stamped{ value: BetreeNode::Nil, seq_end: 0 }
-// }
-
 #[verifier::ext_equal]
 pub struct BetreeNode {
     pub buffers: BufferSeq,
@@ -40,6 +34,8 @@ pub struct BetreeNode {
     pub children: Seq<Pointer>,
     pub flushed: BufferOffsets // # of buffers flushed to each child
 }
+
+pub type BufferDiskView = LinkedBufferSeq_v::DiskView;
 
 impl BetreeNode {
     pub open spec(checked) fn wf(self) -> bool
@@ -52,7 +48,7 @@ impl BetreeNode {
 
     pub open spec(checked) fn valid_child_index(self, child_idx: nat) -> bool
     {
-        &&& child_idx < self.pivots.num_ranges()   
+        &&& child_idx < self.children.len()   
     }
 
     pub open spec(checked) fn occupied_child_index(self, child_idx: nat) -> bool
@@ -79,13 +75,6 @@ impl BetreeNode {
             end: self.pivots[child_idx as int + 1]
         }
     }
-
-    // pub open spec(checked) fn push_memtable(self, memtable: Memtable) -> StampedBetree
-    // {
-    //     let buffers = BufferSeq{buffers: seq![memtable.buffer]};
-    //     let new_root = self.promote(total_domain()).extend_buffer_seq(buffers);
-    //     Stamped{value: new_root, seq_end: memtable.seq_end}
-    // }
 
     pub open spec(checked) fn extend_buffer_seq(self, buffers: BufferSeq) -> BetreeNode
         recommends self.wf()
@@ -125,7 +114,7 @@ impl BetreeNode {
 
     pub open spec(checked) fn is_index(self) -> bool
     {
-        forall |i| #![auto] 0 <= i < self.children.len() ==> self.children[i].is_Some()
+        forall |i| #![auto] self.valid_child_index(i) ==> self.children[i as int].is_Some()
     }
 
     pub open spec(checked) fn can_split_leaf(self, split_key: Key) -> bool
@@ -195,106 +184,22 @@ impl BetreeNode {
         }
     }
 
-    // pub open spec(checked) fn grow(self) -> BetreeNode
-    // {
-    //     BetreeNode{
-    //         buffers: BufferSeq::empty(),
-    //         pivots: domain_to_pivots(total_domain()),
-    //         children: seq![self],
-    //         flushed: BufferOffsets{offsets: seq![0]}
-    //     }
-    // }
+    pub open spec(checked) fn compact_key_range(self, start: nat, end: nat, k: Key, buffer_dv: BufferDiskView) -> bool
+        recommends self.wf(), start < end <= self.buffers.len()
+    {
+        &&& self.key_in_domain(k)
+        &&& self.flushed_ofs(k) <= end
+        &&& exists |buffer_idx| self.buffers.slice(start as int, end as int).key_in_buffer_filtered(
+                buffer_dv, self.make_offset_map().decrement(start), 0, k, buffer_idx)
+    }
 
-    // pub open spec(checked) fn promote(self, domain: Domain) -> BetreeNode
-    // {
-    //     if self.is_Nil() {
-    //         BetreeNode::empty_root(domain)
-    //     } else {
-    //         self
-    //     }
-    // }
-
-    // // pub open spec(checked) fn active_key_cond(self, k: Key, child_idx: int, buffer_idx: int) -> bool
-    // //     recommends self.wf(), self.is_Node(), 
-    // //         0 <= buffer_idx < self.buffers.len()
-    // // {
-    // //     &&& 0 <= child_idx < self.children.len()
-    // //     &&& self.flushed.offsets[child_idx] <= buffer_idx as nat
-    // //     &&& self.child_domain(child_idx as nat).contains(k)
-    // // }
-
-    // // pub open spec(checked) fn active_keys(self, buffer_idx: int) -> Set<Key>
-    // //     recommends self.wf(), self.is_Node(), 
-    // //         0 <= buffer_idx < self.buffers.len()
-    // // {
-    // //     Set::new(|k: Key| exists |child_idx| self.active_key_cond(k, child_idx, buffer_idx))
-    // // }
-
-    // pub open spec(checked) fn can_flush(self, child_idx: nat, buffer_gc: nat) -> bool
-    // {
-    //     &&& self.wf()
-    //     &&& self.is_Node()
-    //     &&& self.valid_child_index(child_idx)
-    //     &&& self.flushed.update(child_idx as int, 
-    //             self.buffers.len()).all_gte(buffer_gc)
-    // }
-
-    // pub open spec(checked) fn flush(self, child_idx: nat, buffer_gc: nat) -> BetreeNode
-    //     recommends self.can_flush(child_idx, buffer_gc)
-    // {
-    //     let idx = child_idx as int;
-    //     let flush_upto = self.buffers.len(); 
-    //     let flushed_ofs = self.flushed.offsets[idx];
-        
-    //     // when we perform a flush to a child, all active buffers for that child (up to the most recent buffer) are flushed
-    //     let buffers_to_child = self.buffers.slice(flushed_ofs as int, flush_upto as int);
-    //     let new_child = self.children[idx].promote(self.child_domain(child_idx)).extend_buffer_seq(buffers_to_child);
-
-    //     // updates to parent node (self)
-    //     // we take advantage of flush time to optionally garbage collect buffers that are no longer active by all children
-    //     // buffer_gc tells us how many buffers (starting from oldest) we can garbage collect
-    //     let gc_buffers = self.buffers.slice(buffer_gc as int, flush_upto as int);
-    //     let gc_flushed = self.flushed.update(idx, flush_upto).shift_left(buffer_gc);
-
-    //     BetreeNode{
-    //         buffers: gc_buffers,
-    //         pivots: self.pivots,
-    //         children: self.children.update(idx, new_child),
-    //         flushed: gc_flushed
-    //     }
-    // }
-
-    // pub open spec(checked) fn compact_key_range(self, start: nat, end: nat, k: Key) -> bool
-    //     recommends self.wf(), self.is_Node(), start < end <= self.buffers.len()
-    // {
-    //     &&& self.key_in_domain(k)
-    //     &&& self.flushed_ofs(k) <= end
-    //     &&& exists |buffer_idx| self.buffers.slice(start as int, end as int
-    //         ).key_in_buffer_filtered(self.make_offset_map().decrement(start), 0, k, buffer_idx)
-    // }
-
-    // pub open spec(checked) fn can_compact(self, start: nat, end: nat, compacted_buffer: Buffer) -> bool 
-    // {
-    //     &&& self.wf()
-    //     &&& self.is_Node()
-    //     &&& start < end <= self.buffers.len()
-    //     &&& forall |k| #![auto] compacted_buffer.map.contains_key(k) <==> self.compact_key_range(start, end, k)
-    //     &&& forall |k| #![auto] compacted_buffer.map.contains_key(k) ==> ({
-    //         let from = if self.flushed_ofs(k) <= start { 0 } else { self.flushed_ofs(k)-start };
-    //         &&& compacted_buffer.query(k) == self.buffers.slice(start as int, end as int).query_from(k, from)
-    //     })
-    // }
-
-    // pub open spec(checked) fn compact(self, start: nat, end: nat, compacted_buffer: Buffer) -> BetreeNode
-    //     recommends self.can_compact(start, end, compacted_buffer)
-    // {
-    //     BetreeNode{
-    //         buffers: self.buffers.update_subrange(start as int, end as int, compacted_buffer),
-    //         pivots: self.pivots,
-    //         children: self.children,
-    //         flushed: self.flushed.adjust_compact(start as int, end as int)
-    //     }
-    // }
+    pub open spec(checked) fn compact_key_value(self, start: nat, end: nat, k: Key, buffer_dv: BufferDiskView) -> Message
+        recommends self.wf(), start < end <= self.buffers.len(), 
+            self.compact_key_range(start, end, k, buffer_dv)
+    {
+        let from = if self.flushed_ofs(k) <= start { 0 } else { self.flushed_ofs(k)-start };
+        self.buffers.slice(start as int, end as int).query_from(buffer_dv, k, from)
+    }
 
     pub open spec(checked) fn key_in_domain(self, key: Key) -> bool
     {
@@ -424,6 +329,26 @@ pub open spec(checked) fn empty_disk() -> DiskView
     DiskView{ entries: Map::empty() }
 }
 
+
+// maybe name this a none flush addrs
+pub struct TwoAddrs {
+    pub addr1: Address,
+    pub addr2: Address,
+}
+
+impl TwoAddrs {
+    pub open spec(checked) fn no_duplicates(self) -> bool
+    {
+        &&& self.addr1 != self.addr2
+    }
+
+    pub open spec(checked) fn repr(self) -> Set<Address>
+        recommends self.no_duplicates()
+    {
+        set!{self.addr1, self.addr2}
+    }
+}
+
 pub struct SplitAddrs {
     pub left: Address,
     pub right: Address,
@@ -431,7 +356,7 @@ pub struct SplitAddrs {
 }
 
 impl SplitAddrs {
-    pub open spec(checked) fn unique_elems(self) -> bool
+    pub open spec(checked) fn no_duplicates(self) -> bool
     {
         &&& self.left != self.right
         &&& self.right != self.parent
@@ -439,17 +364,27 @@ impl SplitAddrs {
     }
 
     pub open spec(checked) fn repr(self) -> Set<Address>
+        recommends self.no_duplicates()
     {
         set!{self.left, self.right, self.parent}
     }
 }
 
-pub type BufferDiskView = LinkedBufferSeq_v::DiskView;
-
 pub struct LinkedBetree {
     pub root: Pointer,
     pub dv: DiskView,
     pub buffer_dv: BufferDiskView
+}
+
+pub type StampedBetree = Stamped<LinkedBetree>;
+
+pub open spec(checked) fn empty_linked_betree() -> LinkedBetree
+{
+    LinkedBetree{root: None, dv: empty_disk(), buffer_dv: LinkedBufferSeq_v::empty_disk() }
+}
+
+pub open spec(checked) fn empty_image() -> StampedBetree {
+    Stamped{ value: empty_linked_betree(), seq_end: 0 }
 }
 
 impl LinkedBetree {
@@ -610,9 +545,35 @@ impl LinkedBetree {
         self.dv.entries.dom() =~= self.betree_repr()
     }
 
+    pub open spec(checked) fn push_memtable(self, memtable: Memtable, new_addrs: TwoAddrs) -> LinkedBetree
+        recommends self.wf(), new_addrs.no_duplicates(), self.is_fresh(new_addrs.repr())
+    {
+        let memtable_buffer = BufferSeq{ buffers: seq![new_addrs.addr2] };
+        let new_root = 
+            if self.has_root() {
+                self.root().extend_buffer_seq(memtable_buffer)
+            } else {
+                BetreeNode::empty_root(total_domain()).extend_buffer_seq(memtable_buffer)
+            };
+        let new_dv = self.dv.modify_disk(new_addrs.addr1, new_root);
+        let new_buffer_dv = self.buffer_dv.modify_disk(new_addrs.addr2, memtable.buffer);
+        LinkedBetree{ root: Some(new_addrs.addr1), dv: new_dv, buffer_dv: new_buffer_dv }
+    }
+
+    pub open spec(checked) fn grow(self, new_root_addr: Address) -> LinkedBetree
+        recommends self.wf(), self.is_fresh(Set::empty().insert(new_root_addr))
+    {
+        let new_root = BetreeNode{
+            buffers: BufferSeq::empty(), 
+            pivots: domain_to_pivots(total_domain()),
+            children: seq![self.root],
+            flushed: BufferOffsets{offsets: seq![0]},
+        };
+        let new_dv = self.dv.modify_disk(new_root_addr, new_root);
+        LinkedBetree{ root: Some(new_root_addr), dv: new_dv, buffer_dv: self.buffer_dv }
+    }
 
     // operations on linked betree:
-
     pub open spec(checked) fn can_split_parent(self, request: SplitRequest) -> bool
     {
         &&& self.wf()
@@ -670,255 +631,342 @@ impl LinkedBetree {
                     ).modify_disk(new_addrs.right, new_right_child
                     ).modify_disk(new_addrs.parent, new_parent);
 
-                LinkedBetree{root: Some(new_addrs.parent), dv: new_dv, buffer_dv: self.buffer_dv }
+                LinkedBetree{ root: Some(new_addrs.parent), dv: new_dv, buffer_dv: self.buffer_dv }
             }
         }
     }
+
+    pub open spec(checked) fn can_flush(self, child_idx: nat, buffer_gc: nat) -> bool
+    {
+        &&& self.wf()
+        &&& self.has_root()
+        &&& self.root().occupied_child_index(child_idx)
+        &&& self.root().flushed.update(child_idx as int, self.root().buffers.len()).all_gte(buffer_gc)
+    }
+
+    pub open spec/*XXX(checked)*/ fn flush(self, child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs) -> LinkedBetree
+        recommends self.can_flush(child_idx, buffer_gc), self.is_fresh(new_addrs.repr())
+    {
+        let root = self.root();
+        let flush_upto = root.buffers.len(); 
+        let flushed_ofs = root.flushed.offsets[child_idx as int];
+
+        let buffers_to_child = root.buffers.slice(flushed_ofs as int, flush_upto as int);
+        let child = self.dv.get(root.children[child_idx as int]);
+        let new_child = child.extend_buffer_seq(buffers_to_child);
+
+        let new_root = BetreeNode{
+            buffers: root.buffers.slice(buffer_gc as int, flush_upto as int),
+            pivots: root.pivots,
+            children: root.children.update(child_idx as int, Some(new_addrs.addr2)),
+            flushed: root.flushed.update(child_idx as int, flush_upto).shift_left(buffer_gc),
+        };
+
+        let new_dv = self.dv.modify_disk(new_addrs.addr1, new_root).modify_disk(new_addrs.addr2, new_child);
+        LinkedBetree{ root: Some(new_addrs.addr1), dv: new_dv, buffer_dv: self.buffer_dv }
+    }
+
+    pub open spec(checked) fn can_compact(self, start: nat, end: nat, compacted_buffer: Buffer) -> bool 
+    {
+        &&& self.wf()
+        &&& self.has_root()
+        &&& start < end <= self.root().buffers.len()
+        &&& forall |k| #![auto] compacted_buffer.map.contains_key(k) <==> self.root().compact_key_range(start, end, k, self.buffer_dv)
+        &&& forall |k| #![auto] compacted_buffer.map.contains_key(k) ==>
+                compacted_buffer.query(k) == self.root().compact_key_value(start, end, k, self.buffer_dv)
+    }
+
+     pub open spec/*XXX(checked)*/ fn compact(self, start: nat, end: nat, compacted_buffer: Buffer, new_addrs: TwoAddrs) -> LinkedBetree
+        recommends 
+            new_addrs.no_duplicates(), 
+            self.is_fresh(new_addrs.repr()),
+            self.can_compact(start, end, compacted_buffer),
+    {
+        let new_root = BetreeNode{
+            buffers: self.root().buffers.update_subrange(start as int, end as int, new_addrs.addr2),
+            pivots: self.root().pivots,
+            children: self.root().children,
+            flushed: self.root().flushed.adjust_compact(start as int, end as int)
+        };
+
+        let new_dv = self.dv.modify_disk(new_addrs.addr1, new_root);
+        let new_buffer_dv = self.buffer_dv.modify_disk(new_addrs.addr2, compacted_buffer);
+        LinkedBetree{ root: Some(new_addrs.addr1), dv: new_dv, buffer_dv: new_buffer_dv }
+    }
+
 } // end of LinkedBetree impl
 
-// pub struct QueryReceiptLine{
-//     pub node: BetreeNode,
-//     pub result: Message
-// }
+pub struct QueryReceiptLine{
+    pub node_ptr: Pointer,
+    pub result: Message
+}
 
-// impl QueryReceiptLine{
-//     pub open spec(checked) fn wf(self) -> bool
-//     {
-//         &&& self.node.wf()
-//         &&& self.result.is_Define()
-//     }
-// } // end impl QueryReceiptLine
+impl QueryReceiptLine{
+    pub open spec(checked) fn wf(self) -> bool
+    {
+        &&& self.result.is_Define()
+    }
+} // end impl QueryReceiptLine
 
-// pub struct QueryReceipt{
-//     pub key: Key,
-//     pub root: BetreeNode,
-//     pub lines: Seq<QueryReceiptLine>
-// }
+pub struct QueryReceipt{
+    pub key: Key,
+    pub linked: LinkedBetree,
+    pub lines: Seq<QueryReceiptLine>
+}
 
-// impl QueryReceipt{
-//     pub open spec(checked) fn structure(self) -> bool
-//     {
-//         &&& 0 < self.lines.len()
-//         &&& self.lines[0].node == self.root
-//         &&& (forall |i:nat| #![auto] i < self.lines.len() ==> {
-//             self.lines[i as int].node.is_Node() <==> i < self.lines.len()-1
-//         })
-//         &&& self.lines.last().result == Message::Define{value: default_value()}
-//     }
+impl QueryReceipt{
+    pub open spec(checked) fn structure(self) -> bool
+    {
+        &&& 0 < self.lines.len()
+        &&& self.linked.wf()
+        &&& self.lines[0].node_ptr == self.linked.root
+        &&& forall |i:nat| #![auto] i < self.lines.len() ==> self.linked.dv.is_nondangling_ptr(self.lines[i as int].node_ptr)
+        &&& forall |i:nat| #![auto] i < self.lines.len() ==> self.lines[i as int].node_ptr.is_Some() <==> i < self.lines.len()-1
+        &&& self.lines.last().result == Message::Define{value: default_value()}
+    }
 
-//     pub open spec(checked) fn all_lines_wf(self) -> bool
-//     {
-//         &&& (forall |i:nat| #![auto] i < self.lines.len() ==> self.lines[i as int].wf())
-//         &&& (forall |i:nat| #![auto] i < self.lines.len()-1 ==> self.lines[i as int].node.key_in_domain(self.key))
-//     }
+    pub open spec(checked) fn node(self, i:int) -> BetreeNode
+        recommends self.structure(), 0 <= i < self.lines.len() - 1
+    {
+        self.linked.dv.get(self.lines[i].node_ptr)
+    }
 
-//     pub open spec(checked) fn child_at(self, i: int) -> BetreeNode
-//         recommends 0 <= i < self.lines.len()
-//     {
-//         self.lines[i].node.child(self.key)
-//     }
+    pub open spec(checked) fn all_lines_wf(self) -> bool
+        recommends self.structure()
+    {
+        &&& forall |i:nat| #![auto] i < self.lines.len() ==> self.lines[i as int].wf()
+        &&& forall |i:nat| #![auto] i < self.lines.len()-1 ==> self.node(i as int).key_in_domain(self.key)
+    }
 
-//     pub open spec(checked) fn child_linked_at(self, i: int) -> bool
-//         recommends 0 <= i < self.lines.len()-1
-//     {
-//         self.lines[i + 1].node == self.child_at(i)
-//     }
+    pub open spec(checked) fn child_linked_at(self, i: int) -> bool
+        recommends self.structure(), self.all_lines_wf(), 0 <= i < self.lines.len()-1
+    {
+        self.lines[i+1].node_ptr == self.node(i).child_ptr(self.key)
+    }
 
-//     pub open spec(checked) fn result_at(self, i: int) -> Message
-//         recommends 0 <= i < self.lines.len()
-//     {
-//         self.lines[i].result
-//     }
+    pub open spec(checked) fn result_at(self, i: int) -> Message
+        recommends 0 <= i < self.lines.len()
+    {
+        self.lines[i].result
+    }
 
-//     pub open spec(checked) fn result_linked_at(self, i: int) -> bool
-//         recommends 0 <= i < self.lines.len()-1
-//     {
-//         let start = self.lines[i].node.flushed_ofs(self.key);
-//         let msg = self.lines[i].node.buffers.query_from(self.key, start as int);
-//         self.lines[i].result == self.result_at(i+1).merge(msg)
-//     }
+    pub open spec/*XXX(checked)*/ fn result_linked_at(self, i: int) -> bool
+        recommends self.structure(), self.all_lines_wf(), 0 <= i < self.lines.len()-1
+    {
+        let start = self.node(i).flushed_ofs(self.key);
+        let msg = self.node(i).buffers.query_from(self.linked.buffer_dv, self.key, start as int);
+        self.lines[i].result == self.result_at(i+1).merge(msg)
+    }
 
-//     pub open spec(checked) fn valid(self) -> bool
-//     {
-//         &&& self.structure()
-//         &&& self.all_lines_wf()
-//         &&& (forall |i| #![auto] 0 <= i < self.lines.len()-1 ==> self.child_linked_at(i))
-//         &&& (forall |i| #![auto] 0 <= i < self.lines.len()-1 ==> self.result_linked_at(i))
-//     }
+    pub open spec(checked) fn result(self) -> Message
+        recommends self.structure()
+    {
+        self.result_at(0)
+    }
 
-//     pub open spec(checked) fn result(self) -> Message
-//         recommends self.structure()
-//     {
-//         self.result_at(0)
-//     }
+    pub open spec(checked) fn valid(self) -> bool
+    {
+        &&& self.structure()
+        &&& self.all_lines_wf()
+        &&& (forall |i| #![auto] 0 <= i < self.lines.len()-1 ==> self.child_linked_at(i))
+        &&& (forall |i| #![auto] 0 <= i < self.lines.len()-1 ==> self.result_linked_at(i))
+    }
 
-//     pub open spec(checked) fn valid_for(self, root: BetreeNode, key: Key) -> bool
-//     {
-//         &&& self.valid()
-//         &&& self.root == root
-//         &&& self.key == key
-//     }
-// } // end impl QueryReceipt
+    pub open spec(checked) fn valid_for(self, linked: LinkedBetree, key: Key) -> bool
+    {
+        &&& self.valid()
+        &&& self.linked == linked
+        &&& self.key == key
+    }
+} // end impl QueryReceipt
 
-// pub struct Path{
-//     pub node: BetreeNode,
-//     pub key: Key,
-//     pub depth: nat
-// }
+pub type PathAddrs = Seq<Address>;
 
-// impl Path{
-//     pub open spec(checked) fn subpath(self) -> Path
-//         recommends 0 < self.depth
-//     {
-//         let depth = (self.depth - 1) as nat;
-//         Path{node: self.node.child(self.key), key: self.key, depth: depth}
-//     }
+pub struct Path{
+    pub linked: LinkedBetree,
+    pub key: Key,
+    pub depth: nat
+}
 
-//     pub open spec(checked) fn valid(self) -> bool
-//         decreases self.depth
-//     {
-//         &&& self.node.wf()
-//         &&& self.node.key_in_domain(self.key)
-//         &&& (0 < self.depth ==> self.node.is_index())
-//         &&& (0 < self.depth ==> self.subpath().valid())
-//     }
+impl Path{
+    pub open spec(checked) fn subpath(self) -> Path
+        recommends 0 < self.depth, 
+            self.linked.has_root(), 
+            self.linked.root().key_in_domain(self.key)
+    {
+        Path{ linked: self.linked.child_for_key(self.key), key: self.key, depth: (self.depth - 1) as nat }
+    }
 
-//     pub open spec(checked) fn target(self) -> BetreeNode
-//         decreases self.depth
-//     {
-//         if self.depth == 0 {
-//             self.node
-//         } else {
-//             self.subpath().target()
-//         }
-//     }
+    pub open spec(checked) fn valid(self) -> bool
+        decreases self.depth
+    {
+        &&& self.linked.has_root()
+        &&& self.linked.acyclic()
+        &&& self.linked.root().key_in_domain(self.key)
+        &&& (0 < self.depth ==> self.linked.root().is_index())
+        &&& (0 < self.depth ==> self.subpath().valid())
+    }
 
-//     pub open spec(checked) fn valid_replacement(self, replacement: BetreeNode) -> bool
-//         recommends self.valid()
-//     {
-//         &&& replacement.wf()
-//         &&& replacement.is_Node()
-//         &&& replacement.my_domain() == self.target().my_domain()
-//     }
+    pub open spec(checked) fn target(self) -> LinkedBetree
+        recommends self.valid()
+        decreases self.depth
+    {
+        if self.depth == 0 {
+            self.linked
+        } else {
+            self.subpath().target()
+        }
+    }
 
-//     pub open spec(checked) fn replaced_children(self, replacement: BetreeNode) -> Seq<BetreeNode>
-//         recommends self.valid(), 
-//             self.valid_replacement(replacement), 
-//             0 < self.depth
-//         decreases self.subpath().depth
-//     {
-//         let new_child = self.subpath().substitute(replacement);
-//         let r = self.node.pivots.route(self.key);
-//         self.node.children.update(r, new_child)
-//     }
+    pub open spec(checked) fn addrs_on_path(self) -> Set<Address>
+        recommends self.valid()
+        decreases self.depth
+    {
+        if self.depth == 0 {
+            set!{self.linked.root.unwrap()}
+        } else {
+            self.subpath().addrs_on_path() + set!{self.linked.root.unwrap()}
+        }
+    }
 
-//     pub open spec(checked) fn substitute(self, replacement: BetreeNode) -> BetreeNode
-//         recommends self.valid(), self.valid_replacement(replacement)
-//         decreases self.depth, 1nat
-//     {
-//         if self.depth == 0 {
-//             replacement
-//         } else {
-//             BetreeNode{
-//                 buffers: self.node.buffers,
-//                 pivots: self.node.pivots,
-//                 children: self.replaced_children(replacement),
-//                 flushed: self.node.flushed
-//             }
-//         }
-//     }
-// } // end impl Path
+    pub open spec/*XXX(checked)*/ fn can_substitute(self, replacement: LinkedBetree, path_addrs: PathAddrs) -> bool
+    {
+        &&& self.valid()
+        &&& self.target().has_root()
+        &&& replacement.wf()
+        &&& replacement.has_root()
+        &&& replacement.root().my_domain() == self.target().root().my_domain()
+        &&& self.depth == path_addrs.len()
+        &&& self.linked.dv.is_subdisk(replacement.dv)
+        &&& self.linked.buffer_dv.is_subdisk(replacement.buffer_dv)
+    }
 
-
-// state_machine!{ LinkedBetree {
-//     fields {
-//         pub memtable: Memtable,
-//         pub root: BetreeNode,
-//     }
-
-//     pub open spec(checked) fn wf(self) -> bool {
-//         &&& self.root.wf()
-//     }
-
-//     #[is_variant]
-//     pub enum Label
-//     {
-//         Query{end_lsn: LSN, key: Key, value: Value},
-//         Put{puts: MsgHistory},
-//         FreezeAs{stamped_betree: StampedBetree},
-//         Internal{},   // Local No-op label
-//     }
-
-//     transition!{ query(lbl: Label, receipt: QueryReceipt) {
-//         require let Label::Query{end_lsn, key, value} = lbl;
-//         require end_lsn == pre.memtable.seq_end;
-//         require receipt.valid_for(pre.root, key);
-//         require Message::Define{value} == receipt.result().merge(pre.memtable.query(key));
-//     }}
-
-//     transition!{ put(lbl: Label) {
-//         require let Label::Put{puts} = lbl;
-//         require puts.wf();
-//         require puts.seq_start == pre.memtable.seq_end;
-//         update memtable = pre.memtable.apply_puts(puts);
-//     }}
-
-//     transition!{ freeze_as(lbl: Label) {
-//         require let Label::FreezeAs{stamped_betree} = lbl;
-//         require pre.wf();
-//         require pre.memtable.is_empty();
-//         require stamped_betree == Stamped{value: pre.root, seq_end: pre.memtable.seq_end};
-//     }}
-
-//     transition!{ internal_flush_memtable(lbl: Label) {
-//         require let Label::Internal{} = lbl;
-//         require pre.wf();
-//         update memtable = pre.memtable.drain();
-//         update root = pre.root.push_memtable(pre.memtable).value;
-//     }}
-
-//     transition!{ internal_grow(lbl: Label) {
-//         require let Label::Internal{} = lbl;
-//         require pre.wf();
-//         update root = pre.root.grow();
-//     }}
-
-//     transition!{ internal_split(lbl: Label, path: Path, request: SplitRequest) {
-//         require let Label::Internal{} = lbl;
-//         require path.valid();
-//         require path.target().can_split_parent(request);
-//         require path.node == pre.root;
-//         update root = path.substitute(path.target().split_parent(request));
-//     }}
-
-//     transition!{ internal_flush(lbl: Label, path: Path, child_idx: nat, buffer_gc: nat) {
-//         require let Label::Internal{} = lbl;
-//         require path.valid();
-//         require path.target().can_flush(child_idx, buffer_gc);
-//         require path.node == pre.root;
-//         update root = path.substitute(path.target().flush(child_idx, buffer_gc));
-//     }}
-
-//     transition!{ internal_compact(lbl: Label, path: Path, start: nat, end: nat, compacted_buffer: Buffer) {
-//         require let Label::Internal{} = lbl;
-//         require path.valid();
-//         require path.target().can_compact(start, end, compacted_buffer);
-//         require path.node == pre.root;
-//         update root = path.substitute(path.target().compact(start, end, compacted_buffer));
-//     }}
-
-//     transition!{ internal_noop(lbl: Label) {
-//         require let Label::Internal{} = lbl;
-//         require pre.wf();
-//     }}
+    pub open spec/*XXX (checked)*/ fn substitute(self, replacement: LinkedBetree, path_addrs: PathAddrs) -> LinkedBetree
+        recommends self.valid(), self.can_substitute(replacement, path_addrs)
+        decreases self.depth, 1nat
+    {
+        if self.depth == 0 {
+            replacement
+        } else {
+            let node = self.linked.root();
+            let subtree = self.subpath().substitute(replacement, path_addrs.subrange(1, path_addrs.len() as int));
+            let new_children = node.children.update(node.pivots.route(self.key), subtree.root);
+            let new_node = BetreeNode{ buffers: node.buffers, pivots: node.pivots, children: new_children, flushed: node.flushed };
+            let new_dv = subtree.dv.modify_disk(path_addrs[0], new_node);
+            LinkedBetree{ root: Some(path_addrs[0]), dv: new_dv, buffer_dv: self.linked.buffer_dv }
+        }
+    }
+} // end impl Path
 
 
-//     init!{ initialize(stamped_betree: StampedBetree) {
-//         require stamped_betree.value.wf();
-//         init memtable = Memtable::empty_memtable(stamped_betree.seq_end);
-//         init root = stamped_betree.value;
-//     }}
-// }} // end LinkedBetree state machine
+state_machine!{ LinkedBetreeVars {
+    fields {
+        pub memtable: Memtable,
+        pub linked: LinkedBetree,
+    }
+
+    pub open spec(checked) fn wf(self) -> bool {
+        &&& self.linked.wf()
+    }
+
+    #[is_variant]
+    pub enum Label
+    {
+        Query{end_lsn: LSN, key: Key, value: Value},
+        Put{puts: MsgHistory},
+        FreezeAs{stamped_betree: StampedBetree},
+        Internal{},   // Local No-op label
+    }
+
+    transition!{ query(lbl: Label, receipt: QueryReceipt) {
+        require let Label::Query{end_lsn, key, value} = lbl;
+        require end_lsn == pre.memtable.seq_end;
+        require receipt.valid_for(pre.linked, key);
+        require Message::Define{value} == receipt.result().merge(pre.memtable.query(key));
+    }}
+
+    transition!{ put(lbl: Label) {
+        require let Label::Put{puts} = lbl;
+        require puts.wf();
+        require puts.seq_start == pre.memtable.seq_end;
+        update memtable = pre.memtable.apply_puts(puts);
+    }}
+
+    transition!{ freeze_as(lbl: Label) {
+        require let Label::FreezeAs{stamped_betree} = lbl;
+        // require pre.wf();
+        require pre.memtable.is_empty();
+        require stamped_betree == Stamped{value: pre.linked, seq_end: pre.memtable.seq_end};
+    }}
+
+    transition!{ internal_flush_memtable(lbl: Label, new_addrs: TwoAddrs) {
+        require let Label::Internal{} = lbl;
+        // require pre.wf();
+        require new_addrs.no_duplicates();
+        require pre.linked.is_fresh(new_addrs.repr());
+        update memtable = pre.memtable.drain();
+        update linked = pre.linked.push_memtable(pre.memtable, new_addrs);
+    }}
+
+    transition!{ internal_grow(lbl: Label, new_root_addr: Address) {
+        require let Label::Internal{} = lbl;
+        // require pre.wf();
+        require pre.linked.is_fresh(Set::empty().insert(new_root_addr));
+        update linked = pre.linked.grow(new_root_addr);
+    }}
+
+    transition!{ internal_split(lbl: Label, path: Path, request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs) {
+        require let Label::Internal{} = lbl;
+        require path.valid();
+        require path_addrs.no_duplicates();
+        require path.depth == path_addrs.len();
+        require path.target().can_split_parent(request);
+        require new_addrs.no_duplicates();
+        require new_addrs.repr().disjoint(path_addrs.to_set());
+        require path.linked == pre.linked;
+        require pre.linked.is_fresh(new_addrs.repr());
+        require pre.linked.is_fresh(path_addrs.to_set());
+        update linked = path.substitute(path.target().split_parent(request, new_addrs), path_addrs).build_tight_tree();
+    }}
+
+    transition!{ internal_flush(lbl: Label, path: Path, child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, path_addrs: PathAddrs) {
+        require let Label::Internal{} = lbl;
+        require path.valid();
+        require path_addrs.no_duplicates();
+        require path.depth == path_addrs.len();
+        require path.target().can_flush(child_idx, buffer_gc);
+        require new_addrs.no_duplicates();
+        require new_addrs.repr().disjoint(path_addrs.to_set());
+        require path.linked == pre.linked;
+        require pre.linked.is_fresh(new_addrs.repr());
+        require pre.linked.is_fresh(path_addrs.to_set());
+        update linked = path.substitute(path.target().flush(child_idx, buffer_gc, new_addrs), path_addrs).build_tight_tree();
+    }}
+
+    transition!{ internal_compact(lbl: Label, path: Path, start: nat, end: nat, compacted_buffer: Buffer, new_addrs: TwoAddrs, path_addrs: PathAddrs) {
+        require let Label::Internal{} = lbl;
+        require path.valid();
+        require path_addrs.no_duplicates();
+        require path.depth == path_addrs.len();
+        require path.target().can_compact(start, end, compacted_buffer);
+        require new_addrs.no_duplicates();
+        require new_addrs.repr().disjoint(path_addrs.to_set());
+        require path.linked == pre.linked;
+        require pre.linked.is_fresh(new_addrs.repr());
+        require pre.linked.is_fresh(path_addrs.to_set());
+        update linked = path.substitute(path.target().compact(start, end, compacted_buffer, new_addrs), path_addrs).build_tight_tree();
+    }}
+
+    transition!{ internal_noop(lbl: Label) {
+        require let Label::Internal{} = lbl;
+    }}
+
+    init!{ initialize(stamped_betree: StampedBetree) {
+        require stamped_betree.value.wf();
+        init memtable = Memtable::empty_memtable(stamped_betree.seq_end);
+        init linked = stamped_betree.value;
+    }}
+}} // end LinkedBetree state machine
 
 
 } // end verus!

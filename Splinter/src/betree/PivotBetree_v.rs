@@ -116,12 +116,10 @@ impl BetreeNode {
         }
     }
 
-    pub open spec(checked) fn push_memtable(self, memtable: Memtable) -> StampedBetree
-    recommends
-        self.wf(),
+    pub open spec(checked) fn push_memtable(self, memtable: Memtable) -> BetreeNode
+    recommends self.wf()
     {
-        let new_root = self.promote(total_domain()).merge_buffer(memtable.buffer);
-        Stamped{value: new_root, seq_end: memtable.seq_end}
+        self.promote(total_domain()).merge_buffer(memtable.buffer)
     }
 
     pub open spec(checked) fn is_leaf(self) -> bool
@@ -540,7 +538,7 @@ state_machine!{ PivotBetree {
         require let Label::Internal{} = lbl;
         require pre.wf();
         update memtable = pre.memtable.drain();
-        update root = pre.root.push_memtable(pre.memtable).value;
+        update root = pre.root.push_memtable(pre.memtable);
     }}
 
     transition!{ internal_grow(lbl: Label) {
