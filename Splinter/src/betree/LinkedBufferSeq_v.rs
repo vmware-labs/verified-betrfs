@@ -162,8 +162,7 @@ impl BufferSeq {
         self.i_filtered_from(dv, offset_map, 0)
     }
 
-    pub open spec(checked) fn key_in_buffer_filtered(self, dv: DiskView, offset_map: OffsetMap, 
-        from_idx: int, k: Key, buffer_idx: int) -> bool
+    pub open spec(checked) fn key_in_buffer_filtered(self, dv: DiskView, offset_map: OffsetMap, from_idx: int, k: Key, buffer_idx: int) -> bool
         recommends 0 <= from_idx, offset_map.is_total()
     {
         &&& self.key_in_buffer(dv, from_idx, k, buffer_idx)

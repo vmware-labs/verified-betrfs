@@ -309,7 +309,7 @@ impl DiskView {
     pub open spec(checked) fn valid_ranking(self, ranking: Ranking) -> bool
     {
         &&& self.wf()
-        &&& forall |addr| #![auto] self.entries.contains_key(addr) && ranking.contains_key(addr)
+        &&& forall |addr| self.entries.contains_key(addr) && #[trigger] ranking.contains_key(addr)
             ==> self.node_children_respects_rank(ranking, addr)
     }
 
@@ -392,7 +392,7 @@ impl LinkedBetree {
     {
         &&& self.dv.wf()
         &&& self.dv.is_nondangling_ptr(self.root)
-        &&& self.dv.is_fresh(self.buffer_dv.repr())
+        // &&& self.dv.is_fresh(self.buffer_dv.repr()) // TODO(jialin): move to inv
     }
 
     pub open spec(checked) fn has_root(self) -> bool
@@ -697,7 +697,7 @@ impl LinkedBetree {
 } // end of LinkedBetree impl
 
 pub struct QueryReceiptLine{
-    pub node_ptr: Pointer,
+    pub linked: LinkedBetree,
     pub result: Message
 }
 
@@ -719,29 +719,31 @@ impl QueryReceipt{
     {
         &&& 0 < self.lines.len()
         &&& self.linked.wf()
-        &&& self.lines[0].node_ptr == self.linked.root
-        &&& forall |i:nat| #![auto] i < self.lines.len() ==> self.linked.dv.is_nondangling_ptr(self.lines[i as int].node_ptr)
-        &&& forall |i:nat| #![auto] i < self.lines.len() ==> self.lines[i as int].node_ptr.is_Some() <==> i < self.lines.len()-1
+        &&& self.lines[0].linked == self.linked
+        &&& forall |i:nat| #![auto] i < self.lines.len() ==> self.lines[i as int].linked.dv == self.linked.dv
+        &&& forall |i:nat| #![auto] i < self.lines.len() ==> self.lines[i as int].linked.buffer_dv == self.linked.buffer_dv
+        &&& forall |i:nat| #![auto] i < self.lines.len() ==> self.lines[i as int].linked.has_root() <==> i < self.lines.len()-1
         &&& self.lines.last().result == Message::Define{value: default_value()}
     }
 
     pub open spec(checked) fn node(self, i:int) -> BetreeNode
         recommends self.structure(), 0 <= i < self.lines.len() - 1
     {
-        self.linked.dv.get(self.lines[i].node_ptr)
+        self.lines[i].linked.root()
     }
 
     pub open spec(checked) fn all_lines_wf(self) -> bool
         recommends self.structure()
     {
         &&& forall |i:nat| #![auto] i < self.lines.len() ==> self.lines[i as int].wf()
+        &&& forall |i:nat| #![auto] i < self.lines.len() ==> self.lines[i as int].linked.acyclic()
         &&& forall |i:nat| #![auto] i < self.lines.len()-1 ==> self.node(i as int).key_in_domain(self.key)
     }
 
     pub open spec(checked) fn child_linked_at(self, i: int) -> bool
         recommends self.structure(), self.all_lines_wf(), 0 <= i < self.lines.len()-1
     {
-        self.lines[i+1].node_ptr == self.node(i).child_ptr(self.key)
+        self.lines[i+1].linked.root == self.node(i).child_ptr(self.key)
     }
 
     pub open spec(checked) fn result_at(self, i: int) -> Message
