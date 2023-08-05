@@ -29,8 +29,8 @@ impl BetreeNode {
     }
 
     pub open spec /*XXX(checked)*/ fn i_children_seq(self, start: int) -> Seq<PivotBetree_v::BetreeNode>
-    recommends self.is_Node(), 0 <= start <= self.get_Node_children().len()
-    decreases self, 0nat, self.get_Node_children().len()-start 
+        recommends self.is_Node(), 0 <= start <= self.get_Node_children().len()
+        decreases self, 0nat, self.get_Node_children().len()-start 
         when self.is_Node() && 0 <= start <= self.get_Node_children().len()
     {
         if start == self.get_Node_children().len() {
@@ -50,9 +50,8 @@ impl BetreeNode {
     }
 
     pub open spec(checked) fn i(self) -> PivotBetree_v::BetreeNode
-    recommends
-        self.wf(),
-    decreases self
+        recommends self.wf()
+        decreases self
     {
         if self.is_Nil() {
             PivotBetree_v::BetreeNode::Nil{}
@@ -867,7 +866,7 @@ impl QueryReceipt{
         }
     }
 
-    pub proof fn valid_receipt_refines(self)
+    pub proof fn i_valid(self)
         requires self.valid()
         ensures self.i().valid()
     {
@@ -1087,7 +1086,7 @@ impl FilteredBetree::State {
         reveal(PivotBetree::State::next);
         reveal(PivotBetree::State::next_by);
 
-        receipt.valid_receipt_refines();
+        receipt.i_valid();
         assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::query(receipt.i())));
     }
 

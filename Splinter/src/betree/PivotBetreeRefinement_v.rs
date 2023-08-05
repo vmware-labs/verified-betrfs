@@ -502,7 +502,7 @@ impl QueryReceipt{
         }
     }
 
-    pub proof fn valid_receipt_refines(self)
+    pub proof fn i_valid(self)
         requires self.valid()
         ensures self.i().valid()
     {
@@ -704,7 +704,7 @@ impl PivotBetree::State {
         reveal(PagedBetree::State::next);
         reveal(PagedBetree::State::next_by);
 
-        receipt.valid_receipt_refines();
+        receipt.i_valid();
         assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::query(receipt.i())));
     }
 
