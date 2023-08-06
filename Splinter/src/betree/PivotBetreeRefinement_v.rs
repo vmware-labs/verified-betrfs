@@ -603,7 +603,7 @@ impl Path{
     }
 
     pub proof fn substitute_preserves_wf(self, replacement: BetreeNode)
-        requires self.valid(), self.valid_replacement(replacement)
+        requires self.can_substitute(replacement)
         ensures self.substitute(replacement).wf()
         decreases self.depth, 1nat
     {
@@ -622,7 +622,7 @@ impl Path{
 
     #[verifier::spinoff_prover]
     pub proof fn replaced_children_matching_domains(self, replacement: BetreeNode)
-        requires self.valid(), self.valid_replacement(replacement), 0 < self.depth
+        requires self.can_substitute(replacement), 0 < self.depth
         ensures self.node.children_have_matching_domains(self.replaced_children(replacement))
         decreases self.depth, 0nat
     {
@@ -637,8 +637,8 @@ impl Path{
         }
     }
 
-    pub proof fn substitute_refines(self, replacement: BetreeNode)
-        requires self.valid(), self.valid_replacement(replacement)
+    pub proof fn substitute_commutes_with_i(self, replacement: BetreeNode)
+        requires self.can_substitute(replacement)
         ensures self.substitute(replacement).wf(), 
             self.i().valid(), replacement.i().wf(),
             self.substitute(replacement).i() == self.i().substitute(replacement.i())
@@ -656,7 +656,7 @@ impl Path{
 
             self.i().substitute_preserves_wf(replacement.i());
             assert(self.i().replaced_children(replacement.i()).wf());
-            self.subpath().substitute_refines(replacement);
+            self.subpath().substitute_commutes_with_i(replacement);
 
             self.subpath_commutes_with_i();
             self.node.i_children_lemma();
@@ -777,7 +777,7 @@ impl PivotBetree::State {
         self.root.i_wf();
         path.target().i_wf();
         path.target().split_parent_wf(request);
-        path.substitute_refines(path.target().split_parent(request));
+        path.substitute_commutes_with_i(path.target().split_parent(request));
 
         post.root.i_wf();
         path.i_valid();
@@ -798,7 +798,7 @@ impl PivotBetree::State {
         self.root.i_wf();
         path.target_wf();
         path.target().flush_wf(child_idx);
-        path.substitute_refines(path.target().flush(child_idx));
+        path.substitute_commutes_with_i(path.target().flush(child_idx));
 
         post.root.i_wf();
         path.i_valid();

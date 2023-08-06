@@ -392,7 +392,6 @@ impl LinkedBetree {
     {
         &&& self.dv.wf()
         &&& self.dv.is_nondangling_ptr(self.root)
-        // &&& self.dv.is_fresh(self.buffer_dv.repr()) // TODO(jialin): move to inv
     }
 
     pub open spec(checked) fn has_root(self) -> bool
@@ -537,12 +536,6 @@ impl LinkedBetree {
         } else {
             self
         }
-    }
-
-    pub open spec(checked) fn disk_tight_wrt_betree_repr(self) -> bool
-        recommends self.acyclic()
-    {
-        self.dv.entries.dom() =~= self.betree_repr()
     }
 
     pub open spec(checked) fn push_memtable(self, memtable: Memtable, new_addrs: TwoAddrs) -> LinkedBetree
@@ -737,6 +730,7 @@ impl QueryReceipt{
     {
         &&& forall |i:nat| #![auto] i < self.lines.len() ==> self.lines[i as int].wf()
         &&& forall |i:nat| #![auto] i < self.lines.len() ==> self.lines[i as int].linked.acyclic()
+        &&& forall |i:nat| #![auto] i < self.lines.len()-1 ==> self.lines[i as int].linked.root().buffers.valid(self.linked.buffer_dv)
         &&& forall |i:nat| #![auto] i < self.lines.len()-1 ==> self.node(i as int).key_in_domain(self.key)
     }
 
@@ -844,7 +838,7 @@ impl Path{
     }
 
     pub open spec/*XXX (checked)*/ fn substitute(self, replacement: LinkedBetree, path_addrs: PathAddrs) -> LinkedBetree
-        recommends self.valid(), self.can_substitute(replacement, path_addrs)
+        recommends self.can_substitute(replacement, path_addrs)
         decreases self.depth, 1nat
     {
         if self.depth == 0 {

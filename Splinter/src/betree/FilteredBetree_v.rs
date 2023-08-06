@@ -567,9 +567,9 @@ impl Path{
         }
     }
 
-    pub open spec /*XXX (checked)*/ fn valid_replacement(self, replacement: BetreeNode) -> bool
-    recommends self.valid()
+    pub open spec /*XXX (checked)*/ fn can_substitute(self, replacement: BetreeNode) -> bool
     {
+        &&& self.valid()
         &&& replacement.wf()
         &&& replacement.is_Node()
         //XXX needs target() ensures wf
@@ -578,8 +578,7 @@ impl Path{
 
     pub open spec /*XXX (checked)*/ fn replaced_children(self, replacement: BetreeNode) -> Seq<BetreeNode>
     recommends
-        self.valid(), 
-        self.valid_replacement(replacement), 
+        self.can_substitute(replacement), 
         0 < self.depth,
     decreases self.subpath().depth
     {
@@ -590,7 +589,7 @@ impl Path{
     }
 
     pub open spec(checked) fn substitute(self, replacement: BetreeNode) -> BetreeNode
-        recommends self.valid(), self.valid_replacement(replacement)
+        recommends self.can_substitute(replacement)
         decreases self.depth, 1nat
     {
         if self.depth == 0 {

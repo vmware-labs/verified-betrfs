@@ -955,7 +955,7 @@ impl Path{
     }
 
     pub proof fn substitute_preserves_wf(self, replacement: BetreeNode)
-        requires self.valid(), self.valid_replacement(replacement)
+        requires self.can_substitute(replacement)
         ensures self.substitute(replacement).wf()
         decreases self.depth, 1nat
     {
@@ -974,7 +974,7 @@ impl Path{
 
     // #[verifier::spinoff_prover]
     pub proof fn replaced_children_matching_domains(self, replacement: BetreeNode)
-        requires self.valid(), self.valid_replacement(replacement), 0 < self.depth
+        requires self.can_substitute(replacement), 0 < self.depth
         ensures self.node.children_have_matching_domains(self.replaced_children(replacement))
         decreases self.depth, 0nat
     {
@@ -990,8 +990,8 @@ impl Path{
         }
     }
 
-    pub proof fn substitute_refines(self, replacement: BetreeNode)
-        requires self.valid(), self.valid_replacement(replacement)
+    pub proof fn substitute_commutes_with_i(self, replacement: BetreeNode)
+        requires self.can_substitute(replacement)
         ensures self.substitute(replacement).wf(), 
             self.i().valid(), replacement.i().wf(),
             self.substitute(replacement).i() == self.i().substitute(replacement.i())
@@ -1013,7 +1013,7 @@ impl Path{
             assert(self.substitute(replacement).i().wf_children());
 
             self.subpath_commutes_with_i();
-            self.subpath().substitute_refines(replacement);
+            self.subpath().substitute_commutes_with_i(replacement);
 
             assert(self.substitute(replacement).i().get_Node_children()
                 =~= self.i().substitute(replacement.i()).get_Node_children()
@@ -1165,7 +1165,7 @@ impl FilteredBetree::State {
         BetreeNode::i_wf_auto();
 
         path.target().split_parent_wf(request);
-        path.substitute_refines(path.target().split_parent(request));
+        path.substitute_commutes_with_i(path.target().split_parent(request));
 
         path.i_valid();
         path.target_commutes_with_i();
@@ -1183,7 +1183,7 @@ impl FilteredBetree::State {
 
         BetreeNode::i_wf_auto();
         path.target().flush_wf(child_idx, buffer_gc);
-        path.substitute_refines(path.target().flush(child_idx, buffer_gc));
+        path.substitute_commutes_with_i(path.target().flush(child_idx, buffer_gc));
 
         path.i_valid();
         path.target_commutes_with_i();

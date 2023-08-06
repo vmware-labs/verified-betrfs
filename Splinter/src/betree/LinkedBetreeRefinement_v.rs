@@ -11,7 +11,7 @@ use crate::disk::GenericDisk_v::*;
 use crate::betree::Domain_v::*;
 use crate::betree::PivotTable_v::*;
 use crate::betree::Buffer_v::*;
-use crate::betree::BufferSeq_v;
+// use crate::betree::BufferSeq_v;
 use crate::betree::LinkedBufferSeq_v;
 use crate::betree::BufferOffsets_v::*;
 use crate::betree::OffsetMap_v::*;
@@ -23,12 +23,12 @@ use crate::betree::SplitRequest_v::*;
 verus! {
 
 impl BetreeNode {
-    pub open spec(checked) fn i_buffer_seq(self, buffer_dv: BufferDiskView) -> BufferSeq_v::BufferSeq
-        recommends self.buffers.valid(buffer_dv)
-    {
-        let buffers = Seq::new(self.buffers.len(), |i| buffer_dv.get(self.buffers[i]));
-        BufferSeq_v::BufferSeq{ buffers: buffers }
-    }
+    // pub open spec(checked) fn i_buffer_seq(self, buffer_dv: BufferDiskView) -> BufferSeq_v::BufferSeq
+    //     recommends self.buffers.valid(buffer_dv)
+    // {
+    //     let buffers = Seq::new(self.buffers.len(), |i| buffer_dv.get(self.buffers[i]));
+    //     BufferSeq_v::BufferSeq{ buffers: buffers }
+    // }
 
     // pub proof fn i_children_lemma_auto()
     //     ensures 
@@ -772,7 +772,20 @@ impl BetreeNode {
     // }
 } // end impl BetreeNode
 
+impl DiskView{
+    pub open spec(checked) fn fresh_ranking_extension(self, r1: Ranking, r2: Ranking) -> bool
+    {
+        &&& r1.le(r2)
+        &&& forall |addr| #![auto] !r1.contains_key(addr) && r2.contains_key(addr) ==> !self.entries.contains_key(addr)
+    }
+}
+
 impl LinkedBetree{
+    pub open spec(checked) fn betree_buffer_disjoint(self) -> bool
+    {
+        self.dv.is_fresh(self.buffer_dv.repr())
+    }
+
     pub open spec(checked) fn node_contains_buffer(self, node_addr: Address, buffer_addr: Address) -> bool
     {
         &&& self.dv.is_nondangling_ptr(Some(node_addr))
@@ -783,6 +796,18 @@ impl LinkedBetree{
     {
         &&& forall |buffer| exists |addr| (#[trigger] self.node_contains_buffer(addr, buffer)) 
             ==> (#[trigger] self.buffer_dv.entries.contains_key(buffer))
+    }
+
+    pub open spec(checked) fn disk_tight_wrt_betree_repr(self) -> bool
+        recommends self.acyclic()
+    {
+        self.dv.entries.dom() =~= self.betree_repr()
+    }
+
+    pub open spec(checked) fn disk_tight_wrt_buffer_repr(self) -> bool
+        recommends self.acyclic()
+    {
+        self.buffer_dv.entries.dom() =~= self.buffer_repr()
     }
 
     pub open spec /*XXX(checked)*/ fn i_children_seq(self, ranking: Ranking, start: nat) -> Seq<FilteredBetree_v::BetreeNode>
@@ -818,7 +843,7 @@ impl LinkedBetree{
         } else {
             let root = self.root();
             FilteredBetree_v::BetreeNode::Node{
-                buffers: root.i_buffer_seq(self.buffer_dv),
+                buffers: root.buffers.i(self.buffer_dv),
                 pivots: root.pivots,
                 children: self.i_children(ranking),
                 flushed: root.flushed,
@@ -1051,18 +1076,40 @@ impl QueryReceipt{
 
         assert forall |i:int| 0 <= i < i_receipt.lines.len()-1
         implies #[trigger] i_receipt.result_linked_at(i) by {
-        //     self.lines[i].i_wf();
-        //     assert(self.result_linked_at(i)); // trigger
-
-        //     // let start = self.node(i).flushed_ofs(self.key);
-        //     // let i_start = i_receipt.lines[i].node
-
-        //     // self.lines[i].linked.i_node_ignores_ranking(self.linked.the_ranking(), self.lines[i].linked.the_ranking());
-
-            assume(false);
+            assert(self.result_linked_at(i)); // trigger
+            let node = self.node(i);
+            let start = node.flushed_ofs(self.key) as int;
+            node.buffers.query_from_commutes_with_i(self.linked.buffer_dv, self.key, start);
         }
         assert(i_receipt.all_lines_wf()); // trigger
     }
+}
+
+pub proof fn path_addrs_to_set_additive(path_addrs: PathAddrs)
+    requires path_addrs.len() > 0
+    ensures path_addrs.to_set() == set![path_addrs[0]] + path_addrs.subrange(1, path_addrs.len() as int).to_set()
+{
+    let sub_path_addrs = path_addrs.subrange(1, path_addrs.len() as int);
+    let a = set![path_addrs[0]] + sub_path_addrs.to_set();
+    let b = path_addrs.to_set();
+
+    // TODO(verus): lack additive seq to set lemma
+    assert forall |addr| a.contains(addr) <==> b.contains(addr)
+    by {
+        if a.contains(addr) {
+            if sub_path_addrs.contains(addr) {
+                let idx = choose |idx| 0 <= idx < sub_path_addrs.len() && sub_path_addrs[idx] == addr;
+                assert(sub_path_addrs[idx] == path_addrs[idx + 1]);
+            }
+        }
+        if b.contains(addr) {
+            let idx = choose |idx| 0 <= idx < path_addrs.len() && path_addrs[idx] == addr;
+            if idx > 0 {
+                assert(sub_path_addrs[idx-1] == path_addrs[idx]);
+            }
+        }
+    }
+    assert(a =~= b);
 }
 
 impl Path{
@@ -1108,100 +1155,193 @@ impl Path{
         }
     }
 
-    // pub proof fn target_commutes_with_i(self)
-    //     requires self.valid(), self.linked.acyclic()
-    //     ensures 
-    //         self.target().acyclic(),
-    //         self.i().valid(), 
-    //         self.i().target() == self.target().i()
-    //     decreases self.depth
-    // {
-    //     self.valid_ranking_throughout(self.linked.the_ranking());
-    //     if 0 < self.depth {
-    //         self.subpath().target_commutes_with_i();
-    //         self.subpath_commutes_with_i();
-    //     }
-    // }
+    pub proof fn target_commutes_with_i(self) 
+        requires self.valid(), self.linked.acyclic()
+        ensures 
+            self.target().acyclic(),
+            self.i().valid(), 
+            self.i().target() == self.target().i()
+        decreases self.depth
+    {
+        self.valid_ranking_throughout(self.linked.the_ranking());
+        self.i_valid();
+        if 0 < self.depth {
+            self.subpath().target_commutes_with_i();
+            self.subpath_commutes_with_i();
+        }
+    }
 
-    // pub proof fn target_wf(self)
-    //     requires self.valid()
-    //     ensures self.target().wf(), self.target().is_Node()
-    //     decreases self.depth
-    // {
-    //     if self.depth > 0 {
-    //         self.subpath().target_wf();
-    //     }
-    // }
-    
+    pub proof fn betree_diskview_diff(self, replacement: LinkedBetree, path_addrs: PathAddrs)
+        requires 
+            self.can_substitute(replacement, path_addrs),
+            path_addrs.no_duplicates(),
+        ensures 
+            self.substitute(replacement, path_addrs).dv.entries.dom() =~= replacement.dv.entries.dom() + path_addrs.to_set()
+        decreases self.depth
+    {
+        let result = self.substitute(replacement, path_addrs);
 
+        if 0 < self.depth {
+            let sub_path_addrs = path_addrs.subrange(1, path_addrs.len() as int);
+            let subtree = self.subpath().substitute(replacement, sub_path_addrs);
+            self.subpath().betree_diskview_diff(replacement, sub_path_addrs);
+            path_addrs_to_set_additive(path_addrs);
+        }
+    }
 
-    // pub proof fn substitute_preserves_wf(self, replacement: BetreeNode)
-    //     requires self.valid(), self.valid_replacement(replacement)
-    //     ensures self.substitute(replacement).wf()
-    //     decreases self.depth, 1nat
-    // {
-    //     if 0 < self.depth {
-    //         self.subpath().substitute_preserves_wf(replacement);
-    
-    //         let result = self.substitute(replacement);
-    //         if result.is_Node() {
-    //             self.replaced_children_matching_domains(replacement);
-    //             assert(self.node.wf_children());
-    //             assert forall |i| #[trigger] result.valid_child_index(i) ==> self.node.valid_child_index(i) by {}
-    //             assert(result.wf_children());
-    //         }
-    //     }
-    // }
+    pub proof fn substitute_preserves_wf(self, replacement: LinkedBetree, path_addrs: PathAddrs)
+        requires 
+            self.can_substitute(replacement, path_addrs),
+            path_addrs.no_duplicates(),
+            self.linked.is_fresh(path_addrs.to_set()),
+            replacement.is_fresh(path_addrs.to_set()),
+        ensures ({
+            let result = self.substitute(replacement, path_addrs);
+            &&& result.wf()
+            &&& result.has_root()
+            &&& result.root().my_domain() == self.linked.root().my_domain()
+            &&& self.linked.dv.is_subdisk(result.dv)
+            &&& self.linked.buffer_dv.is_subdisk(result.buffer_dv)
+            &&& result.dv.entries.dom() =~= (self.linked.dv.entries.dom() + replacement.dv.entries.dom() + path_addrs.to_set())
+        })
+        decreases self.depth, 1nat
+    {
+        if 0 < self.depth {
+            let sub_path_addrs = path_addrs.subrange(1, path_addrs.len() as int);
+            let subtree = self.subpath().substitute(replacement, sub_path_addrs);
+            self.subpath().substitute_preserves_wf(replacement, sub_path_addrs);
 
-    // // #[verifier::spinoff_prover]
-    // pub proof fn replaced_children_matching_domains(self, replacement: BetreeNode)
-    //     requires self.valid(), self.valid_replacement(replacement), 0 < self.depth
-    //     ensures self.node.children_have_matching_domains(self.replaced_children(replacement))
-    //     decreases self.depth, 0nat
-    // {
-    //     PivotTable::route_lemma_auto();
-    //     self.subpath().substitute_preserves_wf(replacement);
+            let result = self.substitute(replacement, path_addrs);
+            let node = result.dv.entries[path_addrs[0]];
 
-    //     let old_children = self.node.get_Node_children();
-    //     let new_children = self.replaced_children(replacement);
-    //     assert(old_children.len() == new_children.len());
-        
-    //     if 0 < self.subpath().depth {
-    //         self.subpath().replaced_children_matching_domains(replacement);
-    //     }
-    // }
+            let r = node.pivots.route(self.key);
+            PivotTable::route_lemma_auto();
+            assert(self.linked.dv.entries.contains_key(self.linked.root.unwrap())); // trigger
 
-    // pub proof fn substitute_refines(self, replacement: BetreeNode)
-    //     requires self.valid(), self.valid_replacement(replacement)
-    //     ensures self.substitute(replacement).wf(), 
-    //         self.i().valid(), replacement.i().wf(),
-    //         self.substitute(replacement).i() == self.i().substitute(replacement.i())
-    //     decreases self.depth
-    // {
-    //     self.i_valid();
-    //     self.target_wf();
-    //     self.substitute_preserves_wf(replacement);
-    //     replacement.i_wf();
+            assert forall |i| #[trigger] node.valid_child_index(i)
+            implies {
+                &&& result.dv.is_nondangling_ptr(node.children[i as int])
+                &&& result.dv.child_linked(node, i)
+            } by {
+                assert(self.linked.root().valid_child_index(i)); // trigger
+                if i != r {
+                    assert(self.linked.dv.is_nondangling_ptr(node.children[i as int]));
+                    assert(self.linked.dv.child_linked(self.linked.root(), i));
+                    assert(result.dv.is_nondangling_ptr(node.children[i as int]));
+                    assert(result.dv.child_linked(node, i));
+                }
+            }
+            self.betree_diskview_diff(replacement, path_addrs);
+        }
+    }
 
-    //     PivotTable::route_lemma_auto();
-    //     BetreeNode::i_children_lemma_auto();
+    pub proof fn ranking_after_substitution(self, replacement: LinkedBetree, path_addrs: PathAddrs, ranking: Ranking) -> (new_ranking: Ranking)
+        requires
+            self.can_substitute(replacement, path_addrs),
+            path_addrs.no_duplicates(),
+            replacement.valid_ranking(ranking),
+            ranking.contains_key(self.linked.root.unwrap()),
+            path_addrs.to_set().disjoint(ranking.dom()),
+            self.linked.is_fresh(path_addrs.to_set()),
+            replacement.is_fresh(path_addrs.to_set()),
+        ensures 
+            self.substitute(replacement, path_addrs).valid_ranking(new_ranking),
+            self.linked.dv.fresh_ranking_extension(ranking, new_ranking),
+            new_ranking.dom() =~= ranking.dom() + path_addrs.to_set()
+        decreases self.depth
+    {
+        self.substitute_preserves_wf(replacement, path_addrs);
+        PivotTable::route_lemma_auto();
 
-    //     if 0 < self.depth {
-    //         assert(self.substitute(replacement).i().wf_children());
+        if self.depth == 0 {
+            ranking
+        } else {
+            let sub_path_addrs = path_addrs.subrange(1, path_addrs.len() as int);
+            let subtree = self.subpath().substitute(replacement, sub_path_addrs);
+            self.subpath().substitute_preserves_wf(replacement, sub_path_addrs);
+            self.valid_ranking_throughout(ranking);
 
-    //         self.target_commutes_with_i();
-    //         self.i().substitute_preserves_wf(replacement.i());
-    //         assert(self.substitute(replacement).i().wf_children());
+            let r = self.linked.root().pivots.route(self.key);
+            assert(self.linked.root().valid_child_index(r as nat)); // trigger
+            assert(self.subpath().linked.has_root());
 
-    //         self.subpath_commutes_with_i();
-    //         self.subpath().substitute_refines(replacement);
+            let intermediate_ranking = self.subpath().ranking_after_substitution(replacement, sub_path_addrs, ranking);
+            let new_root_addr = path_addrs[0];
+            let old_root_rank = intermediate_ranking[self.linked.root.unwrap()];
+            let subtree_root_rank = intermediate_ranking[subtree.root.unwrap()];
+            let new_root_rank = old_root_rank + subtree_root_rank + 1;
+          
+            let new_ranking = intermediate_ranking.insert(new_root_addr, new_root_rank);
+            let result = self.substitute(replacement, path_addrs);
 
-    //         assert(self.substitute(replacement).i().get_Node_children()
-    //             =~= self.i().substitute(replacement.i()).get_Node_children()
-    //         );
-    //         assert(self.substitute(replacement).make_offset_map() =~= self.node.make_offset_map());
-    //     }
-    // }
+            assert forall |addr| #[trigger] new_ranking.contains_key(addr) && result.dv.entries.contains_key(addr)
+            implies result.dv.node_children_respects_rank(new_ranking, addr)
+            by {
+                self.betree_diskview_diff(replacement, path_addrs);
+                if addr == new_root_addr {
+                    let node = result.dv.entries[addr];
+                    assert forall |i| #[trigger] node.valid_child_index(i) && node.children[i as int].is_Some()
+                    implies {
+                        &&& new_ranking.contains_key(node.children[i as int].unwrap())
+                        &&& new_ranking[node.children[i as int].unwrap()] < new_ranking[addr]
+                    } by {
+                        assert(self.linked.root().valid_child_index(i)); // trigger
+                        if i != r {
+                            assert(intermediate_ranking.contains_key(node.children[i as int].unwrap()));
+                            assert(intermediate_ranking.contains_key(self.linked.root.unwrap()));
+                            assert(self.linked.root().valid_child_index(i));
+
+                            assert(new_ranking.contains_key(node.children[i as int].unwrap()));
+                            assert(new_ranking[node.children[i as int].unwrap()] < new_ranking[addr]);
+                        }
+                    }
+                }
+            }
+            path_addrs_to_set_additive(path_addrs);
+            new_ranking
+        }
+    }
+
+    pub proof fn substitute_commutes_with_i(self, replacement: LinkedBetree, path_addrs: PathAddrs, ranking: Ranking)
+        requires 
+            self.can_substitute(replacement, path_addrs),
+            path_addrs.no_duplicates(),
+            replacement.valid_ranking(ranking),
+            ranking.contains_key(self.linked.root.unwrap()),
+            path_addrs.to_set().disjoint(ranking.dom()),
+            self.linked.is_fresh(path_addrs.to_set()),
+            replacement.is_fresh(path_addrs.to_set()),
+        ensures 
+            self.substitute(replacement, path_addrs).acyclic(), 
+            self.i().can_substitute(replacement.i()),
+            self.substitute(replacement, path_addrs).i() === self.i().substitute(replacement.i())
+        decreases self.depth
+    {
+        self.i_valid();
+        replacement.i_wf();
+
+        if 0 < self.depth {
+            let new_ranking = self.ranking_after_substitution(replacement, path_addrs, ranking);
+            let result = self.substitute(replacement, path_addrs);
+
+            result.i_node_ignores_ranking(result.the_ranking(), new_ranking);
+            self.target_commutes_with_i();
+
+            PivotTable::route_lemma_auto();
+            result.i_children_lemma(result.the_ranking());
+            self.linked.i_children_lemma(self.linked.the_ranking());
+
+            assert forall |i| 0 <= i < result.i().get_Node_children().len()
+            implies #[trigger] result.i().get_Node_children()[i] == self.i().substitute(replacement.i()).get_Node_children()[i]
+            by {
+                // TODO
+                assume(false);
+            }
+
+            assert(result.i().get_Node_children() =~= self.i().substitute(replacement.i()).get_Node_children());
+            assert(result.i().get_Node_buffers() =~= self.i().substitute(replacement.i()).get_Node_buffers());
+        }
+    }
 
     // pub proof fn substitute_noop(self, replacement: BetreeNode)
     //     requires self.valid(), replacement.wf(), 
@@ -1242,10 +1382,15 @@ impl LinkedBetreeVars::Label {
 } // end impl LinkedBetree::Label
 
 impl LinkedBetreeVars::State {
-    // pub open spec(checked) fn inv(self) -> bool {
-    //     &&& self.wf()
-    //     &&& (self.root.is_Node() ==> self.root.my_domain() == total_domain())
-    // }
+    pub open spec(checked) fn inv(self) -> bool 
+    {
+        &&& self.linked.acyclic()
+        &&& self.linked.betree_buffer_disjoint()
+        &&& self.linked.no_dangling_buffer_ptr()
+        &&& self.linked.disk_tight_wrt_betree_repr()
+        &&& self.linked.disk_tight_wrt_buffer_repr()
+        &&& self.linked.has_root() ==> self.linked.root().my_domain() == total_domain()
+    }
 
     // pub open spec(checked) fn i(self) -> FilteredBetree::State
     // recommends
@@ -1347,7 +1492,7 @@ impl LinkedBetreeVars::State {
     //     BetreeNode::i_wf_auto();
 
     //     path.target().split_parent_wf(request);
-    //     path.substitute_refines(path.target().split_parent(request));
+    //     path.substitute_commutes_with_i(path.target().split_parent(request));
 
     //     path.i_valid();
     //     path.target_commutes_with_i();
@@ -1365,7 +1510,7 @@ impl LinkedBetreeVars::State {
 
     //     BetreeNode::i_wf_auto();
     //     path.target().flush_wf(child_idx, buffer_gc);
-    //     path.substitute_refines(path.target().flush(child_idx, buffer_gc));
+    //     path.substitute_commutes_with_i(path.target().flush(child_idx, buffer_gc));
 
     //     path.i_valid();
     //     path.target_commutes_with_i();

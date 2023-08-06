@@ -6,6 +6,7 @@ use vstd::{map::*,seq::*,set::*};
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 use crate::betree::Buffer_v::*;
+use crate::betree::BufferSeq_v;
 use crate::betree::OffsetMap_v::*;
 use crate::disk::GenericDisk_v::*;
 
@@ -117,6 +118,13 @@ impl BufferSeq {
         BufferSeq{ buffers: self.buffers.subrange(0, start) + s + self.buffers.subrange(end, self.len() as int) }
     }
 
+    pub open spec(checked) fn i(self, dv: DiskView) -> BufferSeq_v::BufferSeq
+        recommends self.valid(dv)
+    {
+        let buffers = Seq::new(self.len(), |i| dv.get(self[i]));
+        BufferSeq_v::BufferSeq{ buffers: buffers }
+    }
+
 //     pub open spec(checked) fn i_from(self, idx: int) -> Buffer
 //         recommends 0 <= idx <= self.len()
 //         decreases self.len() - idx when 0 <= idx <= self.len()
@@ -140,27 +148,27 @@ impl BufferSeq {
         &&& dv.get(self[buffer_idx]).map.contains_key(k)
     }
 
-    pub open spec /*XXX (checked)*/ fn i_filtered_from(self, dv: DiskView, offset_map: OffsetMap, idx: int) -> Buffer
-        recommends offset_map.is_total(), 0 <= idx <= self.len() 
-        decreases self.len() - idx when 0 <= idx <= self.len()
-    {
-        if self.len() == idx {
-            Buffer::empty()
-        } else {
-            if dv.entries.contains_key(self[idx]) {
-                let bottom_buffer = dv.get(self[idx]).apply_filter(offset_map.active_keys(idx as nat));
-                bottom_buffer.merge(self.i_filtered_from(dv, offset_map, idx+1))
-            } else {
-                self.i_filtered_from(dv, offset_map, idx+1)
-            }
-        }
-    }
+    // pub open spec /*XXX (checked)*/ fn i_filtered_from(self, dv: DiskView, offset_map: OffsetMap, idx: int) -> Buffer
+    //     recommends offset_map.is_total(), 0 <= idx <= self.len() 
+    //     decreases self.len() - idx when 0 <= idx <= self.len()
+    // {
+    //     if self.len() == idx {
+    //         Buffer::empty()
+    //     } else {
+    //         if dv.entries.contains_key(self[idx]) {
+    //             let bottom_buffer = dv.get(self[idx]).apply_filter(offset_map.active_keys(idx as nat));
+    //             bottom_buffer.merge(self.i_filtered_from(dv, offset_map, idx+1))
+    //         } else {
+    //             self.i_filtered_from(dv, offset_map, idx+1)
+    //         }
+    //     }
+    // }
 
-    pub open spec(checked) fn i_filtered(self, dv: DiskView, offset_map: OffsetMap) -> Buffer 
-      recommends offset_map.is_total()
-    {
-        self.i_filtered_from(dv, offset_map, 0)
-    }
+    // pub open spec(checked) fn i_filtered(self, dv: DiskView, offset_map: OffsetMap) -> Buffer 
+    //   recommends offset_map.is_total()
+    // {
+    //     self.i_filtered_from(dv, offset_map, 0)
+    // }
 
     pub open spec(checked) fn key_in_buffer_filtered(self, dv: DiskView, offset_map: OffsetMap, from_idx: int, k: Key, buffer_idx: int) -> bool
         recommends 0 <= from_idx, offset_map.is_total()
@@ -169,6 +177,16 @@ impl BufferSeq {
         &&& offset_map.offsets[k] <= buffer_idx
     }
 
+    pub proof fn query_from_commutes_with_i(self, dv: DiskView, k: Key, start: int)
+        requires 0 <= start <= self.len(), self.valid(dv)
+        ensures self.query_from(dv, k, start) == self.i(dv).query_from(k, start)
+        decreases self.len() - start
+    {
+        if start < self.len() {
+            self.query_from_commutes_with_i(dv, k, start+1);
+        }    
+    }
+    
 //     pub proof fn query_agrees_with_i(self, k: Key, start: int)
 //         requires 0 <= start <= self.len(), 
 //         ensures 
