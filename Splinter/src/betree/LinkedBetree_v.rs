@@ -322,6 +322,11 @@ impl DiskView {
     {
         DiskView{ entries: self.entries.insert(addr, node) }
     }
+
+    pub open spec(checked) fn no_dangling_buffer_ptr(self, buffer_dv: BufferDiskView) -> bool
+    {
+        forall |addr| self.entries.contains_key(addr) ==> #[trigger] self.entries[addr].buffers.valid(buffer_dv)
+    }
 }
 
 pub open spec(checked) fn empty_disk() -> DiskView
@@ -392,6 +397,8 @@ impl LinkedBetree {
     {
         &&& self.dv.wf()
         &&& self.dv.is_nondangling_ptr(self.root)
+        &&& self.dv.is_fresh(self.buffer_dv.repr())
+        &&& self.dv.no_dangling_buffer_ptr(self.buffer_dv)
     }
 
     pub open spec(checked) fn has_root(self) -> bool
@@ -849,7 +856,7 @@ impl Path{
             let new_children = node.children.update(node.pivots.route(self.key), subtree.root);
             let new_node = BetreeNode{ buffers: node.buffers, pivots: node.pivots, children: new_children, flushed: node.flushed };
             let new_dv = subtree.dv.modify_disk(path_addrs[0], new_node);
-            LinkedBetree{ root: Some(path_addrs[0]), dv: new_dv, buffer_dv: self.linked.buffer_dv }
+            LinkedBetree{ root: Some(path_addrs[0]), dv: new_dv, buffer_dv: replacement.buffer_dv }
         }
     }
 } // end impl Path

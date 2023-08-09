@@ -11,6 +11,7 @@ use crate::betree::OffsetMap_v::*;
 use crate::disk::GenericDisk_v::*;
 
 verus! {
+#[verifier::ext_equal]
 pub struct DiskView {
     pub entries: Map<Address, Buffer>
 }
@@ -125,6 +126,17 @@ impl BufferSeq {
         BufferSeq_v::BufferSeq{ buffers: buffers }
     }
 
+    pub proof fn subdisk_implies_same_i(self, small: DiskView, big: DiskView)
+        requires self.valid(small), small.is_subdisk(big)
+        ensures self.valid(big), self.i(small) == self.i(big)
+    {
+        assert forall |i| 0 <= i < self.len()
+        implies self.i(small)[i] == self.i(big)[i]
+        by {
+            assert(big.entries.dom().contains(self[i])); // trigger
+        }
+        assert(self.i(small) =~= self.i(big));
+    }
 //     pub open spec(checked) fn i_from(self, idx: int) -> Buffer
 //         recommends 0 <= idx <= self.len()
 //         decreases self.len() - idx when 0 <= idx <= self.len()
