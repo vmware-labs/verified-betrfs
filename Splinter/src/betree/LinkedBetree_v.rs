@@ -512,7 +512,7 @@ impl LinkedBetree {
     }
 
     // repr of all reachable betree nodes
-    pub open spec(checked) fn betree_repr(self) -> Set<Address>
+    pub open spec(checked) fn reachable_betree_addrs(self) -> Set<Address>
         recommends self.acyclic()
     {
         self.reachable_addrs_using_ranking(self.the_ranking())
@@ -522,23 +522,23 @@ impl LinkedBetree {
     pub open spec/*XXX (checked)*/ fn reachable_buffer(self, addr: Address, buffer_addr: Address) -> bool
         recommends self.acyclic()
     {
-        &&& self.betree_repr().contains(addr) 
+        &&& self.reachable_betree_addrs().contains(addr) 
         && self.dv.get(Some(addr)).buffers.repr().contains(buffer_addr)
     }
 
     // repr of all reachable buffers
-    pub open spec(checked) fn buffer_repr(self) -> Set<Address>
+    pub open spec(checked) fn reachable_buffer_addrs(self) -> Set<Address>
         recommends self.acyclic()
     {
-        let betree_addrs = self.betree_repr();
+        let betree_addrs = self.reachable_betree_addrs();
         Set::new(|buffer_addr| exists |addr| self.reachable_buffer(addr, buffer_addr))
     }
 
     pub open spec(checked) fn build_tight_tree(self) -> LinkedBetree
     {
         if self.acyclic() {
-            let tight_dv = DiskView{ entries: self.dv.entries.restrict(self.betree_repr()) };
-            let tight_buffer_dv = BufferDiskView{ entries: self.buffer_dv.entries.restrict(self.buffer_repr()) };
+            let tight_dv = DiskView{ entries: self.dv.entries.restrict(self.reachable_betree_addrs()) };
+            let tight_buffer_dv = BufferDiskView{ entries: self.buffer_dv.entries.restrict(self.reachable_buffer_addrs()) };
             LinkedBetree{ root: self.root, dv: tight_dv, buffer_dv: tight_buffer_dv }
         } else {
             self

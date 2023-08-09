@@ -793,16 +793,24 @@ impl DiskView{
 }
 
 impl LinkedBetree{
-    pub open spec(checked) fn disk_tight_wrt_betree_repr(self) -> bool
+    pub open spec(checked) fn disk_tight_wrt_reachable_betree_addrs(self) -> bool
         recommends self.acyclic()
     {
-        self.dv.entries.dom() =~= self.betree_repr()
+        self.dv.entries.dom() =~= self.reachable_betree_addrs()
     }
 
-    pub open spec(checked) fn disk_tight_wrt_buffer_repr(self) -> bool
+    pub open spec(checked) fn disk_tight_wrt_reachable_buffer_addrs(self) -> bool
         recommends self.acyclic()
     {
-        self.buffer_dv.entries.dom() =~= self.buffer_repr()
+        self.buffer_dv.entries.dom() =~= self.reachable_buffer_addrs()
+    }
+
+    pub open spec(checked) fn inv(self) -> bool
+    {
+        &&& self.acyclic()
+        &&& self.disk_tight_wrt_reachable_betree_addrs()
+        &&& self.disk_tight_wrt_reachable_buffer_addrs()
+        &&& self.has_root() ==> self.root().my_domain() == total_domain()
     }
 
     pub open spec /*XXX(checked)*/ fn i_children_seq(self, ranking: Ranking, start: nat) -> Seq<FilteredBetree_v::BetreeNode>
@@ -1055,6 +1063,134 @@ impl LinkedBetree{
         }
     }
 
+    pub proof fn reachable_addrs_using_ranking_recur_body_lemma(self, ranking: Ranking, child_idx: nat)
+        requires self.can_recurse_for_reachable(ranking, child_idx)
+        ensures 
+            forall |i| child_idx <= i < self.child_count() ==>
+                (#[trigger]self.child_at_idx(i).reachable_addrs_using_ranking(ranking)
+                ).subset_of(self.reachable_addrs_using_ranking_recur(ranking, child_idx))
+        decreases self.child_count() - child_idx
+    {
+        if child_idx < self.child_count() {
+            assert(self.root().valid_child_index(child_idx)); // trigger
+            self.reachable_addrs_using_ranking_recur_body_lemma(ranking, child_idx+1);
+        }
+    }
+
+    pub open spec(checked) fn child_subtree_contains_addr(self, ranking: Ranking, addr: Address, start: nat, i: nat) -> bool
+        recommends self.wf(), self.valid_ranking(ranking)
+    {
+        &&& start <= i < self.child_count()
+        &&& self.child_at_idx(i).valid_ranking(ranking)
+        &&& self.child_at_idx(i).reachable_addrs_using_ranking(ranking).contains(addr)
+    }
+
+    pub proof fn reachable_addrs_using_ranking_recur_closed(self, ranking: Ranking, child_idx: nat)
+        requires self.can_recurse_for_reachable(ranking, child_idx)
+        ensures
+            forall |addr| #[trigger] self.reachable_addrs_using_ranking_recur(ranking, child_idx).contains(addr)
+                ==> (exists |i| self.child_subtree_contains_addr(ranking, addr, child_idx, i))
+        decreases self.get_rank(ranking), self.child_count() - child_idx
+    {
+        if child_idx < self.child_count() {
+            assert(self.root().valid_child_index(child_idx)); // trigger
+            self.child_at_idx_acyclic(child_idx);
+
+            let child = self.child_at_idx(child_idx);
+            assert(child.valid_ranking(ranking));
+
+            let child_addrs = self.child_at_idx(child_idx).reachable_addrs_using_ranking(ranking);
+            let right_subtree_addrs = self.reachable_addrs_using_ranking_recur(ranking, child_idx + 1);
+
+            self.child_at_idx(child_idx).reachable_addrs_using_ranking_closed(ranking);
+            self.reachable_addrs_using_ranking_recur_closed(ranking, child_idx+1);
+
+            assert forall |addr| #[trigger] self.reachable_addrs_using_ranking_recur(ranking, child_idx).contains(addr)
+            implies (exists |i|  #[trigger]self.child_subtree_contains_addr(ranking, addr, child_idx, i))
+            by {
+                if right_subtree_addrs.contains(addr) {
+                    let i = choose |i| #[trigger] self.child_subtree_contains_addr(ranking, addr, child_idx+1, i);
+                    assert(self.child_subtree_contains_addr(ranking, addr, child_idx, i));
+                } else {
+                    assert(child_addrs.contains(addr));
+                    assert(child.has_root() ==> child_addrs.contains(child.root.unwrap()));
+                    assert(self.child_subtree_contains_addr(ranking, addr, child_idx, child_idx));
+                }
+            }
+        }
+    } 
+
+    pub proof fn reachable_addrs_using_ranking_closed(self, ranking: Ranking)
+        requires self.wf(), self.valid_ranking(ranking)
+        ensures 
+            self.has_root() ==> self.reachable_addrs_using_ranking(ranking).contains(self.root.unwrap()),
+            forall |addr| #[trigger] self.reachable_addrs_using_ranking(ranking).contains(addr) && Some(addr) != self.root
+                ==> (exists |i| self.child_subtree_contains_addr(ranking, addr, 0, i))
+        decreases self.get_rank(ranking)
+    {
+        if self.has_root() {
+            let sub_tree_addrs = self.reachable_addrs_using_ranking_recur(ranking, 0);
+            self.reachable_addrs_using_ranking_recur_closed(ranking, 0);
+            assert(sub_tree_addrs.insert(self.root.unwrap()) =~= self.reachable_addrs_using_ranking(ranking));
+        }
+    }
+
+    pub proof fn reachable_addrs_are_closed(self, ranking: Ranking, addr: Address)
+        requires 
+            self.wf(), self.has_root(), 
+            self.valid_ranking(ranking),
+            self.reachable_addrs_using_ranking(ranking).contains(addr),
+            self.dv.entries.dom().contains(addr),
+        ensures ({
+            let node = self.dv.entries[addr];
+            &&& forall |i| #[trigger] node.valid_child_index(i) && node.children[i as int].is_Some() 
+                ==> self.reachable_addrs_using_ranking(ranking).contains(node.children[i as int].unwrap())
+        })
+        decreases self.get_rank(ranking)
+    {
+        let node = self.dv.entries[addr];
+        let reachable_addrs = self.reachable_addrs_using_ranking(ranking);
+        self.reachable_addrs_using_ranking_closed(ranking);
+
+        assert forall |i| #[trigger] node.valid_child_index(i) && node.children[i as int].is_Some() 
+        implies reachable_addrs.contains(node.children[i as int].unwrap())
+        by {
+            if addr == self.root.unwrap() {
+                self.child_at_idx(i).reachable_addrs_using_ranking_closed(ranking);
+                assert(self.child_at_idx(i).has_root());
+                self.reachable_addrs_using_ranking_recur_body_lemma(ranking, 0);
+                assert(reachable_addrs.contains(node.children[i as int].unwrap()));
+            } else {
+                assert(self.reachable_addrs_using_ranking(ranking).contains(addr));
+                let i = choose |i| self.child_subtree_contains_addr(ranking, addr, 0, i);
+                assert(self.root().valid_child_index(i)); // trigger
+                self.child_at_idx(i).reachable_addrs_are_closed(ranking, addr);
+                self.reachable_addrs_using_ranking_recur_body_lemma(ranking, 0);
+            }
+        }
+    }
+
+    pub proof fn build_tight_preserves_wf(self, ranking: Ranking)
+        requires self.wf(), self.valid_ranking(ranking)
+        ensures self.build_tight_tree().wf()
+        decreases self.get_rank(ranking)
+    {
+        let result = self.build_tight_tree();
+
+        assert forall |addr| #[trigger] result.dv.entries.contains_key(addr)
+        implies {
+            &&& result.dv.node_has_nondangling_child_ptrs(result.dv.entries[addr])
+            &&& result.dv.node_has_linked_children(result.dv.entries[addr])
+        } by {
+            self.reachable_addrs_are_closed(self.the_ranking(), addr);
+        }
+
+        assert(result.dv.wf());
+        assert(result.dv.is_nondangling_ptr(result.root));
+        assert(result.dv.is_fresh(result.buffer_dv.repr()));
+        assume(result.dv.no_dangling_buffer_ptr(result.buffer_dv));
+    }
+
 } // end impl LinkedBetree
 
 pub open spec(checked) fn i_stamped_betree(stamped: StampedBetree) -> FilteredBetree_v::StampedBetree
@@ -1246,6 +1382,7 @@ impl Path{
             let sub_path_addrs = path_addrs.subrange(1, path_addrs.len() as int);
             let subtree = self.subpath().substitute(replacement, sub_path_addrs);
             self.subpath().substitute_preserves_wf(replacement, sub_path_addrs);
+            path_addrs_to_set_additive(path_addrs);
 
             let result = self.substitute(replacement, path_addrs);
             let node = result.dv.entries[path_addrs[0]];
@@ -1273,6 +1410,7 @@ impl Path{
         }
     }
 
+    #[verifier::spinoff_prover]
     pub proof fn ranking_after_substitution(self, replacement: LinkedBetree, path_addrs: PathAddrs, ranking: Ranking) -> (new_ranking: Ranking)
         requires
             self.can_substitute(replacement, path_addrs),
@@ -1297,6 +1435,8 @@ impl Path{
             let sub_path_addrs = path_addrs.subrange(1, path_addrs.len() as int);
             let subtree = self.subpath().substitute(replacement, sub_path_addrs);
             self.subpath().substitute_preserves_wf(replacement, sub_path_addrs);
+
+            self.linked.dv.subdisk_implies_ranking_validity(replacement.dv, ranking);
             assert(self.linked.valid_ranking(ranking));
             self.valid_ranking_throughout(ranking);
 
@@ -1451,15 +1591,13 @@ impl LinkedBetreeVars::Label {
                     LinkedBetreeVars::Label::Internal{} => FilteredBetree::Label::Internal{},
         }
     }
-} // end impl LinkedBetree::Label
+} // end impl LinkedBetreeVars::Label
 
 impl LinkedBetreeVars::State {
     pub open spec(checked) fn inv(self) -> bool 
     {
-        &&& self.linked.acyclic()
-        &&& self.linked.disk_tight_wrt_betree_repr()
-        &&& self.linked.disk_tight_wrt_buffer_repr()
-        &&& self.linked.has_root() ==> self.linked.root().my_domain() == total_domain()
+        &&& self.wf()
+        &&& self.linked.inv()
     }
 
     pub open spec(checked) fn i(self) -> FilteredBetree::State
@@ -1468,51 +1606,53 @@ impl LinkedBetreeVars::State {
         FilteredBetree::State{root: self.linked.i(), memtable: self.memtable}
     }
 
-    // pub proof fn init_refines(self, stamped_betree: StampedBetree) 
-    //     requires LinkedBetree::State::initialize(self, stamped_betree)
-    //     ensures FilteredBetree::State::initialize(self.i(), i_stamped_betree(stamped_betree))
-    // {
-    //     stamped_betree.value.i_wf();
-    // }
+    pub proof fn init_refines(self, stamped_betree: StampedBetree) 
+        requires LinkedBetreeVars::State::initialize(self, stamped_betree), stamped_betree.value.inv()
+        ensures FilteredBetree::State::initialize(self.i(), i_stamped_betree(stamped_betree))
+    {
+        self.linked.i_wf();
+    }
 
-    // pub proof fn query_refines(self, post: Self, lbl: LinkedBetree::Label, receipt: QueryReceipt)
-    //     requires self.inv(), LinkedBetree::State::query(self, post, lbl, receipt)
+    pub proof fn query_refines(self, post: Self, lbl: LinkedBetreeVars::Label, receipt: QueryReceipt)
+        requires self.inv(), LinkedBetreeVars::State::query(self, post, lbl, receipt)
+        ensures post.inv(), FilteredBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(FilteredBetree::State::next);
+        reveal(FilteredBetree::State::next_by);
+
+        receipt.i_valid();
+        assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::query(receipt.i())));
+    }
+
+    pub proof fn put_refines(self, post: Self, lbl: LinkedBetreeVars::Label)
+        requires self.inv(), LinkedBetreeVars::State::put(self, post, lbl)
+        ensures post.inv(), FilteredBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(FilteredBetree::State::next);
+        reveal(FilteredBetree::State::next_by);
+
+        assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::put()));
+    }
+
+    pub proof fn freeze_as_refines(self, post: Self, lbl: LinkedBetreeVars::Label)
+        requires self.inv(), LinkedBetreeVars::State::freeze_as(self, post, lbl)
+        ensures post.inv(), FilteredBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(FilteredBetree::State::next);
+        reveal(FilteredBetree::State::next_by);
+
+        self.linked.i_wf();
+        assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::freeze_as()));
+    }
+
+    // pub proof fn internal_flush_memtable_refines(self, post: Self, lbl: LinkedBetreeVars::Label)
+    //     requires self.inv(), LinkedBetreeVars::State::internal_flush_memtable(self, post, lbl)
     //     ensures post.inv(), FilteredBetree::State::next(self.i(), post.i(), lbl.i())
     // {
     //     reveal(FilteredBetree::State::next);
     //     reveal(FilteredBetree::State::next_by);
 
-    //     receipt.i_valid();
-    //     assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::query(receipt.i())));
-    // }
-
-    // pub proof fn put_refines(self, post: Self, lbl: LinkedBetree::Label)
-    //     requires self.inv(), LinkedBetree::State::put(self, post, lbl)
-    //     ensures post.inv(), FilteredBetree::State::next(self.i(), post.i(), lbl.i())
-    // {
-    //     reveal(FilteredBetree::State::next);
-    //     reveal(FilteredBetree::State::next_by);
-
-    //     assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::put()));
-    // }
-
-    // pub proof fn freeze_as_refines(self, post: Self, lbl: LinkedBetree::Label)
-    //     requires self.inv(), LinkedBetree::State::freeze_as(self, post, lbl)
-    //     ensures post.inv(), FilteredBetree::State::next(self.i(), post.i(), lbl.i())
-    // {
-    //     reveal(FilteredBetree::State::next);
-    //     reveal(FilteredBetree::State::next_by);
-
-    //     self.root.i_wf();
-    //     assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::freeze_as()));
-    // }
-
-    // pub proof fn internal_flush_memtable_refines(self, post: Self, lbl: LinkedBetree::Label)
-    //     requires self.inv(), LinkedBetree::State::internal_flush_memtable(self, post, lbl)
-    //     ensures post.inv(), FilteredBetree::State::next(self.i(), post.i(), lbl.i())
-    // {
-    //     reveal(FilteredBetree::State::next);
-    //     reveal(FilteredBetree::State::next_by);
+        // first need to show inv is real
 
     //     self.root.i_wf();
     //     self.root.promote_commutes_with_i(total_domain());
@@ -1533,12 +1673,12 @@ impl LinkedBetreeVars::State {
     //     assert(buffers.i_from(1) == Buffer::empty()); // trigger
     //     assert(buffers.i() =~= buffers[0]);
     //     assert(a.get_Node_buffer() == b.get_Node_buffer());
-
+    //     assume(false);
     //     assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_flush_memtable()));
     // }
 
-    // pub proof fn internal_grow_refines(self, post: Self, lbl: LinkedBetree::Label)
-    //     requires self.inv(), LinkedBetree::State::internal_grow(self, post, lbl)
+    // pub proof fn internal_grow_refines(self, post: Self, lbl: LinkedBetreeVars::Label)
+    //     requires self.inv(), LinkedBetreeVars::State::internal_grow(self, post, lbl)
     //     ensures post.inv(), FilteredBetree::State::next(self.i(), post.i(), lbl.i())
     // {
     //     reveal(FilteredBetree::State::next);
@@ -1551,8 +1691,8 @@ impl LinkedBetreeVars::State {
     //     assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_grow()));
     // }
 
-    // pub proof fn internal_split_refines(self, post: Self, lbl: LinkedBetree::Label, path: Path, request: SplitRequest)
-    //     requires self.inv(), LinkedBetree::State::internal_split(self, post, lbl, path, request)
+    // pub proof fn internal_split_refines(self, post: Self, lbl: LinkedBetreeVars::Label, path: Path, request: SplitRequest)
+    //     requires self.inv(), LinkedBetreeVars::State::internal_split(self, post, lbl, path, request)
     //     ensures post.inv(), FilteredBetree::State::next(self.i(), post.i(), lbl.i())
     // {
     //     reveal(FilteredBetree::State::next);
@@ -1570,8 +1710,8 @@ impl LinkedBetreeVars::State {
     //     assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_split(path.i(), request)));
     // }
 
-    // pub proof fn internal_flush_refines(self, post: Self, lbl: LinkedBetree::Label, path: Path, child_idx: nat, buffer_gc: nat)
-    //     requires self.inv(), LinkedBetree::State::internal_flush(self, post, lbl, path, child_idx, buffer_gc)
+    // pub proof fn internal_flush_refines(self, post: Self, lbl: LinkedBetreeVars::Label, path: Path, child_idx: nat, buffer_gc: nat)
+    //     requires self.inv(), LinkedBetreeVars::State::internal_flush(self, post, lbl, path, child_idx, buffer_gc)
     //     ensures post.inv(), FilteredBetree::State::next(self.i(), post.i(), lbl.i())
     // {
     //     reveal(FilteredBetree::State::next);
@@ -1588,8 +1728,8 @@ impl LinkedBetreeVars::State {
     //     assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_flush(path.i(), child_idx)));
     // }
 
-    // pub proof fn internal_compact_refines(self, post: Self, lbl: LinkedBetree::Label, path: Path, start: nat, end: nat, compacted_buffer: Buffer)
-    //     requires self.inv(), LinkedBetree::State::internal_compact(self, post, lbl, path, start, end, compacted_buffer)
+    // pub proof fn internal_compact_refines(self, post: Self, lbl: LinkedBetreeVars::Label, path: Path, start: nat, end: nat, compacted_buffer: Buffer)
+    //     requires self.inv(), LinkedBetreeVars::State::internal_compact(self, post, lbl, path, start, end, compacted_buffer)
     //     ensures post.inv(), FilteredBetree::State::next(self.i(), post.i(), lbl.i())
     // {
     //     reveal(FilteredBetree::State::next);
@@ -1603,8 +1743,8 @@ impl LinkedBetreeVars::State {
     //     assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_noop()));
     // }
 
-    // pub proof fn internal_noop_noop(self, post: Self, lbl: LinkedBetree::Label)
-    //     requires self.inv(), LinkedBetree::State::internal_noop(self, post, lbl)
+    // pub proof fn internal_noop_noop(self, post: Self, lbl: LinkedBetreeVars::Label)
+    //     requires self.inv(), LinkedBetreeVars::State::internal_noop(self, post, lbl)
     //     ensures post.inv(), FilteredBetree::State::next(self.i(), post.i(), lbl.i())
     // {
     //     reveal(FilteredBetree::State::next);
@@ -1614,14 +1754,14 @@ impl LinkedBetreeVars::State {
     //     assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_noop()));
     // }
 
-    // pub proof fn next_refines(self, post: Self, lbl: LinkedBetree::Label)
-    //     requires self.inv(), LinkedBetree::State::next(self, post, lbl),
+    // pub proof fn next_refines(self, post: Self, lbl: LinkedBetreeVars::Label)
+    //     requires self.inv(), LinkedBetreeVars::State::next(self, post, lbl),
     //     ensures post.inv(), FilteredBetree::State::next(self.i(), post.i(), lbl.i()),
     // {
-    //     reveal(LinkedBetree::State::next);
-    //     reveal(LinkedBetree::State::next_by);
+    //     reveal(LinkedBetreeVars::State::next);
+    //     reveal(LinkedBetreeVars::State::next_by);
 
-    //     match choose |step| LinkedBetree::State::next_by(self, post, lbl, step)
+    //     match choose |step| LinkedBetreeVars::State::next_by(self, post, lbl, step)
     //     {
     //         LinkedBetree::Step::query(receipt) => { self.query_refines(post, lbl, receipt); } 
     //         LinkedBetree::Step::put() => { self.put_refines(post, lbl); }
@@ -1635,6 +1775,6 @@ impl LinkedBetreeVars::State {
     //         _ => { assert(false); } 
     //     }
     // }
-} // end impl LinkedBetree::State
+} // end impl LinkedBetreeVars::State
 
 }//verus
