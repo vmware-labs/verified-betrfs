@@ -523,7 +523,7 @@ impl LinkedBetree {
         recommends self.acyclic()
     {
         &&& self.reachable_betree_addrs().contains(addr) 
-        && self.dv.get(Some(addr)).buffers.repr().contains(buffer_addr)
+        &&& self.dv.get(Some(addr)).buffers.repr().contains(buffer_addr)
     }
 
     // repr of all reachable buffers
@@ -908,7 +908,7 @@ state_machine!{ LinkedBetreeVars {
         require new_addrs.no_duplicates();
         require pre.linked.is_fresh(new_addrs.repr());
         update memtable = pre.memtable.drain();
-        update linked = pre.linked.push_memtable(pre.memtable, new_addrs);
+        update linked = pre.linked.push_memtable(pre.memtable, new_addrs).build_tight_tree();
     }}
 
     transition!{ internal_grow(lbl: Label, new_root_addr: Address) {
