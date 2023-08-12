@@ -729,6 +729,14 @@ impl DiskView{
     }
 }
 
+// TODO(verus): use merged vstd set max instead
+pub proof fn get_max_rank(ranking: Ranking) -> (max: nat)
+    ensures forall |addr| #[trigger] ranking.contains_key(addr) ==> ranking[addr] <= max
+{
+    assume(false);
+    1
+}
+
 impl LinkedBetree{
     pub open spec(checked) fn disk_tight_wrt_reachable_betree_addrs(self) -> bool
         recommends self.acyclic()
@@ -1321,6 +1329,41 @@ impl LinkedBetree{
         assert(result.i().get_Node_buffers() =~= self.i().push_memtable(memtable).get_Node_buffers());
     }
 
+    pub proof fn grow_new_ranking(self, new_root_addr: Address, old_ranking: Ranking) -> (new_ranking: Ranking)
+        requires 
+            self.wf(),
+            self.has_root() ==> self.root().my_domain() == total_domain(),
+            self.valid_ranking(old_ranking),
+            self.is_fresh(Set::empty().insert(new_root_addr)),
+            self.dv.ranking_is_tight(old_ranking),
+        ensures 
+            self.grow(new_root_addr).wf(),
+            self.grow(new_root_addr).valid_ranking(new_ranking),
+            new_ranking.dom() == old_ranking.dom().insert(new_root_addr),
+    {
+        let result = self.grow(new_root_addr);
+        let new_rank = 
+            if self.has_root() { old_ranking[self.root.unwrap()]+1 } 
+            else if old_ranking =~= map![] { 1 }
+            else { get_max_rank(old_ranking) + 1 };
+        
+        old_ranking.insert(new_root_addr, new_rank)
+    }
+
+    pub proof fn grow_commutes_with_i(self, new_root_addr: Address)
+        requires 
+            self.inv(),
+            self.is_fresh(Set::empty().insert(new_root_addr))
+        ensures
+            self.grow(new_root_addr).inv(),
+            self.grow(new_root_addr).i() == self.i().grow()
+    {
+        let old_ranking = self.build_tight_ranking(self.the_ranking());
+        let new_ranking = self.grow_new_ranking(new_root_addr, old_ranking);
+
+        assume(false);
+    }
+
 } // end impl LinkedBetree
 
 pub open spec(checked) fn i_stamped_betree(stamped: StampedBetree) -> FilteredBetree_v::StampedBetree
@@ -1788,19 +1831,18 @@ impl LinkedBetreeVars::State {
         assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_flush_memtable()));
     }
 
-    // pub proof fn internal_grow_refines(self, post: Self, lbl: LinkedBetreeVars::Label)
-    //     requires self.inv(), LinkedBetreeVars::State::internal_grow(self, post, lbl)
-    //     ensures post.inv(), FilteredBetree::State::next(self.i(), post.i(), lbl.i())
-    // {
-    //     reveal(FilteredBetree::State::next);
-    //     reveal(FilteredBetree::State::next_by);
+    pub proof fn internal_grow_refines(self, post: Self, lbl: LinkedBetreeVars::Label, new_root_addr: Address)
+        requires self.inv(), LinkedBetreeVars::State::internal_grow(self, post, lbl, new_root_addr)
+        ensures post.inv(), FilteredBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(FilteredBetree::State::next);
+        reveal(FilteredBetree::State::next_by);
 
-    //     BetreeNode::i_wf_auto();
-    //     PivotTable::route_lemma_auto();
-    //     post.root.i_children_lemma();
-    //     assert(post.i().root =~= self.i().root.grow());
-    //     assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_grow()));
-    // }
+        self.linked.grow_commutes_with_i(new_root_addr);
+        self.linked.i_wf();
+        post.linked.i_wf();
+        assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_grow()));
+    }
 
     // pub proof fn internal_split_refines(self, post: Self, lbl: LinkedBetreeVars::Label, path: Path, request: SplitRequest)
     //     requires self.inv(), LinkedBetreeVars::State::internal_split(self, post, lbl, path, request)
