@@ -27,302 +27,6 @@ verus! {
 pub type LinkedBufferSeq = LinkedBufferSeq_v::BufferSeq;
 
 impl BetreeNode {
-    pub proof fn split_leaf_wf(self, split_key: Key)
-        requires self.can_split_leaf(split_key)
-        ensures self.split_leaf(split_key).0.wf(), self.split_leaf(split_key).1.wf()
-    {
-    }
-
-    pub proof fn split_index_wf(self, pivot_idx: nat)
-        requires self.can_split_index(pivot_idx)
-        ensures self.split_index(pivot_idx).0.wf(), self.split_index(pivot_idx).1.wf()
-    {
-    }
-
-
-    // pub proof fn split_leaf_commutes_with_i(self, split_key: Key)
-    //     requires self.can_split_leaf(split_key)
-    //     ensures 
-    //         self.split_leaf(split_key).0.i() == self.i().split_leaf(split_key).0,
-    //         self.split_leaf(split_key).1.i() == self.i().split_leaf(split_key).1,
-    // {
-    //     BetreeNode::i_wf_auto();
-    //     PivotTable::route_lemma_auto();
-
-    //     let (left, right) = self.split_leaf(split_key);
-    //     let (i_left, i_right) = self.i().split_leaf(split_key);
-    //     self.split_leaf_wf(split_key);
-
-    //     left.i_buffer_domain();
-    //     right.i_buffer_domain();
-    //     self.i_buffer_domain();
-    //     self.i_preserves_domain_auto();
-
-    //     assert(left.i().get_Node_buffer().map.dom() =~= i_left.get_Node_buffer().map.dom());
-    //     assert(right.i().get_Node_buffer().map.dom() =~= i_right.get_Node_buffer().map.dom());
-    //     assert(left.i().get_Node_buffer() =~= i_left.get_Node_buffer());
-    //     assert(right.i().get_Node_buffer() =~= i_right.get_Node_buffer());
-    // }
-    
-    // // #[verifier::spinoff_prover]
-    // pub proof fn split_index_commutes_with_i(self, pivot_idx: nat)
-    //     requires self.can_split_index(pivot_idx)
-    //     ensures
-    //         self.split_index(pivot_idx).0.i() == self.i().split_index(pivot_idx).0,
-    //         self.split_index(pivot_idx).1.i() == self.i().split_index(pivot_idx).1,
-    // {
-    //     BetreeNode::i_wf_auto();
-    //     PivotTable::route_lemma_auto();
-    //     PivotTable::route_is_lemma_auto();
-
-    //     Element::lt_transitive_forall();
-    //     Element::lte_transitive_forall();
-
-    //     let (left, right) = self.split_index(pivot_idx);
-    //     let (i_left, i_right) = self.i().split_index(pivot_idx);
-    //     self.split_index_wf(pivot_idx);
-
-    //     self.i_buffer_domain();
-    //     left.i_buffer_domain();
-    //     right.i_buffer_domain();
-
-    //     assert(left.i().get_Node_buffer() =~= i_left.get_Node_buffer()) 
-    //     by {
-    //         self.i_preserves_domain_auto();
-    //         left.i_preserves_domain_auto();
-    //     }
-
-    //     assert(right.i().get_Node_buffer() =~= i_right.get_Node_buffer())
-    //     by {
-    //         self.i_preserves_domain_auto();
-    //         right.i_preserves_domain_auto();
-    //     }
-
-    //     BetreeNode::i_children_lemma_auto();
-    //     assert(left.i().get_Node_children() =~= i_left.get_Node_children());
-    //     assert(right.i().get_Node_children() =~= i_right.get_Node_children());
-    // }
-
-    // // #[verifier::spinoff_prover]
-    // pub proof fn split_parent_buffers_commutes_with_i(self, request: SplitRequest)
-    //     requires self.can_split_parent(request), self.i().can_split_parent(request)
-    //     ensures self.i().split_parent(request).get_Node_buffer() == self.split_parent(request).i().get_Node_buffer()
-    // {
-    //     self.split_parent_wf(request);
-    //     self.i().split_parent_wf(request);
-    //     BetreeNode::i_wf_auto();
-
-    //     let new_parent = self.split_parent(request);
-    //     let i_new_parent = self.i().split_parent(request);
-    //     let split_child_idx = request.get_child_idx() as int;
-
-    //     self.i_buffer_domain();
-    //     new_parent.i_buffer_domain();
-
-    //     assert forall |k| 
-    //     ({
-    //         &&& new_parent.i().get_Node_buffer().map.contains_key(k) <==> #[trigger] i_new_parent.get_Node_buffer().map.contains_key(k)
-    //         &&& new_parent.i().get_Node_buffer().map.contains_key(k) ==> 
-    //             new_parent.i().get_Node_buffer().map[k] == i_new_parent.get_Node_buffer().map[k]
-    //     }) by {
-
-    //         if new_parent.i().get_Node_buffer().map.contains_key(k) {
-    //             let r = new_parent.get_Node_pivots().route(k);
-    //             new_parent.get_Node_pivots().route_lemma(k);
-
-    //             if r <= split_child_idx {
-    //                 if r == split_child_idx {
-    //                     assert(Element::lt(new_parent.get_Node_pivots()[r+1], self.get_Node_pivots().pivots[r+1]));
-    //                 }
-    //                 self.get_Node_pivots().route_is_lemma(k, r);
-    //             } else {
-    //                 assert(Element::lt(new_parent.get_Node_pivots().pivots[r-1], new_parent.get_Node_pivots().pivots[r]));
-    //                 self.get_Node_pivots().route_is_lemma(k, r-1);
-    //             }
-    //             assert(self.flushed_ofs(k) == new_parent.flushed_ofs(k));
-    //             new_parent.i_preserves_domain(self, k);
-    //         }
-
-    //         if i_new_parent.get_Node_buffer().map.contains_key(k) {
-    //             assert(self.i().get_Node_buffer().map.contains_key(k));
-    //             assert(self.key_in_domain(k));
-    //             assert(new_parent.key_in_domain(k));
-
-    //             let r = self.get_Node_pivots().route(k);
-    //             self.get_Node_pivots().route_lemma(k);
-    //             if r < split_child_idx {
-    //                 new_parent.get_Node_pivots().route_is_lemma(k, r);
-    //             } else if r == split_child_idx {
-    //                 if Element::lt(to_element(k), new_parent.get_Node_pivots().pivots[r+1]) {
-    //                     new_parent.get_Node_pivots().route_is_lemma(k, r);
-    //                 } else {
-    //                     new_parent.get_Node_pivots().route_is_lemma(k, r+1);
-    //                 }
-    //             } else {
-    //                 new_parent.get_Node_pivots().route_is_lemma(k, r+1);
-    //             }
-    //             assert(self.flushed_ofs(k) == new_parent.flushed_ofs(k));
-    //             self.i_preserves_domain(new_parent, k);
-    //         }
-    //     }
-    //     assert(new_parent.i().get_Node_buffer().map.dom() =~= i_new_parent.get_Node_buffer().map.dom());
-    //     assert(new_parent.i().get_Node_buffer() =~= i_new_parent.get_Node_buffer());
-    // }
-
-    // // #[verifier::spinoff_prover]
-    // pub proof fn split_parent_commutes_with_i(self, request: SplitRequest)
-    //     requires self.can_split_parent(request)
-    //     ensures 
-    //         self.i().can_split_parent(request),
-    //         self.i().split_parent(request) == self.split_parent(request).i()
-    // {
-    //     self.split_parent_wf(request);
-    //     BetreeNode::i_wf_auto();
-    //     BetreeNode::i_children_lemma_auto();
-
-    //     let split_child_idx = request.get_child_idx() as int;
-    //     let child = self.get_Node_children()[request.get_child_idx() as int];
-
-    //     if request.is_SplitLeaf() {
-    //         child.split_leaf_commutes_with_i(request.get_SplitLeaf_split_key());
-    //     } else {
-    //         child.split_index_commutes_with_i(request.get_SplitIndex_child_pivot_idx());
-    //     }
-
-    //     self.split_parent_buffers_commutes_with_i(request);
-    //     assert(self.split_parent(request).i().get_Node_children() =~= self.i().split_parent(request).get_Node_children());
-    // }
-
-    // pub proof fn flush_wf(self, child_idx: nat, buffer_gc: nat)
-    //     requires self.can_flush(child_idx, buffer_gc)
-    //     ensures self.flush(child_idx, buffer_gc).wf()
-    // {
-    //     let result = self.flush(child_idx, buffer_gc);
-
-    //     let idx = child_idx as int;
-    //     let flush_upto = self.get_Node_buffers().len(); 
-
-    //     let updated_flushed = self.get_Node_flushed().update(idx, flush_upto);
-    //     assert(updated_flushed.offsets[idx] == flush_upto);
-    //     updated_flushed.shift_left_preserves_lte(buffer_gc, flush_upto);
-    //     assert(result.local_structure());
-
-    //     let flushed_ofs = self.get_Node_flushed().offsets[idx];
-    //     let buffers_to_child = self.get_Node_buffers().slice(flushed_ofs as int, flush_upto as int);
-
-    //     let child = self.get_Node_children()[idx];
-    //     let child_domain = self.child_domain(child_idx);
-    //     let new_child = child.promote(child_domain).extend_buffer_seq(buffers_to_child);
-
-    //     assert(child.wf()); // trigger
-    //     child.promote(child_domain).extend_buffer_seq_wf(buffers_to_child);
-    //     assert(new_child.wf());
-    //     assert forall |i| #[trigger] result.valid_child_index(i) ==> self.valid_child_index(i) by {}
-    // }
-
-    // pub proof fn flush_commutes_with_i(self, child_idx: nat, buffer_gc: nat)
-    //     requires self.can_flush(child_idx, buffer_gc)
-    //     ensures self.flush(child_idx, buffer_gc).i() == self.i().flush(child_idx)
-    // {
-    //     self.flush_wf(child_idx, buffer_gc);
-    //     BetreeNode::i_wf_auto();
-    //     BetreeNode::i_children_lemma_auto();
-    //     PivotTable::route_lemma_auto();
-
-    //     let idx = child_idx as int;
-    //     let flush_upto = self.get_Node_buffers().len();
-
-    //     let flushed_ofs = self.get_Node_flushed().offsets[idx];
-    //     let buffers_to_child = self.get_Node_buffers().slice(flushed_ofs as int, flush_upto as int);
-
-    //     let child = self.get_Node_children()[idx];
-    //     let child_domain = self.child_domain(child_idx);
-    //     let new_child = child.promote(child_domain).extend_buffer_seq(buffers_to_child);
-
-    //     assert(child.wf()); // trigger
-    //     child.promote_commutes_with_i(child_domain);
-    //     assert(child.promote(child_domain).i() == child.i().promote(child_domain));
-    //     child.promote(child_domain).extend_buffer_seq_refines_merge_buffer(buffers_to_child);
-    //     assert(new_child.i() == child.i().promote(child_domain).merge_buffer(buffers_to_child.i().apply_filter(child_domain.key_set())));
-
-    //     self.i_buffer_domain();
-    //     self.child_domain_implies_key_in_domain(child_idx);
-
-    //     assert forall #![auto] |k| child_domain.contains(k)
-    //     implies ({
-    //         &&& buffers_to_child.i().map.contains_key(k) <==> self.i_buffer().map.contains_key(k)
-    //         &&& buffers_to_child.i().query(k) == self.i_buffer().query(k)
-    //     }) by {
-    //         self.get_Node_pivots().route_is_lemma(k, idx);
-    //         assert(self.flushed_ofs(k) == flushed_ofs);
-
-    //         if buffers_to_child.i().map.contains_key(k) {
-    //             buffers_to_child.i_from_domain(0);
-    //             let buffer_idx = choose |buffer_idx| buffers_to_child.key_in_buffer(0, k, buffer_idx);
-    //             assert(self.get_Node_buffers().key_in_buffer(flushed_ofs as int, k, buffer_idx + flushed_ofs));
-    //             assert(self.get_Node_buffers().key_in_buffer_filtered(self.make_offset_map(), 0, k, buffer_idx + flushed_ofs));
-    //             assert(self.i_buffer().map.contains_key(k));
-    //         }
-
-    //         if self.i_buffer().map.contains_key(k) {
-    //             let buffer_idx = choose |buffer_idx| self.get_Node_buffers().key_in_buffer_filtered(self.make_offset_map(), 0, k, buffer_idx);
-    //             assert(buffers_to_child.key_in_buffer(0, k, buffer_idx-flushed_ofs));
-    //             buffers_to_child.i_from_domain(0);
-    //             assert(buffers_to_child.i().map.contains_key(k));
-    //         }
-
-    //         buffers_to_child.query_agrees_with_i(k, 0);
-    //         self.query_from_refines(k);
-    //         assert(buffers_to_child.query(k) == buffers_to_child.i().query(k));
-    //         assert(self.i_buffer().query(k) == self.get_Node_buffers().query_from(k, flushed_ofs as int));
-    //         BufferSeq::common_buffer_seqs(buffers_to_child, self.get_Node_buffers(), 0, flushed_ofs as int, k);
-    //     }
-    //     assert(buffers_to_child.i().apply_filter(child_domain.key_set()) =~= self.i_buffer().apply_filter(child_domain.key_set()));
-    //     assert(self.flush(child_idx, buffer_gc).i().get_Node_children() =~= self.i().flush(child_idx).get_Node_children());
-
-    //     let a = self.flush(child_idx, buffer_gc);
-    //     let b = self.i().flush(child_idx);
-    //     let keep_keys = all_keys().difference(child_domain.key_set());
-
-    //     a.i_buffer_domain();
-
-    //     assert forall |k|
-    //     ({
-    //         &&& #[trigger] a.i().get_Node_buffer().map.contains_key(k) <==> b.get_Node_buffer().map.contains_key(k)
-    //         &&& a.i().get_Node_buffer().map.contains_key(k) ==> a.i().get_Node_buffer().map[k] == b.get_Node_buffer().map[k]
-    //     }) by {
-    //         if a.i().get_Node_buffer().map.contains_key(k) {
-    //             if child_domain.contains(k) {
-    //                 a.get_Node_pivots().route_is_lemma(k, child_idx as int);
-    //                 assert(a.flushed_ofs(k) == a.get_Node_buffers().len());
-    //                 assert(false);
-    //             }
-    //             assert(keep_keys.contains(k));
-    //             let idx = choose |idx| a.get_Node_buffers().key_in_buffer_filtered(a.make_offset_map(), 0, k, idx);
-    //             let r = a.get_Node_pivots().route(k);
-    //             assert(r != child_idx);
-    //             assert(a.flushed_ofs(k) == self.flushed_ofs(k) - buffer_gc);
-    //             assert(self.get_Node_buffers().key_in_buffer_filtered(self.make_offset_map(), 0, k, idx + buffer_gc));
-    //             assert(b.get_Node_buffer().map.contains_key(k));
-
-    //             self.query_from_refines(k);
-    //             a.query_from_refines(k);
-    //             BufferSeq::common_buffer_seqs(a.get_Node_buffers(), self.get_Node_buffers(), a.flushed_ofs(k) as int, buffer_gc as int, k);
-    //         }
-
-    //         if b.get_Node_buffer().map.contains_key(k) {
-    //             assert(keep_keys.contains(k));
-    //             assert(self.key_in_domain(k));
-    //             assert(a.flushed_ofs(k) == self.flushed_ofs(k) - buffer_gc);
-    //             let idx = choose |idx| self.get_Node_buffers().key_in_buffer_filtered(self.make_offset_map(), 0, k, idx);
-    //             assert(a.get_Node_buffers().key_in_buffer_filtered(a.make_offset_map(), 0, k, idx - buffer_gc));
-    //             assert(a.i().get_Node_buffer().map.contains_key(k));
-    //         }
-    //     }
-    //     assert(a.i().get_Node_buffer().map.dom() =~= b.get_Node_buffer().map.dom());
-    //     assert(a.i().get_Node_buffer() =~= b.get_Node_buffer());
-    // }
-
     // pub proof fn compact_wf(self, start: nat, end: nat, compacted_buffer: Buffer)
     //     requires self.can_compact(start, end, compacted_buffer)
     //     ensures self.compact(start, end, compacted_buffer).wf()
@@ -1342,8 +1046,127 @@ impl LinkedBetree{
         assert(a =~= b);
     }
 
+    pub proof fn flush_new_ranking(self, child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, ranking: Ranking) -> (new_ranking: Ranking)
+        requires 
+            self.wf(), self.has_root(),
+            self.valid_ranking(ranking),
+            self.can_flush(child_idx, buffer_gc),
+            new_addrs.no_duplicates(),
+            self.is_fresh(new_addrs.repr()),
+        ensures 
+            self.valid_ranking(new_ranking),
+            self.flush(child_idx, buffer_gc, new_addrs).valid_ranking(new_ranking),
+            new_ranking.dom() == ranking.dom() + new_addrs.repr(),
+            buffer_gc <= self.root().buffers.len()
+    {
+        let result = self.flush(child_idx, buffer_gc, new_addrs);
+        let old_child_addr = self.child_at_idx(child_idx).root.unwrap();
 
-    // split parent can substitute
+        assert(result.dv.entries.contains_key(new_addrs.addr1));
+        assert(result.dv.entries.contains_key(new_addrs.addr2));
+
+        let old_child = self.dv.entries[old_child_addr];
+        let new_parent = result.dv.entries[new_addrs.addr1];
+        let new_child = result.dv.entries[new_addrs.addr2];
+
+        let old_parent_rank = ranking[self.root.unwrap()];
+        let old_child_rank = ranking[old_child_addr];
+        let new_ranking = ranking.insert(new_addrs.addr1, old_parent_rank).insert(new_addrs.addr2, old_child_rank);
+
+        assert forall |i| #[trigger] new_child.valid_child_index(i) ==> old_child.valid_child_index(i) by {} // trigger
+        assert forall |i| #[trigger] new_parent.valid_child_index(i) ==> self.root().valid_child_index(i) by {} // trigger
+
+        assert(result.dv.valid_ranking(new_ranking));
+
+        assert(buffer_gc <= self.root().buffers.len()) by {
+            let updated_ofs = self.root().flushed.update(child_idx as int, self.root().buffers.len());
+            assert(updated_ofs.offsets[child_idx as int] >= buffer_gc);
+        }
+
+        assert(self.root().buffers.valid(self.buffer_dv)); // trigger
+        assert(old_child.buffers.valid(self.buffer_dv));   // trigger
+
+        assert(result.wf());
+        assert(new_ranking.dom() =~= ranking.dom() + new_addrs.repr());
+
+        new_ranking
+    }
+
+    pub proof fn flush_commutes_with_i(self, child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs)
+        requires 
+            self.acyclic(), 
+            self.can_flush(child_idx, buffer_gc), 
+            new_addrs.no_duplicates(),
+            self.is_fresh(new_addrs.repr()),
+        ensures 
+            self.flush(child_idx, buffer_gc, new_addrs).acyclic(),
+            self.i().can_flush(child_idx, buffer_gc),
+            self.flush(child_idx, buffer_gc, new_addrs).i() == self.i().flush(child_idx, buffer_gc)
+    {
+        let result = self.flush(child_idx, buffer_gc, new_addrs);
+        let new_ranking = self.flush_new_ranking(child_idx, buffer_gc, new_addrs, self.the_ranking());
+        
+        self.i_wf();
+        assert(result.i().get_Node_buffers() =~= self.i().flush(child_idx, buffer_gc).get_Node_buffers());
+
+        let a = result.i_children(result.the_ranking());
+        let b = self.i().flush(child_idx, buffer_gc).get_Node_children();
+
+        self.i_children_lemma(self.the_ranking());
+        result.i_children_lemma(result.the_ranking());
+
+        assert forall |i| 0 <= i < a.len()
+        implies a[i] =~= b[i]
+        by {
+            let old_child = self.child_at_idx(i as nat);
+            self.child_at_idx_acyclic(i as nat);
+            self.child_at_idx_commutes_with_i(i as nat);
+            self.child_at_idx_valid_ranking(i as nat);
+
+            let new_child = result.child_at_idx(i as nat);
+            result.child_at_idx_acyclic(i as nat);
+            result.child_at_idx_commutes_with_i(i as nat);
+            result.child_at_idx_valid_ranking(i as nat);
+
+            if i == child_idx {
+                assert(result.root().valid_child_index(i as nat));
+                assert(a[i].get_Node_children() == new_child.i_children(result.the_ranking()));
+
+                assert(self.i().valid_child_index(i as nat));
+                assert(b[i].get_Node_children() == old_child.i_children(self.the_ranking()));
+
+                assert forall |j| 0 <= j < a[i].get_Node_children().len()
+                implies a[i].get_Node_children()[j] == b[i].get_Node_children()[j]
+                by {
+                    let old_grand_child = old_child.child_at_idx(j as nat);
+                    let new_grand_child = new_child.child_at_idx(j as nat);
+
+                    old_child.child_at_idx_acyclic(j as nat);
+                    new_child.child_at_idx_acyclic(j as nat);
+                    old_child.child_at_idx_valid_ranking(j as nat);
+                    new_child.child_at_idx_valid_ranking(j as nat);
+
+                    assert(a[i].get_Node_children()[j] == new_grand_child.i_node(new_ranking)) by {
+                        new_child.i_children_lemma(result.the_ranking());
+                        new_grand_child.i_node_ignores_ranking(result.the_ranking(), new_ranking);
+                    }
+                    assert(b[i].get_Node_children()[j] == old_grand_child.i_node(new_ranking)) by {
+                        old_child.i_children_lemma(self.the_ranking());
+                        old_grand_child.i_node_ignores_ranking(self.the_ranking(), new_ranking);
+                    }
+
+                    old_grand_child.betree_subdisk_preserves_i_with_ranking(new_grand_child, new_ranking);
+                    assert(new_grand_child.i_node(new_ranking) == old_grand_child.i_node(new_ranking));
+                }
+                assert(a[i].get_Node_children() =~= b[i].get_Node_children());
+            } else {
+                old_child.i_node_ignores_ranking(old_child.the_ranking(), new_ranking);
+                new_child.i_node_ignores_ranking(new_child.the_ranking(), new_ranking);
+                old_child.betree_subdisk_preserves_i_with_ranking(new_child, new_ranking);
+            }
+        }
+        assert(a =~= b);
+    }
 
 } // end impl LinkedBetree
 
@@ -1869,23 +1692,29 @@ impl LinkedBetreeVars::State {
         assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_split(path.i(), request)));
     }
 
-    // pub proof fn internal_flush_refines(self, post: Self, lbl: LinkedBetreeVars::Label, path: Path, child_idx: nat, buffer_gc: nat)
-    //     requires self.inv(), LinkedBetreeVars::State::internal_flush(self, post, lbl, path, child_idx, buffer_gc)
-    //     ensures post.inv(), FilteredBetree::State::next(self.i(), post.i(), lbl.i())
-    // {
-    //     reveal(FilteredBetree::State::next);
-    //     reveal(FilteredBetree::State::next_by);
+    pub proof fn internal_flush_refines(self, post: Self, lbl: LinkedBetreeVars::Label, path: Path, 
+        child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, path_addrs: PathAddrs)
+        requires self.inv(), LinkedBetreeVars::State::internal_flush(self, post, lbl, path, child_idx, buffer_gc, new_addrs, path_addrs)
+        ensures post.inv(), FilteredBetree::State::next(self.i(), post.i(), lbl.i())
+    {
+        reveal(FilteredBetree::State::next);
+        reveal(FilteredBetree::State::next_by);
 
-    //     BetreeNode::i_wf_auto();
-    //     path.target().flush_wf(child_idx, buffer_gc);
-    //     path.substitute_commutes_with_i(path.target().flush(child_idx, buffer_gc));
+        path.i_valid();
+        path.target_commutes_with_i();
+        path.target().flush_commutes_with_i(child_idx, buffer_gc, new_addrs);
 
-    //     path.i_valid();
-    //     path.target_commutes_with_i();
-    //     path.target().flush_commutes_with_i(child_idx, buffer_gc);
+        let replacement = path.target().flush(child_idx, buffer_gc, new_addrs);
+        let old_ranking = self.linked.build_tight_ranking(self.linked.the_ranking());
+        path.valid_ranking_throughout(old_ranking);
 
-    //     assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_flush(path.i(), child_idx)));
-    // }
+        let new_ranking = path.target().flush_new_ranking(child_idx, buffer_gc, new_addrs, old_ranking);
+        path.fresh_substitution_implies_subdisk(replacement, path_addrs);
+        path.substitute_commutes_with_i(replacement, path_addrs, new_ranking);
+        path.substitute(replacement, path_addrs).build_tight_preserves_i();
+
+        assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_flush(path.i(), child_idx, buffer_gc)));
+    }
 
     // pub proof fn internal_compact_refines(self, post: Self, lbl: LinkedBetreeVars::Label, path: Path, start: nat, end: nat, compacted_buffer: Buffer)
     //     requires self.inv(), LinkedBetreeVars::State::internal_compact(self, post, lbl, path, start, end, compacted_buffer)
