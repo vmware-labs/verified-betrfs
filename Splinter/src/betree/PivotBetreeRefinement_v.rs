@@ -634,6 +634,8 @@ impl Path{
         
         if 0 < self.subpath().depth {
             self.subpath().replaced_children_matching_domains(replacement);
+        } else {
+            assert forall |i| #[trigger] self.node.valid_child_index(i) ==> new_children[i as int].wf() by {}
         }
     }
 

@@ -276,6 +276,7 @@ impl DiskView {
     {
         &&& self.entries_wf()
         &&& self.healthy_child_ptrs()
+        &&& self.entries.dom().finite()
     }
 
     pub open spec(checked) fn get(self, ptr: Pointer) -> BetreeNode
@@ -396,6 +397,7 @@ impl LinkedBetree {
     pub open spec(checked) fn wf(self) -> bool
     {
         &&& self.dv.wf()
+        &&& self.buffer_dv.wf()
         &&& self.dv.is_nondangling_ptr(self.root)
         &&& self.dv.is_fresh(self.buffer_dv.repr())
         &&& self.dv.no_dangling_buffer_ptr(self.buffer_dv)

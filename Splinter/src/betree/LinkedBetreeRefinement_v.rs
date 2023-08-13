@@ -4,6 +4,7 @@ use builtin_macros::*;
 use vstd::prelude::*;
 use vstd::map::*;
 use vstd::seq_lib::*;
+use vstd::set_lib::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 use crate::abstract_system::StampedMap_v::*;
@@ -727,14 +728,34 @@ impl DiskView{
     {
         ranking.dom().subset_of(self.entries.dom())
     }
+
+    pub proof fn tight_ranking_is_finite(self, ranking: Ranking)
+        requires self.wf(), self.ranking_is_tight(ranking)
+        ensures ranking.dom().finite()
+    {
+        lemma_len_subset(ranking.dom(), self.entries.dom());
+    }
 }
 
-// TODO(verus): use merged vstd set max instead
 pub proof fn get_max_rank(ranking: Ranking) -> (max: nat)
+    requires ranking.dom().finite()
     ensures forall |addr| #[trigger] ranking.contains_key(addr) ==> ranking[addr] <= max
+    decreases ranking.dom().len()
 {
-    assume(false);
-    1
+    if ranking.dom().is_empty() {
+        assert forall |addr| #[trigger] ranking.contains_key(addr) 
+        implies ranking[addr] <= 0 by { assert(false); }
+        0
+    } else {
+        let addr = ranking.dom().choose();
+        let other_max = get_max_rank(ranking.remove(addr));
+
+        if ranking[addr] > other_max {
+            ranking[addr]
+        } else {
+            other_max
+        }
+    }
 }
 
 impl LinkedBetree{
@@ -1144,6 +1165,9 @@ impl LinkedBetree{
             }
             assert(node.buffers.valid(result.buffer_dv));
         }
+
+        lemma_len_subset(result.dv.entries.dom(), self.dv.entries.dom());
+        lemma_len_subset(result.buffer_dv.entries.dom(), self.buffer_dv.entries.dom());
     }
 
     pub proof fn build_tight_preserves_i(self)
@@ -1160,16 +1184,6 @@ impl LinkedBetree{
         result.betree_subdisk_preserves_i_with_ranking(self, ranking);
         result.i_node_ignores_ranking(ranking, result.the_ranking());
     }
-
-    // pub proof fn build_tight_ranking(self, ranking: Ranking) -> (tight_ranking: Ranking)
-    //     requires self.wf(), self.valid_ranking(ranking)
-    //     ensures 
-    //         self.dv.ranking_is_tight(tight_ranking),
-    //         self.valid_ranking(tight_ranking),
-    //         forall |addr| self.dv.entries.contains_key(addr) && #[trigger] ranking.contains_key(addr) ==> tight_ranking.contains_key(addr),
-    // {
-    //     ranking.restrict(self.dv.entries.dom())
-    // }
 
     pub open spec(checked) fn build_tight_ranking(self, ranking: Ranking) -> Ranking
     {
@@ -1341,6 +1355,8 @@ impl LinkedBetree{
             self.grow(new_root_addr).valid_ranking(new_ranking),
             new_ranking.dom() == old_ranking.dom().insert(new_root_addr),
     {
+        self.dv.tight_ranking_is_finite(old_ranking);
+
         let result = self.grow(new_root_addr);
         let new_rank = 
             if self.has_root() { old_ranking[self.root.unwrap()]+1 } 
@@ -1348,6 +1364,41 @@ impl LinkedBetree{
             else { get_max_rank(old_ranking) + 1 };
         
         old_ranking.insert(new_root_addr, new_rank)
+    }
+
+    pub proof fn fresh_entry_preserves_i(self, other: LinkedBetree, ranking: Ranking, new_addr: Address)
+        requires 
+            self.wf(), other.wf(),
+            self.root == other.root,
+            self.valid_ranking(ranking),
+            other.valid_ranking(ranking),
+            self.dv.is_subdisk(other.dv),
+            self.dv.entries.dom().insert(new_addr) =~= other.dv.entries.dom(),
+            self.buffer_dv == other.buffer_dv,
+            self.is_fresh(Set::empty().insert(new_addr)),
+        ensures 
+            self.i_node(ranking) == other.i_node(ranking)
+        decreases self.get_rank(ranking)
+    {
+        if self.has_root() {
+            self.i_children_lemma(ranking);
+            other.i_children_lemma(ranking);
+
+            assert(self.i_children(ranking).len() == other.i_children(ranking).len());
+            assert forall |i| 0 <= i < self.i_children(ranking).len()
+            implies self.i_children(ranking)[i] == other.i_children(ranking)[i]
+            by {
+                assert(self.root().valid_child_index(i as nat)); // trigger
+                assert(other.root().valid_child_index(i as nat)); // trigger
+
+                self.child_at_idx_acyclic(i as nat);
+                other.child_at_idx_acyclic(i as nat);
+                self.child_at_idx(i as nat).fresh_entry_preserves_i(other.child_at_idx(i as nat), ranking, new_addr);
+            }
+
+            assert(self.i_node(ranking).get_Node_children() =~= other.i_node(ranking).get_Node_children());
+            assert(self.i_node(ranking).get_Node_buffers() =~= other.i_node(ranking).get_Node_buffers());
+        }
     }
 
     pub proof fn grow_commutes_with_i(self, new_root_addr: Address)
@@ -1358,10 +1409,20 @@ impl LinkedBetree{
             self.grow(new_root_addr).inv(),
             self.grow(new_root_addr).i() == self.i().grow()
     {
+        let result = self.grow(new_root_addr);
         let old_ranking = self.build_tight_ranking(self.the_ranking());
         let new_ranking = self.grow_new_ranking(new_root_addr, old_ranking);
+        result.i_children_lemma(result.the_ranking());
 
-        assume(false);
+        result.child_at_idx_acyclic(0);
+        let child = result.child_at_idx(0);
+        child.i_node_ignores_ranking(new_ranking, result.the_ranking());
+        
+        self.i_node_ignores_ranking(self.the_ranking(), new_ranking);
+        self.fresh_entry_preserves_i(child, new_ranking, new_root_addr);
+
+        assert(result.i().get_Node_children() =~= self.i().grow().get_Node_children());
+        assert(result.i().get_Node_buffers() =~= self.i().grow().get_Node_buffers());
     }
 
 } // end impl LinkedBetree

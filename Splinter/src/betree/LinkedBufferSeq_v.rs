@@ -17,6 +17,11 @@ pub struct DiskView {
 }
 
 impl DiskView {
+    pub open spec(checked) fn wf(self) -> bool
+    {
+        self.entries.dom().finite()
+    }
+
     pub open spec(checked) fn repr(self) -> Set<Address>
     {
         self.entries.dom()

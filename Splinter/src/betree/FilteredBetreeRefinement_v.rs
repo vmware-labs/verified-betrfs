@@ -691,6 +691,7 @@ impl BetreeNode {
         assert(a.i().get_Node_buffer() =~= b.get_Node_buffer());
     }
 
+    #[verifier::spinoff_prover]
     pub proof fn compact_wf(self, start: nat, end: nat, compacted_buffer: Buffer)
         requires self.can_compact(start, end, compacted_buffer)
         ensures self.compact(start, end, compacted_buffer).wf()
