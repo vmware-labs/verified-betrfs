@@ -142,21 +142,6 @@ impl BufferSeq {
         }
         assert(self.i(small) =~= self.i(big));
     }
-//     pub open spec(checked) fn i_from(self, idx: int) -> Buffer
-//         recommends 0 <= idx <= self.len()
-//         decreases self.len() - idx when 0 <= idx <= self.len()
-//     {
-//         if self.len() == idx {
-//             Buffer::empty()
-//         } else {
-//             self[idx].merge(self.i_from(idx+1))
-//         }
-//     }
-
-//     pub open spec(checked) fn i(self) -> Buffer
-//     {
-//         self.i_from(0)
-//     }
 
     pub open spec fn key_in_buffer(self, dv: DiskView, from_idx: int, k: Key, buffer_idx: int) -> bool
     {
@@ -164,28 +149,6 @@ impl BufferSeq {
         &&& dv.entries.contains_key(self[buffer_idx])
         &&& dv.get(self[buffer_idx]).map.contains_key(k)
     }
-
-    // pub open spec /*XXX (checked)*/ fn i_filtered_from(self, dv: DiskView, offset_map: OffsetMap, idx: int) -> Buffer
-    //     recommends offset_map.is_total(), 0 <= idx <= self.len() 
-    //     decreases self.len() - idx when 0 <= idx <= self.len()
-    // {
-    //     if self.len() == idx {
-    //         Buffer::empty()
-    //     } else {
-    //         if dv.entries.contains_key(self[idx]) {
-    //             let bottom_buffer = dv.get(self[idx]).apply_filter(offset_map.active_keys(idx as nat));
-    //             bottom_buffer.merge(self.i_filtered_from(dv, offset_map, idx+1))
-    //         } else {
-    //             self.i_filtered_from(dv, offset_map, idx+1)
-    //         }
-    //     }
-    // }
-
-    // pub open spec(checked) fn i_filtered(self, dv: DiskView, offset_map: OffsetMap) -> Buffer 
-    //   recommends offset_map.is_total()
-    // {
-    //     self.i_filtered_from(dv, offset_map, 0)
-    // }
 
     pub open spec(checked) fn key_in_buffer_filtered(self, dv: DiskView, offset_map: OffsetMap, from_idx: int, k: Key, buffer_idx: int) -> bool
         recommends 0 <= from_idx, offset_map.is_total()
@@ -203,138 +166,5 @@ impl BufferSeq {
             self.query_from_commutes_with_i(dv, k, start+1);
         }    
     }
-    
-//     pub proof fn query_agrees_with_i(self, k: Key, start: int)
-//         requires 0 <= start <= self.len(), 
-//         ensures 
-//             self.i_from(start).map.contains_key(k) ==> self.query_from(k, start) == self.i_from(start).map[k],
-//             !self.i_from(start).map.contains_key(k) ==> self.query_from(k, start) == (Message::Update{delta: nop_delta()})
-//         decreases self.len() - start
-//     {
-//         if start < self.len() {
-//             self.query_agrees_with_i(k, start+1);
-//         }
-//     }
-
-//     pub proof fn i_from_domain(self, idx: int)
-//         requires 0 <= idx <= self.len()
-//         ensures forall |k| self.i_from(idx).map.contains_key(k) <==> exists |buffer_idx| self.key_in_buffer(idx, k, buffer_idx)
-//         decreases self.len() - idx
-//     {
-//         assert forall |k| #[trigger] self.i_from(idx).map.contains_key(k) <==> exists |buffer_idx| self.key_in_buffer(idx, k, buffer_idx)
-//         by {
-//             if self.i_from(idx).map.contains_key(k) {
-//                 assert(idx < self.len()); // trigger
-//                 if self.key_in_buffer(idx, k, idx) {
-//                 } else {
-//                     self.i_from_domain(idx+1);
-//                     assert(self.i_from(idx+1).map.contains_key(k));
-
-//                     let next_idx = idx + 1; // TODO(verus): temp measure before forall_arith pr is merged
-//                     let buffer_idx = choose |buffer_idx| self.key_in_buffer(next_idx, k, buffer_idx);
-//                     assert(self.key_in_buffer(idx, k, buffer_idx));
-//                 }
-//             }
-//             if exists |buffer_idx| self.key_in_buffer(idx, k, buffer_idx) {
-//                 let buffer_idx = choose |buffer_idx| self.key_in_buffer(idx, k, buffer_idx);
-//                 if buffer_idx == idx {
-//                     assert(self.i_from(idx).map.contains_key(k));
-//                 } else {
-//                     self.i_from_domain(idx+1);
-//                     assert(self.key_in_buffer(idx+1, k, buffer_idx)); // trigger
-//                     assert(self.i_from(idx+1).map.contains_key(k)); // trigger
-//                 }
-//             }
-//         }
-//     }
-
-//     pub proof fn i_filtered_from_domain(self, offset_map: OffsetMap, idx: int)
-//         requires offset_map.is_total(), 0 <= idx <= self.len()
-//         ensures forall |k| self.i_filtered_from(offset_map, idx).map.contains_key(k)
-//             <==> exists |buffer_idx| self.key_in_buffer_filtered(offset_map, idx, k, buffer_idx)
-//         decreases self.len() - idx
-//     {
-//         let result = self.i_filtered_from(offset_map, idx);
-//         assert forall |k| #[trigger] result.map.contains_key(k)
-//             <==> exists |buffer_idx| self.key_in_buffer_filtered(offset_map, idx, k, buffer_idx)
-//         by {
-//             if result.map.contains_key(k) {
-//                 assert(idx < self.len()); // trigger
-//                 if self.key_in_buffer_filtered(offset_map, idx, k, idx) {
-//                 } else {
-//                     let sub_result = self.i_filtered_from(offset_map, idx+1);
-//                     self.i_filtered_from_domain(offset_map, idx+1);
-//                     assert(sub_result.map.contains_key(k));
-
-//                     let next_idx = idx + 1; // TODO(verus): temp measure before forall_arith pr is merged
-//                     let buffer_idx = choose |buffer_idx| self.key_in_buffer_filtered(offset_map, next_idx, k, buffer_idx);
-//                     assert(self.key_in_buffer_filtered(offset_map, idx, k, buffer_idx));
-//                 }
-//             } 
-//             if exists |buffer_idx| self.key_in_buffer_filtered(offset_map, idx, k, buffer_idx) {
-//                 let buffer_idx = choose |buffer_idx| self.key_in_buffer_filtered(offset_map, idx, k, buffer_idx);
-//                 if buffer_idx == idx {
-//                     assert(result.map.contains_key(k));
-//                 } else {
-//                     let sub_result = self.i_filtered_from(offset_map, idx+1);
-//                     self.i_filtered_from_domain(offset_map, idx+1);
-//                     assert(self.key_in_buffer_filtered(offset_map, idx+1, k, buffer_idx)); // trigger
-//                 }
-//             }
-//         }
-//     }
-
-//     pub proof fn query_from_same_as_i_filtered(self, k: Key, buffer_idx: int, offset_map: OffsetMap)
-//         requires
-//             offset_map.is_total(),
-//             0 <= buffer_idx <= self.len(),
-//             offset_map.offsets[k] <= self.len(),
-//         ensures ({
-//             let start = offset_map.offsets[k] as int;
-//             &&& start <= buffer_idx ==> self.i_filtered_from(offset_map, buffer_idx).query(k) == self.query_from(k, buffer_idx)
-//             &&& start > buffer_idx ==> self.i_filtered_from(offset_map, buffer_idx).query(k) == self.query_from(k, start)
-//         })
-//         decreases self.len() - buffer_idx
-//     {
-//         if buffer_idx < self.len() {
-//             self.query_from_same_as_i_filtered(k, buffer_idx+1, offset_map);
-//         }
-//     }
-
-//     pub proof fn common_buffer_seqs(a: BufferSeq, b: BufferSeq, a_start: int, b_delta: int, key: Key)
-//         requires 0 <= a_start <= a.len(), 0 <= a_start+b_delta <= b.len(), 
-//             a.len()-a_start == b.len()-a_start-b_delta,
-//             forall |i:int| a_start <= i < a.len() ==> a.buffers[i] == b.buffers[i+b_delta]
-//         ensures a.query_from(key, a_start) == b.query_from(key, a_start+b_delta)
-//         decreases a.len()-a_start
-//     {
-//         if a_start < a.len() {
-//             Self::common_buffer_seqs(a, b, a_start+1, b_delta, key);
-//         }
-//     }
-
-//     pub proof fn extend_buffer_seq_lemma(top: BufferSeq, bottom: BufferSeq, key: Key, start: int)
-//         requires 0 <= start <= bottom.len()
-//         ensures bottom.extend(top).query_from(key, start) == bottom.query_from(key, start).merge(top.query(key)) 
-//         decreases bottom.len()-start
-//     {
-//         if start == bottom.len() {
-//             Self::common_buffer_seqs(bottom.extend(top), top, start, 0-start, key);
-//         } else {
-//             assert(bottom.extend(top).buffers[start] == bottom.buffers[start]);
-//             Self::extend_buffer_seq_lemma(top, bottom, key, start+1);
-//         }
-//     }
-
-//     pub proof fn not_present_query_lemma(self, k: Key, start: int)
-//         requires 0 <= start <= self.len(),
-//             forall |i| #![auto] start <= i < self.len() ==> !self[i].map.contains_key(k)
-//         ensures self.query_from(k, start) == (Message::Update{ delta: nop_delta() })
-//         decreases self.len()-start
-//     {
-//         if start < self.len() {
-//             self.not_present_query_lemma(k, start+1);
-//         }
-//     }
 } // end impl BufferSeq
 }  // end verus!
