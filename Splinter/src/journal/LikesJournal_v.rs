@@ -589,11 +589,83 @@ state_machine!{ LikesJournal {
     fn put_inductive(pre: Self, post: Self, lbl: Label, newjournal: LinkedJournal_v::LinkedJournal::State) {
         reveal(LinkedJournal_v::LinkedJournal::State::next_by);
     }
+
+    proof fn discard_old_step_preserves_wf_disk_view(pre: Self, post: Self, lbl: Label)
+    requires
+        pre.wf(),
+        pre.journal.truncated_journal.index_domain_valid(pre.lsn_addr_index),
+        pre.journal.truncated_journal.index_keys_map_to_valid_entries(pre.lsn_addr_index),
+        pre.journal.truncated_journal.index_range_valid(pre.lsn_addr_index),
+        pre.journal.truncated_journal.disk_view.acyclic(),
+        pre.lsn_addr_index == pre.journal.truncated_journal.build_lsn_addr_index(),
+        pre.lsn_addr_index.values() == pre.journal.truncated_journal.representation(),
+        Self::discard_old(pre, post, lbl),
+    ensures
+        post.journal.truncated_journal.wf(),
+    {
+        assume(false); // TODO port this proof
+    }
    
+    proof fn discard_old_step_preserves_wf_and_index(pre: Self, post: Self, lbl: Label)
+    requires
+        pre.wf(),
+        pre.journal.truncated_journal.index_domain_valid(pre.lsn_addr_index),
+        pre.journal.truncated_journal.index_keys_map_to_valid_entries(pre.lsn_addr_index),
+        pre.journal.truncated_journal.index_range_valid(pre.lsn_addr_index),
+        pre.journal.truncated_journal.disk_view.acyclic(),
+        pre.lsn_addr_index == pre.journal.truncated_journal.build_lsn_addr_index(),
+        pre.lsn_addr_index.values() == pre.journal.truncated_journal.representation(),
+        Self::discard_old(pre, post, lbl),
+    ensures
+        post.wf(),
+        post.journal.truncated_journal.index_domain_valid(post.lsn_addr_index),
+        post.journal.truncated_journal.index_keys_map_to_valid_entries(post.lsn_addr_index),
+        post.journal.truncated_journal.index_range_valid(post.lsn_addr_index),
+    {
+        reveal(TruncatedJournal::index_domain_valid);
+        reveal(TruncatedJournal::index_keys_map_to_valid_entries);
+
+        let tj_pre = pre.journal.truncated_journal;
+        let tj_post = post.journal.truncated_journal;
+        let pre_bdy = tj_pre.disk_view.boundary_lsn;
+        let new_bdy = lbl.get_DiscardOld_start_lsn();
+
+        Self::discard_old_step_preserves_wf_disk_view(pre, post, lbl);
+    
+        // prove tj'.diskView.IsNondanglingPointer(tj'.freshestRec);
+        if tj_post.freshest_rec.is_Some() {
+          let msgs = tj_pre.disk_view.entries[tj_pre.freshest_rec.unwrap()].message_seq;
+          let lsn = max(new_bdy as int, msgs.seq_start as int) as nat; // witness
+          assume( post.lsn_addr_index.contains_key(lsn) && post.lsn_addr_index[lsn] == tj_pre.freshest_rec.unwrap() );  // TODO left off
+        }
+        
+        assume(false); // TODO complete this proof
+    }
+
+    proof fn discard_old_maintains_repr_index(pre: Self, post: Self, lbl: Label)
+    requires
+        pre.inv(),
+        post.wf(),
+        Self::discard_old(pre, post, lbl),
+        pre.journal.truncated_journal.disk_view.acyclic(),
+    ensures
+        post.lsn_addr_index == post.journal.truncated_journal.build_lsn_addr_index(),
+    {
+        assume(false);  // TODO more proof porting
+    }
+
     #[inductive(discard_old)]
     fn discard_old_inductive(pre: Self, post: Self, lbl: Label) {
         reveal(LinkedJournal_v::LinkedJournal::State::next_by);
-        assume(false); // missing a proof port here
+
+        Self::discard_old_step_preserves_wf_and_index(pre, post, lbl);
+        let ranking = pre.journal.truncated_journal.disk_view.the_ranking();  // witness to acyclicity
+        assert( post.journal.truncated_journal.disk_view.valid_ranking(ranking) );
+        Self::discard_old_maintains_repr_index(pre, post, lbl);
+        post.journal.truncated_journal.build_lsn_addr_index_gives_representation();
+        assert( post.journal.truncated_journal.index_range_valid(post.lsn_addr_index) );
+        assume(post.journal.truncated_journal.disk_is_tight_wrt_representation()); // TODO something didn't prove for free
+        assert( post.inv() );
     }
 
     #[inductive(internal_journal_marshal)]
