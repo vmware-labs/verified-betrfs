@@ -69,13 +69,13 @@ requires
 ensures
     lsn_disjoint(lsn_addr_index.dom(), msgs) ==>
         lsn_addr_index_append_record(lsn_addr_index, msgs, addr).values()
-        == lsn_addr_index.values() + Set::singleton(addr),
+        == lsn_addr_index.values() + set![addr],
 {
     let out = lsn_addr_index_append_record(lsn_addr_index, msgs, addr);
     // TODO(chris): Dafny needed only one line of proof for this mess; does our stdlib need some
     // better triggers? I wonder if it's down to contains-vs-contains_key
     if lsn_disjoint(lsn_addr_index.dom(), msgs) {
-        let sum = lsn_addr_index.values() + Set::singleton(addr);
+        let sum = lsn_addr_index.values() + set![addr];
         // TODO(chris): #[auto] doesn't work in the assert-forall context?
         assert forall |a| #[trigger] sum.contains(a) implies out.values().contains(a) by {
             // Go find witnesses.
@@ -86,7 +86,7 @@ ensures
                 assert( out.contains_key(msgs.seq_start) );
             }
         };
-        assert( out.values() =~= lsn_addr_index.values() + Set::singleton(addr) );
+        assert( out.values() =~= lsn_addr_index.values() + set![addr] );
     }
 }
 
