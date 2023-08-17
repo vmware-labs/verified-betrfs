@@ -10,12 +10,13 @@ use state_machines_macros::state_machine;
 
 use vstd::prelude::*;
 use vstd::map::*;
+use vstd::math;
 use crate::abstract_system::StampedMap_v::LSN;
 use crate::abstract_system::MsgHistory_v::*;
 use crate::disk::GenericDisk_v::*;
 use crate::disk::GenericDisk_v::AU;
 use crate::journal::LinkedJournal_v;
-use crate::journal::LinkedJournal_v::TruncatedJournal;
+use crate::journal::LinkedJournal_v::{DiskView, TruncatedJournal};
 use crate::journal::LikesJournal_v;
 use crate::journal::LikesJournal_v::LikesJournal;
 use crate::allocation_layer::MiniAllocator_v::*;
@@ -28,23 +29,23 @@ pub struct JournalImage {
 }
 
 impl JournalImage {
-    pub open spec fn wf(self) -> bool
+    pub open spec(checked) fn wf(self) -> bool
     {
         self.tj.wf()
     }
         
-    pub open spec fn accessible_aus(self) -> Set<AU>
+    pub open spec(checked) fn accessible_aus(self) -> Set<AU>
     {
         to_aus(self.tj.disk_view.entries.dom())
     }
 
-    pub open spec fn empty() -> Self
+    pub open spec(checked) fn empty() -> Self
     {
         Self{ tj: LinkedJournal_v::TruncatedJournal::mkfs(), first: 0 }
     }
 }
 
-state_machine!{ LinkedJournal {
+state_machine!{ AllocationJournal {
     fields {
         pub journal: LikesJournal::State,
         
@@ -65,17 +66,17 @@ state_machine!{ LinkedJournal {
         QueryEndLsn{end_lsn: LSN},
         Put{messages: MsgHistory},
         DiscardOld{start_lsn: LSN, require_end: LSN, deallocs: Set<AU>},
-        InternalAllocations{alloc: Set<AU>, deallocs: Set<AU>},
+        InternalAllocations{allocs: Set<AU>, deallocs: Set<AU>},
     }
 
-    pub closed spec fn lbl_wf(lbl: Label) -> bool {
+    pub closed spec(checked) fn lbl_wf(lbl: Label) -> bool {
         match lbl {
             Label::FreezeForCommit{frozen_journal} => frozen_journal.tj.decodable(),
             _ => true,
         }
     }
 
-    pub closed spec fn lbl_i(lbl: Label) -> LikesJournal::Label {
+    pub closed spec(checked) fn lbl_i(lbl: Label) -> LikesJournal::Label {
         match lbl {
             Label::ReadForRecovery{messages} =>
                 LikesJournal::Label::ReadForRecovery{messages},
@@ -87,11 +88,220 @@ state_machine!{ LinkedJournal {
                 LikesJournal::Label::Put{messages},
             Label::DiscardOld{start_lsn, require_end, deallocs} =>
                 LikesJournal::Label::DiscardOld{start_lsn, require_end},
-            Label::InternalAllocations{alloc, deallocs} =>
+            Label::InternalAllocations{allocs, deallocs} =>
                 LikesJournal::Label::Internal{},
         }
     }
 
+    pub open spec(checked) fn wf(self) -> bool {
+        &&& self.journal.wf()
+        &&& self.mini_allocator.wf()
+    }
 
+    pub open spec(checked) fn accessible_aus(self) -> Set<AU> {
+        self.lsn_au_index.values() + self.mini_allocator.allocs.dom()
+    }
+
+    // pub open spec(checked) fn only_advance_likes_journal(
+
+    transition!{ freeze_for_commit(lbl: Label, depth: nat, post_journal: LikesJournal::State) {
+        require pre.wf();
+        require Self::lbl_wf(lbl);
+        require lbl.is_ReadForRecovery();
+        require LikesJournal::State::freeze_for_commit(pre.journal, post_journal, Self::lbl_i(lbl), depth, post_journal.journal);
+        update journal = post_journal;
+    } }
+
+    transition!{ internal_mini_allocator_fill(lbl: Label) {
+        require pre.wf();
+        require Self::lbl_wf(lbl);
+        require lbl.is_InternalAllocations();
+        require lbl.get_InternalAllocations_deallocs() == Set::<AU>::empty();
+        // TODO: maybe we want to eliminate this check and just use the label
+        require lbl.get_InternalAllocations_allocs().disjoint(
+            pre.mini_allocator.allocs.dom());
+        
+        update mini_allocator = pre.mini_allocator.add_aus(lbl.get_InternalAllocations_allocs());
+    } }
+
+    transition!{ internal_mini_allocator_prune(lbl: Label) {
+        require pre.wf();
+        require Self::lbl_wf(lbl);
+        require lbl.is_InternalAllocations();
+        require lbl.get_InternalAllocations_allocs() == Set::<AU>::empty();
+        require forall |au| lbl.get_InternalAllocations_deallocs().contains(au)
+                ==> pre.mini_allocator.can_remove(au);
+        
+        update mini_allocator = pre.mini_allocator.prune(lbl.get_InternalAllocations_deallocs());
+    } }
+
+    // Update lsnAUIndex with by discarding lsn's strictly smaller than bdy
+    pub open spec(checked) fn lsn_au_index_discarding_up_to(lsn_au_index: Map<LSN, AU>, bdy: LSN) -> (out: Map<LSN, AU>)
+//     ensures
+//         out.len(lsn_au_index),
+//         forall |k| out.contains_key(k) :: bdy <= k,
+//         forall |k| lsn_au_index.contains_key(k) && bdy <= k ==> out.contains_key(k),
+    {
+        Map::new(|lsn| lsn_au_index.contains_key(lsn) && bdy <= lsn,
+                 |lsn| lsn_au_index[lsn])
+    }
+
+    transition!{ discard_old(lbl: Label, post_journal: LikesJournal::State) {
+        require pre.wf();
+        require Self::lbl_wf(lbl);
+        require lbl.is_DiscardOld();
+        require LikesJournal::State::discard_old(pre.journal, post_journal, Self::lbl_i(lbl));
+
+        let new_lsn_au_index = Self::lsn_au_index_discarding_up_to(pre.lsn_au_index, lbl.get_DiscardOld_start_lsn());
+        let discarded_aus = pre.lsn_au_index.values().difference(new_lsn_au_index.values());
+        let new_first =
+            if post_journal.journal.truncated_journal.freshest_rec.is_None() { pre.first }
+            else { pre.lsn_au_index[lbl.get_DiscardOld_start_lsn()] };
+        require lbl.get_DiscardOld_deallocs() == discarded_aus;
+
+        update journal = post_journal;
+        update lsn_au_index = new_lsn_au_index;
+        update first = new_first;
+        update mini_allocator = pre.mini_allocator.prune(discarded_aus.intersect(pre.mini_allocator.allocs.dom()));
+      // note that these AUs refine to free (in the frozen freeset) 
+    } }
+
+    pub open spec(checked) fn singleton_index(start_lsn: LSN, end_lsn: LSN, value: AU) -> (index: Map<LSN, AU>)
+    {
+        Map::new(|lsn| start_lsn <= lsn < end_lsn, |lsn| value)
+    }
+    
+    // Update lsnAUIndex with additional lsn's from a new record
+    pub open spec(checked) fn lsn_au_index_append_record(lsn_au_index: Map<LSN, AU>, msgs: MsgHistory, au: AU) -> (out: Map<LSN, AU>)
+    recommends
+        msgs.wf(),
+        msgs.seq_start < msgs.seq_end,   // nonempty history
+    // ensures LikesJournal::lsn_disjoint(lsn_au_index.dom(), msgs)
+    //      ==> out.values() == lsn_au_index.values() + set![au]
+    {
+        // msgs is complete map from seqStart to seqEnd 
+        let update = Self::singleton_index(msgs.seq_start, msgs.seq_end, au);
+        let out = lsn_au_index.union_prefer_right(update);
+        // assertion here in dafny original
+        out
+    }
+
+    pub open spec(checked) fn valid_next_journal_addr(self, addr: Address) -> bool {
+        &&& self.mini_allocator.can_allocate(addr)
+        &&& (self.mini_allocator.curr.is_None() ==> {
+              &&& self.mini_allocator.allocs[addr.au].all_pages_free()
+              &&& addr.page == 0
+        })
+        &&& (self.mini_allocator.curr.is_Some() && self.journal.journal.truncated_journal.freshest_rec.is_Some() ==>
+                addr == self.journal.journal.truncated_journal.freshest_rec.unwrap().next_page())
+    }
+
+    transition!{ internal_journal_marshal(lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal_v::LinkedJournal::State) {
+        require pre.wf();
+        require Self::lbl_wf(lbl);
+        require lbl.is_InternalAllocations();
+        require pre.valid_next_journal_addr(addr);
+        // TODO(jialin): How do we feel about reaching up two layers to a transition? Eww?
+        require LinkedJournal_v::LinkedJournal::State::internal_journal_marshal(
+            pre.journal.journal, post_linked_journal,
+            LikesJournal::State::lbl_i(Self::lbl_i(lbl)), cut, addr);
+        let discard_msgs = pre.journal.journal.unmarshalled_tail.discard_recent(cut);
+        update journal = LikesJournal::State{
+            journal: post_linked_journal,
+            lsn_addr_index: LikesJournal_v::lsn_addr_index_append_record(
+                pre.journal.lsn_addr_index, discard_msgs, addr),
+            };
+        update first = 
+            if pre.journal.journal.truncated_journal.freshest_rec.is_Some() { pre.first }
+            else { addr.au };
+        update mini_allocator = pre.mini_allocator.allocate_and_observe(addr);
+    } }
+
+
+    transition!{ internal_journal_no_op(lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal_v::LinkedJournal::State) {
+        require pre.wf();
+        require Self::lbl_wf(lbl);
+        require lbl.is_InternalAllocations();
+    } }
+    
+    // build LSN index by walking every page
+    pub open spec(checked) fn build_lsn_au_index_page_walk(dv: DiskView, root: Pointer) -> Map<LSN, AU>
+    recommends
+        dv.decodable(root),
+        dv.acyclic(),
+    decreases dv.the_rank_of(root)
+    {
+        if root.is_None() { Map::empty() }
+        else {
+            let curr_msgs = dv.entries[root.unwrap()].message_seq;
+            let update = Self::singleton_index(
+                math::max(dv.boundary_lsn as int, curr_msgs.seq_start as int) as nat, curr_msgs.seq_end, root.unwrap().au);
+            Self::build_lsn_au_index_page_walk(dv, dv.next(root)).union_prefer_right(update)
+        }
+    }
+
+    // inv to prove transitive ranking
+    // Every page in addr.au that is before addr (except page 0) is present 
+    // in the diskview and points to the one before it.
+    pub open spec(checked) fn au_pages_linked_till_first_in_order(dv: DiskView, addr: Address) -> bool
+    {
+        forall |page: nat| 0 <= page < addr.page ==> {
+            &&& let prior_addr = (Address{au: addr.au, page});
+            &&& dv.decodable(Some(prior_addr.next_page()))
+            &&& dv.next(Some(prior_addr.next_page())) == Some(prior_addr)
+        }
+    }
+
+    pub open spec(checked) fn internal_au_pages_fully_linked(dv: DiskView, first: AU) -> bool {
+        forall |addr| dv.entries.contains_key(addr) && addr.au != first ==>
+            Self::au_pages_linked_till_first_in_order(dv, addr)
+    }
+
+    pub proof fn transitive_ranking(dv: LinkedJournal_v::DiskView, root: Address, later: Address, first: AU)
+    requires
+        dv.decodable(Some(later)),
+        dv.acyclic(),
+        root.au != first,
+        root.au == later.au,
+        root.page <= later.page,
+        Self::internal_au_pages_fully_linked(dv, first),
+    // should be less than <= bc it's enough to prove termination, cause later is already < caller's root
+    ensures
+        dv.decodable(Some(root)),
+        dv.the_rank_of(Some(root)) <= dv.the_rank_of(Some(later)),
+    decreases later.page
+    {
+        if root == later { return; }
+        let prior = dv.entries[later].cropped_prior(dv.boundary_lsn);
+        //let prior_addr = Address{au: later.au, page: (later.page-1) as nat};
+        //assert( prior_addr.next_page() == later );
+        //assert( Some(prior_addr) == prior );
+        Self::transitive_ranking(dv, root, prior.unwrap(), first);
+    }
+    
+    pub open spec(checked) fn build_lsn_au_index_au_walk(dv: DiskView, root: Address, last: LSN, first: AU) -> Map<LSN, AU>
+    recommends
+        dv.decodable(Some(root)),
+        dv.acyclic(),
+        root.au != first,
+        root.page == 0,
+        Self::internal_au_pages_fully_linked(dv, first),
+    decreases dv.the_rank_of(Some(root))
+    {
+        // we jump to the first page of each AU and perform an AU walk skipping over pages in the middle 
+        let curr_msgs = dv.entries[root].message_seq;
+        let update = Self::singleton_index(
+            math::max(dv.boundary_lsn as int, curr_msgs.seq_start as int) as nat, last, root.au);
+        let prior = dv.entries[root].cropped_prior(dv.boundary_lsn);
+        let prior_result =
+            if prior.is_none() { map![] }
+            else if prior.unwrap().au == first { Self::build_lsn_au_index_page_walk(dv, prior) }
+            else {
+                // Why does termination proof complete without this invocation?
+                //Self::transitive_ranking(dv, prior.unwrap().first_page(), prior.unwrap(), first);
+                Self::build_lsn_au_index_au_walk(dv, prior.unwrap().first_page(), curr_msgs.seq_start, first)
+            };
+        prior_result.union_prefer_right(update)
+    }
 } } // state_machine
 } // verus
