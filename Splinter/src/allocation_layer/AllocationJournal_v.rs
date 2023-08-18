@@ -341,7 +341,97 @@ state_machine!{ AllocationJournal {
         init mini_allocator = MiniAllocator::empty();
     } }
 
+    //////////////////////////////////////////////////////////////////////////////
+    // AllocationJournalRefinement stuff
+    //
 
+    pub open spec(checked) fn addr_index_consistent_with_au_index(lsn_addr_index: Map<LSN, Address>, lsn_au_index: Map<LSN, AU>) -> bool
+    {
+        &&& lsn_addr_index.dom() == lsn_au_index.dom()
+        &&& forall |lsn| lsn_addr_index.contains_key(lsn) ==> lsn_addr_index[lsn].au == lsn_au_index[lsn]
+    }
+
+    pub open spec(checked) fn journal_pages_not_free(addrs: Set<Address>, allocator: MiniAllocator) -> bool
+    {
+        forall |addr| addrs.contains(addr) ==> addr.wf() && !allocator.can_allocate(addr)
+    }
+
+    pub open spec(checked) fn mini_allocator_follows_freshest_rec(freshest_rec: Pointer, allocator: MiniAllocator) -> bool
+    {
+        allocator.curr.is_Some() ==> {
+            &&& freshest_rec.is_Some()
+            &&& freshest_rec.unwrap().au == allocator.curr.unwrap()
+        }
+    }
+
+    pub open spec(checked) fn get_tj(self) -> TruncatedJournal
+    {
+        self.journal.journal.truncated_journal
+    }
+
+    pub open spec(checked) fn contiguous_lsns(lsn_au_index: Map<LSN, AU>, lsn1: LSN, lsn2: LSN, lsn3: LSN) -> bool
+    {
+        &&& lsn1 <= lsn2 <= lsn3
+        &&& lsn_au_index.contains_key(lsn1)
+        &&& lsn_au_index.contains_key(lsn3)
+        &&& lsn_au_index[lsn1] == lsn_au_index[lsn3]
+        ==> {
+            &&& lsn_au_index.contains_key(lsn2)
+            &&& lsn_au_index[lsn1] == lsn_au_index[lsn2]
+        }
+    }
+
+    pub open spec(checked) fn aus_hold_contiguous_lsns(lsn_au_index: Map<LSN, AU>) -> bool
+    {
+        forall |lsn1, lsn2, lsn3| Self::contiguous_lsns(lsn_au_index, lsn1, lsn2, lsn3)
+    }
+
+    pub open spec(checked) fn valid_first_au(dv: DiskView, lsn_au_index: Map<LSN, AU>, first: AU) -> bool
+    {
+        &&& lsn_au_index.contains_key(dv.boundary_lsn)
+        &&& lsn_au_index[dv.boundary_lsn] == first
+    }
+
+    #[invariant]
+    pub open spec(checked) fn inv(self) -> bool {
+        &&& self.wf()
+        // The following is opaqued in AllocationJournalRefinement.
+        // (Note: that suggests this is a good place to think about
+        // building an isolation cell!)
+        &&& LikesJournal_v::LikesJournal::State::inv(self.journal)
+        &&& Self::addr_index_consistent_with_au_index(self.journal.lsn_addr_index, self.lsn_au_index)
+        &&& Self::journal_pages_not_free(self.journal.lsn_addr_index.values(), self.mini_allocator)
+        &&& Self::mini_allocator_follows_freshest_rec(self.get_tj().freshest_rec, self.mini_allocator)
+        &&& Self::aus_hold_contiguous_lsns(self.lsn_au_index)
+        &&& (self.get_tj().freshest_rec.is_Some()
+            ==> Self::valid_first_au(self.get_tj().disk_view, self.lsn_au_index, self.first))
+        &&& (self.get_tj().freshest_rec.is_Some()
+            ==> Self::internal_au_pages_fully_linked(self.get_tj().disk_view, self.first))
+
+        // TODO: miniAllocator can remove means that it's not in lsnauindex.values
+    }
+
+    #[inductive(freeze_for_commit)]
+    fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label, depth: nat, post_journal: LikesJournal::State) { }
+   
+    #[inductive(internal_mini_allocator_fill)]
+    fn internal_mini_allocator_fill_inductive(pre: Self, post: Self, lbl: Label) { }
+   
+    #[inductive(internal_mini_allocator_prune)]
+    fn internal_mini_allocator_prune_inductive(pre: Self, post: Self, lbl: Label) { }
+   
+    #[inductive(discard_old)]
+    fn discard_old_inductive(pre: Self, post: Self, lbl: Label, post_journal: LikesJournal::State) { }
+   
+    #[inductive(internal_journal_marshal)]
+    fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal_v::LinkedJournal::State) { }
+   
+    #[inductive(internal_journal_no_op)]
+    fn internal_journal_no_op_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal_v::LinkedJournal::State) { }
+   
+    #[inductive(initialize)]
+    fn initialize_inductive(post: Self, journal: LikesJournal::State, image: JournalImage) { }
+    
 
 } } // state_machine
 } // verus
