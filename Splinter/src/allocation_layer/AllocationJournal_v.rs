@@ -303,5 +303,45 @@ state_machine!{ AllocationJournal {
             };
         prior_result.union_prefer_right(update)
     }
+
+    pub open spec(checked) fn build_lsn_au_index(tj: TruncatedJournal, first: AU) -> Map<LSN, AU>
+    recommends
+        tj.decodable(),
+        Self::internal_au_pages_fully_linked(tj.disk_view, first),
+    {
+        match tj.freshest_rec {
+            None => map![],
+            Some(addr) =>
+                // if we are looking at address from the first AU, just walk the pages
+                if addr.au == first { Self::build_lsn_au_index_page_walk(tj.disk_view, tj.freshest_rec) }
+                else {
+                    let last = tj.disk_view.entries[addr].message_seq.seq_end;
+                    Self::build_lsn_au_index_au_walk(tj.disk_view, addr.first_page(), last, first)
+                }
+        }
+    }
+
+    pub open spec(checked) fn wf_addrs(dv: DiskView) -> bool
+    {
+        forall |addr| dv.entries.contains_key(addr) ==> addr.wf()
+    }
+
+    pub open spec(checked) fn valid_journal_image(image: JournalImage) -> bool
+    {
+        &&& Self::wf_addrs(image.tj.disk_view)
+        &&& Self::internal_au_pages_fully_linked(image.tj.disk_view, image.first)
+    }
+
+    init!{ initialize(journal: LikesJournal::State, image: JournalImage) {
+        require Self::valid_journal_image(image);
+        require LikesJournal::State::initialize(journal, image.tj);
+        init journal = journal;
+        init lsn_au_index = Self::build_lsn_au_index(image.tj, image.first);
+        init first = image.first;
+        init mini_allocator = MiniAllocator::empty();
+    } }
+
+
+
 } } // state_machine
 } // verus

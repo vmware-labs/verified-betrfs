@@ -538,7 +538,7 @@ state_machine!{ LikesJournal {
     // TODO(travis): one can shadow field names with argument names, leading
     // to confusing error messages. I suggest the state-machine language
     // should simply treat shadowing as an error.
-    init!{ init0(ijournal: TruncatedJournal) {
+    init!{ initialize(ijournal: TruncatedJournal) {
         require ijournal.decodable();    // An invariant carried by CoordinationSystem from FreezeForCommit, past a crash, back here
         require ijournal.disk_is_tight_wrt_representation();
         init journal = LinkedJournal_v::LinkedJournal::State{
@@ -722,8 +722,8 @@ state_machine!{ LikesJournal {
     fn internal_no_op_inductive(pre: Self, post: Self, lbl: Label) {
     }
    
-    #[inductive(init0)]
-    fn init0_inductive(post: Self, ijournal: TruncatedJournal) {
+    #[inductive(initialize)]
+    fn initialize_inductive(post: Self, ijournal: TruncatedJournal) {
         reveal(TruncatedJournal::index_domain_valid);
         reveal(TruncatedJournal::index_keys_map_to_valid_entries);
         ijournal.disk_view.build_tight_is_awesome(ijournal.freshest_rec);
