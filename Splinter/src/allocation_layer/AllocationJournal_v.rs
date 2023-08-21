@@ -277,12 +277,12 @@ state_machine!{ AllocationJournal {
         forall |page: nat| 0 <= page < addr.page ==> {
             // TODO(chris): let variables in triggers not supported
             &&& dv.decodable(Some(Address{au: addr.au, page}.next_page()))
-            &&& dv.next(Some(Address{au: addr.au, page}.next_page())) == Some(Address{au: addr.au, page})
+            &&& #[trigger] dv.next(Some(Address{au: addr.au, page}.next_page())) == Some(Address{au: addr.au, page})
         }
     }
 
     pub open spec(checked) fn internal_au_pages_fully_linked(dv: DiskView, first: AU) -> bool {
-        forall |addr| dv.entries.contains_key(addr) && addr.au != first ==>
+        forall |addr| #[trigger] dv.entries.contains_key(addr) && addr.au != first ==>
             Self::au_pages_linked_till_first_in_order(dv, addr)
     }
 
@@ -301,10 +301,14 @@ state_machine!{ AllocationJournal {
     decreases later.page
     {
         if root == later { return; }
+
         let prior = dv.entries[later].cropped_prior(dv.boundary_lsn);
-        //let prior_addr = Address{au: later.au, page: (later.page-1) as nat};
-        //assert( prior_addr.next_page() == later );
-        //assert( Some(prior_addr) == prior );
+        let page = (later.page-1) as nat;
+        // tickle trigger in au_pages_linked_till_first_in_order. Dafny's trigger
+        // was easier to hit, evidently.
+        assert(dv.next(Some(Address{au: root.au, page}.next_page())) ==
+               Some(Address{au: root.au, page}));
+
         Self::transitive_ranking(dv, root, prior.unwrap(), first);
     }
 
@@ -386,7 +390,7 @@ state_machine!{ AllocationJournal {
 
     pub open spec(checked) fn wf_addrs(dv: DiskView) -> bool
     {
-        forall |addr| dv.entries.contains_key(addr) ==> addr.wf()
+        forall |addr| #[trigger] dv.entries.contains_key(addr) ==> addr.wf()
     }
 
     pub open spec(checked) fn valid_journal_image(image: JournalImage) -> bool
@@ -411,12 +415,12 @@ state_machine!{ AllocationJournal {
     pub open spec(checked) fn addr_index_consistent_with_au_index(lsn_addr_index: Map<LSN, Address>, lsn_au_index: Map<LSN, AU>) -> bool
     {
         &&& lsn_addr_index.dom() == lsn_au_index.dom()
-        &&& forall |lsn| lsn_addr_index.contains_key(lsn) ==> lsn_addr_index[lsn].au == lsn_au_index[lsn]
+        &&& forall |lsn| #[trigger] lsn_addr_index.contains_key(lsn) ==> lsn_addr_index[lsn].au == lsn_au_index[lsn]
     }
 
     pub open spec(checked) fn journal_pages_not_free(addrs: Set<Address>, allocator: MiniAllocator) -> bool
     {
-        forall |addr| addrs.contains(addr) ==> addr.wf() && !allocator.can_allocate(addr)
+        forall |addr| #[trigger] addrs.contains(addr) ==> addr.wf() && !allocator.can_allocate(addr)
     }
 
     pub open spec(checked) fn mini_allocator_follows_freshest_rec(freshest_rec: Pointer, allocator: MiniAllocator) -> bool
@@ -475,25 +479,35 @@ state_machine!{ AllocationJournal {
     }
 
     #[inductive(freeze_for_commit)]
-    fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label, depth: nat, post_journal: LikesJournal::State) { }
+    fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label, depth: nat, post_journal: LikesJournal::State) {
+        assume(false);  // Dafny had several holes left to fill
+    }
 
     #[inductive(internal_mini_allocator_fill)]
-    fn internal_mini_allocator_fill_inductive(pre: Self, post: Self, lbl: Label) { }
+    fn internal_mini_allocator_fill_inductive(pre: Self, post: Self, lbl: Label) {
+        assume(false);  // Dafny had several holes left to fill
+    }
 
     #[inductive(internal_mini_allocator_prune)]
     fn internal_mini_allocator_prune_inductive(pre: Self, post: Self, lbl: Label) { }
 
     #[inductive(discard_old)]
-    fn discard_old_inductive(pre: Self, post: Self, lbl: Label, post_journal: LikesJournal::State) { }
+    fn discard_old_inductive(pre: Self, post: Self, lbl: Label, post_journal: LikesJournal::State) {
+        assume(false);  // Dafny had several holes left to fill
+    }
 
     #[inductive(internal_journal_marshal)]
-    fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal_v::LinkedJournal::State) { }
+    fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal_v::LinkedJournal::State) {
+        assume(false);  // Dafny had several holes left to fill
+    }
 
     #[inductive(internal_journal_no_op)]
     fn internal_journal_no_op_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal_v::LinkedJournal::State) { }
 
     #[inductive(initialize)]
-    fn initialize_inductive(post: Self, journal: LikesJournal::State, image: JournalImage) { }
+    fn initialize_inductive(post: Self, journal: LikesJournal::State, image: JournalImage) {
+        assume(false);  // Dafny had several holes left to fill
+    }
 
 
 } } // state_machine
