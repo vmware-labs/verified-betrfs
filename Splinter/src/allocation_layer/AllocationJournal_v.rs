@@ -22,7 +22,7 @@ use crate::journal::LikesJournal_v::LikesJournal;
 use crate::allocation_layer::MiniAllocator_v::*;
 
 verus!{
-    
+
 pub struct JournalImage {
     pub tj: TruncatedJournal,
     pub first: AU,
@@ -33,7 +33,7 @@ impl JournalImage {
     {
         self.tj.wf()
     }
-        
+
     pub open spec(checked) fn accessible_aus(self) -> Set<AU>
     {
         to_aus(self.tj.disk_view.entries.dom())
@@ -48,7 +48,7 @@ impl JournalImage {
 state_machine!{ AllocationJournal {
     fields {
         pub journal: LikesJournal::State,
-        
+
         // lsnAUAddrIndex maps in-repr lsn's to their AU addr
         pub lsn_au_index: Map<LSN, AU>,
 
@@ -120,7 +120,7 @@ state_machine!{ AllocationJournal {
         // TODO: maybe we want to eliminate this check and just use the label
         require lbl.get_InternalAllocations_allocs().disjoint(
             pre.mini_allocator.allocs.dom());
-        
+
         update mini_allocator = pre.mini_allocator.add_aus(lbl.get_InternalAllocations_allocs());
     } }
 
@@ -131,7 +131,7 @@ state_machine!{ AllocationJournal {
         require lbl.get_InternalAllocations_allocs() == Set::<AU>::empty();
         require forall |au| lbl.get_InternalAllocations_deallocs().contains(au)
                 ==> pre.mini_allocator.can_remove(au);
-        
+
         update mini_allocator = pre.mini_allocator.prune(lbl.get_InternalAllocations_deallocs());
     } }
 
@@ -163,14 +163,14 @@ state_machine!{ AllocationJournal {
         update lsn_au_index = new_lsn_au_index;
         update first = new_first;
         update mini_allocator = pre.mini_allocator.prune(discarded_aus.intersect(pre.mini_allocator.allocs.dom()));
-      // note that these AUs refine to free (in the frozen freeset) 
+      // note that these AUs refine to free (in the frozen freeset)
     } }
 
     pub open spec(checked) fn singleton_index(start_lsn: LSN, end_lsn: LSN, value: AU) -> (index: Map<LSN, AU>)
     {
         Map::new(|lsn| start_lsn <= lsn < end_lsn, |lsn| value)
     }
-    
+
     // Update lsnAUIndex with additional lsn's from a new record
     pub open spec(checked) fn lsn_au_index_append_record(lsn_au_index: Map<LSN, AU>, msgs: MsgHistory, au: AU) -> (out: Map<LSN, AU>)
     recommends
@@ -179,7 +179,7 @@ state_machine!{ AllocationJournal {
     // ensures LikesJournal::lsn_disjoint(lsn_au_index.dom(), msgs)
     //      ==> out.values() == lsn_au_index.values() + set![au]
     {
-        // msgs is complete map from seqStart to seqEnd 
+        // msgs is complete map from seqStart to seqEnd
         let update = Self::singleton_index(msgs.seq_start, msgs.seq_end, au);
         let out = lsn_au_index.union_prefer_right(update);
         // assertion here in dafny original
@@ -211,7 +211,7 @@ state_machine!{ AllocationJournal {
             lsn_addr_index: LikesJournal_v::lsn_addr_index_append_record(
                 pre.journal.lsn_addr_index, discard_msgs, addr),
             };
-        update first = 
+        update first =
             if pre.journal.journal.truncated_journal.freshest_rec.is_Some() { pre.first }
             else { addr.au };
         update mini_allocator = pre.mini_allocator.allocate_and_observe(addr);
@@ -223,14 +223,43 @@ state_machine!{ AllocationJournal {
         require Self::lbl_wf(lbl);
         require lbl.is_InternalAllocations();
     } }
-    
+
     // build LSN index by walking every page
+//     #[verifier(decreases_by)]
+//     pub proof fn build_lsn_au_index_page_walk_proof(dv: DiskView, root: Pointer)
+//     {
+//         // TODO(chris): Why am I not getting this decreases_when assumption?
+// //         assume({
+// //             &&& dv.decodable(root)
+// //             &&& dv.acyclic()
+// //         });
+// //         assert(dv.decodable(root));
+// //         if root.is_None() { }
+// //         else {
+// // //             assert(dv.entries.contains_key(root.unwrap()));
+// //             if dv.next(root).is_Some() {
+// // //                 assert(dv.entries.contains_key(dv.next(root).unwrap()));
+// //             }
+// //         }
+//     }
+
     pub open spec(checked) fn build_lsn_au_index_page_walk(dv: DiskView, root: Pointer) -> Map<LSN, AU>
     recommends
         dv.decodable(root),
         dv.acyclic(),
     decreases dv.the_rank_of(root)
+        // TODO(chris): this when clause isn't working!
+        when {
+        // TODO(chris): oh look, &&&s not ,s! Let's run with that!
+        &&& dv.decodable(root)
+        &&& dv.acyclic()
+    }
     {
+        decreases_when({
+            &&& dv.decodable(root)
+            &&& dv.acyclic()
+        });
+//         decreases_by(Self::build_lsn_au_index_page_walk_proof);
         if root.is_None() { Map::empty() }
         else {
             let curr_msgs = dv.entries[root.unwrap()].message_seq;
@@ -241,14 +270,14 @@ state_machine!{ AllocationJournal {
     }
 
     // inv to prove transitive ranking
-    // Every page in addr.au that is before addr (except page 0) is present 
+    // Every page in addr.au that is before addr (except page 0) is present
     // in the diskview and points to the one before it.
     pub open spec(checked) fn au_pages_linked_till_first_in_order(dv: DiskView, addr: Address) -> bool
     {
         forall |page: nat| 0 <= page < addr.page ==> {
-            &&& let prior_addr = (Address{au: addr.au, page});
-            &&& dv.decodable(Some(prior_addr.next_page()))
-            &&& dv.next(Some(prior_addr.next_page())) == Some(prior_addr)
+            // TODO(chris): let variables in triggers not supported
+            &&& dv.decodable(Some(Address{au: addr.au, page}.next_page()))
+            &&& dv.next(Some(Address{au: addr.au, page}.next_page())) == Some(Address{au: addr.au, page})
         }
     }
 
@@ -278,7 +307,19 @@ state_machine!{ AllocationJournal {
         //assert( Some(prior_addr) == prior );
         Self::transitive_ranking(dv, root, prior.unwrap(), first);
     }
-    
+
+    #[verifier(decreases_by)]
+    pub proof fn build_lsn_au_index_au_walk_helper(dv: DiskView, root: Address, last: LSN, first: AU)
+    {
+        let prior = dv.entries[root].cropped_prior(dv.boundary_lsn);
+        if prior.is_None() { }
+        else if prior.unwrap().au == first { }
+        else {
+            // Nine lines of boilerplate to insert this one line in the right place. :v/
+            Self::transitive_ranking(dv, prior.unwrap().first_page(), prior.unwrap(), first);
+        }
+    }
+
     pub open spec(checked) fn build_lsn_au_index_au_walk(dv: DiskView, root: Address, last: LSN, first: AU) -> Map<LSN, AU>
     recommends
         dv.decodable(Some(root)),
@@ -288,20 +329,41 @@ state_machine!{ AllocationJournal {
         Self::internal_au_pages_fully_linked(dv, first),
     decreases dv.the_rank_of(Some(root))
     {
-        // we jump to the first page of each AU and perform an AU walk skipping over pages in the middle 
+        decreases_when({
+            &&& dv.decodable(Some(root))
+            &&& dv.acyclic()
+            &&& root.au != first
+            &&& root.page == 0
+            &&& Self::internal_au_pages_fully_linked(dv, first)
+        });
+        decreases_by(Self::build_lsn_au_index_au_walk_helper);
+        // we jump to the first page of each AU and perform an AU walk skipping over pages in the middle
         let curr_msgs = dv.entries[root].message_seq;
         let update = Self::singleton_index(
             math::max(dv.boundary_lsn as int, curr_msgs.seq_start as int) as nat, last, root.au);
         let prior = dv.entries[root].cropped_prior(dv.boundary_lsn);
         let prior_result =
-            if prior.is_none() { map![] }
+            if prior.is_None() { map![] }
             else if prior.unwrap().au == first { Self::build_lsn_au_index_page_walk(dv, prior) }
             else {
-                // Why does termination proof complete without this invocation?
                 //Self::transitive_ranking(dv, prior.unwrap().first_page(), prior.unwrap(), first);
                 Self::build_lsn_au_index_au_walk(dv, prior.unwrap().first_page(), curr_msgs.seq_start, first)
             };
         prior_result.union_prefer_right(update)
+    }
+
+    #[verifier(recommends_by)]
+    pub proof fn build_lsn_au_index_helper(tj: TruncatedJournal, first: AU)
+    {
+        match tj.freshest_rec {
+            None => {},
+            Some(addr) => {
+                if addr.au == first { }
+                else {
+                    Self::transitive_ranking(tj.disk_view, tj.freshest_rec.unwrap().first_page(), tj.freshest_rec.unwrap(), first);
+                }
+            }
+        }
     }
 
     pub open spec(checked) fn build_lsn_au_index(tj: TruncatedJournal, first: AU) -> Map<LSN, AU>
@@ -309,6 +371,7 @@ state_machine!{ AllocationJournal {
         tj.decodable(),
         Self::internal_au_pages_fully_linked(tj.disk_view, first),
     {
+        recommends_by(Self::build_lsn_au_index_helper);
         match tj.freshest_rec {
             None => map![],
             Some(addr) =>
@@ -413,25 +476,25 @@ state_machine!{ AllocationJournal {
 
     #[inductive(freeze_for_commit)]
     fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label, depth: nat, post_journal: LikesJournal::State) { }
-   
+
     #[inductive(internal_mini_allocator_fill)]
     fn internal_mini_allocator_fill_inductive(pre: Self, post: Self, lbl: Label) { }
-   
+
     #[inductive(internal_mini_allocator_prune)]
     fn internal_mini_allocator_prune_inductive(pre: Self, post: Self, lbl: Label) { }
-   
+
     #[inductive(discard_old)]
     fn discard_old_inductive(pre: Self, post: Self, lbl: Label, post_journal: LikesJournal::State) { }
-   
+
     #[inductive(internal_journal_marshal)]
     fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal_v::LinkedJournal::State) { }
-   
+
     #[inductive(internal_journal_no_op)]
     fn internal_journal_no_op_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal_v::LinkedJournal::State) { }
-   
+
     #[inductive(initialize)]
     fn initialize_inductive(post: Self, journal: LikesJournal::State, image: JournalImage) { }
-    
+
 
 } } // state_machine
 } // verus
