@@ -363,7 +363,7 @@ impl TruncatedJournal {
         self.disk_view.entries.contains_key(lsn_addr_index[lsn]),
         self.disk_view.entries[lsn_addr_index[lsn]].contains_lsn(lsn),
     {
-        reveal(Self::index_keys_map_to_valid_entries);
+        reveal(TruncatedJournal::index_keys_map_to_valid_entries);
     }
 
     #[verifier(opaque)]
