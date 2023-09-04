@@ -102,7 +102,25 @@ state_machine!{ AllocationJournal {
         self.lsn_au_index.values() + self.mini_allocator.allocs.dom()
     }
 
-    // pub open spec(checked) fn only_advance_likes_journal(
+    transition!{ discard_old(lbl: Label, post_journal: LikesJournal::State) {
+        require pre.wf();
+        require Self::lbl_wf(lbl);
+        require lbl.is_DiscardOld();
+        require LikesJournal::State::discard_old(pre.journal, post_journal, Self::lbl_i(lbl));
+
+        let new_lsn_au_index = Self::lsn_au_index_discarding_up_to(pre.lsn_au_index, lbl.get_DiscardOld_start_lsn());
+        let discarded_aus = pre.lsn_au_index.values().difference(new_lsn_au_index.values());
+        let new_first =
+            if post_journal.journal.truncated_journal.freshest_rec.is_None() { pre.first }
+            else { pre.lsn_au_index[lbl.get_DiscardOld_start_lsn()] };
+        require lbl.get_DiscardOld_deallocs() == discarded_aus;
+
+        update journal = post_journal;
+        update lsn_au_index = new_lsn_au_index;
+        update first = new_first;
+        update mini_allocator = pre.mini_allocator.prune(discarded_aus.intersect(pre.mini_allocator.allocs.dom()));
+      // note that these AUs refine to free (in the frozen freeset)
+    } }
 
     transition!{ freeze_for_commit(lbl: Label, depth: nat, post_journal: LikesJournal::State) {
         require pre.wf();
@@ -110,6 +128,27 @@ state_machine!{ AllocationJournal {
         require lbl.is_ReadForRecovery();
         require LikesJournal::State::freeze_for_commit(pre.journal, post_journal, Self::lbl_i(lbl), depth, post_journal.journal);
         update journal = post_journal;
+    } }
+
+    transition!{ internal_journal_marshal(lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal_v::LinkedJournal::State) {
+        require pre.wf();
+        require Self::lbl_wf(lbl);
+        require lbl.is_InternalAllocations();
+        require pre.valid_next_journal_addr(addr);
+        // TODO(jialin): How do we feel about reaching up two layers to a transition? Eww?
+        require LinkedJournal_v::LinkedJournal::State::internal_journal_marshal(
+            pre.journal.journal, post_linked_journal,
+            LikesJournal::State::lbl_i(Self::lbl_i(lbl)), cut, addr);
+        let discard_msgs = pre.journal.journal.unmarshalled_tail.discard_recent(cut);
+        update journal = LikesJournal::State{
+            journal: post_linked_journal,
+            lsn_addr_index: LikesJournal_v::lsn_addr_index_append_record(
+                pre.journal.lsn_addr_index, discard_msgs, addr),
+            };
+        update first =
+            if pre.journal.journal.truncated_journal.freshest_rec.is_Some() { pre.first }
+            else { addr.au };
+        update mini_allocator = pre.mini_allocator.allocate_and_observe(addr);
     } }
 
     transition!{ internal_mini_allocator_fill(lbl: Label) {
@@ -135,6 +174,30 @@ state_machine!{ AllocationJournal {
         update mini_allocator = pre.mini_allocator.prune(lbl.get_InternalAllocations_deallocs());
     } }
 
+    // TODO(jonh): delete. Subsumed by only_advance_likes_journal.
+    transition!{ internal_journal_no_op(lbl: Label, post_linked_journal: LinkedJournal_v::LinkedJournal::State) {
+        require pre.wf();
+        require Self::lbl_wf(lbl);
+        require lbl.is_InternalAllocations();
+    } }
+
+    transition!{ only_advance_likes_journal(lbl: Label, depth: nat, post_likes_journal: LikesJournal::State) {
+        require pre.wf();
+        require Self::lbl_wf(lbl);
+        require {
+            ||| lbl.is_ReadForRecovery()
+            ||| lbl.is_QueryEndLsn()
+            ||| lbl.is_Put()
+            // TODO add InternalJournalNoOp?
+        };
+
+        require LikesJournal::State::next(
+            pre.journal, post_likes_journal,
+            Self::lbl_i(lbl));
+
+        update journal = post_likes_journal;
+    } }
+
     // Update lsnAUIndex with by discarding lsn's strictly smaller than bdy
     pub open spec(checked) fn lsn_au_index_discarding_up_to(lsn_au_index: Map<LSN, AU>, bdy: LSN) -> (out: Map<LSN, AU>)
 //     ensures
@@ -145,26 +208,6 @@ state_machine!{ AllocationJournal {
         Map::new(|lsn| lsn_au_index.contains_key(lsn) && bdy <= lsn,
                  |lsn| lsn_au_index[lsn])
     }
-
-    transition!{ discard_old(lbl: Label, post_journal: LikesJournal::State) {
-        require pre.wf();
-        require Self::lbl_wf(lbl);
-        require lbl.is_DiscardOld();
-        require LikesJournal::State::discard_old(pre.journal, post_journal, Self::lbl_i(lbl));
-
-        let new_lsn_au_index = Self::lsn_au_index_discarding_up_to(pre.lsn_au_index, lbl.get_DiscardOld_start_lsn());
-        let discarded_aus = pre.lsn_au_index.values().difference(new_lsn_au_index.values());
-        let new_first =
-            if post_journal.journal.truncated_journal.freshest_rec.is_None() { pre.first }
-            else { pre.lsn_au_index[lbl.get_DiscardOld_start_lsn()] };
-        require lbl.get_DiscardOld_deallocs() == discarded_aus;
-
-        update journal = post_journal;
-        update lsn_au_index = new_lsn_au_index;
-        update first = new_first;
-        update mini_allocator = pre.mini_allocator.prune(discarded_aus.intersect(pre.mini_allocator.allocs.dom()));
-      // note that these AUs refine to free (in the frozen freeset)
-    } }
 
     pub open spec(checked) fn singleton_index(start_lsn: LSN, end_lsn: LSN, value: AU) -> (index: Map<LSN, AU>)
     {
@@ -196,52 +239,6 @@ state_machine!{ AllocationJournal {
                 addr == self.journal.journal.truncated_journal.freshest_rec.unwrap().next_page())
     }
 
-    transition!{ internal_journal_marshal(lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal_v::LinkedJournal::State) {
-        require pre.wf();
-        require Self::lbl_wf(lbl);
-        require lbl.is_InternalAllocations();
-        require pre.valid_next_journal_addr(addr);
-        // TODO(jialin): How do we feel about reaching up two layers to a transition? Eww?
-        require LinkedJournal_v::LinkedJournal::State::internal_journal_marshal(
-            pre.journal.journal, post_linked_journal,
-            LikesJournal::State::lbl_i(Self::lbl_i(lbl)), cut, addr);
-        let discard_msgs = pre.journal.journal.unmarshalled_tail.discard_recent(cut);
-        update journal = LikesJournal::State{
-            journal: post_linked_journal,
-            lsn_addr_index: LikesJournal_v::lsn_addr_index_append_record(
-                pre.journal.lsn_addr_index, discard_msgs, addr),
-            };
-        update first =
-            if pre.journal.journal.truncated_journal.freshest_rec.is_Some() { pre.first }
-            else { addr.au };
-        update mini_allocator = pre.mini_allocator.allocate_and_observe(addr);
-    } }
-
-
-    transition!{ internal_journal_no_op(lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal_v::LinkedJournal::State) {
-        require pre.wf();
-        require Self::lbl_wf(lbl);
-        require lbl.is_InternalAllocations();
-    } }
-
-    // build LSN index by walking every page
-//     #[verifier(decreases_by)]
-//     pub proof fn build_lsn_au_index_page_walk_proof(dv: DiskView, root: Pointer)
-//     {
-//         // TODO(chris): Why am I not getting this decreases_when assumption?
-// //         assume({
-// //             &&& dv.decodable(root)
-// //             &&& dv.acyclic()
-// //         });
-// //         assert(dv.decodable(root));
-// //         if root.is_None() { }
-// //         else {
-// // //             assert(dv.entries.contains_key(root.unwrap()));
-// //             if dv.next(root).is_Some() {
-// // //                 assert(dv.entries.contains_key(dv.next(root).unwrap()));
-// //             }
-// //         }
-//     }
 
     pub open spec(checked) fn build_lsn_au_index_page_walk(dv: DiskView, root: Pointer) -> Map<LSN, AU>
     recommends
@@ -269,16 +266,19 @@ state_machine!{ AllocationJournal {
         }
     }
 
+    pub open spec(checked) fn au_page_linked_in_order(dv: DiskView, addr: Address, page: Page) -> bool
+    {
+        let prior_addr = Address{au: addr.au, page};
+        &&& dv.decodable(Some(prior_addr.next_page()))
+        &&& dv.next(Some(prior_addr.next_page())) == Some(prior_addr)
+    }
+
     // inv to prove transitive ranking
     // Every page in addr.au that is before addr (except page 0) is present
     // in the diskview and points to the one before it.
     pub open spec(checked) fn au_pages_linked_till_first_in_order(dv: DiskView, addr: Address) -> bool
     {
-        forall |page: nat| 0 <= page < addr.page ==> {
-            // TODO(chris): let variables in triggers not supported
-            &&& dv.decodable(Some(Address{au: addr.au, page}.next_page()))
-            &&& #[trigger] dv.next(Some(Address{au: addr.au, page}.next_page())) == Some(Address{au: addr.au, page})
-        }
+        forall |page: nat| 0 <= page < addr.page ==> Self::au_page_linked_in_order(dv, addr, page)
     }
 
     pub open spec(checked) fn internal_au_pages_fully_linked(dv: DiskView, first: AU) -> bool {
@@ -304,10 +304,8 @@ state_machine!{ AllocationJournal {
 
         let prior = dv.entries[later].cropped_prior(dv.boundary_lsn);
         let page = (later.page-1) as nat;
-        // tickle trigger in au_pages_linked_till_first_in_order. Dafny's trigger
-        // was easier to hit, evidently.
-        assert(dv.next(Some(Address{au: root.au, page}.next_page())) ==
-               Some(Address{au: root.au, page}));
+
+        assert( Self::au_page_linked_in_order(dv, later, page) );
 
         Self::transitive_ranking(dv, root, prior.unwrap(), first);
     }
@@ -438,11 +436,12 @@ state_machine!{ AllocationJournal {
 
     pub open spec(checked) fn contiguous_lsns(lsn_au_index: Map<LSN, AU>, lsn1: LSN, lsn2: LSN, lsn3: LSN) -> bool
     {
-        &&& lsn1 <= lsn2 <= lsn3
-        &&& lsn_au_index.contains_key(lsn1)
-        &&& lsn_au_index.contains_key(lsn3)
-        &&& lsn_au_index[lsn1] == lsn_au_index[lsn3]
-        ==> {
+        ({
+            &&& lsn1 <= lsn2 <= lsn3
+            &&& lsn_au_index.contains_key(lsn1)
+            &&& lsn_au_index.contains_key(lsn3)
+            &&& lsn_au_index[lsn1] == lsn_au_index[lsn3]
+        }) ==> {
             &&& lsn_au_index.contains_key(lsn2)
             &&& lsn_au_index[lsn1] == lsn_au_index[lsn2]
         }
@@ -480,20 +479,235 @@ state_machine!{ AllocationJournal {
 
     #[inductive(freeze_for_commit)]
     fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label, depth: nat, post_journal: LikesJournal::State) {
-        assume(false);  // Dafny had several holes left to fill
+        reveal( LinkedJournal_v::LinkedJournal::State::next_by );
     }
 
     #[inductive(internal_mini_allocator_fill)]
     fn internal_mini_allocator_fill_inductive(pre: Self, post: Self, lbl: Label) {
+        // hole in dafny proof
         assume(false);  // Dafny had several holes left to fill
     }
 
     #[inductive(internal_mini_allocator_prune)]
-    fn internal_mini_allocator_prune_inductive(pre: Self, post: Self, lbl: Label) { }
+    fn internal_mini_allocator_prune_inductive(pre: Self, post: Self, lbl: Label) {
+        // dafny had assume false, yet we don't need a proof here!?
+    }
+
+    proof fn smaller_page_has_smaller_lsns(dv: DiskView, prior: Address, later: Address)
+    requires
+        dv.wf(),
+        prior.au == later.au,
+        prior.page < later.page,
+        Self::au_pages_linked_till_first_in_order(dv, later),
+    ensures
+        dv.entries.contains_key(prior),
+        dv.entries.contains_key(later),
+        dv.entries[prior].message_seq.seq_end <= dv.entries[later].message_seq.seq_start,
+    {
+        assume(false); // left off porting proof
+    }
+
+    proof fn invoke_submodule_inv(pre: Self, post: Self)
+    requires
+        Self::inv(pre),
+    ensures
+        post.journal.inv(),
+    {
+        assume(false);  // help, travis -- need access to this result
+    }
+
+
+    // the contiguous LSNs an AU contains are bigger than bdy unless that AU is first.
+    // no, that requires some notion of tightness. Argh.
+    // how about: no two AUs can both contain bdy, and first does, so I don't.
+    // If two AUs both contain bdy, then two pages contain bdy.
+    // Why must LSNs be unique? Because lsn_addr_index is complete?
+    // index_range_valid?
+    proof fn first_unique(self, a: nat, b: nat)
+    requires
+        Self::valid_first_au(self.get_tj().disk_view, self.lsn_au_index, a),
+        Self::valid_first_au(self.get_tj().disk_view, self.lsn_au_index, b),
+    ensures
+        a == b,
+    {
+    }
+
+    /*
+The argument I'd like to make:
+- discard_old removes some pages and keeps others.
+- every page it removes is associated with an lsn seq below new_bdy
+- if a page remains in post.entries, it's either in first or !first
+- if it's in !first, every page in !first remains, because its lsns are above new_bdy
+
+How may we talk about pages that remain?
+- they're what survive build_tight. I guess those pages have unique associations with lsns?
+- page.au != post.first.
+- so post.boundary_lsn is not stored in page.au.
+- so every lsn in page.au is greater than boundary_lsn (this is what's tricky)
+- so every page in page.au is present (differently tricky: uniqueness of lsns)
+
+Lemmas I wish I had:
+- if a page stores an LSN, that page is present in build_tight.
+- if pages a and b store an LSN, a==b
+
+Proof:
+- suppose page.next is absent from post.
+- it stored lsn page.next.start_seq in pre.
+- that lsn is still present in post (because it's bigger than post.boundary_lsn)
+    - if page.next.start_seq < post.boundary_lsn, then page is *not* in post (wish-lemma-1)
+    - if post.end_seq < page.next.start_seq, then page.next.start_seq<addr.start_seq (by au lsns in order), so addr not in post, contradiction.
+- so some page x stores that lsn in post
+- post is a subdisk of pre, so x is in pre
+- contradiction with uniqueness a==x above.
+     */
+    proof fn discard_old_helper(pre: Self, post: Self, lbl: Label, post_journal: LikesJournal::State, addr: Address, page: nat)
+    requires
+        Self::inv(pre),
+        Self::discard_old(pre, post, lbl, post_journal),
+        post.get_tj().disk_view.entries.contains_key(addr),
+        addr.au != pre.first,
+        addr.au != post.first,
+        0 <= page < addr.page,
+    ensures
+        post.get_tj().disk_view.entries.contains_key(Address{au: addr.au, page}.next_page()),
+    decreases addr.page - page
+    {
+        reveal( LikesJournal_v::LikesJournal::State::next );
+        reveal( LikesJournal_v::LikesJournal::State::next_by );
+        reveal( LinkedJournal_v::LinkedJournal::State::next );
+        reveal( LinkedJournal_v::LinkedJournal::State::next_by );
+        Self::invoke_submodule_inv(pre, post);
+
+        if page + 1 == addr.page {
+            assert( post.get_tj().disk_view.entries.contains_key(Address{au: addr.au, page}.next_page()) );
+        } else {
+            let pre_dv = pre.get_tj().disk_view;
+            let post_dv = post.get_tj().disk_view;
+            Self::discard_old_helper(pre, post, lbl, post_journal, addr, page + 1);
+            let ap = Address{au: addr.au, page: page};
+            let ap1 = Address{au: addr.au, page: page+1};
+            let ap2 = Address{au: addr.au, page: page+2};
+            assert( post_dv.entries.contains_key(ap1.next_page()) );
+            assert( pre_dv.entries.contains_key(ap1.next_page()) );
+            assert( pre_dv.entries.contains_key(ap2) );
+        //forall |addr| #[trigger] dv.entries.contains_key(addr) && addr.au != first ==>
+            assert( Self::au_pages_linked_till_first_in_order(pre_dv, addr) );
+            assert( Self::au_page_linked_in_order(pre_dv, addr, page+1) );
+            assert( pre_dv.next(Some(ap2)) == Some(ap1) );
+            assert( pre_dv.entries[ap2] == post_dv.entries[ap2] );
+            assert( pre_dv.boundary_lsn < pre_dv.entries[ap2].message_seq.seq_start );
+            assert( post_dv.boundary_lsn < post_dv.entries[ap2].message_seq.seq_start ) by {
+                if post_dv.entries[ap2].message_seq.seq_end < post_dv.boundary_lsn  {
+                    // no because transition
+                    assert( false );
+                } else {
+                    assert( post.lsn_au_index[post_dv.boundary_lsn] == addr.au );
+                    Self::first_unique(post, post.first, addr.au);
+                    assert(false);
+                }
+            }
+            assert( post_dv.next(Some(ap2)) == Some(ap1) );
+
+            assert( post_dv.entries.contains_key(ap2) );
+            assert( post_dv.entries[ap2].cropped_prior(post_dv.boundary_lsn) == post_dv.next(Some(ap2)) );
+            assert( post_dv.nondangling_pointers() );
+            assert( post_dv.is_nondangling_pointer(post_dv.entries[ap2].cropped_prior(post_dv.boundary_lsn)) );
+            assert( post_dv.is_nondangling_pointer(Some(ap1)) );
+            assert( post_dv.entries.contains_key(ap1) );
+            assert( post_dv.entries.contains_key(Address{au: addr.au, page}.next_page()) );
+        }
+    }
 
     #[inductive(discard_old)]
     fn discard_old_inductive(pre: Self, post: Self, lbl: Label, post_journal: LikesJournal::State) {
-        assume(false);  // Dafny had several holes left to fill
+        reveal( LikesJournal_v::LikesJournal::State::next );
+        reveal( LikesJournal_v::LikesJournal::State::next_by );
+        reveal( LinkedJournal_v::LinkedJournal::State::next );
+        reveal( LinkedJournal_v::LinkedJournal::State::next_by );
+
+        Self::invoke_submodule_inv(pre, post);
+        assert( post.wf() );
+        assert( Self::addr_index_consistent_with_au_index(post.journal.lsn_addr_index, post.lsn_au_index) );
+        assert( Self::journal_pages_not_free(post.journal.lsn_addr_index.values(), post.mini_allocator) );
+        if post.get_tj().freshest_rec.is_Some() && post.get_tj().freshest_rec.is_None() {
+            assert( pre.journal.lsn_addr_index.values().contains(pre.get_tj().freshest_rec.unwrap()) );
+            assert( post.journal.lsn_addr_index =~~= map![] );
+        }
+        assert( Self::mini_allocator_follows_freshest_rec(post.get_tj().freshest_rec, post.mini_allocator) );
+        assert forall |lsn1,lsn2,lsn3| Self::contiguous_lsns(post.lsn_au_index, lsn1, lsn2, lsn3) by
+        {
+            if {
+                &&& lsn1 <= lsn2 <= lsn3
+                &&& post.lsn_au_index.contains_key(lsn1)
+                &&& post.lsn_au_index.contains_key(lsn3)
+                &&& post.lsn_au_index[lsn1] == post.lsn_au_index[lsn3]
+            } {
+                assert( Self::contiguous_lsns(pre.lsn_au_index, lsn1, lsn2, lsn3) );
+            }
+            assert( Self::contiguous_lsns(post.lsn_au_index, lsn1, lsn2, lsn3) );
+        }
+
+        if post.get_tj().freshest_rec.is_Some() {
+            assert( Self::valid_first_au(post.get_tj().disk_view, post.lsn_au_index, post.first) ) by {
+
+                assume(false);  // not sure what's missing, but likes_journal_inv
+                reveal(LinkedJournal_v::TruncatedJournal::index_domain_valid);
+            }
+            let start_lsn = lbl.get_DiscardOld_start_lsn();
+
+            assert forall |addr| ({
+                    &&& post.get_tj().disk_view.entries.contains_key(addr)
+                    &&& addr.au != post.first
+                }) implies #[trigger] Self::au_pages_linked_till_first_in_order(post.get_tj().disk_view, addr) by {
+
+                let lsn = choose |lsn| #![auto] post.journal.lsn_addr_index.contains_key(lsn) && post.journal.lsn_addr_index[lsn] == addr;
+                if addr.au == pre.first {
+                    assert( Self::contiguous_lsns(pre.lsn_au_index, pre.get_tj().disk_view.boundary_lsn, start_lsn, lsn) );
+                    assert( false );
+                } else {
+                    assert( Self::au_pages_linked_till_first_in_order(pre.get_tj().disk_view, addr) );
+                    assert( post.get_tj().index_keys_map_to_valid_entries(post.journal.lsn_addr_index) );
+                    post.get_tj().instantiate_index_keys_map_to_valid_entries(post.journal.lsn_addr_index, lsn);
+                    assert forall |page| 0 <= page < addr.page
+                    implies Self::au_page_linked_in_order(post.get_tj().disk_view, addr, page) by {
+                        assert( Self::au_page_linked_in_order(pre.get_tj().disk_view, addr, page) );
+                        let prior_addr = Address{au: addr.au, page};
+                        assert( pre.get_tj().disk_view.next(Some(prior_addr.next_page())) == Some(prior_addr) );
+                        assert( pre.get_tj().disk_view.entries.contains_key(prior_addr) );
+                        assert( pre.journal.lsn_addr_index.values().contains(prior_addr) );
+                        let prior_addr_lsn = choose |prior_addr_lsn| pre.journal.lsn_addr_index.contains_key(prior_addr_lsn) && pre.journal.lsn_addr_index[prior_addr_lsn] == prior_addr;
+                        assert( pre.get_tj().index_keys_map_to_valid_entries(pre.journal.lsn_addr_index) );
+                        //pre.get_tj().instantiate_index_keys_map_to_valid_entries(pre.journal.lsn_addr_index, prior_addr_lsn);
+
+                        if prior_addr_lsn <= start_lsn {
+                            Self::smaller_page_has_smaller_lsns(pre.get_tj().disk_view, prior_addr, addr);
+                            assert( prior_addr_lsn <= lsn );
+                            assert( Self::contiguous_lsns(pre.lsn_au_index, prior_addr_lsn, start_lsn, lsn) );
+                            assert( false );
+                        }
+                        assert( start_lsn < prior_addr_lsn );   // TODO dup delete
+                        post.get_tj().instantiate_index_keys_map_to_valid_entries(post.journal.lsn_addr_index, prior_addr_lsn);
+                        assert( post.get_tj().disk_view.entries.contains_key(prior_addr) );
+                        // That's the end of the Dafny proof.
+
+//         assert( post.get_tj().disk_view.representation(post.get_tj().freshest_rec).contains(prior_addr.next_page()) );
+    
+                        // every lsn in a range is present
+                        // every 
+        Self::discard_old_helper(pre, post, lbl, post_journal, addr, page);
+        assert( post.get_tj().disk_view.entries.contains_key(prior_addr.next_page()) );
+        assert( post.get_tj().disk_view.decodable(Some(prior_addr.next_page())) );
+        assert( post.get_tj().disk_view.next(Some(prior_addr.next_page())) == Some(prior_addr) );
+                        
+                        assert( Self::au_page_linked_in_order(post.get_tj().disk_view, addr, page) );
+                    }
+                    assume( false );
+                }
+            }
+        }
+
+        assume(false);  // keep translatin', cowboy
+        assert( post.inv() );
     }
 
     #[inductive(internal_journal_marshal)]
@@ -502,13 +716,37 @@ state_machine!{ AllocationJournal {
     }
 
     #[inductive(internal_journal_no_op)]
-    fn internal_journal_no_op_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal_v::LinkedJournal::State) { }
+    fn internal_journal_no_op_inductive(pre: Self, post: Self, lbl: Label, post_linked_journal: LinkedJournal_v::LinkedJournal::State) { }
 
     #[inductive(initialize)]
     fn initialize_inductive(post: Self, journal: LikesJournal::State, image: JournalImage) {
-        assume(false);  // Dafny had several holes left to fill
+        //reveal( LikesJournal::State::initialize );
+        //LikesJournal::State::initialize_inductive(post.journal);
+        assume(false);  // left off
+        assert( LikesJournal_v::LikesJournal::State::inv(post.journal) );
+        assert( Self::addr_index_consistent_with_au_index(post.journal.lsn_addr_index, post.lsn_au_index) );
+        assert( post.get_tj().freshest_rec.is_Some()
+            ==> Self::internal_au_pages_fully_linked(post.get_tj().disk_view, post.first) );
+        assert( post.inv() );
     }
 
+    #[inductive(only_advance_likes_journal)]
+    fn only_advance_likes_journal_inductive(pre: Self, post: Self, lbl: Label, depth: nat, post_likes_journal: LikesJournal::State) {
+        reveal( LikesJournal_v::LikesJournal::State::next );
+        reveal( LikesJournal_v::LikesJournal::State::next_by );
+        reveal( LinkedJournal_v::LinkedJournal::State::next_by );
+    }
+    
+    // lemmas used by other refinements
+    proof fn discard_old_accessible_aus(pre: Self, post: Self, lbl: Label)
+    requires
+        Self::next(pre, post, lbl),
+        lbl.is_DiscardOld(),
+    ensures
+        post.accessible_aus() == pre.accessible_aus() - lbl.get_DiscardOld_deallocs(),
+    {
+        assume(false);  // left off
+    }
 
 } } // state_machine
 } // verus

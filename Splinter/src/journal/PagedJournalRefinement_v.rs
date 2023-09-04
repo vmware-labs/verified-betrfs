@@ -21,6 +21,9 @@ use crate::journal::PagedJournal_v::*;
 verus! {
 
 impl JournalRecord {
+    // TODO(jonh): WHY ISN'T THIS written relative to cropped_prior!?
+    // I suspect I wrote the dfy version of this before the cropped_prior
+    // discipline was done consistently.
     pub open spec /*XXX (checked)*/ fn i(self, boundary_lsn: LSN) -> MsgHistory
     recommends
         self.wf(),

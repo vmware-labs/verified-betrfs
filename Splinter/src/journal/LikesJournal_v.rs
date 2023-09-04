@@ -354,7 +354,7 @@ impl TruncatedJournal {
     }
 
     // one-off explicit instantiation lemma for use in predicates where reveal is verboten.
-    proof fn instantiate_index_keys_map_to_valid_entries(self, lsn_addr_index: LsnAddrIndex, lsn: LSN)
+    pub proof fn instantiate_index_keys_map_to_valid_entries(self, lsn_addr_index: LsnAddrIndex, lsn: LSN)
     requires
         self.wf(),
         lsn_addr_index.contains_key(lsn),
