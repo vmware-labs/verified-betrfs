@@ -789,6 +789,17 @@ impl TruncatedJournal {
         assert( Self::mkfs().disk_view.valid_ranking(map![]) );
     }
 
+    // An extra invariant that makes life easier later in AllocationJournal layer
+    pub open spec fn lsn_has_entry(self, lsn) -> bool {
+        exists |addr| {
+            &&& self.disk_view.entries.contains_key(addr)
+            &&& self.disk_view.entries[addr].message_seq.contains(lsn)
+        }
+    }
+
+    pub open spec fn lsns_have_entries(self) -> bool {
+        forall |lsn| self.seq_start() <= lsn < self.seq_end() ==> self.lsn_has_entry(lsn)
+    }
 }
 
 state_machine!{ LinkedJournal {
@@ -949,6 +960,7 @@ state_machine!{ LinkedJournal {
         &&& self.wf()
         &&& self.truncated_journal.decodable()
         &&& self.truncated_journal.disk_view.acyclic()
+        &&& self.truncated_journal.lsns_have_entries()
     }
 
     #[inductive(read_for_recovery)]

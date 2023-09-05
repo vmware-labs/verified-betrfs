@@ -367,7 +367,7 @@ impl TruncatedJournal {
     }
 
     #[verifier(opaque)]
-    pub closed spec(checked) fn index_domain_valid(self, lsn_addr_index: LsnAddrIndex) -> bool
+    pub open spec(checked) fn index_domain_valid(self, lsn_addr_index: LsnAddrIndex) -> bool
     recommends
         self.wf(),
     {

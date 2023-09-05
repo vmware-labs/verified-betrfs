@@ -558,8 +558,125 @@ Proof:
     - if post.end_seq < page.next.start_seq, then page.next.start_seq<addr.start_seq (by au lsns in order), so addr not in post, contradiction.
 - so some page x stores that lsn in post
 - post is a subdisk of pre, so x is in pre
-- contradiction with uniqueness a==x above.
+- contradiction with uniqueness a==x above. (wish-lemma-2)
      */
+
+    proof fn lsns_unique(dv: DiskView, lsn: LSN, addr1: Address, addr2: Address)
+    requires
+        dv.entries.contains_key(addr1),
+        dv.entries[addr1].message_seq.contains(lsn),
+        dv.entries.contains_key(addr2),
+        dv.entries[addr2].message_seq.contains(lsn),
+    ensures
+        addr1 == addr2,
+    {
+        assume(false);
+    }
+
+//     proof fn discard_old_helper3(pre: Self, post: Self, lbl: Label, post_journal: LikesJournal::State, xaddr: Address, zaddr: Address)
+//     requires
+//         Self::inv(pre),
+//         Self::discard_old(pre, post, lbl, post_journal),
+//         post.get_tj().disk_view.entries.contains_key(zaddr),
+//         zaddr.au != pre.first,
+//         zaddr.au != post.first,
+//         xaddr.au == zaddr.au,
+//         0 <= xaddr.page < zaddr.page,
+//     ensures
+//         post.get_tj().disk_view.entries.contains_key(xaddr),
+//     decreases zaddr.page - xaddr.page
+//     {
+//         let pre_dv = pre.get_tj().disk_view;
+//         let post_dv = post.get_tj().disk_view;
+//         Self::invoke_submodule_inv(pre, post);
+//         let yaddr = Address{au: zaddr.au, page: (zaddr.page - 1) as nat};
+//         let bdylsn = post_dv.boundary_lsn;
+//         assert( post_dv.is_nondangling_pointer(post_dv.entries[zaddr].cropped_prior(bdylsn)) );
+//         assert( bdylsn < post_dv.entries[zaddr].message_seq.seq_start ) by {
+//             if post_dv.entries[zaddr].message_seq.seq_end - 1 < bdylsn {
+//                 // contradiction with index-domain_valid
+//                 reveal(LinkedJournal_v::TruncatedJournal::index_domain_valid);
+//                 assert( post.journal.lsn_addr_index.contains_key(bdylsn) );
+//                 let idxaddr = post.journal.lsn_addr_index[bdylsn];
+//                 assert( post_dv.entries[zaddr].message_seq.seq_start <= bdylsn );
+//                 assert( bdylsn < post_dv.entries[zaddr].message_seq.seq_end );
+//                 assert( post_dv.entries[zaddr].message_seq.contains(bdylsn) );
+//                 Self::lsns_unique(post_dv, bdylsn, zaddr, idxaddr);
+//                 assert( idxaddr == zaddr );    // uniqueness?
+//         //&&& forall |lsn| lsn_addr_index.contains_key(lsn) <==> (self.seq_start() <= lsn < self.seq_end())
+//                 assert(false);
+//             }
+//             assert(bdylsn <= post_dv.entries[zaddr].message_seq.seq_end);
+//             if post_dv.entries[zaddr].message_seq.seq_start <= bdylsn {
+//                 // contradiction with first
+//                 assume(false);
+//             }
+//         }
+// 
+//         assert( post_dv.entries[zaddr] == pre_dv.entries[zaddr] );
+//         assert( pre_dv.entries[zaddr].cropped_prior(pre_dv.boundary_lsn) == pre_dv.entries[zaddr].cropped_prior(post_dv.boundary_lsn) );
+//         assert( Self::au_page_linked_in_order(pre_dv, zaddr, yaddr.page) );
+//         assert( pre_dv.entries[zaddr].cropped_prior(pre_dv.boundary_lsn) == Some(yaddr) ); //
+// 
+//         assert( post_dv.entries.contains_key(yaddr) );
+// 
+//         if xaddr != yaddr {
+//             Self::discard_old_helper3(pre, post, lbl, post_journal, xaddr, yaddr);
+//         }
+// 
+//     }
+
+//     proof fn discard_old_helper2(pre: Self, post: Self, lbl: Label, post_journal: LikesJournal::State, addr: Address, page: nat)
+//     requires
+//         Self::inv(pre),
+//         Self::discard_old(pre, post, lbl, post_journal),
+//         post.get_tj().disk_view.entries.contains_key(addr),
+//         addr.au != pre.first,
+//         addr.au != post.first,
+//         0 <= page < addr.page,
+//     ensures
+//         post.get_tj().disk_view.entries.contains_key(Address{au: addr.au, page}),
+//     {
+//         let pre_dv = pre.get_tj().disk_view;
+//         let post_dv = post.get_tj().disk_view;
+//         let apage = Address{au: addr.au, page: page};
+//         let npage = Address{au: addr.au, page: page+1};
+// 
+//         assume( post_dv.is_sub_disk(pre_dv) );  // build_tight is the easy part...
+//         assert( post_dv.entries.contains_key(addr) );
+//         assert( pre_dv.entries.contains_key(addr) );
+//         assert( Self::au_page_linked_in_order(pre_dv, addr, page) );    // so next is there
+//         assert( pre_dv.entries.contains_key(npage) );
+//         assert( pre_dv.entries.contains_key(apage) );
+//         let plsn = pre_dv.entries[apage].message_seq.seq_start;
+//         assert( pre_dv.entries.contains_key(apage) );
+//         reveal(LinkedJournal_v::TruncatedJournal::index_domain_valid);
+//         assert( pre.journal.lsn_addr_index[plsn] == apage ) by {
+//             assert( pre.journal.lsn_addr_index.contains_key(plsn) );
+//             let lpage = pre.journal.lsn_addr_index[plsn];
+//             pre.get_tj().instantiate_index_keys_map_to_valid_entries(pre.journal.lsn_addr_index, plsn);
+//             assert( pre_dv.entries.contains_key(lpage) );
+//             Self::lsns_unique(pre_dv, plsn, apage, lpage);
+//         }
+//         assert( post.get_tj().seq_start() <= plsn );
+//         assume(false);
+//         let elsn = pre_dv.entries[apage].message_seq.seq_start;
+//         assert( pre.journal.lsn_addr_index[elsn] == apage );
+//         assert( elsn < post.get_tj().seq_end() );
+//         assert( plsn <= elsn );
+//         assert( plsn < post.get_tj().seq_end() );
+//         assert( post.journal.lsn_addr_index.contains_key(plsn) );   // index_domain_valid
+//         let opage = post.journal.lsn_addr_index[plsn];
+//         assert( post_dv.entries.contains_key(opage) );
+//         assert( pre_dv.entries.contains_key(opage) );   // is_sub_disk
+//         assert( opage == apage );   // uniqueness
+//         assert( post_dv.entries.contains_key(apage) );
+// /*
+// the reasoning is:
+// -- addr survived, so addr.seq_start is in range
+// */
+//     }
+
     proof fn discard_old_helper(pre: Self, post: Self, lbl: Label, post_journal: LikesJournal::State, addr: Address, page: nat)
     requires
         Self::inv(pre),
@@ -572,50 +689,91 @@ Proof:
         post.get_tj().disk_view.entries.contains_key(Address{au: addr.au, page}.next_page()),
     decreases addr.page - page
     {
+        assume(false);/// use other helper
+
         reveal( LikesJournal_v::LikesJournal::State::next );
         reveal( LikesJournal_v::LikesJournal::State::next_by );
         reveal( LinkedJournal_v::LinkedJournal::State::next );
         reveal( LinkedJournal_v::LinkedJournal::State::next_by );
         Self::invoke_submodule_inv(pre, post);
 
-        if page + 1 == addr.page {
-            assert( post.get_tj().disk_view.entries.contains_key(Address{au: addr.au, page}.next_page()) );
-        } else {
-            let pre_dv = pre.get_tj().disk_view;
-            let post_dv = post.get_tj().disk_view;
-            Self::discard_old_helper(pre, post, lbl, post_journal, addr, page + 1);
-            let ap = Address{au: addr.au, page: page};
-            let ap1 = Address{au: addr.au, page: page+1};
-            let ap2 = Address{au: addr.au, page: page+2};
-            assert( post_dv.entries.contains_key(ap1.next_page()) );
-            assert( pre_dv.entries.contains_key(ap1.next_page()) );
-            assert( pre_dv.entries.contains_key(ap2) );
-        //forall |addr| #[trigger] dv.entries.contains_key(addr) && addr.au != first ==>
-            assert( Self::au_pages_linked_till_first_in_order(pre_dv, addr) );
-            assert( Self::au_page_linked_in_order(pre_dv, addr, page+1) );
-            assert( pre_dv.next(Some(ap2)) == Some(ap1) );
-            assert( pre_dv.entries[ap2] == post_dv.entries[ap2] );
-            assert( pre_dv.boundary_lsn < pre_dv.entries[ap2].message_seq.seq_start );
-            assert( post_dv.boundary_lsn < post_dv.entries[ap2].message_seq.seq_start ) by {
-                if post_dv.entries[ap2].message_seq.seq_end < post_dv.boundary_lsn  {
-                    // no because transition
-                    assert( false );
-                } else {
-                    assert( post.lsn_au_index[post_dv.boundary_lsn] == addr.au );
-                    Self::first_unique(post, post.first, addr.au);
-                    assert(false);
-                }
-            }
-            assert( post_dv.next(Some(ap2)) == Some(ap1) );
+        let pre_dv = pre.get_tj().disk_view;
+        let post_dv = post.get_tj().disk_view;
+        let ap = Address{au: addr.au, page: page};
+        let ap1 = Address{au: addr.au, page: page+1};
+        let next_lsn = post_dv.entries[ap].message_seq.seq_end;
 
-            assert( post_dv.entries.contains_key(ap2) );
-            assert( post_dv.entries[ap2].cropped_prior(post_dv.boundary_lsn) == post_dv.next(Some(ap2)) );
-            assert( post_dv.nondangling_pointers() );
-            assert( post_dv.is_nondangling_pointer(post_dv.entries[ap2].cropped_prior(post_dv.boundary_lsn)) );
-            assert( post_dv.is_nondangling_pointer(Some(ap1)) );
-            assert( post_dv.entries.contains_key(ap1) );
-            assert( post_dv.entries.contains_key(Address{au: addr.au, page}.next_page()) );
-        }
+        assert( Self::au_page_linked_in_order(pre_dv, addr, page) ); // trigger
+        assert( pre_dv.next(Some(ap1)) == Some(ap) );
+
+        assert( pre_dv.this_block_can_concat(ap1) ); // trigger
+        assert( pre_dv.entries[ap1].message_seq.seq_start == pre_dv.entries[ap].message_seq.seq_end );
+
+        let pre_addr = pre.journal.lsn_addr_index[next_lsn];
+        assert( post_dv.is_sub_disk(pre_dv) );
+        assert( post_dv.entries.contains_key(ap) );
+        assert( post_dv.entries.dom().contains(ap) );
+        assert( post_dv.entries[ap] == pre_dv.entries[ap] );
+        assert( post_dv.entries[ap].message_seq.seq_end == pre_dv.entries[ap].message_seq.seq_end );
+        //assert( pre.get_tj().seq_start() <= post_dv.entries[ap
+        assert( pre.get_tj().seq_start() <= next_lsn );
+        assert( next_lsn < pre.get_tj().seq_end() );
+        pre.get_tj().instantiate_index_keys_map_to_valid_entries(pre.journal.lsn_addr_index, next_lsn);
+        assert( pre_dv.entries.contains_key(ap1) );
+        assert( pre_dv.entries[ap1].message_seq.contains(next_lsn) );
+        assert( pre_dv.entries.contains_key(pre_addr) );
+        assert( pre_dv.entries[pre_addr].message_seq.contains(next_lsn) );
+        Self::lsns_unique(pre_dv, next_lsn, ap1, pre_addr );
+
+        assert( pre.journal.lsn_addr_index[next_lsn] == ap1 );  // by contiguity
+        assert( post.journal.lsn_addr_index[next_lsn] == pre.journal.lsn_addr_index[next_lsn] ); // by we-didn't-touch-that
+        let next_addr_in_post = post.journal.lsn_addr_index[next_lsn];   // by wish-1 completeness.--
+                                                                 // actually already just have it
+                                                                 // as lsn_addr_index
+        assume( pre_dv.entries.contains_key(next_addr_in_post) ); // by subdisk
+        assume( next_addr_in_post == ap1 );   // by wish-2 uniqueness
+
+        assert( post_dv.entries.contains_key(ap1) );
+        assert( ap1 == ap.next_page() );
+        assert( post_dv.entries.contains_key(ap.next_page()) );
+//         if page + 1 == addr.page {
+//             assert( post.get_tj().disk_view.entries.contains_key(Address{au: addr.au, page}.next_page()) );
+//         } else {
+//             let pre_dv = pre.get_tj().disk_view;
+//             let post_dv = post.get_tj().disk_view;
+//             Self::discard_old_helper(pre, post, lbl, post_journal, addr, page + 1);
+//             let ap = Address{au: addr.au, page: page};
+//             let ap1 = Address{au: addr.au, page: page+1};
+//             let ap2 = Address{au: addr.au, page: page+2};
+//             assert( post_dv.entries.contains_key(ap1.next_page()) );
+//             assert( pre_dv.entries.contains_key(ap1.next_page()) );
+//             assert( pre_dv.entries.contains_key(ap2) );
+//         //forall |addr| #[trigger] dv.entries.contains_key(addr) && addr.au != first ==>
+//             assert( Self::au_pages_linked_till_first_in_order(pre_dv, addr) );
+//             assert( Self::au_page_linked_in_order(pre_dv, addr, page+1) );
+//             assert( pre_dv.next(Some(ap2)) == Some(ap1) );
+//             assert( pre_dv.entries[ap2] == post_dv.entries[ap2] );
+//             assert( pre_dv.boundary_lsn < pre_dv.entries[ap2].message_seq.seq_start );
+//             assert( post_dv.boundary_lsn < post_dv.entries[ap2].message_seq.seq_start ) by {
+//                 if post_dv.entries[ap2].message_seq.seq_end < post_dv.boundary_lsn  {
+//                     // no because transition
+//                     assert( false );
+//                 } else {
+//                     assert( post.lsn_au_index[post_dv.boundary_lsn] == addr.au );
+//                     Self::first_unique(post, post.first, addr.au);
+//                     assert(false);
+//                 }
+//             }
+//             assert( post_dv.next(Some(ap2)) == Some(ap1) );
+// 
+//             assert( post_dv.entries.contains_key(ap2) );
+//             assert( post_dv.entries[ap2].cropped_prior(post_dv.boundary_lsn) == post_dv.next(Some(ap2)) );
+//             assert( post_dv.nondangling_pointers() );
+//             assert( post_dv.is_nondangling_pointer(post_dv.entries[ap2].cropped_prior(post_dv.boundary_lsn)) );
+//             assert( post_dv.is_nondangling_pointer(Some(ap1)) );
+//             assert( post_dv.entries.contains_key(ap1) );
+//             assert( post_dv.entries.contains_key(Address{au: addr.au, page}.next_page()) );
+//         }
     }
 
     #[inductive(discard_old)]
