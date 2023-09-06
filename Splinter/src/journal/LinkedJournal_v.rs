@@ -503,6 +503,7 @@ impl DiskView {
         }
     }
 
+    #[verifier::spinoff_prover]  // flaky proof
     pub proof fn build_tight_builds_sub_disks(self, root: Pointer)
     requires
         self.decodable(root),
@@ -514,7 +515,7 @@ impl DiskView {
         if root.is_Some() {
             self.build_tight_builds_sub_disks(self.next(root));
         }
-        assert( self.build_tight(root).is_sub_disk(self) ); // This line shouldn't be necessary
+//         assert( self.build_tight(root).is_sub_disk(self) ); // This line shouldn't be necessary
     }
 
     // Dafny didn't need this proof
@@ -648,7 +649,6 @@ impl DiskView {
         &&& self.entries[addr].message_seq.contains(lsn)
     }
 
-    // An extra invariant that makes life easier later in AllocationJournal layer
     pub open spec fn lsn_has_entry(self, lsn: LSN) -> bool {
         exists |addr| self.lsn_has_entry_at(lsn, addr)
     }
@@ -657,26 +657,20 @@ impl DiskView {
         forall |lsn| self.boundary_lsn <= lsn < self.seq_end(root) ==> self.lsn_has_entry(lsn)
     }
 
-    pub proof fn build_tight_preserves_lsns_have_entries(self, root: Pointer)
+    pub proof fn decodable_implies_lsns_have_entries(self, root: Pointer)
     requires
         self.decodable(root),
         self.acyclic(),
-        self.lsns_have_entries(root),
     ensures
-        self.build_tight(root).lsns_have_entries(root),
+        self.lsns_have_entries(root),
     decreases self.the_rank_of(root)
     {
-        assert forall |lsn| self.seq_start() <= lsn < self.seq_end(root)
-            implies self.build_tight(root).lsn_has_entry(lsn) by {
-            if root.is_Some() && lsn < self.entries[root.unwrap()].message_seq.seq_start {
-                self.build_tight_preserves_lsns_have_entries(self.next(root));
-                self.build_tight_shape(root);
-                let tail = self.build_tight(self.next(root));
-                assert( tail.lsn_has_entry(lsn) );
-                let addr = choose |addr| tail.lsn_has_entry_at(lsn, addr);
-                assert( self.build_tight(root).lsn_has_entry_at(lsn, addr) );  // witness
-            } else {
-                assert( self.build_tight(root).lsn_has_entry_at(lsn, root.unwrap()) );  // witness
+        if root.is_Some() {
+            self.decodable_implies_lsns_have_entries(self.next(root));
+            assert forall |lsn| self.seq_start() <= lsn < self.seq_end(root) implies self.lsn_has_entry(lsn) by {
+                if self.entries[root.unwrap()].message_seq.seq_start <= lsn {
+                    assert( self.lsn_has_entry_at(lsn, root.unwrap()) );
+                }
             }
         }
     }
@@ -842,6 +836,14 @@ impl TruncatedJournal {
         self.disk_view.lsns_have_entries(self.freshest_rec)
     }
 
+    pub proof fn decodable_implies_lsns_have_entries(self)
+    requires
+        self.decodable(),
+    ensures
+        self.lsns_have_entries(),
+    {
+        self.disk_view.decodable_implies_lsns_have_entries(self.freshest_rec);
+    }
 }
 
 state_machine!{ LinkedJournal {
@@ -1002,7 +1004,6 @@ state_machine!{ LinkedJournal {
         &&& self.wf()
         &&& self.truncated_journal.decodable()
         &&& self.truncated_journal.disk_view.acyclic()
-        &&& self.truncated_journal.lsns_have_entries()
     }
 
     #[inductive(read_for_recovery)]
@@ -1026,14 +1027,6 @@ state_machine!{ LinkedJournal {
         assert( cropped_tj.disk_view.valid_ranking(
                 pre.truncated_journal.disk_view.the_ranking()) ); // witness to acyclic
         DiskView::tight_interp(cropped_tj.disk_view, cropped_tj.freshest_rec, tight_tj.disk_view);
-
-        let pre_tj = pre.truncated_journal;
-        assert forall |lsn| cropped_tj.seq_start() <= lsn < cropped_tj.seq_end() implies cropped_tj.disk_view.lsn_has_entry(lsn) by {
-            assert( pre_tj.disk_view.lsn_has_entry(lsn) );    //trigger
-            let addr = choose |addr| pre_tj.disk_view.lsn_has_entry_at(lsn, addr);
-            assert( cropped_tj.disk_view.lsn_has_entry_at(lsn, addr) );   //trigger
-        }
-        cropped_tj.disk_view.build_tight_preserves_lsns_have_entries(cropped_tj.freshest_rec);
     }
 
     #[inductive(internal_journal_marshal)]
@@ -1043,31 +1036,13 @@ state_machine!{ LinkedJournal {
                             if pre.truncated_journal.freshest_rec.is_None() { 0 }
                             else {pre_rank[pre.truncated_journal.freshest_rec.unwrap()] + 1 });
         assert( post.truncated_journal.disk_view.valid_ranking(post_rank) );    // witness
-                                           
-        let pre_tj = pre.truncated_journal;
-        let post_tj = post.truncated_journal;
-        assert forall |lsn| post_tj.seq_start() <= lsn < post_tj.seq_end() implies post_tj.disk_view.lsn_has_entry(lsn) by {
-            if pre.truncated_journal.seq_end() <= lsn {
-                assert( post_tj.disk_view.lsn_has_entry_at(lsn, addr) );    //witness
-            } else {
-                assert( pre_tj.disk_view.lsn_has_entry(lsn) );    //trigger
-                let addr = choose |addr| pre_tj.disk_view.lsn_has_entry_at(lsn, addr);
-                assert( post_tj.disk_view.lsn_has_entry_at(lsn, addr) );    //witness
-            }
-        }
     }
 
     #[inductive(internal_journal_no_op)]
     fn internal_journal_no_op_inductive(pre: Self, post: Self, lbl: Label) { }
 
     #[inductive(initialize)]
-    fn initialize_inductive(post: Self, truncated_journal: TruncatedJournal) {
-        let post_tj = post.truncated_journal;
-        assert forall |lsn| post_tj.seq_start() <= lsn < post_tj.seq_end() implies post_tj.disk_view.lsn_has_entry(lsn) by {
-            assert( false );
-        }
-    }
-
+    fn initialize_inductive(post: Self, truncated_journal: TruncatedJournal) { }
 
 } } // state_machine!
 
