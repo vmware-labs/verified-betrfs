@@ -162,6 +162,20 @@ impl DiskView {
             { 0 }
     }
 
+    pub open spec(checked) fn seq_start(self) -> LSN {
+        self.boundary_lsn
+    }
+
+    pub open spec(checked) fn seq_end(self, root: Pointer) -> LSN
+    recommends
+        self.is_nondangling_pointer(root),   // why not just wf()?
+    {
+        if root.is_None()
+            { self.boundary_lsn }
+        else
+            { self.entries[root.unwrap()].message_seq.seq_end }
+    }
+
     // Simply advance the boundary LSN
     pub open spec(checked) fn discard_old(self, new_boundary: LSN) -> (out: Self)
     recommends
@@ -628,6 +642,44 @@ impl DiskView {
             tight.iptr_ignores_extra_blocks(root, big);
         }
     }
+
+    pub open spec fn lsn_has_entry_at(self, lsn: LSN, addr: Address) -> bool {
+        &&& self.entries.contains_key(addr)
+        &&& self.entries[addr].message_seq.contains(lsn)
+    }
+
+    // An extra invariant that makes life easier later in AllocationJournal layer
+    pub open spec fn lsn_has_entry(self, lsn: LSN) -> bool {
+        exists |addr| self.lsn_has_entry_at(lsn, addr)
+    }
+
+    pub open spec fn lsns_have_entries(self, root: Pointer) -> bool {
+        forall |lsn| self.boundary_lsn <= lsn < self.seq_end(root) ==> self.lsn_has_entry(lsn)
+    }
+
+    pub proof fn build_tight_preserves_lsns_have_entries(self, root: Pointer)
+    requires
+        self.decodable(root),
+        self.acyclic(),
+        self.lsns_have_entries(root),
+    ensures
+        self.build_tight(root).lsns_have_entries(root),
+    decreases self.the_rank_of(root)
+    {
+        assert forall |lsn| self.seq_start() <= lsn < self.seq_end(root)
+            implies self.build_tight(root).lsn_has_entry(lsn) by {
+            if root.is_Some() && lsn < self.entries[root.unwrap()].message_seq.seq_start {
+                self.build_tight_preserves_lsns_have_entries(self.next(root));
+                self.build_tight_shape(root);
+                let tail = self.build_tight(self.next(root));
+                assert( tail.lsn_has_entry(lsn) );
+                let addr = choose |addr| tail.lsn_has_entry_at(lsn, addr);
+                assert( self.build_tight(root).lsn_has_entry_at(lsn, addr) );  // witness
+            } else {
+                assert( self.build_tight(root).lsn_has_entry_at(lsn, root.unwrap()) );  // witness
+            }
+        }
+    }
 }
 
 pub struct TruncatedJournal {
@@ -643,17 +695,14 @@ impl TruncatedJournal {
     }
 
     pub open spec(checked) fn seq_start(self) -> LSN {
-        self.disk_view.boundary_lsn
+        self.disk_view.seq_start()
     }
 
     pub open spec(checked) fn seq_end(self) -> LSN
     recommends
         self.disk_view.is_nondangling_pointer(self.freshest_rec),   // why not just wf()?
     {
-        if self.freshest_rec.is_None() // normal case with empty TJ
-            { self.disk_view.boundary_lsn }
-        else
-            { self.disk_view.entries[self.freshest_rec.unwrap()].message_seq.seq_end }
+        self.disk_view.seq_end(self.freshest_rec)
     }
 
     pub open spec(checked) fn can_discard_to(self, lsn: LSN) -> bool
@@ -789,17 +838,10 @@ impl TruncatedJournal {
         assert( Self::mkfs().disk_view.valid_ranking(map![]) );
     }
 
-    // An extra invariant that makes life easier later in AllocationJournal layer
-    pub open spec fn lsn_has_entry(self, lsn) -> bool {
-        exists |addr| {
-            &&& self.disk_view.entries.contains_key(addr)
-            &&& self.disk_view.entries[addr].message_seq.contains(lsn)
-        }
+    pub open spec fn lsns_have_entries(self) -> bool {
+        self.disk_view.lsns_have_entries(self.freshest_rec)
     }
 
-    pub open spec fn lsns_have_entries(self) -> bool {
-        forall |lsn| self.seq_start() <= lsn < self.seq_end() ==> self.lsn_has_entry(lsn)
-    }
 }
 
 state_machine!{ LinkedJournal {
@@ -984,6 +1026,14 @@ state_machine!{ LinkedJournal {
         assert( cropped_tj.disk_view.valid_ranking(
                 pre.truncated_journal.disk_view.the_ranking()) ); // witness to acyclic
         DiskView::tight_interp(cropped_tj.disk_view, cropped_tj.freshest_rec, tight_tj.disk_view);
+
+        let pre_tj = pre.truncated_journal;
+        assert forall |lsn| cropped_tj.seq_start() <= lsn < cropped_tj.seq_end() implies cropped_tj.disk_view.lsn_has_entry(lsn) by {
+            assert( pre_tj.disk_view.lsn_has_entry(lsn) );    //trigger
+            let addr = choose |addr| pre_tj.disk_view.lsn_has_entry_at(lsn, addr);
+            assert( cropped_tj.disk_view.lsn_has_entry_at(lsn, addr) );   //trigger
+        }
+        cropped_tj.disk_view.build_tight_preserves_lsns_have_entries(cropped_tj.freshest_rec);
     }
 
     #[inductive(internal_journal_marshal)]
@@ -994,13 +1044,29 @@ state_machine!{ LinkedJournal {
                             else {pre_rank[pre.truncated_journal.freshest_rec.unwrap()] + 1 });
         assert( post.truncated_journal.disk_view.valid_ranking(post_rank) );    // witness
                                            
+        let pre_tj = pre.truncated_journal;
+        let post_tj = post.truncated_journal;
+        assert forall |lsn| post_tj.seq_start() <= lsn < post_tj.seq_end() implies post_tj.disk_view.lsn_has_entry(lsn) by {
+            if pre.truncated_journal.seq_end() <= lsn {
+                assert( post_tj.disk_view.lsn_has_entry_at(lsn, addr) );    //witness
+            } else {
+                assert( pre_tj.disk_view.lsn_has_entry(lsn) );    //trigger
+                let addr = choose |addr| pre_tj.disk_view.lsn_has_entry_at(lsn, addr);
+                assert( post_tj.disk_view.lsn_has_entry_at(lsn, addr) );    //witness
+            }
+        }
     }
 
     #[inductive(internal_journal_no_op)]
     fn internal_journal_no_op_inductive(pre: Self, post: Self, lbl: Label) { }
 
     #[inductive(initialize)]
-    fn initialize_inductive(post: Self, truncated_journal: TruncatedJournal) { }
+    fn initialize_inductive(post: Self, truncated_journal: TruncatedJournal) {
+        let post_tj = post.truncated_journal;
+        assert forall |lsn| post_tj.seq_start() <= lsn < post_tj.seq_end() implies post_tj.disk_view.lsn_has_entry(lsn) by {
+            assert( false );
+        }
+    }
 
 
 } } // state_machine!
