@@ -548,8 +548,6 @@ state_machine!{ AllocationJournal {
 
         if post.get_tj().freshest_rec.is_Some() {
             assert( Self::valid_first_au(post.get_tj().disk_view, post.lsn_au_index, post.first) ) by {
-
-                assume(false);  // not sure what's missing, but likes_journal_inv
                 reveal(LinkedJournal_v::TruncatedJournal::index_domain_valid);
             }
             let start_lsn = lbl.get_DiscardOld_start_lsn();
@@ -569,25 +567,29 @@ state_machine!{ AllocationJournal {
                     post.get_tj().instantiate_index_keys_map_to_valid_entries(post.journal.lsn_addr_index, lsn);
                     assert forall |page| 0 < page <= addr.page
                     implies #[trigger] Self::au_page_linked_in_order(post.get_tj().disk_view, Address{au: addr.au, page}) by {
-                        let prior_addr = Address{au: addr.au, page};
-                        assert( Self::au_page_linked_in_order(pre.get_tj().disk_view, prior_addr) );
-                        assume(false);  // fell apart
-                        assert( pre.get_tj().disk_view.next(Some(prior_addr.next_page())) == Some(prior_addr) );
-                        assert( pre.get_tj().disk_view.entries.contains_key(prior_addr) );
-                        assert( pre.journal.lsn_addr_index.values().contains(prior_addr) );
-                        let prior_addr_lsn = choose |prior_addr_lsn| #![auto] pre.journal.lsn_addr_index.contains_key(prior_addr_lsn) && pre.journal.lsn_addr_index[prior_addr_lsn] == prior_addr;
-                        assert( pre.get_tj().index_keys_map_to_valid_entries(pre.journal.lsn_addr_index) );
-                        //pre.get_tj().instantiate_index_keys_map_to_valid_entries(pre.journal.lsn_addr_index, prior_addr_lsn);
-
-                        if prior_addr_lsn <= start_lsn {
-                            Self::smaller_page_has_smaller_lsns(pre.get_tj().disk_view, prior_addr, addr);
-                            assert( prior_addr_lsn <= lsn );
-                            assert( Self::contiguous_lsns(pre.lsn_au_index, prior_addr_lsn, start_lsn, lsn) );
-                            assert( false );
-                        }
-                        assert( start_lsn < prior_addr_lsn );   // TODO dup delete
-                        post.get_tj().instantiate_index_keys_map_to_valid_entries(post.journal.lsn_addr_index, prior_addr_lsn);
-                        assert( post.get_tj().disk_view.entries.contains_key(prior_addr) );
+                        let prior_addr = Address{au: addr.au, page: (addr.page - 1) as nat};
+                        let post_dv = post.get_tj().disk_view;
+                        LEFT OFF: Oh crapola, I had a false here; I must have deleted some relevant proof. Check git.
+                        assert( post_dv.decodable(Some(prior_addr)) );
+                        assert( post_dv.next(Some(addr)) == Some(prior_addr) );
+                        assert( Self::au_page_linked_in_order(post_dv, Address{au: addr.au, page}) );
+//                         assert( Self::au_page_linked_in_order(pre.get_tj().disk_view, prior_addr) );
+//                         assert( pre.get_tj().disk_view.next(Some(prior_addr.next_page())) == Some(prior_addr) );
+//                         assert( pre.get_tj().disk_view.entries.contains_key(prior_addr) );
+//                         assert( pre.journal.lsn_addr_index.values().contains(prior_addr) );
+//                         let prior_addr_lsn = choose |prior_addr_lsn| #![auto] pre.journal.lsn_addr_index.contains_key(prior_addr_lsn) && pre.journal.lsn_addr_index[prior_addr_lsn] == prior_addr;
+//                         assert( pre.get_tj().index_keys_map_to_valid_entries(pre.journal.lsn_addr_index) );
+//                         //pre.get_tj().instantiate_index_keys_map_to_valid_entries(pre.journal.lsn_addr_index, prior_addr_lsn);
+// 
+//                         if prior_addr_lsn <= start_lsn {
+//                             Self::smaller_page_has_smaller_lsns(pre.get_tj().disk_view, prior_addr, addr);
+//                             assert( prior_addr_lsn <= lsn );
+//                             assert( Self::contiguous_lsns(pre.lsn_au_index, prior_addr_lsn, start_lsn, lsn) );
+//                             assert( false );
+//                         }
+//                         assert( start_lsn < prior_addr_lsn );   // TODO dup delete
+//                         post.get_tj().instantiate_index_keys_map_to_valid_entries(post.journal.lsn_addr_index, prior_addr_lsn);
+//                         assert( post.get_tj().disk_view.entries.contains_key(prior_addr) );
                     }
                 }
             }
@@ -598,7 +600,11 @@ state_machine!{ AllocationJournal {
 
     #[inductive(internal_journal_marshal)]
     fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal_v::LinkedJournal::State) {
-        assume(false);  // Dafny had several holes left to fill
+        let discard_msgs = pre.journal.journal.unmarshalled_tail.discard_recent(cut);
+        assert( LikesJournal_v::lsn_disjoint(pre.lsn_au_index.dom(), discard_msgs) ) by {
+            reveal(LinkedJournal_v::TruncatedJournal::index_domain_valid);
+        }
+        assume(false);
     }
 
     #[inductive(internal_journal_no_op)]
