@@ -347,10 +347,10 @@ impl TruncatedJournal {
     recommends
         self.wf(),
     {
-        &&& forall |lsn| #![auto] lsn_addr_index.contains_key(lsn)
-            ==> self.disk_view.entries.contains_key(lsn_addr_index[lsn])
-        &&& forall |lsn| #![auto] lsn_addr_index.contains_key(lsn)
-            ==> self.disk_view.entries[lsn_addr_index[lsn]].contains_lsn(lsn)
+        &&& (forall |lsn| #![auto] lsn_addr_index.contains_key(lsn)
+            ==> self.disk_view.entries.contains_key(lsn_addr_index[lsn]))
+        &&& (forall |lsn| #![auto] lsn_addr_index.contains_key(lsn)
+            ==> self.disk_view.entries[lsn_addr_index[lsn]].contains_lsn(lsn))
     }
 
     // one-off explicit instantiation lemma for use in predicates where reveal is verboten.
@@ -364,6 +364,14 @@ impl TruncatedJournal {
         self.disk_view.entries[lsn_addr_index[lsn]].contains_lsn(lsn),
     {
         reveal(TruncatedJournal::index_keys_map_to_valid_entries);
+    }
+
+    pub open spec(checked) fn valid_entries_appear_in_index(self, lsn_addr_index: LsnAddrIndex) -> bool
+    recommends
+        self.wf(),
+    {
+        &&& (forall |addr, lsn| self.disk_view.entries.contains_key(addr) && #[trigger] self.disk_view.entries[addr].message_seq.contains(lsn)
+            ==> lsn_addr_index.contains_key(lsn) && lsn_addr_index[lsn]==addr)
     }
 
     #[verifier(opaque)]
@@ -565,6 +573,7 @@ state_machine!{ LikesJournal {
         &&& self.lsn_addr_index.values() == tj.representation()
         &&& tj.index_domain_valid(self.lsn_addr_index)
         &&& tj.index_keys_map_to_valid_entries(self.lsn_addr_index)
+        &&& tj.valid_entries_appear_in_index(self.lsn_addr_index)
         &&& tj.index_range_valid(self.lsn_addr_index)
         &&& tj.disk_is_tight_wrt_representation()
         &&& self.imperative_matches_transitive()
