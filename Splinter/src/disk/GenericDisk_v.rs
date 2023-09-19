@@ -32,6 +32,13 @@ impl Address {
     }
 }
 
+pub open spec(checked) fn first_page(ptr: Pointer) -> Pointer {
+    match ptr {
+        None => None,
+        Some(addr) => Some(addr.first_page()),
+    }
+}
+
 pub open spec(checked) fn min_addr(a: Address, b: Address) -> Address {
     if a.au < b.au { a }
     else if a.au > b.au { b }

@@ -5,6 +5,7 @@
 use builtin::*;
 use vstd::prelude::*;
 use vstd::{map::*,multiset::*};
+use vstd::math;
 
 use builtin_macros::*;
 use state_machines_macros::state_machine;
@@ -103,10 +104,15 @@ impl DiskView {
             map!{}
         } else {
             let curr_msgs = self.entries[root.unwrap()].message_seq;
-            let start_lsn = if self.boundary_lsn > curr_msgs.seq_start { self.boundary_lsn } else { curr_msgs.seq_start };
+            let start_lsn = math::max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
+            //let start_lsn = if self.boundary_lsn > curr_msgs.seq_start { self.boundary_lsn } else { curr_msgs.seq_start };
             let update = singleton_index(start_lsn, curr_msgs.seq_end, root.unwrap());
 
-            update.union_prefer_right(self.build_lsn_addr_index(self.entries[root.unwrap()].cropped_prior(self.boundary_lsn)))
+            // Put the update on the "preferred" side to make recursive proof reasoning easier:
+            // there should be no conflicts between update and inner call, but this way we don't
+            // even have to make that argument because update values dominate.
+            self.build_lsn_addr_index(self.entries[root.unwrap()].cropped_prior(self.boundary_lsn))
+                .union_prefer_right(update)
         }
     }
 } // end of impl DiskView
@@ -169,12 +175,12 @@ impl DiskView {
         max(boundary as int, message_seq.seq_start as int) <= lsn < message_seq.seq_end
     }
 
-    spec(checked) fn tj_at(self, root: Pointer) -> TruncatedJournal
+    pub open spec(checked) fn tj_at(self, root: Pointer) -> TruncatedJournal
     {
         TruncatedJournal{freshest_rec: root, disk_view: self}
     }
 
-    proof fn build_lsn_addr_index_domain_valid(self, root: Pointer)
+    pub proof fn build_lsn_addr_index_domain_valid(self, root: Pointer)
     requires
         self.decodable(root),
         self.acyclic(),
@@ -214,7 +220,14 @@ impl DiskView {
         self.acyclic(),
         root.is_Some() ==> self.boundary_lsn < self.entries[root.unwrap()].message_seq.seq_end,
     ensures
-        self.build_lsn_addr_index(root).values() == self.representation(root),
+        // This conclusion is used inside the recursion
+        root.is_Some() ==>
+            forall |lsn| self.build_lsn_addr_index(root).contains_key(lsn) ==>
+                self.boundary_lsn <= lsn < self.entries[root.unwrap()].message_seq.seq_end,
+        // This conclusion is the one we're trying to actually export
+        self.build_lsn_addr_index(root).values() =~= self.representation(root),
+        // TODO(chris): I find it kind of disturbing that the ~ between the == in the line above
+        // is a functional part of the proof strategy. --jonh
     decreases self.the_rank_of(root)
     {
         reveal(TruncatedJournal::index_domain_valid);
@@ -233,31 +246,18 @@ impl DiskView {
                 self.representation(root).contains(addr) implies
                 self.build_lsn_addr_index(root).values().contains(addr) by {
 
-                let right_index = self.build_lsn_addr_index(self.entries[root.unwrap()].cropped_prior(self.boundary_lsn));
-                if right_index.values().contains(addr) {
-                    let lsn = choose |lsn| #![auto] right_index.contains_key(lsn) && right_index[lsn]==addr;
-                    assert( self.build_lsn_addr_index(root).contains_key(lsn) );
-                    assert( self.build_lsn_addr_index(root)[lsn] == addr );
-                    assert( self.build_lsn_addr_index(root).values().contains(addr) );
+                let left_index = self.build_lsn_addr_index(self.entries[root.unwrap()].cropped_prior(self.boundary_lsn));
+                if update.values().contains(addr) {
+                    assert( self.build_lsn_addr_index(root).contains_key(begin) );   // witness
+//                     assert( self.build_lsn_addr_index(root).values().contains(addr) );
                 } else {
-                    assert( update.contains_key(begin) );
-                    assert( update[begin] == addr );
-                    assert( self.build_lsn_addr_index(root) == update.union_prefer_right(right_index) );
-                    //assert( self.index_domain_valid(right_index) );
-                    assume( !right_index.contains_key(begin) );
-                        // seems to depend on somehting like IndexDomainValid, yet
-                        // the original proof didn't. The original proof might also
-                        // have been exploiting union_prefer_left, except that it
-                        // didn't reveal agnostic-MapUnion.
-
-                    assert( self.build_lsn_addr_index(root).contains_key(begin) );
-                    assert( self.build_lsn_addr_index(root).values().contains(addr) );
+                    let lsn = choose |lsn| #![auto] left_index.contains_key(lsn) && left_index[lsn]==addr;
+                    assert( self.build_lsn_addr_index(root).contains_key(lsn) );    // witness
+//                     assert( self.build_lsn_addr_index(root).values().contains(addr) );
                 }
             }
-            assert( self.build_lsn_addr_index(root).values() =~= self.representation(root) );    // TODO remove
-        } else {
-            assert( self.build_lsn_addr_index(root).values() =~= self.representation(root) );    // TODO
-                                                                                          }
+        }
+//         assert( self.build_lsn_addr_index(root).values() =~= self.representation(root) );    // TODO remove
     }
 
     proof fn sub_disk_repr_index(self, big: Self, ptr: Pointer)
