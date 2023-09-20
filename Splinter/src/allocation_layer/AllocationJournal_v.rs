@@ -383,15 +383,7 @@ state_machine!{ AllocationJournal {
         Self::internal_au_pages_fully_linked(tj.disk_view, first),
     {
         recommends_by(Self::build_lsn_au_index_helper);
-        match tj.freshest_rec {
-            None => map![],
-            Some(addr) =>
-                // if we are looking at address from the first AU, just walk the pages
-                if addr.au == first { Self::build_lsn_au_index_page_walk(tj.disk_view, tj.freshest_rec) }
-                else {
-                    Self::build_lsn_au_index_au_walk(tj.disk_view, Some(addr), first)
-                }
-        }
+        Self::build_lsn_au_index_au_walk(tj.disk_view, tj.freshest_rec, first)
     }
 
     pub open spec(checked) fn wf_addrs(dv: DiskView) -> bool
@@ -402,6 +394,7 @@ state_machine!{ AllocationJournal {
     pub open spec(checked) fn valid_journal_image(image: JournalImage) -> bool
     {
         &&& Self::wf_addrs(image.tj.disk_view)
+        &&& image.tj.decodable()
         &&& Self::internal_au_pages_fully_linked(image.tj.disk_view, image.first)
         &&& Self::valid_first_au(image.tj.disk_view, image.first)
     }
@@ -464,15 +457,86 @@ state_machine!{ AllocationJournal {
         forall |lsn1, lsn2, lsn3| Self::contiguous_lsns(lsn_au_index, lsn1, lsn2, lsn3)
     }
 
+    pub proof fn lemma_aus_hold_contiguous_lsns_inner(dv: DiskView, root: Pointer, first: AU)
+    requires
+        dv.decodable(root),
+        dv.acyclic(),
+        Self::internal_au_pages_fully_linked(dv, first),
+    ensures
+        Self::aus_hold_contiguous_lsns(Self::build_lsn_au_index_au_walk(dv, root, first)),
+    {
+        match root {
+            None => {
+                assert( Self::aus_hold_contiguous_lsns(Self::build_lsn_au_index_au_walk(dv, root, first)) );
+            },
+            Some(addr) => {
+                if addr.au == first {
+                    assume(false);
+                    assert( Self::aus_hold_contiguous_lsns(Self::build_lsn_au_index_au_walk(dv, root, first)) );
+                } else {
+                    let bottom = first_page(root);
+                    Self::transitive_ranking(dv, bottom.unwrap(), root.unwrap(), first);
+                    let last_lsn = dv.entries[root.unwrap()].message_seq.seq_end;
+                    let first_lsn = dv.entries[bottom.unwrap()].message_seq.seq_start;
+                    let update = Self::singleton_index(first_lsn, last_lsn, bottom.unwrap().au);
+                    let prior_result = Self::build_lsn_au_index_au_walk(dv, dv.next(bottom), first);
+                    let result = prior_result.union_prefer_right(update);
+                    assert({
+                        &&& dv.decodable(root)
+                        &&& dv.acyclic()
+                        &&& Self::internal_au_pages_fully_linked(dv, first)
+                    });
+                        
+                    assert( result == Self::build_lsn_au_index_au_walk(dv, root, first) );
+                    if root.unwrap().page != 0 {
+                        assume( false );
+                        assert( Self::aus_hold_contiguous_lsns(Self::build_lsn_au_index_au_walk(dv, root, first)) );
+                    } else {
+                        let lsn_au_index = Self::build_lsn_au_index_au_walk(dv, root, first);
+                        assert forall |lsn1, lsn2, lsn3| Self::contiguous_lsns(lsn_au_index, lsn1, lsn2, lsn3) by {
+                            if ({
+                                &&& lsn1 <= lsn2 <= lsn3
+                                &&& lsn_au_index.contains_key(lsn1)
+                                &&& lsn_au_index.contains_key(lsn3)
+                                &&& lsn_au_index[lsn1] == lsn_au_index[lsn3]
+                            }) {
+                                if lsn3 < first_lsn {
+                                    // recursive call
+                                    assume( false );
+                                    assert( lsn_au_index.contains_key(lsn2) );
+                                    assert( lsn_au_index[lsn1] == lsn_au_index[lsn2] );
+                                } else {
+                                    assert( first_lsn <= lsn3 );
+                                    assert( lsn3 < last_lsn );
+                                    if lsn1 < first_lsn {
+                                        assert( lsn_au_index[lsn3] == root.unwrap().au );
+                                        assert( lsn_au_index[lsn1] != root.unwrap().au );
+                                        assert( false );
+                                    }
+                                    assert( first_lsn <= lsn1 );
+                                    // local
+                                    assert( lsn_au_index.contains_key(lsn2) );
+                                    assert( lsn_au_index[lsn1] == lsn_au_index[lsn2] );
+                                }
+                                
+                            }
+                        }
+                        assert( Self::aus_hold_contiguous_lsns(Self::build_lsn_au_index_au_walk(dv, root, first)) );
+                    }
+                }
+            }
+        }
+        
+        assume(false);
+    }
+
     pub proof fn lemma_aus_hold_contiguous_lsns(image: JournalImage)
     requires
         Self::valid_journal_image(image),
     ensures
         Self::aus_hold_contiguous_lsns(Self::build_lsn_au_index(image.tj, image.first)),
     {
-        // can be proven from internal_au_pages_fully_linked + Paged::wf
-        // Proof is a recursion, by AU then by page.
-        assume(false);  // TODO
+        Self::lemma_aus_hold_contiguous_lsns_inner(image.tj.disk_view, image.tj.freshest_rec, image.first)
     }
 
     proof fn smaller_page_has_smaller_lsns(dv: DiskView, prior: Address, later: Address)
