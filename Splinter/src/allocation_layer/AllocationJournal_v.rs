@@ -320,55 +320,6 @@ state_machine!{ AllocationJournal {
     #[verifier(decreases_by)]
     pub proof fn build_lsn_au_index_au_walk_helper(dv: DiskView, root: Pointer, first: AU)
     {
-        let bottom = first_page(root);
-        let prior = dv.next(bottom);
-        if prior.is_None() { }
-        else if prior.unwrap().au == first { }
-        else {
-            // Nine lines of boilerplate to insert this one line in the right place. :v/
-            Self::transitive_ranking(dv, bottom.unwrap(), root.unwrap(), first);
-        }
-    }
-
-    // TODO(jonh): Add inline call to transitive_ranking to satisfy recommendation-not-met
-    // warnings
-    pub open spec/*(checked)*/ fn build_lsn_au_index_au_walk_deleteme(dv: DiskView, root: Pointer, first: AU) -> Map<LSN, AU>
-    recommends
-        dv.decodable(root),
-        dv.acyclic(),
-        root.is_Some(),
-        root.unwrap().au != first,
-        Self::internal_au_pages_fully_linked(dv, first),
-    decreases dv.the_rank_of(root)
-    {
-        decreases_when({
-            &&& dv.decodable(root)
-            &&& dv.acyclic()
-            &&& root.is_Some()
-            &&& root.unwrap().au != first
-            &&& Self::internal_au_pages_fully_linked(dv, first)
-        });
-        decreases_by(Self::build_lsn_au_index_au_walk_helper);
-        let bottom = first_page(root);
-        let last = dv.entries[root.unwrap()].message_seq.seq_end;
-
-        // we jump to the first page of each AU and perform an AU walk skipping over pages in the middle
-        let curr_msgs = dv.entries[bottom.unwrap()].message_seq;
-        let update = Self::singleton_index(curr_msgs.seq_start, last, bottom.unwrap().au);
-        let prior = dv.next(bottom);
-        let prior_result =
-            if prior.is_None() { map![] }
-            else if prior.unwrap().au == first { Self::build_lsn_au_index_page_walk(dv, prior) }
-            else {
-                //Self::transitive_ranking(dv, prior.unwrap().first_page(), prior.unwrap(), first);
-                Self::build_lsn_au_index_au_walk_deleteme(dv, prior, first)
-            };
-        prior_result.union_prefer_right(update)
-    }
-
-    #[verifier(decreases_by)]
-    pub proof fn build_lsn_au_index_au_walk2_helper(dv: DiskView, root: Pointer, first: AU)
-    {
         match root {
             None => {},
             Some(addr) => {
@@ -394,7 +345,7 @@ state_machine!{ AllocationJournal {
             &&& dv.acyclic()
             &&& Self::internal_au_pages_fully_linked(dv, first)
         });
-        decreases_by(Self::build_lsn_au_index_au_walk2_helper);
+        decreases_by(Self::build_lsn_au_index_au_walk_helper);
         match root {
             None => map![],
             Some(addr) => {
@@ -835,24 +786,10 @@ state_machine!{ AllocationJournal {
     decreases dv.the_rank_of(root)
     {
         match root {
-            None => {
-//                 let out: Map<LSN, AU> = map![];
-//                 assert(
-//                     Self::build_lsn_au_index_au_walk(dv, root, first)
-//                     == out
-//                 );
-// 
-                assert( Self::addr_index_consistent_with_au_index(
-                    dv.build_lsn_addr_index(root),
-                    Self::build_lsn_au_index_au_walk(dv, root, first)) );
-            },
+            None => { },
             Some(addr) => {
                 if addr.au == first {
                     Self::build_lsn_au_index_page_walk_consistency(dv, root);
-
-                    assert( Self::addr_index_consistent_with_au_index(
-                        dv.build_lsn_addr_index(root),
-                        Self::build_lsn_au_index_au_walk(dv, root, first)) );
                 }
                 else {
                     if root.unwrap().page != 0 {
@@ -861,70 +798,18 @@ state_machine!{ AllocationJournal {
                         Self::build_lsn_au_index_au_walk_consistency(dv, dv.next(root), first); // recursive call
                         let bottom = first_page(root);
                         Self::smaller_page_has_smaller_lsns(dv, bottom.unwrap(), root.unwrap());
-
-                        assert( Self::addr_index_consistent_with_au_index(
-                            dv.build_lsn_addr_index(root),
-                            Self::build_lsn_au_index_au_walk(dv, root, first)) );
                     } else {
                         // Recurse this function to turn an AU corner.
                         assert( Self::pointer_is_upstream(dv, dv.next(root), first) );
                         Self::build_lsn_au_index_au_walk_consistency(dv, dv.next(root), first);
 
-                    let bottom = first_page(root);
-                    let last_lsn = dv.entries[root.unwrap()].message_seq.seq_end;
-                    let first_lsn = dv.entries[bottom.unwrap()].message_seq.seq_start;
-                    let update = Self::singleton_index(first_lsn, last_lsn, bottom.unwrap().au);
-                    let prior_result = Self::build_lsn_au_index_au_walk(dv, dv.next(bottom), first);
-                    let result = prior_result.union_prefer_right(update);
-
-                //Self::transitive_ranking(dv, bottom.unwrap(), root.unwrap(), first);
-                    let lsn_addr_index = dv.build_lsn_addr_index(root);
-                    let lsn_au_index = Self::build_lsn_au_index_au_walk(dv, root, first);
-                    assert forall |lsn|
-                        lsn_au_index.dom().contains(lsn)
-                        implies lsn_addr_index.dom().contains(lsn) by {
-                        if prior_result.dom().contains(lsn) {
-                            assert( lsn_addr_index.dom().contains(lsn) );
-                        } else {
-
-            let curr_msgs = dv.entries[root.unwrap()].message_seq;
-            let start_lsn = math::max(dv.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
-            let addr_update = LikesJournal_v::singleton_index(start_lsn, curr_msgs.seq_end, root.unwrap());
-            assert( lsn_addr_index == dv.build_lsn_addr_index(dv.next(root)).union_prefer_right(addr_update) );
-            assert( bottom == root );
-            assert( dv.boundary_lsn <= first_lsn );
-            assert( start_lsn == first_lsn );
-            assert( last_lsn == curr_msgs.seq_end );
-
-                            assert( update.dom().contains(lsn) );
-                            assert( lsn_addr_index.dom().contains(lsn) );
+                        if dv.entries[root.unwrap()].message_seq.seq_start < dv.boundary_lsn {
+                            assert( Self::addr_has_lsn(dv, root.unwrap(), dv.boundary_lsn) );
+                            assert( false );
                         }
-                    }
-                        assert(
-                            Self::build_lsn_au_index_au_walk(dv, root, first)
-                            == result );
-                        assert( Self::addr_index_consistent_with_au_index(
-                            dv.build_lsn_addr_index(root),
-                            Self::build_lsn_au_index_au_walk(dv, root, first)) );
                     }
                 }
             }
-        }
-    }
-
-    proof fn build_lsn_au_index_au_consistency(tj: TruncatedJournal, first: AU)
-    requires
-        Self::pointer_is_upstream(tj.disk_view, tj.freshest_rec, first),
-    ensures
-        Self::addr_index_consistent_with_au_index(
-            tj.build_lsn_addr_index(),
-            Self::build_lsn_au_index(tj, first)),
-    {
-        let TruncatedJournal{disk_view: dv, freshest_rec: root} = tj;
-        if root.unwrap().au == first {
-            Self::build_lsn_au_index_page_walk_consistency(dv, root);
-        } else {
-            Self::build_lsn_au_index_au_walk_consistency(dv, root, first);
         }
     }
 
@@ -936,7 +821,8 @@ state_machine!{ AllocationJournal {
         //assert( post.journal.lsn_au_index = Linked::build_lsn_au_index(image.tj, image.first);
         assume( LikesJournal_v::LikesJournal::State::inv(post.journal) );   // TODO(travis): help!
 
-        Self::build_lsn_au_index_au_consistency(image.tj, image.first);
+        let TruncatedJournal{disk_view: dv, freshest_rec: root} = image.tj;
+        Self::build_lsn_au_index_au_walk_consistency(dv, root, image.first);
         Self::lemma_aus_hold_contiguous_lsns(image);
     }
 
