@@ -111,8 +111,7 @@ impl DiskView {
             // Put the update on the "preferred" side to make recursive proof reasoning easier:
             // there should be no conflicts between update and inner call, but this way we don't
             // even have to make that argument because update values dominate.
-            self.build_lsn_addr_index(self.entries[root.unwrap()].cropped_prior(self.boundary_lsn))
-                .union_prefer_right(update)
+            self.build_lsn_addr_index(self.next(root)).union_prefer_right(update)
         }
     }
 } // end of impl DiskView

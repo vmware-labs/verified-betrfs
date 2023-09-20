@@ -176,7 +176,8 @@ impl MiniAllocator {
 
     // TODO(jailin): is it okay to prune any old thing? No check necessary?
     // remove AUs from the mini allocator
-    pub open spec(checked) fn prune(self, aus: Set<AU>) -> Self
+    // removed (checked) due to total lambda
+    pub open spec/*(checked)*/ fn prune(self, aus: Set<AU>) -> Self
     recommends
         self.wf(),
     // ensures out.wf()

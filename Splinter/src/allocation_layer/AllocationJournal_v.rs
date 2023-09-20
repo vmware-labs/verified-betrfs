@@ -4,6 +4,7 @@
 #![allow(unused_imports)]
 use builtin::*;
 use vstd::prelude::*;
+use vstd::math;
 
 use builtin_macros::*;
 use state_machines_macros::state_machine;
@@ -200,7 +201,8 @@ state_machine!{ AllocationJournal {
     } }
 
     // Update lsnAUIndex with by discarding lsn's strictly smaller than bdy
-    pub open spec(checked) fn lsn_au_index_discarding_up_to(lsn_au_index: Map<LSN, AU>, bdy: LSN) -> (out: Map<LSN, AU>)
+    // Removed (checked) due to lambda being total
+    pub open spec/*(checked)*/ fn lsn_au_index_discarding_up_to(lsn_au_index: Map<LSN, AU>, bdy: LSN) -> (out: Map<LSN, AU>)
 //     ensures
 //         out.len(lsn_au_index),
 //         forall |k| out.contains_key(k) :: bdy <= k,
@@ -330,7 +332,7 @@ state_machine!{ AllocationJournal {
 
     // TODO(jonh): Add inline call to transitive_ranking to satisfy recommendation-not-met
     // warnings
-    pub open spec/*(checked)*/ fn build_lsn_au_index_au_walk(dv: DiskView, root: Pointer, first: AU) -> Map<LSN, AU>
+    pub open spec/*(checked)*/ fn build_lsn_au_index_au_walk_deleteme(dv: DiskView, root: Pointer, first: AU) -> Map<LSN, AU>
     recommends
         dv.decodable(root),
         dv.acyclic(),
@@ -359,9 +361,55 @@ state_machine!{ AllocationJournal {
             else if prior.unwrap().au == first { Self::build_lsn_au_index_page_walk(dv, prior) }
             else {
                 //Self::transitive_ranking(dv, prior.unwrap().first_page(), prior.unwrap(), first);
-                Self::build_lsn_au_index_au_walk(dv, prior, first)
+                Self::build_lsn_au_index_au_walk_deleteme(dv, prior, first)
             };
         prior_result.union_prefer_right(update)
+    }
+
+    #[verifier(decreases_by)]
+    pub proof fn build_lsn_au_index_au_walk2_helper(dv: DiskView, root: Pointer, first: AU)
+    {
+        match root {
+            None => {},
+            Some(addr) => {
+                if addr.au == first { }
+                else {
+                    // Nine lines of boilerplate to insert this one line in the right place. :v/
+                    let bottom = first_page(root);
+                    Self::transitive_ranking(dv, bottom.unwrap(), root.unwrap(), first);
+                }
+            }
+        }
+    }
+
+    pub open spec/*(checked)*/ fn build_lsn_au_index_au_walk(dv: DiskView, root: Pointer, first: AU) -> Map<LSN, AU>
+    recommends
+        dv.decodable(root),
+        dv.acyclic(),
+        Self::internal_au_pages_fully_linked(dv, first),
+    decreases dv.the_rank_of(root)
+    {
+        decreases_when({
+            &&& dv.decodable(root)
+            &&& dv.acyclic()
+            &&& Self::internal_au_pages_fully_linked(dv, first)
+        });
+        decreases_by(Self::build_lsn_au_index_au_walk2_helper);
+        match root {
+            None => map![],
+            Some(addr) => {
+                if addr.au == first { Self::build_lsn_au_index_page_walk(dv, root) }
+                else {
+                    // Jump over all the intermediate pages in the AU; we know how they're laid out already.
+                    let bottom = first_page(root);
+                    let last_lsn = dv.entries[root.unwrap()].message_seq.seq_end;
+                    let first_lsn = dv.entries[bottom.unwrap()].message_seq.seq_start;
+                    let update = Self::singleton_index(first_lsn, last_lsn, bottom.unwrap().au);
+                    let prior_result = Self::build_lsn_au_index_au_walk(dv, dv.next(bottom), first);
+                    prior_result.union_prefer_right(update)
+                }
+            }
+        }
     }
 
     #[verifier(recommends_by)]
@@ -390,7 +438,6 @@ state_machine!{ AllocationJournal {
                 // if we are looking at address from the first AU, just walk the pages
                 if addr.au == first { Self::build_lsn_au_index_page_walk(tj.disk_view, tj.freshest_rec) }
                 else {
-                    let last = tj.disk_view.entries[addr].message_seq.seq_end;
                     Self::build_lsn_au_index_au_walk(tj.disk_view, Some(addr), first)
                 }
         }
@@ -767,130 +814,101 @@ state_machine!{ AllocationJournal {
         }
     }
 
-    // LEFT OFF:
-    // the correct proof strategy is to decouple the page-by-page Likes recursion from the
-    // AU-by-AU Allocation recursive walk, and instead use forall.
-    // Show that lsn_addr_index(dv, root)
-    //   contains lsns from dv.boundary_lsn to root.message_seq.seq_end
-    //   lsn_addr_index[lsn]==addr ==> dv[addr].message_seq.contains[lsn]
-    // Show that lsn_au_index(dv, root)
-    //   contains lsns from dv.boundary_lsn to root.message_seq.seq_end
-    //   lsn_au_index[lsn]==au ==> exists page :: dv[Address{addr:page}].message_seq.contains[lsn]
-    // ...but getting the arrows going the other way is tricky, since we don't know anything about
-    // random other pages. So how can we say for sure that, having discovered a particular lsn in
-    // an address on one walk, we know that's the one pointed to by the other walk?
-    // The intution has to be:
-    // - each walk visits the same pages.
-    // - the set of pages visited by each walk contain unique mappings for lsns (because of basic
-    // PagedJournal wf)
-    //
-    // I think we need to alternate between two recursions:
-    // - by AU for the big recursion
-    //   root.page is zero.
-    //       Previous page.au == first: call page walk
-    //       Otherwise walk pages within the AU
-    // - by page inside an AU
-    // 
-
-    proof fn wtf(dv: DiskView, root: Pointer, first: AU)
-    requires
-        dv.decodable(root),
-        dv.acyclic(),
-        root.is_Some(),
-        root.unwrap().au != first,
-        Self::internal_au_pages_fully_linked(dv, first),
-    {
-        let bottom = first_page(root);
-        let last = dv.entries[root.unwrap()].message_seq.seq_end;
-
-        // we jump to the first page of each AU and perform an AU walk skipping over pages in the middle
-
-        // TODO(andrea): WOW this is a nasty behavior we should figure out how to keep users from
-        // falling into. I disabled (checked) on a definition, so then later when I copy-pasted the
-        // definition into a proof context, I couldn't prove it equal to the value of the
-        // spec fn symbol, despite being textually identical, because recommends weren't met.
-        // Again the answer may well be "keep users from ever straying into unchecked recommends
-        // territory", but this is a pretty compelling example of a problem that's really nasty to
-        // understand in the absence of well-structured requires.
-        Self::transitive_ranking(dv, bottom.unwrap(), root.unwrap(), first);
-
-        let curr_msgs = dv.entries[bottom.unwrap()].message_seq;
-        let update = Self::singleton_index(curr_msgs.seq_start, last, bottom.unwrap().au);
-        let prior = dv.next(bottom);
-        let prior_result =
-            if prior.is_None() { map![] }
-            else if prior.unwrap().au == first { Self::build_lsn_au_index_page_walk(dv, prior) }
-            else {
-                //Self::transitive_ranking(dv, prior.unwrap().first_page(), prior.unwrap(), first);
-                Self::build_lsn_au_index_au_walk(dv, prior, first)
-            };
-        let output = prior_result.union_prefer_right(update);
-        assert( Self::build_lsn_au_index_au_walk(dv, root, first) == output );
-        
-    }
-
     pub open spec fn pointer_is_upstream(dv: DiskView, root: Pointer, first: AU) -> bool
     {
         &&& dv.decodable(root)
         &&& dv.acyclic()
-        &&& root.is_Some()
         &&& Self::internal_au_pages_fully_linked(dv, first)
         &&& Self::valid_first_au(dv, first)
         &&& Self::has_unique_lsns(dv)
         &&& root.is_Some() ==> dv.boundary_lsn < dv.entries[root.unwrap()].message_seq.seq_end
     }
     
-//     proof fn some_simple_stuff(dv: DiskView, root: Pointer, first: AU)
-//     requires
-//         Self::pointer_is_upstream(dv, root, first),
-//         root.unwrap().page != 0,
-//     ensures
-//         dv.next(root).is_Some(),
-//         dv.next(root).unwrap().au == root.unwrap().au,
-//     {
-//         if dv.next(root).is_None() {
-// //             assert( dv.boundary_lsn <= dv.entries[root.unwrap()].message_seq.seq_end );
-// //             assert( dv.entries[root.unwrap()].message_seq.seq_start <= dv.boundary_lsn );
-//             assert( Self::addr_has_lsn(dv, root.unwrap(), dv.boundary_lsn) );
-// //             assert( Self::valid_first_au(dv, root.unwrap().au) );
-// //             Self::first_is_unique(dv, first, root.unwrap().au);  // completes automatically
-//             assert( false );
-//         }
-//         //assert( Self::au_page_linked_in_order(dv, Address{au: root.unwrap().au, page: root.unwrap().page}) );
-//         //assert( Self::au_page_linked_in_order(dv, Address{au: root.unwrap().au, page: root.unwrap().page}) );
-//         assert( Self::au_page_linked_in_order(dv, root.unwrap()) ); // trigger
-//         assert( dv.next(root).unwrap().au == root.unwrap().au );
-//     }
-
     // TODO(jonh): this lemma should just be an ensures on build_lsn_au_index_au_walk.
     proof fn build_lsn_au_index_au_walk_consistency(dv: DiskView, root: Pointer, first: AU)
     requires
         Self::pointer_is_upstream(dv, root, first),
-        root.unwrap().au != first,
     ensures
         Self::addr_index_consistent_with_au_index(
             dv.build_lsn_addr_index(root),
             Self::build_lsn_au_index_au_walk(dv, root, first)),
     decreases dv.the_rank_of(root)
     {
-        let bottom = first_page(root);
-        let prior = dv.next(bottom);
-        
-        if root.unwrap().page != 0 {
-            // Walk back a single page, unwinding the Likes index one step.
-            assert( Self::au_page_linked_in_order(dv, root.unwrap()) ); // trigger
-            Self::build_lsn_au_index_au_walk_consistency(dv, dv.next(root), first); // recursive call
-            Self::smaller_page_has_smaller_lsns(dv, bottom.unwrap(), root.unwrap());
-        } else if prior.is_None() {
-            // If there isn't a prior reference, then root is in first AU, which our precondition excludes.
-            assert( Self::addr_has_lsn(dv, root.unwrap(), dv.boundary_lsn) );   // trigger
-            assert( false );
-        } else if prior.unwrap().au == first {
-            // At `first`; drop to page walk
-            Self::build_lsn_au_index_page_walk_consistency(dv, prior);
-        } else {
-            // Recurse this function to turn an AU corner.
-            Self::build_lsn_au_index_au_walk_consistency(dv, dv.next(root), first);
+        match root {
+            None => {
+//                 let out: Map<LSN, AU> = map![];
+//                 assert(
+//                     Self::build_lsn_au_index_au_walk(dv, root, first)
+//                     == out
+//                 );
+// 
+                assert( Self::addr_index_consistent_with_au_index(
+                    dv.build_lsn_addr_index(root),
+                    Self::build_lsn_au_index_au_walk(dv, root, first)) );
+            },
+            Some(addr) => {
+                if addr.au == first {
+                    Self::build_lsn_au_index_page_walk_consistency(dv, root);
+
+                    assert( Self::addr_index_consistent_with_au_index(
+                        dv.build_lsn_addr_index(root),
+                        Self::build_lsn_au_index_au_walk(dv, root, first)) );
+                }
+                else {
+                    if root.unwrap().page != 0 {
+                        // Walk back a single page, unwinding the Likes index one step.
+                        assert( Self::au_page_linked_in_order(dv, root.unwrap()) ); // trigger
+                        Self::build_lsn_au_index_au_walk_consistency(dv, dv.next(root), first); // recursive call
+                        let bottom = first_page(root);
+                        Self::smaller_page_has_smaller_lsns(dv, bottom.unwrap(), root.unwrap());
+
+                        assert( Self::addr_index_consistent_with_au_index(
+                            dv.build_lsn_addr_index(root),
+                            Self::build_lsn_au_index_au_walk(dv, root, first)) );
+                    } else {
+                        // Recurse this function to turn an AU corner.
+                        assert( Self::pointer_is_upstream(dv, dv.next(root), first) );
+                        Self::build_lsn_au_index_au_walk_consistency(dv, dv.next(root), first);
+
+                    let bottom = first_page(root);
+                    let last_lsn = dv.entries[root.unwrap()].message_seq.seq_end;
+                    let first_lsn = dv.entries[bottom.unwrap()].message_seq.seq_start;
+                    let update = Self::singleton_index(first_lsn, last_lsn, bottom.unwrap().au);
+                    let prior_result = Self::build_lsn_au_index_au_walk(dv, dv.next(bottom), first);
+                    let result = prior_result.union_prefer_right(update);
+
+                //Self::transitive_ranking(dv, bottom.unwrap(), root.unwrap(), first);
+                    let lsn_addr_index = dv.build_lsn_addr_index(root);
+                    let lsn_au_index = Self::build_lsn_au_index_au_walk(dv, root, first);
+                    assert forall |lsn|
+                        lsn_au_index.dom().contains(lsn)
+                        implies lsn_addr_index.dom().contains(lsn) by {
+                        if prior_result.dom().contains(lsn) {
+                            assert( lsn_addr_index.dom().contains(lsn) );
+                        } else {
+
+            let curr_msgs = dv.entries[root.unwrap()].message_seq;
+            let start_lsn = math::max(dv.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
+            let addr_update = LikesJournal_v::singleton_index(start_lsn, curr_msgs.seq_end, root.unwrap());
+            assert( lsn_addr_index == dv.build_lsn_addr_index(dv.next(root)).union_prefer_right(addr_update) );
+            assert( bottom == root );
+            assert( dv.boundary_lsn <= first_lsn );
+            assert( start_lsn == first_lsn );
+            assert( last_lsn == curr_msgs.seq_end );
+
+                            assert( update.dom().contains(lsn) );
+                            assert( lsn_addr_index.dom().contains(lsn) );
+                        }
+                    }
+                        assert(
+                            Self::build_lsn_au_index_au_walk(dv, root, first)
+                            == result );
+                        assert( Self::addr_index_consistent_with_au_index(
+                            dv.build_lsn_addr_index(root),
+                            Self::build_lsn_au_index_au_walk(dv, root, first)) );
+                    }
+                }
+            }
         }
     }
 
