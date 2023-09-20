@@ -405,13 +405,17 @@ state_machine!{ AllocationJournal {
     {
         &&& Self::wf_addrs(image.tj.disk_view)
         &&& Self::internal_au_pages_fully_linked(image.tj.disk_view, image.first)
+        &&& Self::valid_first_au(image.tj.disk_view, image.first)
     }
+
 
     init!{ initialize(journal: LikesJournal::State, image: JournalImage) {
         require Self::valid_journal_image(image);
         require LikesJournal::State::initialize(journal, image.tj);
+        let lsn_au_index = Self::build_lsn_au_index(image.tj, image.first);
+
         init journal = journal;
-        init lsn_au_index = Self::build_lsn_au_index(image.tj, image.first);
+        init lsn_au_index = lsn_au_index;
         init first = image.first;
         init mini_allocator = MiniAllocator::empty();
     } }
@@ -460,6 +464,35 @@ state_machine!{ AllocationJournal {
     pub open spec(checked) fn aus_hold_contiguous_lsns(lsn_au_index: Map<LSN, AU>) -> bool
     {
         forall |lsn1, lsn2, lsn3| Self::contiguous_lsns(lsn_au_index, lsn1, lsn2, lsn3)
+    }
+
+    pub proof fn lemma_aus_hold_contiguous_lsns(image: JournalImage)
+    requires
+        Self::valid_journal_image(image),
+    ensures
+        Self::aus_hold_contiguous_lsns(Self::build_lsn_au_index(image.tj, image.first)),
+    {
+        // can be proven from internal_au_pages_fully_linked + Paged::wf
+        // Proof is a recursion, by AU then by page.
+        assume(false);  // TODO
+    }
+
+    proof fn smaller_page_has_smaller_lsns(dv: DiskView, prior: Address, later: Address)
+    requires
+        dv.wf(),
+        prior.au == later.au,
+        prior.page < later.page,
+        dv.entries.contains_key(later),
+        Self::au_pages_linked_till_first_in_order(dv, later),
+    ensures
+        dv.entries.contains_key(prior),
+        dv.entries[prior].message_seq.seq_end <= dv.entries[later].message_seq.seq_start,
+    decreases later.page
+    {
+        assert( Self::au_page_linked_in_order(dv, later) ); // trigger?
+        if prior.page + 1 < later.page {
+            Self::smaller_page_has_smaller_lsns(dv, prior, Address{ page: (later.page-1) as nat, ..later});
+        }
     }
 
     pub open spec fn addr_has_lsn(dv: DiskView, addr: Address, lsn: LSN) -> bool
@@ -513,20 +546,6 @@ state_machine!{ AllocationJournal {
     #[inductive(internal_mini_allocator_prune)]
     fn internal_mini_allocator_prune_inductive(pre: Self, post: Self, lbl: Label) {
         // dafny had assume false, yet we don't need a proof here!?
-    }
-
-    proof fn smaller_page_has_smaller_lsns(dv: DiskView, prior: Address, later: Address)
-    requires
-        dv.wf(),
-        prior.au == later.au,
-        prior.page < later.page,
-        Self::au_pages_linked_till_first_in_order(dv, later),
-    ensures
-        dv.entries.contains_key(prior),
-        dv.entries.contains_key(later),
-        dv.entries[prior].message_seq.seq_end <= dv.entries[later].message_seq.seq_start,
-    {
-        assume(false); // left off porting proof
     }
 
     proof fn invoke_submodule_inv(pre: Self, post: Self)
@@ -818,44 +837,36 @@ state_machine!{ AllocationJournal {
         &&& Self::internal_au_pages_fully_linked(dv, first)
         &&& Self::valid_first_au(dv, first)
         &&& Self::has_unique_lsns(dv)
-        &&& dv.boundary_lsn < dv.entries[root.unwrap()].message_seq.seq_end
-        &&& root.unwrap().au != first
+        &&& root.is_Some() ==> dv.boundary_lsn < dv.entries[root.unwrap()].message_seq.seq_end
     }
     
-    proof fn some_simple_stuff(dv: DiskView, root: Pointer, first: AU)
-    requires
-        Self::pointer_is_upstream(dv, root, first),
-        root.unwrap().page != 0,
-    ensures
-        dv.next(root).is_Some(),
-        dv.next(root).unwrap().au == root.unwrap().au,
-    {
-        if dv.next(root).is_None() {
-//             assert( dv.boundary_lsn <= dv.entries[root.unwrap()].message_seq.seq_end );
-//             assert( dv.entries[root.unwrap()].message_seq.seq_start <= dv.boundary_lsn );
-            assert( Self::addr_has_lsn(dv, root.unwrap(), dv.boundary_lsn) );
-//             assert( Self::valid_first_au(dv, root.unwrap().au) );
-//             Self::first_is_unique(dv, first, root.unwrap().au);  // completes automatically
-            assert( false );
-        }
-        //assert( Self::au_page_linked_in_order(dv, Address{au: root.unwrap().au, page: root.unwrap().page}) );
-        //assert( Self::au_page_linked_in_order(dv, Address{au: root.unwrap().au, page: root.unwrap().page}) );
-        assert( Self::au_page_linked_in_order(dv, root.unwrap()) ); // trigger
-        assert( dv.next(root).unwrap().au == root.unwrap().au );
-    }
-/*
- * Maybe what we really want is a much stronger invariant: Every diskview we work with at this
- * layer is "tight"; it has exactly one first page. Might be a little dodgy during:
- * discard old before build_tight: I guess there's only one, even though there are pages below.
- *
- * Geez. What we really want is an invariant that says "every lsn appears in exactly one page"
- * has_unique_lsns should give us this "tightness".
- */
+//     proof fn some_simple_stuff(dv: DiskView, root: Pointer, first: AU)
+//     requires
+//         Self::pointer_is_upstream(dv, root, first),
+//         root.unwrap().page != 0,
+//     ensures
+//         dv.next(root).is_Some(),
+//         dv.next(root).unwrap().au == root.unwrap().au,
+//     {
+//         if dv.next(root).is_None() {
+// //             assert( dv.boundary_lsn <= dv.entries[root.unwrap()].message_seq.seq_end );
+// //             assert( dv.entries[root.unwrap()].message_seq.seq_start <= dv.boundary_lsn );
+//             assert( Self::addr_has_lsn(dv, root.unwrap(), dv.boundary_lsn) );
+// //             assert( Self::valid_first_au(dv, root.unwrap().au) );
+// //             Self::first_is_unique(dv, first, root.unwrap().au);  // completes automatically
+//             assert( false );
+//         }
+//         //assert( Self::au_page_linked_in_order(dv, Address{au: root.unwrap().au, page: root.unwrap().page}) );
+//         //assert( Self::au_page_linked_in_order(dv, Address{au: root.unwrap().au, page: root.unwrap().page}) );
+//         assert( Self::au_page_linked_in_order(dv, root.unwrap()) ); // trigger
+//         assert( dv.next(root).unwrap().au == root.unwrap().au );
+//     }
 
     // TODO(jonh): this lemma should just be an ensures on build_lsn_au_index_au_walk.
     proof fn build_lsn_au_index_au_walk_consistency(dv: DiskView, root: Pointer, first: AU)
     requires
         Self::pointer_is_upstream(dv, root, first),
+        root.unwrap().au != first,
     ensures
         Self::addr_index_consistent_with_au_index(
             dv.build_lsn_addr_index(root),
@@ -863,13 +874,6 @@ state_machine!{ AllocationJournal {
     decreases dv.the_rank_of(root)
     {
         let bottom = first_page(root);
-//         let last = dv.entries[root.unwrap()].message_seq.seq_end;
-
-        Self::transitive_ranking(dv, bottom.unwrap(), root.unwrap(), first);
-
-        // we jump to the first page of each AU and perform an AU walk skipping over pages in the middle
-//         let lsn_au_index = Self::build_lsn_au_index_au_walk(dv, root, first);
-//         let lsn_addr_index = dv.build_lsn_addr_index(root);
         let prior = dv.next(bottom);
         
         if root.unwrap().page != 0 {
@@ -877,20 +881,32 @@ state_machine!{ AllocationJournal {
             assert( Self::au_page_linked_in_order(dv, root.unwrap()) ); // trigger
             Self::build_lsn_au_index_au_walk_consistency(dv, dv.next(root), first); // recursive call
             Self::smaller_page_has_smaller_lsns(dv, bottom.unwrap(), root.unwrap());
-//             assert( Self::addr_index_consistent_with_au_index(lsn_addr_index, lsn_au_index) );
         } else if prior.is_None() {
             // If there isn't a prior reference, then root is in first AU, which our precondition excludes.
             assert( Self::addr_has_lsn(dv, root.unwrap(), dv.boundary_lsn) );   // trigger
-//             assert( Self::valid_first_au(dv, root.unwrap().au) );   // trigger
             assert( false );
         } else if prior.unwrap().au == first {
             // At `first`; drop to page walk
             Self::build_lsn_au_index_page_walk_consistency(dv, prior);
-//             assert( Self::addr_index_consistent_with_au_index(lsn_addr_index, lsn_au_index) );
         } else {
             // Recurse this function to turn an AU corner.
             Self::build_lsn_au_index_au_walk_consistency(dv, dv.next(root), first);
-//             assert( Self::addr_index_consistent_with_au_index(lsn_addr_index, lsn_au_index) );
+        }
+    }
+
+    proof fn build_lsn_au_index_au_consistency(tj: TruncatedJournal, first: AU)
+    requires
+        Self::pointer_is_upstream(tj.disk_view, tj.freshest_rec, first),
+    ensures
+        Self::addr_index_consistent_with_au_index(
+            tj.build_lsn_addr_index(),
+            Self::build_lsn_au_index(tj, first)),
+    {
+        let TruncatedJournal{disk_view: dv, freshest_rec: root} = tj;
+        if root.unwrap().au == first {
+            Self::build_lsn_au_index_page_walk_consistency(dv, root);
+        } else {
+            Self::build_lsn_au_index_au_walk_consistency(dv, root, first);
         }
     }
 
@@ -899,25 +915,11 @@ state_machine!{ AllocationJournal {
 
     #[inductive(initialize)]
     fn initialize_inductive(post: Self, journal: LikesJournal::State, image: JournalImage) {
-        //reveal( LikesJournal::State::initialize );
-        //LikesJournal::State::initialize_inductive(post.journal);
-        assert( post.journal == journal );
-        assume(false);
         //assert( post.journal.lsn_au_index = Linked::build_lsn_au_index(image.tj, image.first);
         assume( LikesJournal_v::LikesJournal::State::inv(post.journal) );   // TODO(travis): help!
-        assert forall |lsn| #[trigger] post.journal.lsn_addr_index.contains_key(lsn) == post.lsn_au_index.contains_key(lsn) by {
-        }
-//         assert forall |lsn| #[trigger] post.journal.lsn_addr_index.dom().contains(lsn) == post.lsn_au_index.dom().contains(lsn) by {
-//         }
-        assert( post.journal.lsn_addr_index.dom() =~= post.lsn_au_index.dom() );
-        assume(false);
-        assert forall |lsn| #[trigger] post.journal.lsn_addr_index.contains_key(lsn)
-            implies post.journal.lsn_addr_index[lsn].au == post.lsn_au_index[lsn] by {
-        }
-        assert( Self::addr_index_consistent_with_au_index(post.journal.lsn_addr_index, post.lsn_au_index) );
-        assert( post.get_tj().freshest_rec.is_Some()
-            ==> Self::internal_au_pages_fully_linked(post.get_tj().disk_view, post.first) );
-        assert( post.inv() );
+
+        Self::build_lsn_au_index_au_consistency(image.tj, image.first);
+        Self::lemma_aus_hold_contiguous_lsns(image);
     }
 
     #[inductive(only_advance_likes_journal)]
