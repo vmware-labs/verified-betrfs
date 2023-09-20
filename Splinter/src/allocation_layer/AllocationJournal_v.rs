@@ -391,14 +391,21 @@ state_machine!{ AllocationJournal {
         forall |addr| #[trigger] dv.entries.contains_key(addr) ==> addr.wf()
     }
 
-    pub open spec(checked) fn valid_journal_image(image: JournalImage) -> bool
+    pub open spec fn pointer_is_upstream(dv: DiskView, root: Pointer, first: AU) -> bool
     {
-        &&& Self::wf_addrs(image.tj.disk_view)
-        &&& image.tj.decodable()
-        &&& Self::internal_au_pages_fully_linked(image.tj.disk_view, image.first)
-        &&& Self::valid_first_au(image.tj.disk_view, image.first)
+        &&& dv.decodable(root)
+        &&& dv.acyclic()
+        &&& Self::internal_au_pages_fully_linked(dv, first)
+        &&& Self::valid_first_au(dv, first)
+        &&& Self::has_unique_lsns(dv)
+        &&& root.is_Some() ==> dv.boundary_lsn < dv.entries[root.unwrap()].message_seq.seq_end
     }
 
+    pub open spec(checked) fn valid_journal_image(image: JournalImage) -> bool
+    {
+        &&& Self::wf_addrs(image.tj.disk_view)  // subsumed by decodable?
+            &&& Self::pointer_is_upstream(image.tj.disk_view, image.tj.freshest_rec, image.first)
+    }
 
     init!{ initialize(journal: LikesJournal::State, image: JournalImage) {
         require Self::valid_journal_image(image);
@@ -452,6 +459,17 @@ state_machine!{ AllocationJournal {
         }
     }
 
+    pub closed spec(checked) fn index_honors_rank(dv: DiskView, root: Pointer, first: AU) -> bool
+    recommends
+        dv.decodable(root),
+        dv.acyclic(),
+        Self::internal_au_pages_fully_linked(dv, first),
+    {
+        let index = Self::build_lsn_au_index_au_walk(dv, root, first);
+        forall |lsn, page| index.contains_key(lsn) && dv.decodable(Some(Address{au: index[lsn], page: page}))
+            ==> #[trigger] dv.the_rank_of(Some(Address{au: index[lsn], page: page})) <= dv.the_rank_of(root)
+    }
+
     pub open spec(checked) fn aus_hold_contiguous_lsns(lsn_au_index: Map<LSN, AU>) -> bool
     {
         forall |lsn1, lsn2, lsn3| Self::contiguous_lsns(lsn_au_index, lsn1, lsn2, lsn3)
@@ -459,11 +477,11 @@ state_machine!{ AllocationJournal {
 
     pub proof fn lemma_aus_hold_contiguous_lsns_inner(dv: DiskView, root: Pointer, first: AU)
     requires
-        dv.decodable(root),
-        dv.acyclic(),
-        Self::internal_au_pages_fully_linked(dv, first),
+        Self::pointer_is_upstream(dv, root, first),
     ensures
+        Self::index_honors_rank(dv, root, first),
         Self::aus_hold_contiguous_lsns(Self::build_lsn_au_index_au_walk(dv, root, first)),
+    decreases dv.the_rank_of(root)
     {
         match root {
             None => {
@@ -481,48 +499,88 @@ state_machine!{ AllocationJournal {
                     let update = Self::singleton_index(first_lsn, last_lsn, bottom.unwrap().au);
                     let prior_result = Self::build_lsn_au_index_au_walk(dv, dv.next(bottom), first);
                     let result = prior_result.union_prefer_right(update);
-                    assert({
-                        &&& dv.decodable(root)
-                        &&& dv.acyclic()
-                        &&& Self::internal_au_pages_fully_linked(dv, first)
-                    });
                         
+                    assert( Self::pointer_is_upstream(dv, dv.next(bottom), first) );
+                    Self::lemma_aus_hold_contiguous_lsns_inner(dv, dv.next(bottom), first);
+
                     assert( result == Self::build_lsn_au_index_au_walk(dv, root, first) );
-                    if root.unwrap().page != 0 {
-                        assume( false );
-                        assert( Self::aus_hold_contiguous_lsns(Self::build_lsn_au_index_au_walk(dv, root, first)) );
-                    } else {
-                        let lsn_au_index = Self::build_lsn_au_index_au_walk(dv, root, first);
-                        assert forall |lsn1, lsn2, lsn3| Self::contiguous_lsns(lsn_au_index, lsn1, lsn2, lsn3) by {
-                            if ({
-                                &&& lsn1 <= lsn2 <= lsn3
-                                &&& lsn_au_index.contains_key(lsn1)
-                                &&& lsn_au_index.contains_key(lsn3)
-                                &&& lsn_au_index[lsn1] == lsn_au_index[lsn3]
-                            }) {
+
+                    let lsn_addr_index = dv.tj_at(root).build_lsn_addr_index();
+                    let lsn_au_index = Self::build_lsn_au_index_au_walk(dv, root, first);
+
+                    assert forall |lsn1, lsn2, lsn3| Self::contiguous_lsns(lsn_au_index, lsn1, lsn2, lsn3) by {
+                        if ({
+                            &&& lsn1 <= lsn2 <= lsn3
+                            &&& lsn_au_index.contains_key(lsn1)
+                            &&& lsn_au_index.contains_key(lsn3)
+                            &&& lsn_au_index[lsn1] == lsn_au_index[lsn3]
+                        })
+                        {
+                            if /*root.unwrap().page != 0*/ true {
+                                let page_first_lsn = dv.entries[root.unwrap()].message_seq.seq_start;
+                                // recurse
+                                Self::build_lsn_au_index_au_walk_consistency(dv, dv.next(bottom), first);
+                                let prior_au_index = Self::build_lsn_au_index_au_walk(dv, dv.next(bottom), first);
+                                assert( Self::contiguous_lsns(prior_au_index, lsn1, lsn2, lsn3) );  // trigger
+                                                                                                    //
                                 if lsn3 < first_lsn {
-                                    // recursive call
-                                    assume( false );
+                                    assert( lsn_au_index.contains_key(lsn2) );
+                                    assert( lsn_au_index[lsn1] == lsn_au_index[lsn2] );
+                                } else if lsn3 < page_first_lsn {
+                                    // lsn1 is in this au
                                     assert( lsn_au_index.contains_key(lsn2) );
                                     assert( lsn_au_index[lsn1] == lsn_au_index[lsn2] );
                                 } else {
-                                    assert( first_lsn <= lsn3 );
-                                    assert( lsn3 < last_lsn );
-                                    if lsn1 < first_lsn {
-                                        assert( lsn_au_index[lsn3] == root.unwrap().au );
-                                        assert( lsn_au_index[lsn1] != root.unwrap().au );
-                                        assert( false );
+                                    // lsn1, lsn3 is in this page
+                                    if lsn1 < page_first_lsn {
+                                        assume( false );
+                                        assert( first_lsn <= lsn1 );
+                                        assert( lsn_au_index.contains_key(lsn2) );
+                                        assert( lsn_au_index[lsn1] == lsn_au_index[lsn2] );
+                                    } else {
+                                        assert( page_first_lsn <= lsn1 );
+                                        assert( dv.entries[root.unwrap()].message_seq.seq_start == page_first_lsn );
+                                        assert( dv.entries[root.unwrap()].message_seq.seq_end == last_lsn );
+                                        if prior_au_index.contains_key(lsn3) {
+                                            assert( lsn3 < last_lsn ) by {
+                                                dv.build_lsn_addr_index_domain_valid(dv.next(bottom));
+                                                assert( dv.tj_at(dv.next(bottom)).index_domain_valid(dv.build_lsn_addr_index(dv.next(bottom))) );
+                                                reveal(LinkedJournal_v::TruncatedJournal::index_domain_valid);
+                                                assert( lsn3 < dv.entries[bottom.unwrap()].message_seq.seq_start );
+                                            }
+                                            assert( lsn3 < last_lsn );
+                                        } else {
+                                            assert( lsn3 < last_lsn );
+                                        }
+                                        assert( lsn3 < last_lsn );
+                                        assert( page_first_lsn <= lsn1 <= lsn3 < last_lsn );
+                                        assert( dv.entries[root.unwrap()].message_seq.contains(lsn1) );
+                                        assert( dv.entries[root.unwrap()].message_seq.contains(lsn3) );
+                                        assert( lsn_au_index.contains_key(lsn2) );
+                                        assert( lsn_au_index[lsn1] == lsn_au_index[lsn2] );
                                     }
-                                    assert( first_lsn <= lsn1 );
-                                    // local
+                                }
+                            } else {
+
+                                Self::build_lsn_au_index_au_walk_consistency(dv, root, first);
+                                assert( lsn3 < last_lsn ) by {
+                                    dv.build_lsn_addr_index_domain_valid(root);
+                                    reveal(LinkedJournal_v::TruncatedJournal::index_domain_valid);
+                                }
+                                if lsn3 < first_lsn {
+                                    Self::build_lsn_au_index_au_walk_consistency(dv, dv.next(bottom), first);
+                                    let prior_au_index = Self::build_lsn_au_index_au_walk(dv, dv.next(bottom), first);
+                                    assert( Self::contiguous_lsns(prior_au_index, lsn1, lsn2, lsn3) );  // trigger
+                                    assert( lsn_au_index.contains_key(lsn2) );
+                                    assert( lsn_au_index[lsn1] == lsn_au_index[lsn2] );
+                                } else {
                                     assert( lsn_au_index.contains_key(lsn2) );
                                     assert( lsn_au_index[lsn1] == lsn_au_index[lsn2] );
                                 }
-                                
                             }
                         }
-                        assert( Self::aus_hold_contiguous_lsns(Self::build_lsn_au_index_au_walk(dv, root, first)) );
                     }
+                    assert( Self::aus_hold_contiguous_lsns(Self::build_lsn_au_index_au_walk(dv, root, first)) );
                 }
             }
         }
@@ -829,16 +887,6 @@ state_machine!{ AllocationJournal {
         }
     }
 
-    pub open spec fn pointer_is_upstream(dv: DiskView, root: Pointer, first: AU) -> bool
-    {
-        &&& dv.decodable(root)
-        &&& dv.acyclic()
-        &&& Self::internal_au_pages_fully_linked(dv, first)
-        &&& Self::valid_first_au(dv, first)
-        &&& Self::has_unique_lsns(dv)
-        &&& root.is_Some() ==> dv.boundary_lsn < dv.entries[root.unwrap()].message_seq.seq_end
-    }
-    
     // TODO(jonh): this lemma should just be an ensures on build_lsn_au_index_au_walk.
     proof fn build_lsn_au_index_au_walk_consistency(dv: DiskView, root: Pointer, first: AU)
     requires
