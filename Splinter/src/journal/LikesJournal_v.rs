@@ -94,10 +94,16 @@ ensures
 //////////////////////////////////////////////////////////////////////////////
 
 impl DiskView {
+    pub open spec(checked) fn buildable(self, root: Pointer) -> bool
+    {
+        &&& self.decodable(root)
+        &&& self.acyclic()
+        &&& root.is_Some() ==> self.boundary_lsn < self.entries[root.unwrap()].message_seq.seq_end
+    }
+
     pub open spec(checked) fn build_lsn_addr_index(self, root: Pointer) -> LsnAddrIndex
     recommends
-        self.decodable(root), self.acyclic(),
-        root.is_Some() ==> self.boundary_lsn < self.entries[root.unwrap()].message_seq.seq_end,
+        self.buildable(root),
     decreases self.the_rank_of(root) when self.decodable(root) && self.acyclic()
     {
         if root.is_None() {
@@ -120,10 +126,8 @@ impl DiskView {
 impl DiskView {
     proof fn build_lsn_addr_index_ignores_build_tight(self, bt_root: Pointer, repr_root: Pointer)
     requires
+        self.buildable(repr_root),
         self.decodable(bt_root),
-        self.decodable(repr_root),
-        self.acyclic(),
-        repr_root.is_Some() ==> self.boundary_lsn < self.entries[repr_root.unwrap()].message_seq.seq_end,
         self.build_tight(bt_root).decodable(repr_root),
     ensures
         self.build_tight(bt_root).wf(),
@@ -197,9 +201,7 @@ impl DiskView {
 
     proof fn build_lsn_addr_index_range_valid(self, root: Pointer, tj_end: LSN)
     requires
-        self.decodable(root),
-        self.acyclic(),
-        root.is_Some() ==> self.boundary_lsn < self.entries[root.unwrap()].message_seq.seq_end,
+        self.buildable(root),
         root.is_Some() ==> self.entries[root.unwrap()].message_seq.seq_end == tj_end,
         root.is_None() ==> tj_end <= self.boundary_lsn,
         self.tj_at(root).index_domain_valid(self.build_lsn_addr_index(root)),
@@ -215,9 +217,7 @@ impl DiskView {
 
     pub proof fn build_lsn_addr_index_gives_representation(self, root: Pointer) 
     requires
-        self.decodable(root),
-        self.acyclic(),
-        root.is_Some() ==> self.boundary_lsn < self.entries[root.unwrap()].message_seq.seq_end,
+        self.buildable(root),
     ensures
         // This conclusion is used inside the recursion
         root.is_Some() ==>
@@ -288,6 +288,22 @@ impl DiskView {
             self.sub_disk_repr_index(big, big.next(ptr));
         }
     }
+
+//     pub open spec fn lsns_from_unique_addrs(self) -> bool
+//     {
+//         forall |lsn, addr1, addr2| ({
+//             &&& self.entries[addr1].message_seq.contains(lsn)
+//             &&& self.entries[addr2].message_seq.contains(lsn)
+//         }) ==> addr1 == addr2
+//     }
+
+//     pub build_lsn_addr_index_gives_unique_addrs(self, root: Pointer)
+//     requires
+//         self.buildable(root),
+//     ensures
+//         self.build_lsn_addr_index(root),
+//     {
+//     }
    
 } // DiskView proof bits
 
@@ -371,6 +387,14 @@ impl TruncatedJournal {
     {
         &&& (forall |addr, lsn| self.disk_view.entries.contains_key(addr) && #[trigger] self.disk_view.entries[addr].message_seq.contains(lsn)
             ==> lsn_addr_index.contains_key(lsn) && lsn_addr_index[lsn]==addr)
+    }
+
+    pub open spec fn index_reflects_disk_view(self, lsn_addr_index: LsnAddrIndex) -> bool
+    {
+        forall |lsn| #[trigger] lsn_addr_index.contains_key(lsn) ==> {
+            &&& self.disk_view.entries.contains_key(lsn_addr_index[lsn])
+            &&& self.disk_view.entries[lsn_addr_index[lsn]].message_seq.contains(lsn)
+        }
     }
 
     #[verifier(opaque)]
@@ -570,6 +594,7 @@ state_machine!{ LikesJournal {
         &&& tj.disk_view.acyclic()
         &&& self.lsn_addr_index == tj.build_lsn_addr_index()
         &&& self.lsn_addr_index.values() == tj.representation()
+        &&& tj.index_reflects_disk_view(self.lsn_addr_index)
         &&& tj.index_domain_valid(self.lsn_addr_index)
         &&& tj.index_keys_map_to_valid_entries(self.lsn_addr_index)
         &&& tj.valid_entries_appear_in_index(self.lsn_addr_index)
