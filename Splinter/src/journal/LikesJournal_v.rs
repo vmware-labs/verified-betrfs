@@ -238,10 +238,10 @@ impl DiskView {
             let begin = max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
             let update = singleton_index(begin, curr_msgs.seq_end, root.unwrap());
             assert(update.contains_key(begin));
-            assert forall #![auto] |k| self.build_lsn_addr_index(root).values().contains(k) implies self.representation(root).contains(k) by {
+            assert forall |k| #![auto] self.build_lsn_addr_index(root).values().contains(k) implies self.representation(root).contains(k) by {
             }
             self.representation_ensures(root);
-            assert forall #![auto] |addr|
+            assert forall |addr| #![auto]
                 self.representation(root).contains(addr) implies
                 self.build_lsn_addr_index(root).values().contains(addr) by {
 
@@ -701,7 +701,7 @@ state_machine!{ LikesJournal {
 
         tj_post.disk_view.representation_ensures(tj_post.freshest_rec); // not helpful; delete
 
-        assert forall #![auto] |addr| tj_post.disk_view.entries.dom().contains(addr)
+        assert forall |addr| #![auto] tj_post.disk_view.entries.dom().contains(addr)
             implies tj_post.representation().contains(addr) by {
             if tj_pre.disk_view.entries.dom().contains(addr) {
                 assert( tj_pre.representation().contains(addr) );

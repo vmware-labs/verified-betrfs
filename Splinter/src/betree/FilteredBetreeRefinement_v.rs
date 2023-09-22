@@ -180,7 +180,7 @@ impl BetreeNode {
         ensures forall |k: Key, node: BetreeNode| #![auto] node.wf() && node.is_Node() && node.key_in_domain(k)
             ==> node.get_Node_buffers().query_from(k, node.flushed_ofs(k) as int) == node.i().get_Node_buffer().query(k)
     {
-        assert forall  #![auto] |k: Key, node: BetreeNode| node.wf() && node.is_Node() && node.key_in_domain(k)
+        assert forall |k: Key, node: BetreeNode| #![auto] node.wf() && node.is_Node() && node.key_in_domain(k)
         implies node.get_Node_buffers().query_from(k, node.flushed_ofs(k) as int) == node.i().get_Node_buffer().query(k)
         by {
             node.query_from_refines(k);
@@ -235,7 +235,7 @@ impl BetreeNode {
             &&& self.i().get_Node_buffer().map.contains_key(k) ==> self.i().get_Node_buffer().map[k] == other.i().get_Node_buffer().map[k]
         })
     {
-        assert forall #![auto] |other: Self, k: Key| 
+        assert forall |other: Self, k: Key| #![auto]
             self.key_in_domain(k) && other.key_in_domain(k)
             && self.flushed_ofs(k) == other.flushed_ofs(k)
             && self.get_Node_buffers() == other.get_Node_buffers()
@@ -252,7 +252,7 @@ impl BetreeNode {
         ensures forall |k: Key| #![auto] self.child_domain(child_idx).contains(k) ==> self.key_in_domain(k)
     {
         let child_domain = self.child_domain(child_idx);
-        assert forall #![auto] |k: Key| child_domain.contains(k)
+        assert forall |k: Key| #![auto] child_domain.contains(k)
         implies self.key_in_domain(k)
         by {
             if self.get_Node_pivots().num_ranges() == 1 {
@@ -616,7 +616,7 @@ impl BetreeNode {
         self.i_buffer_domain();
         self.child_domain_implies_key_in_domain(child_idx);
 
-        assert forall #![auto] |k| child_domain.contains(k)
+        assert forall |k| #![auto] child_domain.contains(k)
         implies ({
             &&& buffers_to_child.i().map.contains_key(k) <==> self.i_buffer().map.contains_key(k)
             &&& buffers_to_child.i().query(k) == self.i_buffer().query(k)
@@ -770,7 +770,7 @@ impl BetreeNode {
 
                 if ofs < start {
                     if !compacted_buffer.map.contains_key(k) {
-                        assert forall #![auto] |i| 0 <= i < compact_slice.len()
+                        assert forall |i| #![auto] 0 <= i < compact_slice.len()
                         implies !compact_slice[i].map.contains_key(k)
                         by {
                             if compact_slice[i].map.contains_key(k) {
@@ -798,7 +798,7 @@ impl BetreeNode {
                     assert(result.i().get_Node_buffer().map[k] == self.i().get_Node_buffer().map[k]);
                 } else if ofs < end {
                     if !compacted_buffer.map.contains_key(k) {
-                        assert forall #![auto] |i| ofs-start <= i < compact_slice.len()
+                        assert forall |i| #![auto] ofs-start <= i < compact_slice.len()
                         implies !compact_slice[i].map.contains_key(k)
                         by {
                             if compact_slice[i].map.contains_key(k) {

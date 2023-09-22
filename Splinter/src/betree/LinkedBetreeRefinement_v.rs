@@ -1083,7 +1083,7 @@ impl LinkedBetree{
         let i_compact_ofs_map = self.i().make_offset_map().decrement(start);
         assert(compact_ofs_map =~= i_compact_ofs_map);
 
-        assert forall #![auto] |k| self.root().compact_key_range(start, end, k, self.buffer_dv) == self.i().compact_key_range(start, end, k)
+        assert forall |k| #![auto] self.root().compact_key_range(start, end, k, self.buffer_dv) == self.i().compact_key_range(start, end, k)
         by {
             if self.root().compact_key_range(start, end, k, self.buffer_dv) {
                 let buffer_idx = choose |buffer_idx| compact_slice.key_in_buffer_filtered(self.buffer_dv, compact_ofs_map, 0, k, buffer_idx);
@@ -1102,7 +1102,7 @@ impl LinkedBetree{
             }
         }
 
-        assert forall #![auto] |k| compacted_buffer.map.contains_key(k)
+        assert forall |k| #![auto] compacted_buffer.map.contains_key(k)
         implies {
             let from = if self.i().flushed_ofs(k) <= start { 0 } else { self.i().flushed_ofs(k)-start };
             &&& compacted_buffer.query(k) == self.i().get_Node_buffers().slice(start as int, end as int).query_from(k, from)
@@ -1181,7 +1181,7 @@ impl QueryReceipt{
         let i_receipt = self.i();
         let ranking = self.linked.the_ranking();
 
-        assert forall #![auto] |i:int| 0 <= i < i_receipt.lines.len()
+        assert forall |i:int| #![auto] 0 <= i < i_receipt.lines.len()
         implies i_receipt.lines[i].wf()
         by {
             self.lines[i].linked.i_wf();
