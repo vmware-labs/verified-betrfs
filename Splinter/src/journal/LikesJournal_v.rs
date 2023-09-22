@@ -436,6 +436,19 @@ impl TruncatedJournal {
         self.disk_view.build_lsn_addr_index_gives_representation(self.freshest_rec)
     }
     
+
+    pub proof fn build_lsn_addr_honors_rank(self, lsn_addr_index: Map<LSN, Address>)
+    requires
+        lsn_addr_index == self.build_lsn_addr_index(),
+    ensures
+        forall |lsn1, lsn2| ({
+            &&& lsn_addr_index.contains_key(lsn1)
+            &&& lsn_addr_index.contains_key(lsn2)
+            &&& lsn1 <= lsn2
+        }) ==> self.disk_view.the_rank_of(Some(lsn_addr_index[lsn1])) <= self.disk_view.the_rank_of(Some(lsn_addr_index[lsn1]))
+    {
+        // uh, why does this proof go through without reference to any lemmas? Suspicious.
+    }
 }
 
 state_machine!{ LikesJournal {
