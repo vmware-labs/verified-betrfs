@@ -536,7 +536,7 @@ state_machine!{ AllocationJournal {
     {
         let bottom = first_page(root);
         let lsn_addr_index = dv.tj_at(dv.next(bottom)).build_lsn_addr_index();
-        assume( dv.tj_at(dv.next(bottom)).valid_entries_appear_in_index(lsn_addr_index) );
+        assume( dv.valid_entries_appear_in_index(dv.next(bottom), lsn_addr_index) );
         assume( Self::addr_index_consistent_with_au_index(lsn_addr_index, prior_result) );
         assert forall |lsn| prior_result.contains_key(lsn)
             implies #[trigger] prior_result[lsn] != root.unwrap().au by {
@@ -561,7 +561,7 @@ state_machine!{ AllocationJournal {
                     assert( dv.the_rank_of(Some(addrp)) < dv.the_rank_of(Some(addr0)) );
 
                     let prior_last = (dv.entries[addrp].message_seq.seq_end - 1) as nat;
-                    assert( dv.tj_at(dv.next(bottom)).valid_entries_appear_in_index(lsn_addr_index) );
+                    assert( dv.valid_entries_appear_in_index(dv.next(bottom), lsn_addr_index) );
                     assert( dv.tj_at(dv.next(bottom)).disk_view.entries[addrp].message_seq.contains(prior_last) );
                     assert( lsn_addr_index.contains_key(prior_last) );
                     assert( lsn_addr_index[prior_last] == addrp );

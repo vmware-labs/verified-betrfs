@@ -328,6 +328,34 @@ impl DiskView {
         }
     }
 
+    pub open spec(checked) fn valid_entries_appear_in_index(self, root: Pointer, lsn_addr_index: LsnAddrIndex) -> bool
+    recommends
+        self.tj_at(root).wf(),
+    {
+        &&& (forall |addr, lsn| self.entries.contains_key(addr) && #[trigger] self.entries[addr].message_seq.contains(lsn)
+            ==> lsn_addr_index.contains_key(lsn) && lsn_addr_index[lsn]==addr)
+    }
+
+    // Another 1-line ensures recursion
+    pub proof fn build_lsn_addr_index_valid_entries_appear_in_index(self, root: Pointer)
+    requires
+        self.buildable(root),
+    ensures
+        self.valid_entries_appear_in_index(root, self.build_lsn_addr_index(root)),
+    decreases self.the_rank_of(root)
+    {
+        let lsn_addr_index = self.build_lsn_addr_index(root);
+        if root.is_None() {
+            assert forall |addr, lsn|
+                self.entries.contains_key(addr) && #[trigger] self.entries[addr].message_seq.contains(lsn)
+                implies lsn_addr_index.contains_key(lsn) && lsn_addr_index[lsn]==addr by {
+            }
+            assert( self.valid_entries_appear_in_index(root, lsn_addr_index) );
+        } else {
+            self.build_lsn_addr_index_valid_entries_appear_in_index(self.next(root));
+            assert( self.valid_entries_appear_in_index(root, lsn_addr_index) );
+        }
+    }
 
     pub proof fn build_lsn_addr_honors_rank(self, root: Pointer, lsn_addr_index: Map<LSN, Address>)
     requires
@@ -346,6 +374,7 @@ impl DiskView {
         } else {
             let prior_index = self.build_lsn_addr_index(self.next(root));
             self.build_lsn_addr_honors_rank(self.next(root), prior_index);
+            self.build_lsn_addr_index_valid_entries_appear_in_index(self.next(root));
             assert forall |lsn1, lsn2| ({
                 &&& lsn_addr_index.contains_key(lsn1)
                 &&& lsn_addr_index.contains_key(lsn2)
@@ -355,10 +384,15 @@ impl DiskView {
                 &&& self.decodable(Some(lsn_addr_index[lsn2]))
                 &&& self.the_rank_of(Some(lsn_addr_index[lsn1])) <= self.the_rank_of(Some(lsn_addr_index[lsn2]))
             }) by {
-                let corner = self.entries[root.unwrap()].message_seq.seq_start;
+                let prior = self.entries[self.next(root).unwrap()];
+                let corner = prior.message_seq.seq_end;
                 let before = (corner - 1) as nat;
                 if lsn1 < corner {
-                    assert( prior_index.contains_key(lsn1) );
+                    assert( self.valid_entries_appear_in_index(self.next(root), prior_index) );
+                    self.build_lsn_addr_index_domain_valid(self.next(root));
+                    assert( prior_index.contains_key(lsn1) ) by {
+                        reveal(TruncatedJournal::index_domain_valid);
+                    }
                     assert( prior_index.contains_key(corner) );
                     assert( lsn1 <= corner );
                     assert( self.the_rank_of(Some(lsn_addr_index[lsn1])) <= self.the_rank_of(Some(lsn_addr_index[before])) );
@@ -367,6 +401,7 @@ impl DiskView {
             }
         }
     }
+
 } // DiskView proof bits
 
 pub open spec(checked) fn map_to_likes(lsn_addr_map: LsnAddrIndex) -> Likes
@@ -441,14 +476,6 @@ impl TruncatedJournal {
         self.disk_view.entries[lsn_addr_index[lsn]].contains_lsn(lsn),
     {
         reveal(TruncatedJournal::index_keys_map_to_valid_entries);
-    }
-
-    pub open spec(checked) fn valid_entries_appear_in_index(self, lsn_addr_index: LsnAddrIndex) -> bool
-    recommends
-        self.wf(),
-    {
-        &&& (forall |addr, lsn| self.disk_view.entries.contains_key(addr) && #[trigger] self.disk_view.entries[addr].message_seq.contains(lsn)
-            ==> lsn_addr_index.contains_key(lsn) && lsn_addr_index[lsn]==addr)
     }
 
     pub open spec fn index_reflects_disk_view(self, lsn_addr_index: LsnAddrIndex) -> bool
@@ -673,7 +700,7 @@ state_machine!{ LikesJournal {
         &&& tj.index_reflects_disk_view(self.lsn_addr_index)
         &&& tj.index_domain_valid(self.lsn_addr_index)
         &&& tj.index_keys_map_to_valid_entries(self.lsn_addr_index)
-        &&& tj.valid_entries_appear_in_index(self.lsn_addr_index)
+        //&&& tj.valid_entries_appear_in_index(self.lsn_addr_index) // just prove it from == build above ... or ensures!
         &&& tj.index_range_valid(self.lsn_addr_index)
         &&& tj.disk_is_tight_wrt_representation()
         &&& self.imperative_matches_transitive()
