@@ -305,6 +305,68 @@ impl DiskView {
 //     {
 //     }
    
+    pub proof fn build_lsn_addr_all_decodable(self, root: Pointer)
+    requires
+        self.buildable(root),
+    ensures
+        forall |lsn| self.build_lsn_addr_index(root).contains_key(lsn) ==> self.decodable(Some(self.build_lsn_addr_index(root)[lsn])),
+    decreases self.the_rank_of(root)
+    {
+        let lsn_addr_index = self.build_lsn_addr_index(root);   // I want that super-let!
+        if root.is_None() {
+        } else {
+            self.build_lsn_addr_all_decodable(self.next(root));
+            assert forall |lsn| lsn_addr_index.contains_key(lsn)
+            implies self.decodable(Some(lsn_addr_index[lsn])) by {
+                if self.build_lsn_addr_index(self.next(root)).contains_key(lsn) {
+                    assert( self.decodable(Some(lsn_addr_index[lsn])) );
+                } else {
+                    assert( lsn_addr_index[lsn] == root.unwrap() );
+                    assert( self.decodable(Some(lsn_addr_index[lsn])) );
+                }
+            }
+        }
+    }
+
+
+    pub proof fn build_lsn_addr_honors_rank(self, root: Pointer, lsn_addr_index: Map<LSN, Address>)
+    requires
+        self.buildable(root),
+        lsn_addr_index == self.build_lsn_addr_index(root),  // wish this were a super-let!
+    ensures
+        forall |lsn1, lsn2| #![auto] ({
+            &&& lsn_addr_index.contains_key(lsn1)
+            &&& lsn_addr_index.contains_key(lsn2)
+            &&& lsn1 <= lsn2
+        }) ==> self.the_rank_of(Some(lsn_addr_index[lsn1])) <= self.the_rank_of(Some(lsn_addr_index[lsn2]))
+    decreases self.the_rank_of(root)
+    {
+        self.build_lsn_addr_all_decodable(root);
+        if root.is_None() {
+        } else {
+            let prior_index = self.build_lsn_addr_index(self.next(root));
+            self.build_lsn_addr_honors_rank(self.next(root), prior_index);
+            assert forall |lsn1, lsn2| ({
+                &&& lsn_addr_index.contains_key(lsn1)
+                &&& lsn_addr_index.contains_key(lsn2)
+                &&& lsn1 <= lsn2
+            }) implies ({
+                &&& self.decodable(Some(lsn_addr_index[lsn1]))
+                &&& self.decodable(Some(lsn_addr_index[lsn2]))
+                &&& self.the_rank_of(Some(lsn_addr_index[lsn1])) <= self.the_rank_of(Some(lsn_addr_index[lsn2]))
+            }) by {
+                let corner = self.entries[root.unwrap()].message_seq.seq_start;
+                let before = (corner - 1) as nat;
+                if lsn1 < corner {
+                    assert( prior_index.contains_key(lsn1) );
+                    assert( prior_index.contains_key(corner) );
+                    assert( lsn1 <= corner );
+                    assert( self.the_rank_of(Some(lsn_addr_index[lsn1])) <= self.the_rank_of(Some(lsn_addr_index[before])) );
+                    assert( self.the_rank_of(Some(lsn_addr_index[corner])) <= self.the_rank_of(Some(lsn_addr_index[corner])) );
+                }
+            }
+        }
+    }
 } // DiskView proof bits
 
 pub open spec(checked) fn map_to_likes(lsn_addr_map: LsnAddrIndex) -> Likes
@@ -439,15 +501,16 @@ impl TruncatedJournal {
 
     pub proof fn build_lsn_addr_honors_rank(self, lsn_addr_index: Map<LSN, Address>)
     requires
+        self.decodable(),
         lsn_addr_index == self.build_lsn_addr_index(),
     ensures
-        forall |lsn1, lsn2| ({
+        forall |lsn1, lsn2| #![auto] ({
             &&& lsn_addr_index.contains_key(lsn1)
             &&& lsn_addr_index.contains_key(lsn2)
             &&& lsn1 <= lsn2
-        }) ==> self.disk_view.the_rank_of(Some(lsn_addr_index[lsn1])) <= self.disk_view.the_rank_of(Some(lsn_addr_index[lsn1]))
+        }) ==> self.disk_view.the_rank_of(Some(lsn_addr_index[lsn1])) <= self.disk_view.the_rank_of(Some(lsn_addr_index[lsn2]))
     {
-        // uh, why does this proof go through without reference to any lemmas? Suspicious.
+        self.disk_view.build_lsn_addr_honors_rank(self.freshest_rec, lsn_addr_index)
     }
 }
 

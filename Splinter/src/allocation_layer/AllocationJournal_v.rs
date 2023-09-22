@@ -532,9 +532,59 @@ state_machine!{ AllocationJournal {
         root.unwrap().au != first,
         prior_result == Self::build_lsn_au_index_au_walk(dv, dv.next(first_page(root)), first),
     ensures
-        forall |lsn| prior_result.contains_key(lsn) ==> prior_result[lsn] != root.unwrap().au,
+        forall |lsn| #![auto] prior_result.contains_key(lsn) ==> prior_result[lsn] != root.unwrap().au,
     {
-assume(false);
+        let bottom = first_page(root);
+        let lsn_addr_index = dv.tj_at(dv.next(bottom)).build_lsn_addr_index();
+        assume( dv.tj_at(dv.next(bottom)).valid_entries_appear_in_index(lsn_addr_index) );
+        assume( Self::addr_index_consistent_with_au_index(lsn_addr_index, prior_result) );
+        assert forall |lsn| prior_result.contains_key(lsn)
+            implies #[trigger] prior_result[lsn] != root.unwrap().au by {
+            let addr = lsn_addr_index[lsn];
+            assert( prior_result[lsn] == lsn_addr_index[lsn].au );
+            if addr.au == root.unwrap().au {
+                if addr.au != first {
+                    let addr0 = Address{au: addr.au, page: 0};
+                    let addrp = dv.next(bottom).unwrap();
+
+                    assume( dv.decodable(Some(addr)) ); // everything in lsn_addr_index should be decodable.
+
+                    Self::transitive_ranking(dv, addr0, addr, first);
+                    assert( dv.the_rank_of(Some(addr0)) <= dv.the_rank_of(Some(addr)) );
+
+                    // Single hop.
+                    assert( dv.acyclic() );
+                    assert( dv.entries.contains_key(addr) );
+                    //assert( dv.entries[addr].cropped_prior(dv.boundary_lsn).is_Some() );
+                    assert( dv.entries[addr0].cropped_prior(dv.boundary_lsn) == Some(addrp) );
+
+                    assert( dv.the_rank_of(Some(addrp)) < dv.the_rank_of(Some(addr0)) );
+
+                    let prior_last = (dv.entries[addrp].message_seq.seq_end - 1) as nat;
+                    assert( dv.tj_at(dv.next(bottom)).valid_entries_appear_in_index(lsn_addr_index) );
+                    assert( dv.tj_at(dv.next(bottom)).disk_view.entries[addrp].message_seq.contains(prior_last) );
+                    assert( lsn_addr_index.contains_key(prior_last) );
+                    assert( lsn_addr_index[prior_last] == addrp );
+                    assert( lsn <= prior_last ) by {
+                        reveal(LinkedJournal_v::TruncatedJournal::index_domain_valid);
+                        dv.build_lsn_addr_index_domain_valid(dv.next(bottom));
+                    }
+
+                    dv.tj_at(dv.next(bottom)).build_lsn_addr_honors_rank(lsn_addr_index);
+                    let tj_bot = dv.tj_at(dv.next(bottom));
+                    assert( lsn_addr_index.contains_key(lsn) );
+                    assert( lsn_addr_index.contains_key(prior_last) );
+                    assert( lsn <= prior_last );
+                    assert( tj_bot.disk_view.the_rank_of(Some(lsn_addr_index[lsn])) <= tj_bot.disk_view.the_rank_of(Some(lsn_addr_index[prior_last])) );
+//                     Self::instantiate_build_lsn_addr_honors_rank(dv, bottom, lsn_addr_index, lsn, prior_last);
+                    assert( dv.the_rank_of(Some(addr)) <= dv.the_rank_of(Some(addrp)) );
+
+                    assert( false );
+                }
+                assert( addr.au == first );
+                assert( false );
+            }
+        }
     }
 
     pub proof fn lemma_aus_hold_contiguous_lsns_inner(dv: DiskView, root: Pointer, first: AU)
