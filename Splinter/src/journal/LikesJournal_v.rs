@@ -101,6 +101,21 @@ impl DiskView {
         &&& root.is_Some() ==> self.boundary_lsn < self.entries[root.unwrap()].message_seq.seq_end
     }
 
+    // too small to be interesting; delete
+//     pub proof fn buildable_recursive(self, root: Pointer)
+//     requires
+//         self.buildable(root),
+//         root.is_Some(),
+//         self.next(root).is_Some(),
+//     ensures
+//         self.buildable(self.next(root)),
+//     {
+//         let next = self.next(root);
+//         
+//         assert( self.entries.contains_key(root.unwrap()) );
+//         assert( self.is_nondangling_pointer(next) );
+//     }
+
     pub open spec(checked) fn build_lsn_addr_index(self, root: Pointer) -> LsnAddrIndex
     recommends
         self.buildable(root),
@@ -192,11 +207,21 @@ impl DiskView {
     ensures
         self.tj_at(root).index_domain_valid(self.build_lsn_addr_index(root)),
         self.tj_at(root).index_keys_map_to_valid_entries(self.build_lsn_addr_index(root)),
+    decreases self.the_rank_of(root)
     {
         reveal(TruncatedJournal::index_domain_valid);
         reveal(TruncatedJournal::index_keys_map_to_valid_entries);
-        assume(false);
-        // TODO missing proof here
+        if root.is_None() {
+        } else if self.next(root).is_None() {
+            // TODO(chris) These lets are trigger something... not sure why, since we have the same
+            // defn (build_lsn_addr_index) available in scope. ?
+            let curr_msgs = self.entries[root.unwrap()].message_seq;
+            let start_lsn = math::max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
+            let update = singleton_index(start_lsn, curr_msgs.seq_end, root.unwrap());
+            let output = self.build_lsn_addr_index(self.next(root)).union_prefer_right(update);
+        } else {
+            self.build_lsn_addr_index_domain_valid(self.next(root));
+        }
     }
 
     proof fn build_lsn_addr_index_range_valid(self, root: Pointer, tj_end: LSN)
@@ -207,12 +232,23 @@ impl DiskView {
         self.tj_at(root).index_domain_valid(self.build_lsn_addr_index(root)),
         self.tj_at(root).index_keys_map_to_valid_entries(self.build_lsn_addr_index(root)),
     ensures
-        self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root))
+        self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)),
     {
         reveal(TruncatedJournal::index_domain_valid);
         reveal(TruncatedJournal::index_keys_map_to_valid_entries);
-        assume(false);
-        // TODO missing proof bits here
+        if root.is_None() {
+            assert( self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)) );
+        } else if self.next(root).is_None() {
+            let curr_msgs = self.entries[root.unwrap()].message_seq;
+            let start_lsn = math::max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
+            let update = singleton_index(start_lsn, curr_msgs.seq_end, root.unwrap());
+            let output = self.build_lsn_addr_index(self.next(root)).union_prefer_right(update);
+            assert( self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)) );
+        } else {
+            self.build_lsn_addr_index_domain_valid(self.next(root));
+            assume( false );    // do we ever actually use index_range_valid? That's one ugly definition
+            assert( self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)) );
+        }
     }
 
     pub proof fn build_lsn_addr_index_gives_representation(self, root: Pointer) 
@@ -327,7 +363,6 @@ impl DiskView {
             }
         }
     }
-
 
     pub proof fn build_lsn_addr_honors_rank(self, root: Pointer, lsn_addr_index: Map<LSN, Address>)
     requires
