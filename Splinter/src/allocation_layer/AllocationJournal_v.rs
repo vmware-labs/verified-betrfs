@@ -770,26 +770,19 @@ state_machine!{ AllocationJournal {
     {
         let lsn_au_index = Self::build_lsn_au_index_au_walk(dv, root, first);
         match root {
-            None => {
-                assert( Self::au_domain_valid(dv, root, lsn_au_index) );
-                assert( Self::aus_hold_contiguous_lsns(Self::build_lsn_au_index_au_walk(dv, root, first)) );
-            },
+            None => { },
             Some(addr) => {
                 if addr.au == first {
                     Self::lemma_aus_hold_contiguous_lsns_first_page(dv, root, first);
                 } else {
                     let bottom = first_page(root);
-                    let last_lsn = dv.entries[root.unwrap()].message_seq.seq_end;
+//                     let last_lsn = dv.entries[root.unwrap()].message_seq.seq_end;
                     let first_lsn = dv.entries[bottom.unwrap()].message_seq.seq_start;
-                    let update = Self::singleton_index(first_lsn, last_lsn, bottom.unwrap().au);
+//                     let update = Self::singleton_index(first_lsn, last_lsn, bottom.unwrap().au);
                     let prior_result = Self::build_lsn_au_index_au_walk(dv, dv.next(bottom), first);
 
                     Self::transitive_ranking(dv, bottom.unwrap(), root.unwrap(), first);
-                    assert( lsn_au_index == prior_result.union_prefer_right(update) );
-
                     Self::lemma_aus_hold_contiguous_lsns_inner(dv, dv.next(bottom), first);
-                    assert( Self::au_domain_valid(dv, dv.next(bottom), Self::build_lsn_au_index_au_walk(dv, dv.next(bottom), first)) );
-                    assert( Self::au_domain_valid(dv, dv.next(bottom), prior_result) );
                     
                     assert forall |lsn1, lsn2, lsn3| Self::contiguous_lsns(lsn_au_index, lsn1, lsn2, lsn3) by {
                         if ({
@@ -798,56 +791,16 @@ state_machine!{ AllocationJournal {
                             &&& lsn_au_index.contains_key(lsn3)
                             &&& lsn_au_index[lsn1] == lsn_au_index[lsn3]
                         }) {
-
-                            if lsn1 < first_lsn {
-                                // recursive case
-                                assert( prior_result.contains_key(lsn1) );
-                                if !prior_result.contains_key(lsn3) {
-                                    assert( update.contains_key(lsn3) );
-                                    // lsn3 is in bottom.au
-                                    // if any key in prior_result maps to bottom.au,
-                                    // then we can use prior contiguous to get lsn2 in bottom and
-                                    // we're done, albeit weirdly since that can't happen
-                                    assert( lsn_au_index[lsn3] == bottom.unwrap().au );
+                            if lsn1 < first_lsn {   // recursive case
+                                if !prior_result.contains_key(lsn3) {   // lsn3 is in bottom.au, tho? Nope.
                                     Self::lemma_next_au_doesnt_intersect(dv, root, first, prior_result);
                                     assert( false );
                                 }
-                                //assert( lsn_au_index.contains_key(lsn2) );
-                                assert( prior_result.contains_key(lsn1) );
-                                assert( prior_result.contains_key(lsn3) );
-                                assert( Self::contiguous_lsns(prior_result, lsn1, lsn2, lsn3) );
-                                assert( prior_result.contains_key(lsn2) );
-                                assert( lsn_au_index.contains_key(lsn2) );
-                                assert( lsn_au_index[lsn1] == lsn_au_index[lsn2] );
-                            } else {
-                                // everything after first_lsn, in this au, case
-                                assert( lsn_au_index.contains_key(lsn2) );
-                                assert( lsn_au_index[lsn1] == lsn_au_index[lsn2] );
+                                assert( Self::contiguous_lsns(prior_result, lsn1, lsn2, lsn3) );    // trigger
                             }
                         }
                     }
-                    assert( Self::aus_hold_contiguous_lsns(lsn_au_index) );
                     Self::bottom_properties(dv, root, first);
-//                     assert forall |lsn|
-//                         lsn_au_index.contains_key(lsn)
-//                         implies
-//                         dv.tj_at(root).seq_start() <= lsn < dv.tj_at(root).seq_end()
-//                     by {
-// //                         if update.contains_key(lsn) {
-// //                             assert( dv.tj_at(root).seq_start() <= first_lsn );
-// //                             assert( last_lsn <= dv.tj_at(root).seq_end() );
-// //                             assert( dv.tj_at(root).seq_start() <= lsn < dv.tj_at(root).seq_end() );
-// //                         } else {
-// //                             assert( prior_result.contains_key(lsn) );
-// //                             assert( Self::au_domain_valid(dv, dv.next(bottom), prior_result) );
-// //                             //assert( dv.tj_at(root).seq_start() == dv.tj_at(dv.next(bottom)).seq_start() );
-// //                             assert( dv.tj_at(dv.next(bottom)).seq_end() <= dv.tj_at(root).seq_end() );  // here
-// //                             assert( dv.tj_at(root).seq_start() <= lsn );
-// //                             assert( lsn < dv.tj_at(root).seq_end() );
-// //                             assert( dv.tj_at(root).seq_start() <= lsn < dv.tj_at(root).seq_end() );
-// //                         }
-//                     }
-                    assert( Self::au_domain_valid(dv, root, lsn_au_index) );
                 }
             }
         }
