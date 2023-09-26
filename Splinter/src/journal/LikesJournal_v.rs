@@ -411,6 +411,28 @@ impl DiskView {
             }
         }
     }
+
+    pub open spec fn index_reflects_disk_view(self, lsn_addr_index: LsnAddrIndex) -> bool
+    {
+        forall |lsn| #[trigger] lsn_addr_index.contains_key(lsn) ==> {
+            &&& self.entries.contains_key(lsn_addr_index[lsn])
+            &&& self.entries[lsn_addr_index[lsn]].message_seq.contains(lsn)
+        }
+    }
+
+    // another thing to tuck into build_lsn_addr_index ensures
+    pub proof fn build_lsn_addr_index_reflects_disk_view(self, root: Pointer)
+    requires
+        self.buildable(root),
+    ensures
+        self.index_reflects_disk_view(self.build_lsn_addr_index(root)),
+    decreases self.the_rank_of(root)
+    {
+        if root is Some {
+            self.build_lsn_addr_index_reflects_disk_view(self.next(root))
+        }
+    }
+
 } // DiskView proof bits
 
 pub open spec(checked) fn map_to_likes(lsn_addr_map: LsnAddrIndex) -> Likes
@@ -493,14 +515,6 @@ impl TruncatedJournal {
     {
         &&& (forall |addr, lsn| self.disk_view.entries.contains_key(addr) && #[trigger] self.disk_view.entries[addr].message_seq.contains(lsn)
             ==> lsn_addr_index.contains_key(lsn) && lsn_addr_index[lsn]==addr)
-    }
-
-    pub open spec fn index_reflects_disk_view(self, lsn_addr_index: LsnAddrIndex) -> bool
-    {
-        forall |lsn| #[trigger] lsn_addr_index.contains_key(lsn) ==> {
-            &&& self.disk_view.entries.contains_key(lsn_addr_index[lsn])
-            &&& self.disk_view.entries[lsn_addr_index[lsn]].message_seq.contains(lsn)
-        }
     }
 
     #[verifier(opaque)]
@@ -714,7 +728,7 @@ state_machine!{ LikesJournal {
         &&& tj.disk_view.acyclic()
         &&& self.lsn_addr_index == tj.build_lsn_addr_index()
         &&& self.lsn_addr_index.values() == tj.representation()
-        &&& tj.index_reflects_disk_view(self.lsn_addr_index)
+        &&& tj.disk_view.index_reflects_disk_view(self.lsn_addr_index)  // TODO or just prove it from build
         &&& tj.index_domain_valid(self.lsn_addr_index)
         &&& tj.index_keys_map_to_valid_entries(self.lsn_addr_index)
         &&& tj.valid_entries_appear_in_index(self.lsn_addr_index)

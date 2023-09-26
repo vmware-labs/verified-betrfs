@@ -278,16 +278,38 @@ state_machine!{ AllocationJournal {
         &&& dv.next(Some(addr)) == Some(prior_addr)
     }
 
-    /// EVERY nonzero page with a link links back one within its AU
-    pub open spec(checked) fn all_nonzero_pages_link_to_prior(dv: DiskView) -> bool
+//     /// EVERY nonzero page with a link links back one within its AU
+//     pub open spec(checked) fn all_nonzero_pages_link_to_prior(dv: DiskView) -> bool
+//     recommends
+//         dv.wf(),
+//     {
+//         forall |addr: Address| ({
+//             &&& 0 < addr.page
+//             &&& dv.entries.contains_key(addr)
+//             &&& dv.next(Some(addr)).is_Some()
+//         }) ==> #[trigger] Self::au_page_links_to_prior(dv, addr)
+//     }
+
+    pub open spec(checked) fn upstream(dv: DiskView, addr: Address) -> bool
+    {
+        &&& dv.entries.contains_key(addr)
+        &&& dv.boundary_lsn < dv.entries[addr].message_seq.seq_end
+    }
+
+    /// Every page that's present in the disk_view and which holds any lsns
+    /// upstream of the dv boundary is either the first page or points back a page.
+    /// (NB this invariant is subtly strong: we maintain it because we never introduce pages
+    /// to the journal and then abandon them by pointing "over" them.)
+    pub open spec(checked) fn all_nonzero_pages_link_to_prior(dv: DiskView, first: AU) -> bool
     recommends
         dv.wf(),
     {
-        forall |addr: Address| ({
-            &&& 0 < addr.page
-            &&& dv.entries.contains_key(addr)
-            &&& dv.next(Some(addr)).is_Some()
-        }) ==> #[trigger] Self::au_page_links_to_prior(dv, addr)
+        forall |addr: Address| #![auto] ({
+            &&& addr.au == first
+            &&& addr.page != 0
+            &&& Self::upstream(dv, addr)
+            &&& !Self::addr_has_lsn(dv, addr, dv.boundary_lsn)
+        }) ==> Self::au_page_links_to_prior(dv, addr)
     }
 
     /// Any page in a non-first AU at or below some existing witness page also link back one within its AU
@@ -302,12 +324,20 @@ state_machine!{ AllocationJournal {
         }) ==> Self::au_page_links_to_prior(dv, addr)
     }
 
+    pub open spec(checked) fn zero_page_first_au_unlinked(dv: DiskView, first: AU) -> bool
+    recommends
+        dv.wf(),
+    {
+        dv.next(Some(Address{au: first, page: 0})) is None
+    }
+
     pub open spec(checked) fn internal_au_pages_fully_linked(dv: DiskView, first: AU) -> bool
     recommends
         dv.wf(),
     {
-        &&& Self::all_nonzero_pages_link_to_prior(dv)
+        &&& Self::all_nonzero_pages_link_to_prior(dv, first)
         &&& Self::all_nonfirst_pages_link_to_prior(dv, first)
+        &&& Self::zero_page_first_au_unlinked(dv, first)
     }
 
 //     // inv to prove transitive ranking
@@ -442,7 +472,8 @@ state_machine!{ AllocationJournal {
         &&& Self::internal_au_pages_fully_linked(dv, first)
         &&& Self::valid_first_au(dv, first)
         &&& Self::has_unique_lsns(dv)
-        &&& root.is_Some() ==> dv.boundary_lsn < dv.entries[root.unwrap()].message_seq.seq_end
+        &&& root is Some ==> Self::upstream(dv, root.unwrap())
+//        &&& root.is_Some() ==> dv.boundary_lsn < dv.entries[root.unwrap()].message_seq.seq_end
     }
 
     pub open spec(checked) fn valid_journal_image(image: JournalImage) -> bool
@@ -531,9 +562,14 @@ state_machine!{ AllocationJournal {
         root.is_Some(),
         root.unwrap().au != first,
     ensures
+        // TODO wish I had a superlet for bottom=first_page(root) here
         dv.next(first_page(root)) is Some,    // else root.au == first
         dv.decodable(dv.next(first_page(root))), // because decodable-ity is recursive
         dv.buildable(dv.next(first_page(root))),
+
+        // a couple uglies I threw in to complete lemma_aus_hold_contiguous_lsns_inner
+        Self::pointer_is_upstream(dv, first_page(root), first),
+        dv.tj_at(dv.next(first_page(root))).seq_end() <= dv.tj_at(root).seq_end(),
     decreases dv.the_rank_of(root)
     {
         if dv.next(root) is None {
@@ -590,6 +626,63 @@ state_machine!{ AllocationJournal {
         }
     }
 
+// TODO discard
+//     pub proof fn first_page_contiguity(dv: DiskView, bottom: Address, top: Address)
+//     requires
+//         Self::all_nonzero_pages_link_to_prior(dv),
+//         dv.entries.contains_key(bottom),
+//         // nevermind dv.next(Some(bottom)) is None,  // bottom is 'first', which keeps top from also being first.
+//         dv.entries.contains_key(top),
+//         bottom.au == top.au,
+//         bottom.page <= top.page,
+//     ensures
+//         forall |addr: Address| #![auto] addr.au == top.au && bottom.page < addr.page <= top.page
+//             ==> /*dv.entries.contains_key(addr) &&*/ dv.next(Some(addr)) is Some
+//     decreases top.page - bottom.page
+//     {
+//         assume(false);
+//         if bottom.page == top.page {
+//         } else {
+//             //nevermind if dv.next(Some(top)) is none, then top is first page.
+//             if dv.next(Some(top)) is None {
+//             }
+// 
+//             let prior = Address{au: top.au, page: (top.page-1) as nat};
+//             assert( Self::au_page_links_to_prior(dv, top) );
+//             Self::first_page_contiguity(dv, bottom, prior);
+//             assert forall |addr: Address| #![auto] addr.au == top.au && bottom.page < addr.page <= top.page
+//                 implies /*dv.entries.contains_key(addr) &&*/ dv.next(Some(addr)) is Some by {
+//             }
+//         }
+//     }
+//
+//     pub proof fn first_page_transitive_ranking(dv: DiskView, bottom: Address, top: Address)
+//     requires
+//         dv.acyclic(),
+//         Self::all_nonzero_pages_link_to_prior(dv),
+//         dv.entries.contains_key(bottom),
+//         dv.entries.contains_key(top),
+//         bottom.au == top.au,
+//         bottom.page <= top.page,
+//     ensures
+//         forall |addr: Address| #![auto] addr.au == top.au && bottom.page < addr.page <= top.page
+//             ==> dv.the_rank_of(Some(bottom)) < dv.the_rank_of(Some(addr)),
+//     decreases top.page - bottom.page
+//     {
+//         if bottom.page < top.page {
+//             let prior = Address{au: top.au, page: (top.page-1) as nat};
+//             Self::first_page_contiguity(dv, bottom, top);
+//             assert( Self::au_page_links_to_prior(dv, top) );    // trigger
+//             Self::first_page_transitive_ranking(dv, bottom, prior);
+//             assert forall |addr: Address| #![auto] addr.au == top.au && bottom.page < addr.page <= top.page
+//                 implies dv.the_rank_of(Some(bottom)) < #[trigger] dv.the_rank_of(Some(addr)) by {
+//                 if addr.page == top.page && bottom.page < prior.page {
+//                     assert( dv.the_rank_of(Some(prior)) < dv.the_rank_of(Some(addr)) );  // trigger
+//                 }
+//             }
+//         }
+//     }
+
     pub proof fn lemma_aus_hold_contiguous_lsns_first_page(dv: DiskView, root: Pointer, first: AU)
     requires
         Self::pointer_is_upstream(dv, root, first),
@@ -607,41 +700,65 @@ state_machine!{ AllocationJournal {
         let lsn_au_index = Self::build_lsn_au_index_page_walk(dv, root);
 
         if root is None {
-//             assert( Self::au_domain_valid(dv, root, lsn_au_index) );
-//             assert( Self::aus_hold_contiguous_lsns(Self::build_lsn_au_index_page_walk(dv, root)) );
         } else if dv.next(root) is None {
-//             let curr_msgs = dv.entries[root.unwrap()].message_seq;
-//             let update = Self::singleton_index(
-//                 math::max(dv.boundary_lsn as int, curr_msgs.seq_start as int) as nat, curr_msgs.seq_end, root.unwrap().au);
             assert( Self::build_lsn_au_index_page_walk(dv, dv.next(root)) =~= Map::empty() ); // trigger
-            //assert( lsn_au_index == Self::build_lsn_au_index_page_walk(dv, dv.next(root)).union_prefer_right(update) ); // trigger.
-            
-//             assert( Self::au_domain_valid(dv, root, lsn_au_index) );
-//             assert( Self::aus_hold_contiguous_lsns(Self::build_lsn_au_index_page_walk(dv, root)) );
-        } else if root.unwrap().page == 0 {
-            assume( dv.next(root) is None );    // contradicts valid_first_au, but ... hard to talk about!
-            assert( false );
+//         } else if root.unwrap().page == 0 {
+//             assert( false );
         } else {
             assert( Self::au_page_links_to_prior(dv, root.unwrap()) );  // trigger
-            Self::lemma_aus_hold_contiguous_lsns_first_page(dv, dv.next(root), first);
-//             assert( Self::au_domain_valid(dv, root, lsn_au_index) );
-
-//             let prior_au_index = Self::build_lsn_au_index_page_walk(dv, dv.next(root));
-//             assert forall |lsn1, lsn2, lsn3| Self::contiguous_lsns(lsn_au_index, lsn1, lsn2, lsn3) by {
-//                 if ({
-//                     &&& lsn1 <= lsn2 <= lsn3
-//                     &&& lsn_au_index.contains_key(lsn1)
-//                     &&& lsn_au_index.contains_key(lsn3)
-//                     &&& lsn_au_index[lsn1] == lsn_au_index[lsn3]
-//                 }) {
-//                     if prior_au_index.contains_key(lsn2) {
-//                         //assert( lsn_au_index[lsn2] == 
-//                     }
-//                 }
-//             }
-//             assert( Self::aus_hold_contiguous_lsns(Self::build_lsn_au_index_page_walk(dv, root)) );
+            Self::lemma_aus_hold_contiguous_lsns_first_page(dv, dv.next(root), first);  // recurse!
         }
     }
+
+//     pub proof fn lemma_first_page_ordering(dv: DiskView, low: Address, high: Address)
+//     requires
+//         dv.wf(),
+//         Self::has_unique_lsns(dv),
+//         low.au == high.au,
+//         dv.entries.contains_key(low),
+//         dv.boundary_lsn < dv.entries[low].message_seq.seq_end,
+//         dv.entries.contains_key(high),
+//         dv.boundary_lsn < dv.entries[high].message_seq.seq_end,
+//         dv.entries[low].message_seq.seq_start < dv.entries[high].message_seq.seq_start,
+//     ensures
+//         low.page < high.page
+//     decreases dv.entries[high].message_seq.seq_start - dv.entries[low].message_seq.seq_start
+//     {
+//         assert( dv.entries[low].message_seq.seq_end <= dv.entries[high].message_seq.seq_start ) by {
+//             if !( dv.entries[low].message_seq.seq_end <= dv.entries[high].message_seq.seq_start ) {
+//                 let dup_lsn = dv.entries[high].message_seq.seq_start;
+//                 assert( Self::addr_has_lsn(dv, low, dup_lsn) );  // trigger has_unique_lsns
+//                 assert( Self::addr_has_lsn(dv, high, dup_lsn) ); // trigger has_unique_lsns
+//                 assert( false );
+//             }
+//         }
+// 
+//         assert( dv.next(Some(high)) is Some );
+// 
+//         if dv.entries[high].message_seq.seq_start == dv.entries[low].message_seq.seq_end {
+//             assert( dv.next(Some(high)) == Some(low) );
+//             assert( low.page < high.page );
+//         } else {
+//             assume( false );
+//             let prior = Address{au: high.au, page: (high.page-1) as nat};
+//             if dv.entries[prior].message_seq.seq_end <= dv.boundary_lsn {
+//                 if dv.entries[high].message_seq.seq_start < dv.entries[low].message_seq.seq_end {
+//                     let dup_lsn = dv.entries[high].message_seq.seq_start;
+//                     assert( dv.entries.contains_key(low) );
+//                     assert( dv.entries[low].message_seq.seq_start <= dup_lsn );
+//                     assert( dup_lsn < dv.entries[low].message_seq.seq_end );
+//                     assert( Self::addr_has_lsn(dv, low, dup_lsn) );
+//                     assert( Self::addr_has_lsn(dv, high, dup_lsn) );
+//                     assert(false);
+//                 }
+//                 assert( dv.entries[low].message_seq.seq_start < dv.entries[high].message_seq.seq_start );
+//                 assert( dv.entries[high].message_seq.seq_start < dv.entries[high].message_seq.seq_end );
+//                 assert( dv.entries[low].message_seq.seq_end <= dv.boundary_lsn );
+//                 assert( false );
+//             }
+//             Self::lemma_first_page_ordering(dv, low, prior);
+//         }
+//     }
 
     pub proof fn lemma_aus_hold_contiguous_lsns_inner(dv: DiskView, root: Pointer, first: AU)
     requires
@@ -710,7 +827,27 @@ state_machine!{ AllocationJournal {
                         }
                     }
                     assert( Self::aus_hold_contiguous_lsns(lsn_au_index) );
-                    assume( Self::au_domain_valid(dv, root, lsn_au_index) );
+                    Self::bottom_properties(dv, root, first);
+//                     assert forall |lsn|
+//                         lsn_au_index.contains_key(lsn)
+//                         implies
+//                         dv.tj_at(root).seq_start() <= lsn < dv.tj_at(root).seq_end()
+//                     by {
+// //                         if update.contains_key(lsn) {
+// //                             assert( dv.tj_at(root).seq_start() <= first_lsn );
+// //                             assert( last_lsn <= dv.tj_at(root).seq_end() );
+// //                             assert( dv.tj_at(root).seq_start() <= lsn < dv.tj_at(root).seq_end() );
+// //                         } else {
+// //                             assert( prior_result.contains_key(lsn) );
+// //                             assert( Self::au_domain_valid(dv, dv.next(bottom), prior_result) );
+// //                             //assert( dv.tj_at(root).seq_start() == dv.tj_at(dv.next(bottom)).seq_start() );
+// //                             assert( dv.tj_at(dv.next(bottom)).seq_end() <= dv.tj_at(root).seq_end() );  // here
+// //                             assert( dv.tj_at(root).seq_start() <= lsn );
+// //                             assert( lsn < dv.tj_at(root).seq_end() );
+// //                             assert( dv.tj_at(root).seq_start() <= lsn < dv.tj_at(root).seq_end() );
+// //                         }
+//                     }
+                    assert( Self::au_domain_valid(dv, root, lsn_au_index) );
                 }
             }
         }
@@ -969,6 +1106,7 @@ state_machine!{ AllocationJournal {
             }
         }
 
+        assume( false );    // added a conjunct
         assert( post.inv() );
         
     }
