@@ -626,63 +626,6 @@ state_machine!{ AllocationJournal {
         }
     }
 
-// TODO discard
-//     pub proof fn first_page_contiguity(dv: DiskView, bottom: Address, top: Address)
-//     requires
-//         Self::all_nonzero_pages_link_to_prior(dv),
-//         dv.entries.contains_key(bottom),
-//         // nevermind dv.next(Some(bottom)) is None,  // bottom is 'first', which keeps top from also being first.
-//         dv.entries.contains_key(top),
-//         bottom.au == top.au,
-//         bottom.page <= top.page,
-//     ensures
-//         forall |addr: Address| #![auto] addr.au == top.au && bottom.page < addr.page <= top.page
-//             ==> /*dv.entries.contains_key(addr) &&*/ dv.next(Some(addr)) is Some
-//     decreases top.page - bottom.page
-//     {
-//         assume(false);
-//         if bottom.page == top.page {
-//         } else {
-//             //nevermind if dv.next(Some(top)) is none, then top is first page.
-//             if dv.next(Some(top)) is None {
-//             }
-// 
-//             let prior = Address{au: top.au, page: (top.page-1) as nat};
-//             assert( Self::au_page_links_to_prior(dv, top) );
-//             Self::first_page_contiguity(dv, bottom, prior);
-//             assert forall |addr: Address| #![auto] addr.au == top.au && bottom.page < addr.page <= top.page
-//                 implies /*dv.entries.contains_key(addr) &&*/ dv.next(Some(addr)) is Some by {
-//             }
-//         }
-//     }
-//
-//     pub proof fn first_page_transitive_ranking(dv: DiskView, bottom: Address, top: Address)
-//     requires
-//         dv.acyclic(),
-//         Self::all_nonzero_pages_link_to_prior(dv),
-//         dv.entries.contains_key(bottom),
-//         dv.entries.contains_key(top),
-//         bottom.au == top.au,
-//         bottom.page <= top.page,
-//     ensures
-//         forall |addr: Address| #![auto] addr.au == top.au && bottom.page < addr.page <= top.page
-//             ==> dv.the_rank_of(Some(bottom)) < dv.the_rank_of(Some(addr)),
-//     decreases top.page - bottom.page
-//     {
-//         if bottom.page < top.page {
-//             let prior = Address{au: top.au, page: (top.page-1) as nat};
-//             Self::first_page_contiguity(dv, bottom, top);
-//             assert( Self::au_page_links_to_prior(dv, top) );    // trigger
-//             Self::first_page_transitive_ranking(dv, bottom, prior);
-//             assert forall |addr: Address| #![auto] addr.au == top.au && bottom.page < addr.page <= top.page
-//                 implies dv.the_rank_of(Some(bottom)) < #[trigger] dv.the_rank_of(Some(addr)) by {
-//                 if addr.page == top.page && bottom.page < prior.page {
-//                     assert( dv.the_rank_of(Some(prior)) < dv.the_rank_of(Some(addr)) );  // trigger
-//                 }
-//             }
-//         }
-//     }
-
     pub proof fn lemma_aus_hold_contiguous_lsns_first_page(dv: DiskView, root: Pointer, first: AU)
     requires
         Self::pointer_is_upstream(dv, root, first),
@@ -709,56 +652,6 @@ state_machine!{ AllocationJournal {
             Self::lemma_aus_hold_contiguous_lsns_first_page(dv, dv.next(root), first);  // recurse!
         }
     }
-
-//     pub proof fn lemma_first_page_ordering(dv: DiskView, low: Address, high: Address)
-//     requires
-//         dv.wf(),
-//         Self::has_unique_lsns(dv),
-//         low.au == high.au,
-//         dv.entries.contains_key(low),
-//         dv.boundary_lsn < dv.entries[low].message_seq.seq_end,
-//         dv.entries.contains_key(high),
-//         dv.boundary_lsn < dv.entries[high].message_seq.seq_end,
-//         dv.entries[low].message_seq.seq_start < dv.entries[high].message_seq.seq_start,
-//     ensures
-//         low.page < high.page
-//     decreases dv.entries[high].message_seq.seq_start - dv.entries[low].message_seq.seq_start
-//     {
-//         assert( dv.entries[low].message_seq.seq_end <= dv.entries[high].message_seq.seq_start ) by {
-//             if !( dv.entries[low].message_seq.seq_end <= dv.entries[high].message_seq.seq_start ) {
-//                 let dup_lsn = dv.entries[high].message_seq.seq_start;
-//                 assert( Self::addr_has_lsn(dv, low, dup_lsn) );  // trigger has_unique_lsns
-//                 assert( Self::addr_has_lsn(dv, high, dup_lsn) ); // trigger has_unique_lsns
-//                 assert( false );
-//             }
-//         }
-// 
-//         assert( dv.next(Some(high)) is Some );
-// 
-//         if dv.entries[high].message_seq.seq_start == dv.entries[low].message_seq.seq_end {
-//             assert( dv.next(Some(high)) == Some(low) );
-//             assert( low.page < high.page );
-//         } else {
-//             assume( false );
-//             let prior = Address{au: high.au, page: (high.page-1) as nat};
-//             if dv.entries[prior].message_seq.seq_end <= dv.boundary_lsn {
-//                 if dv.entries[high].message_seq.seq_start < dv.entries[low].message_seq.seq_end {
-//                     let dup_lsn = dv.entries[high].message_seq.seq_start;
-//                     assert( dv.entries.contains_key(low) );
-//                     assert( dv.entries[low].message_seq.seq_start <= dup_lsn );
-//                     assert( dup_lsn < dv.entries[low].message_seq.seq_end );
-//                     assert( Self::addr_has_lsn(dv, low, dup_lsn) );
-//                     assert( Self::addr_has_lsn(dv, high, dup_lsn) );
-//                     assert(false);
-//                 }
-//                 assert( dv.entries[low].message_seq.seq_start < dv.entries[high].message_seq.seq_start );
-//                 assert( dv.entries[high].message_seq.seq_start < dv.entries[high].message_seq.seq_end );
-//                 assert( dv.entries[low].message_seq.seq_end <= dv.boundary_lsn );
-//                 assert( false );
-//             }
-//             Self::lemma_first_page_ordering(dv, low, prior);
-//         }
-//     }
 
     pub proof fn lemma_aus_hold_contiguous_lsns_inner(dv: DiskView, root: Pointer, first: AU)
     requires
