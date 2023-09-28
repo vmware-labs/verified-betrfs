@@ -27,7 +27,11 @@ impl Address {
         Address{page: 0, ..self}
     }
 
-    pub open spec(checked) fn next_page(self) -> Address {
+    pub open spec(checked) fn previous(self) -> Address {
+        Address{page: (self.page-1) as nat, ..self}
+    }
+    
+    pub open spec(checked) fn next(self) -> Address {
         Address{page: self.page+1, ..self}
     }
 }

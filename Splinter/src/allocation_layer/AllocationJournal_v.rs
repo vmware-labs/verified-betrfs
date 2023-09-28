@@ -240,7 +240,7 @@ state_machine!{ AllocationJournal {
               &&& addr.page == 0
         })
         &&& (self.mini_allocator.curr.is_Some() && self.journal.journal.truncated_journal.freshest_rec.is_Some() ==>
-                addr == self.journal.journal.truncated_journal.freshest_rec.unwrap().next_page())
+                addr == self.journal.journal.truncated_journal.freshest_rec.unwrap().next())
     }
 
 
@@ -345,15 +345,43 @@ state_machine!{ AllocationJournal {
         dv.entries.contains_key(first_page_0) ==> dv.entries[first_page_0].message_seq.seq_start <= dv.boundary_lsn
     }
 
+    // NB talking about dv.next() is painful because we have to reason about interactions
+    // with a moving dv.boundary. Maybe easier to break down the reasoning into pointers
+    // (which don't change) and layer the boundary reasoning on top.
+    pub open spec(checked) fn nonzero_pages_point_backward(dv: DiskView) -> bool
+    recommends
+        dv.wf(),
+    {
+        forall |addr: Address| #![auto] ({
+            &&& addr.page != 0
+            &&& dv.entries.contains_key(addr)
+        }) ==> dv.entries[addr].prior_rec == Some(addr.previous())
+    }
+
+    pub open spec(checked) fn pages_allocated_in_lsn_order(dv: DiskView) -> bool
+    recommends
+        dv.wf(),
+    {
+        forall |alo: Address, ahi: Address| #![auto] ({
+            &&& alo.au == ahi.au
+            &&& alo.page <= ahi.page
+            &&& dv.entries.contains_key(alo)
+            &&& dv.entries.contains_key(ahi)
+        }) ==> dv.entries[alo].message_seq.seq_end <= dv.entries[ahi].message_seq.seq_start
+    }
+
     pub open spec(checked) fn internal_au_pages_fully_linked(dv: DiskView, first: AU) -> bool
     recommends
         dv.wf(),
     {
-        &&& Self::all_nonfirst_pages_link_to_prior(dv, first)
-        &&& Self::nonfirst_aus_populated_to_zero(dv, first)
-        &&& Self::zero_page_of_first_au_unlinked(dv, first)
-        &&& Self::all_aus_link_towards_existing_pages(dv)
-        &&& Self::all_nonzero_pages_in_first_au_link_to_prior(dv, first)
+//         &&& Self::all_nonfirst_pages_link_to_prior(dv, first)
+//         &&& Self::nonfirst_aus_populated_to_zero(dv, first)
+//         &&& Self::zero_page_of_first_au_unlinked(dv, first)
+//         &&& Self::all_aus_link_towards_existing_pages(dv)
+//         &&& Self::all_nonzero_pages_in_first_au_link_to_prior(dv, first)
+
+        &&& Self::nonzero_pages_point_backward(dv)
+        &&& Self::pages_allocated_in_lsn_order(dv)
     }
 
 //     // inv to prove transitive ranking
@@ -370,6 +398,19 @@ state_machine!{ AllocationJournal {
 //             Self::au_pages_linked_till_first_in_order(dv, addr)
 //     }
 
+    pub proof fn nonfirst_decodable(dv: DiskView, root: Pointer, first: AU)
+    requires
+        dv.decodable(root),
+        root is Some,
+        root.unwrap().au != first,
+        root.unwrap().page != 0,
+    ensures
+        dv.next(root) is Some,
+        dv.decodable(dv.next(root)),
+    {
+        assume(false); // TODO prove me with a uniquenes argument about boundary page
+    }
+
     pub proof fn transitive_ranking(dv: LinkedJournal_v::DiskView, root: Address, later: Address, first: AU)
     requires
         dv.decodable(Some(later)),
@@ -385,11 +426,7 @@ state_machine!{ AllocationJournal {
     decreases later.page
     {
         if root == later { return; }
-
-        assert( dv.entries.contains_key(root) );    // trigger nonfirst_aus_populated_to_zero
-        assert( Self::au_page_links_to_prior(dv, later) ); // trigger all_aus_link_towards_existing_pages
-
-        //let prior = dv.entries[later].cropped_prior(dv.boundary_lsn);
+        Self::nonfirst_decodable(dv, Some(later), first);
         let prior = dv.next(Some(later));
         Self::transitive_ranking(dv, root, prior.unwrap(), first);
     }
@@ -585,7 +622,7 @@ state_machine!{ AllocationJournal {
         }
 
         if root.unwrap().page != 0 {
-            assert( dv.entries.contains_key(first_page(root).unwrap()) );
+//             assert( dv.entries.contains_key(first_page(root).unwrap()) );
             assert( Self::au_page_links_to_prior(dv, root.unwrap()) );
             Self::bottom_properties(dv, dv.next(root), first);
         }
@@ -634,6 +671,63 @@ state_machine!{ AllocationJournal {
         }
     }
 
+//     could there be an au in which:
+//         - valid_first_au,
+//             so choose |faddr| faddr.au == au
+//         - page0 points outbound
+//         - page0 is upstream
+//     no because
+//         - every higher-numbered page has higher lsns!
+//     also we know every higher-numbered page must be present on the disk. Do we need that?
+// 
+//     pub proof fn first_au_cannot_point_outbound_inner(dv: DiskView, alo: Address, ahi: Address)
+//     requires
+//         alo.au == ahi.au,
+//     ensures
+//         forall |addr: Address| ({
+//             &&& alo.au == addr.au
+//             &&& alo.page < addr.page <= ahi.page
+//             &&& dv.entries.contains_key(addr)
+//         }) ==> dv.entries[alo].message_seq.seq_end <= dv.entries[addr].message_seq.seq_start,
+//     decreases ahi.page - alo.page
+//     {
+//         if alo.page < ahi.page {
+//             Self::first_au_cannot_point_outbound_inner(dv, alo.next(), ahi);
+//             assert forall |addr: Address| ({
+//                 &&& alo.au == addr.au
+//                 &&& alo.page < addr.page <= ahi.page
+//                 &&& dv.entries.contains_key(addr)
+//             }) implies dv.entries[alo].message_seq.seq_end <= dv.entries[addr].message_seq.seq_start by {
+//                 if addr == alo {
+//                     assert( dv.entries[alo].message_seq.seq_end <= dv.entries[addr].message_seq.seq_start );
+//                 } else {
+//                     let aloinner = alo.next();
+//                     assert( alo.next().au == addr.au );
+//                     assert( alo.next().page < addr.page );
+//                     assert( addr.page <= ahi.page );
+//                     assert( dv.entries.contains_key(addr) );
+//                     assert( dv.entries[aloinner].message_seq.seq_end <= dv.entries[addr].message_seq.seq_start );
+//                     assert( dv.entries.contains_key(aloinner) );
+//                     assert( dv.entries[alo].message_seq.seq_end <= dv.entries[aloinner].message_seq.seq_end );
+//                     assert( dv.entries[alo].message_seq.seq_end <= dv.entries[addr].message_seq.seq_start );
+//                 }
+//             }
+//         }
+//     }
+
+    pub proof fn first_au_cannot_point_outbound(dv: DiskView, first: AU)
+    requires
+        Self::valid_first_au(dv, first),
+        Self::pages_allocated_in_lsn_order(dv),
+    ensures
+        dv.next(Some(Address{au: first, page: 0})) is None,
+    {
+        let zero_page = Address{au: first, page: 0};
+        let first_page = choose |addr: Address| #![auto] addr.au == first && dv.addr_supports_lsn(addr, dv.boundary_lsn);
+        assert( dv.entries.contains_key(zero_page) );
+        assert( dv.entries.contains_key(first_page) );
+    }
+
     pub proof fn lemma_aus_hold_contiguous_lsns_first_page(dv: DiskView, root: Pointer, first: AU)
     requires
         Self::pointer_is_upstream(dv, root, first),
@@ -653,10 +747,18 @@ state_machine!{ AllocationJournal {
         if root is None {
         } else if dv.next(root) is None {
             assert( Self::build_lsn_au_index_page_walk(dv, dv.next(root)) =~= Map::empty() ); // trigger
-//         } else if root.unwrap().page == 0 {
-//             assert( false );
+        } else if root.unwrap().page == 0 {
+            assert( false );
         } else {
-            assert( Self::au_page_links_to_prior(dv, root.unwrap()) );  // trigger
+//             assert( Self::au_page_links_to_prior(dv, root.unwrap()) );  // trigger
+//             assert( dv.next(root) is Some );
+//             assert( Self::nonzero_pages_point_backward(dv) );
+//             assert( dv.entries.contains_key(root.unwrap()) );
+//             assert( dv.next(root) == dv.entries[root.unwrap()].prior_rec );
+//             assert( root.unwrap().page != 0 );
+//             assert( dv.entries[root.unwrap()].prior_rec is Some );
+//             assert( dv.entries[root.unwrap()].prior_rec == Some(root.unwrap().previous()) );
+//             assert( dv.next(root).unwrap().au == root.unwrap().au );
             Self::lemma_aus_hold_contiguous_lsns_first_page(dv, dv.next(root), first);  // recurse!
         }
     }
@@ -926,101 +1028,101 @@ state_machine!{ AllocationJournal {
             }
             let start_lsn = lbl.get_DiscardOld_start_lsn();
 
-            assert( Self::all_aus_link_towards_existing_pages(post_dv) ) by {
-                assert forall |alo: Address, ahi: Address| #![auto] ({
-                    &&& alo.au == ahi.au
-                    &&& alo.page < ahi.page
-                    &&& #[trigger] post_dv.entries.contains_key(alo)
-                    &&& #[trigger] post_dv.entries.contains_key(ahi)
-                }) implies Self::au_page_links_to_prior(post_dv, ahi) by {
-                    assert( Self::au_page_links_to_prior(pre_dv, ahi) );    // trigger
+//             assert( Self::all_aus_link_towards_existing_pages(post_dv) ) by {
+//                 assert forall |alo: Address, ahi: Address| #![auto] ({
+//                     &&& alo.au == ahi.au
+//                     &&& alo.page < ahi.page
+//                     &&& #[trigger] post_dv.entries.contains_key(alo)
+//                     &&& #[trigger] post_dv.entries.contains_key(ahi)
+//                 }) implies Self::au_page_links_to_prior(post_dv, ahi) by {
+//                     assert( Self::au_page_links_to_prior(pre_dv, ahi) );    // trigger
+// 
+//                     if !Self::au_page_links_to_prior(post_dv, ahi) {
+//                         // If ahi doesn't link back, it's because the dv.boundary moved into its range. Contradict that idea.
+//                         assert( post_dv.entries[ahi].message_seq.seq_start <= post_dv.boundary_lsn );
+// 
+//                         let lo_witness = (post_dv.entries[alo].message_seq.seq_end - 1) as nat;
+//                         assert( post_dv.boundary_lsn <= lo_witness ) by {
+// //                                 assert( post_dv.addr_supports_lsn(alo, lo_witness) ); // trigger valid_entries_appear_in_index
+// //                                 assert( post.journal.lsn_addr_index.contains_key(lo_witness) ); // trigger index_domain_valid
+//                             reveal(LinkedJournal_v::TruncatedJournal::index_domain_valid);
+// //                                 assert( post.get_tj().seq_start() <= lo_witness );
+//                         }
+// 
+//                         Self::better_smaller_page_has_smaller_lsns(pre_dv, alo, ahi, pre.first);
+// //                             assert( lo_witness <= post_dv.entries[ahi].message_seq.seq_start ); // all_aus_link_towards_existing_pages in pre
+//                     }
+//                     assert( Self::au_page_links_to_prior(post_dv, ahi) );
+//                 }
+//             }
 
-                    if !Self::au_page_links_to_prior(post_dv, ahi) {
-                        // If ahi doesn't link back, it's because the dv.boundary moved into its range. Contradict that idea.
-                        assert( post_dv.entries[ahi].message_seq.seq_start <= post_dv.boundary_lsn );
+//             //all_nonzero_pages_in_first_au_link_to_prior
+//             assert forall |addr: Address| ({
+//                 &&& addr.au == post.first
+//                 &&& addr.page != 0
+//                 &&& Self::upstream(post_dv, addr)
+//                 &&& !post_dv.addr_supports_lsn(addr, post_dv.boundary_lsn)
+//             }) implies #[trigger] Self::au_page_links_to_prior(post_dv, addr) by {
+//                 assert( Self::au_page_links_to_prior(pre_dv, addr) );   // trigger
+//             }
 
-                        let lo_witness = (post_dv.entries[alo].message_seq.seq_end - 1) as nat;
-                        assert( post_dv.boundary_lsn <= lo_witness ) by {
-//                                 assert( post_dv.addr_supports_lsn(alo, lo_witness) ); // trigger valid_entries_appear_in_index
-//                                 assert( post.journal.lsn_addr_index.contains_key(lo_witness) ); // trigger index_domain_valid
-                            reveal(LinkedJournal_v::TruncatedJournal::index_domain_valid);
-//                                 assert( post.get_tj().seq_start() <= lo_witness );
-                        }
-
-                        Self::better_smaller_page_has_smaller_lsns(pre_dv, alo, ahi, pre.first);
-//                             assert( lo_witness <= post_dv.entries[ahi].message_seq.seq_start ); // all_aus_link_towards_existing_pages in pre
-                    }
-                    assert( Self::au_page_links_to_prior(post_dv, ahi) );
-                }
-            }
-
-            //all_nonzero_pages_in_first_au_link_to_prior
-            assert forall |addr: Address| ({
-                &&& addr.au == post.first
-                &&& addr.page != 0
-                &&& Self::upstream(post_dv, addr)
-                &&& !post_dv.addr_supports_lsn(addr, post_dv.boundary_lsn)
-            }) implies #[trigger] Self::au_page_links_to_prior(post_dv, addr) by {
-                assert( Self::au_page_links_to_prior(pre_dv, addr) );   // trigger
-            }
-
-            let first_lsn = post.get_tj().seq_start();
-            let first_page = post.journal.lsn_addr_index[first_lsn];
-            post_dv.instantiate_index_keys_map_to_valid_entries(post.journal.lsn_addr_index, first_lsn);
-            assert( post_dv.addr_supports_lsn(first_page, first_lsn) );
-            let first_page_0 = Address{au: post.first, page: 0};
-            assert( first_page.au == post.first );
-
-            assert( Self::zero_page_of_first_au_unlinked(post_dv, post.first) ) by {
-                if post_dv.entries.contains_key(first_page_0) {
-                    if post_dv.addr_supports_lsn(first_page_0, first_lsn) {
-                        assert( post_dv.entries[first_page_0].message_seq.seq_start <= post_dv.boundary_lsn );
-                    } else {
-                        // first_page is after 0, so first_page_0 must not be in post_dv
-                        if pre_dv.entries.contains_key(first_page_0) {
-                            if post_dv.entries.contains_key(first_page_0) {
-                                Self::better_smaller_page_has_smaller_lsns(pre_dv, first_page_0, first_page, pre.first);
-                                assert( false );
-                            }
-                            assert( !post_dv.entries.contains_key(first_page_0) );
-                        } // if it wasn't in pre, we're done
-                        assert( post_dv.entries[first_page_0].message_seq.seq_start <= post_dv.boundary_lsn );
-                    }
-                }
-            }
-
-            if post.first != pre.first {
-                assert forall |addr| #[trigger] post_dv.entries.contains_key(addr) implies addr.au != pre.first by {
-                    assume(false);
-                }
-            }
-
-            assert( Self::all_nonfirst_pages_link_to_prior(post_dv, post.first) ) by {
-                assert forall |alo: Address, ahi: Address| #![auto] ({
-                    &&& #[trigger] post_dv.entries.contains_key(ahi)
-                    &&& ahi.au != post.first
-                    &&& alo.au == ahi.au
-                    &&& 0 < alo.page <= ahi.page
-                }) implies #[trigger] Self::au_page_links_to_prior(post_dv, alo) by {
-                    assert( ahi.au != pre.first );
-                    assert( Self::au_page_links_to_prior(pre_dv, alo) );
-                    assert( pre_dv.entries.contains_key(ahi) );
-                    assume( post_dv.boundary_lsn < post_dv.entries[alo].message_seq.seq_start );
-                    assert( pre_dv.entries.contains_key(alo) );
-                    assert( post_dv.entries.contains_key(alo) );
-                    assert( Self::au_page_links_to_prior(post_dv, alo) );
-                }
-            }
-            assert( Self::nonfirst_aus_populated_to_zero(post_dv, post.first) ) by {
-                assert forall |alo: Address, ahi: Address| #![auto] ({
-                    &&& alo.au != post.first
-                    &&& alo.au == ahi.au
-                    &&& alo.page < ahi.page
-                    &&& #[trigger] post_dv.entries.contains_key(ahi)
-                }) implies #[trigger] post_dv.entries.contains_key(alo) by {
-                    assume(false);
-                }
-            }
+//             let first_lsn = post.get_tj().seq_start();
+//             let first_page = post.journal.lsn_addr_index[first_lsn];
+//             post_dv.instantiate_index_keys_map_to_valid_entries(post.journal.lsn_addr_index, first_lsn);
+//             assert( post_dv.addr_supports_lsn(first_page, first_lsn) );
+//             let first_page_0 = Address{au: post.first, page: 0};
+//             assert( first_page.au == post.first );
+// 
+//             assert( Self::zero_page_of_first_au_unlinked(post_dv, post.first) ) by {
+//                 if post_dv.entries.contains_key(first_page_0) {
+//                     if post_dv.addr_supports_lsn(first_page_0, first_lsn) {
+//                         assert( post_dv.entries[first_page_0].message_seq.seq_start <= post_dv.boundary_lsn );
+//                     } else {
+//                         // first_page is after 0, so first_page_0 must not be in post_dv
+//                         if pre_dv.entries.contains_key(first_page_0) {
+//                             if post_dv.entries.contains_key(first_page_0) {
+//                                 Self::better_smaller_page_has_smaller_lsns(pre_dv, first_page_0, first_page, pre.first);
+//                                 assert( false );
+//                             }
+//                             assert( !post_dv.entries.contains_key(first_page_0) );
+//                         } // if it wasn't in pre, we're done
+//                         assert( post_dv.entries[first_page_0].message_seq.seq_start <= post_dv.boundary_lsn );
+//                     }
+//                 }
+//             }
+// 
+//             if post.first != pre.first {
+//                 assert forall |addr| #[trigger] post_dv.entries.contains_key(addr) implies addr.au != pre.first by {
+//                     assume(false);
+//                 }
+//             }
+// 
+//             assert( Self::all_nonfirst_pages_link_to_prior(post_dv, post.first) ) by {
+//                 assert forall |alo: Address, ahi: Address| #![auto] ({
+//                     &&& #[trigger] post_dv.entries.contains_key(ahi)
+//                     &&& ahi.au != post.first
+//                     &&& alo.au == ahi.au
+//                     &&& 0 < alo.page <= ahi.page
+//                 }) implies #[trigger] Self::au_page_links_to_prior(post_dv, alo) by {
+//                     assert( ahi.au != pre.first );
+//                     assert( Self::au_page_links_to_prior(pre_dv, alo) );
+//                     assert( pre_dv.entries.contains_key(ahi) );
+//                     assume( post_dv.boundary_lsn < post_dv.entries[alo].message_seq.seq_start );
+//                     assert( pre_dv.entries.contains_key(alo) );
+//                     assert( post_dv.entries.contains_key(alo) );
+//                     assert( Self::au_page_links_to_prior(post_dv, alo) );
+//                 }
+//             }
+//             assert( Self::nonfirst_aus_populated_to_zero(post_dv, post.first) ) by {
+//                 assert forall |alo: Address, ahi: Address| #![auto] ({
+//                     &&& alo.au != post.first
+//                     &&& alo.au == ahi.au
+//                     &&& alo.page < ahi.page
+//                     &&& #[trigger] post_dv.entries.contains_key(ahi)
+//                 }) implies #[trigger] post_dv.entries.contains_key(alo) by {
+//                     assume(false);
+//                 }
+//             }
             
             assert( Self::internal_au_pages_fully_linked(post.get_tj().disk_view, post.first) );
         }
