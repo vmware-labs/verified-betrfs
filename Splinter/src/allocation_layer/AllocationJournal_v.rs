@@ -311,87 +311,16 @@ state_machine!{ AllocationJournal {
         let old_au_idx = Self::build_lsn_au_index_page_walk(dv, root); // super-let, please
         let new_tj = dv.tj_at(root).discard_old(new_bdy);
         Self::build_lsn_au_index_page_walk(new_tj.disk_view, new_tj.freshest_rec)
-            == Self::lsn_au_index_discarding_up_to(old_au_idx, new_bdy) 
+            =~= Self::lsn_au_index_discarding_up_to(old_au_idx, new_bdy)    // remember, kids, the tilde is a proof strategy!
         }),
     decreases dv.the_rank_of(root)
     {
-        let old_au_idx = Self::build_lsn_au_index_page_walk(dv, root); // super-let, please
         Self::build_lsn_au_index_page_walk_domain(dv, root);
-
         let discarded_tj = dv.tj_at(root).discard_old(new_bdy);
-
-        assert( discarded_tj.disk_view.wf() );
         assert( discarded_tj.disk_view.valid_ranking(dv.the_ranking()) );   // witness to acyclic
-        
-        assert( discarded_tj.decodable() );
-        let new_au_idx = Self::build_lsn_au_index_page_walk(discarded_tj.disk_view, discarded_tj.freshest_rec);
-        let discarded_idx = Self::lsn_au_index_discarding_up_to(old_au_idx, new_bdy);
-
-        if root is None {
-            assert( new_au_idx =~= discarded_idx );
-        //} else if dv.entries[root.unwrap()].contains_lsn(dv.boundary_lsn, new_bdy) {
-        } else if dv.entries[root.unwrap()].message_seq.seq_end == new_bdy {
-            Self::build_lsn_au_index_page_walk_domain(dv, root);
-//             assert( discarded_tj.freshest_rec is None );
-//             assert( new_au_idx =~= Map::<LSN,AU>::empty() );
-//             assert forall |lsn| old_au_idx.contains_key(lsn)
-//                 implies lsn < dv.tj_at(root).seq_end() by {
-//                 Self::build_lsn_au_index_page_walk_domain(dv, root);
-//             }
-//             assert forall |lsn| old_au_idx.contains_key(lsn) && new_bdy <= lsn
-//                 implies false by {
-//             }
-//             assert( discarded_idx =~= Map::<LSN,AU>::empty() );
-            assert( new_au_idx =~= discarded_idx );
-        } else if dv.entries[root.unwrap()].message_seq.seq_start <= new_bdy
-                && new_bdy < dv.entries[root.unwrap()].message_seq.seq_end {
-
-            let curr_msgs = dv.entries[root.unwrap()].message_seq;
-            let update = Self::singleton_index(
-                math::max(dv.boundary_lsn as int, curr_msgs.seq_start as int) as nat, curr_msgs.seq_end, root.unwrap().au);
-            let prior_result = Self::build_lsn_au_index_page_walk(dv, dv.next(root));
-            assert( prior_result.union_prefer_right(update) == Self::build_lsn_au_index_page_walk(dv, root) );
-            assert( old_au_idx == prior_result.union_prefer_right(update) );
-
-            assert( discarded_tj.freshest_rec == root );
-
-            let d_dv = discarded_tj.disk_view;
-            let d_curr_msgs = d_dv.entries[root.unwrap()].message_seq;
-            let d_update = Self::singleton_index(
-                math::max(d_dv.boundary_lsn as int, d_curr_msgs.seq_start as int) as nat, d_curr_msgs.seq_end, root.unwrap().au);
-            let d_prior_result = Self::build_lsn_au_index_page_walk(d_dv, d_dv.next(root));
-            let d_result = d_prior_result.union_prefer_right(d_update);
-            assert( d_result == new_au_idx );
-
-            assert forall |lsn| new_au_idx.contains_key(lsn)
-                implies discarded_idx.contains_key(lsn) by {
-            }
-            Self::build_lsn_au_index_page_walk_domain(d_dv, root);
-            let d_tj = d_dv.tj_at(root);
-            assert forall |lsn| discarded_idx.contains_key(lsn)
-                implies new_au_idx.contains_key(lsn) by {
-                assert( old_au_idx.contains_key(lsn) );
-                assert( lsn < dv.tj_at(root).seq_end() );
-                assert( new_bdy <= lsn );
-                assert( d_tj.seq_start() <= lsn );
-
-                assert( d_tj.seq_end() == d_dv.entries[root.unwrap()].message_seq.seq_end );
-                assert( lsn < d_tj.seq_end() );
-                assert( d_result.contains_key(lsn) );
-                assert( new_au_idx.contains_key(lsn) );
-            }
-
-            assert( new_au_idx =~= discarded_idx );
-        } else if dv.entries[root.unwrap()].message_seq.seq_start <= new_bdy {
-//             assert( dv.entries[root.unwrap()].message_seq.seq_end <= new_bdy );
-//             assert( dv.tj_at(root).seq_end() == dv.entries[root.unwrap()].message_seq.seq_end );
-//             assert( new_bdy <= dv.tj_at(root).seq_end() );
-//             assert( new_bdy == dv.tj_at(root).seq_end() );
-            assert( false );
-        } else {
-            assert( new_bdy < dv.entries[root.unwrap()].message_seq.seq_start );
-            Self::build_commutes_over_discard_page_walk(dv, dv.next(root), new_bdy);
-            assert( new_au_idx =~= discarded_idx );
+        Self::build_lsn_au_index_page_walk_domain(discarded_tj.disk_view, root);
+        if root is Some && new_bdy < dv.entries[root.unwrap()].message_seq.seq_start {
+            Self::build_commutes_over_discard_page_walk(dv, dv.next(root), new_bdy);    // recurse
         }
     }
 
