@@ -270,13 +270,13 @@ state_machine!{ AllocationJournal {
         }
     }
 
-    pub open spec(checked) fn au_page_links_to_prior(dv: DiskView, addr: Address) -> bool
-    {
-        let prior_addr = Address{au: addr.au, page: (addr.page - 1) as nat};
-        &&& dv.entries.contains_key(addr)
-        &&& dv.decodable(Some(prior_addr))
-        &&& dv.next(Some(addr)) == Some(prior_addr)
-    }
+//     pub open spec(checked) fn au_page_links_to_prior(dv: DiskView, addr: Address) -> bool
+//     {
+//         let prior_addr = Address{au: addr.au, page: (addr.page - 1) as nat};
+//         &&& dv.entries.contains_key(addr)
+//         &&& dv.decodable(Some(prior_addr))
+//         &&& dv.next(Some(addr)) == Some(prior_addr)
+//     }
 
     pub open spec(checked) fn upstream(dv: DiskView, addr: Address) -> bool
     {
@@ -285,65 +285,65 @@ state_machine!{ AllocationJournal {
     }
 
 
-    /// Every page that's present in the disk_view and which holds any lsns
-    /// upstream of the dv boundary is either the first page or points back a page.
-    /// (NB this invariant is subtly strong: we maintain it because we never introduce pages
-    /// to the journal and then abandon them by pointing "over" them.)
-    ///  We need this invariant in addition to all_aus_link_towards_existing_pages because, in some contexts, we don't
-    ///  already have a lower `alo` that is known to be in the same au & lower.
-    pub open spec(checked) fn all_nonzero_pages_in_first_au_link_to_prior(dv: DiskView, first: AU) -> bool
-    recommends
-        dv.wf(),
-    {
-        forall |addr: Address| #![auto] ({
-            &&& addr.au == first
-            &&& addr.page != 0
-            &&& Self::upstream(dv, addr)
-            &&& !dv.addr_supports_lsn(addr, dv.boundary_lsn)
-        }) ==> Self::au_page_links_to_prior(dv, addr)
-    }
-
-    /// Any page in a non-first AU at or below some existing witness page also link back one within its AU
-    /// top is the address of some page present in a non-first AU
-    pub open spec(checked) fn all_nonfirst_pages_link_to_prior(dv: DiskView, first: AU) -> bool
-    {
-        forall |alo: Address, ahi: Address| #![auto] ({
-            &&& dv.entries.contains_key(ahi)
-            &&& ahi.au != first
-            &&& alo.au == ahi.au
-            &&& 0 < alo.page <= ahi.page
-        }) ==> Self::au_page_links_to_prior(dv, alo)
-    }
-
-    pub open spec(checked) fn all_aus_link_towards_existing_pages(dv: DiskView) -> bool
-    recommends
-        dv.wf(),
-    {
-        forall |alo: Address, ahi: Address| #![auto] ({
-            &&& alo.au == ahi.au
-            &&& alo.page < ahi.page
-            &&& dv.entries.contains_key(alo)
-            &&& dv.entries.contains_key(ahi)
-        }) ==> Self::au_page_links_to_prior(dv, ahi)
-    }
-
-    pub open spec(checked) fn nonfirst_aus_populated_to_zero(dv: DiskView, first: AU) -> bool
-    {
-        forall |alo: Address, ahi: Address| #![auto] ({
-            &&& alo.au == ahi.au
-            &&& alo.au != first
-            &&& alo.page < ahi.page
-            &&& dv.entries.contains_key(ahi)
-        }) ==> dv.entries.contains_key(alo)
-    }
-
-    pub open spec(checked) fn zero_page_of_first_au_unlinked(dv: DiskView, first: AU) -> bool
-    recommends
-        dv.wf(),
-    {
-        let first_page_0 = Address{au: first, page: 0};
-        dv.entries.contains_key(first_page_0) ==> dv.entries[first_page_0].message_seq.seq_start <= dv.boundary_lsn
-    }
+//     /// Every page that's present in the disk_view and which holds any lsns
+//     /// upstream of the dv boundary is either the first page or points back a page.
+//     /// (NB this invariant is subtly strong: we maintain it because we never introduce pages
+//     /// to the journal and then abandon them by pointing "over" them.)
+//     ///  We need this invariant in addition to all_aus_link_towards_existing_pages because, in some contexts, we don't
+//     ///  already have a lower `alo` that is known to be in the same au & lower.
+//     pub open spec(checked) fn all_nonzero_pages_in_first_au_link_to_prior(dv: DiskView, first: AU) -> bool
+//     recommends
+//         dv.wf(),
+//     {
+//         forall |addr: Address| #![auto] ({
+//             &&& addr.au == first
+//             &&& addr.page != 0
+//             &&& Self::upstream(dv, addr)
+//             &&& !dv.addr_supports_lsn(addr, dv.boundary_lsn)
+//         }) ==> Self::au_page_links_to_prior(dv, addr)
+//     }
+// 
+//     /// Any page in a non-first AU at or below some existing witness page also link back one within its AU
+//     /// top is the address of some page present in a non-first AU
+//     pub open spec(checked) fn all_nonfirst_pages_link_to_prior(dv: DiskView, first: AU) -> bool
+//     {
+//         forall |alo: Address, ahi: Address| #![auto] ({
+//             &&& dv.entries.contains_key(ahi)
+//             &&& ahi.au != first
+//             &&& alo.au == ahi.au
+//             &&& 0 < alo.page <= ahi.page
+//         }) ==> Self::au_page_links_to_prior(dv, alo)
+//     }
+// 
+//     pub open spec(checked) fn all_aus_link_towards_existing_pages(dv: DiskView) -> bool
+//     recommends
+//         dv.wf(),
+//     {
+//         forall |alo: Address, ahi: Address| #![auto] ({
+//             &&& alo.au == ahi.au
+//             &&& alo.page < ahi.page
+//             &&& dv.entries.contains_key(alo)
+//             &&& dv.entries.contains_key(ahi)
+//         }) ==> Self::au_page_links_to_prior(dv, ahi)
+//     }
+// 
+//     pub open spec(checked) fn nonfirst_aus_populated_to_zero(dv: DiskView, first: AU) -> bool
+//     {
+//         forall |alo: Address, ahi: Address| #![auto] ({
+//             &&& alo.au == ahi.au
+//             &&& alo.au != first
+//             &&& alo.page < ahi.page
+//             &&& dv.entries.contains_key(ahi)
+//         }) ==> dv.entries.contains_key(alo)
+//     }
+// 
+//     pub open spec(checked) fn zero_page_of_first_au_unlinked(dv: DiskView, first: AU) -> bool
+//     recommends
+//         dv.wf(),
+//     {
+//         let first_page_0 = Address{au: first, page: 0};
+//         dv.entries.contains_key(first_page_0) ==> dv.entries[first_page_0].message_seq.seq_start <= dv.boundary_lsn
+//     }
 
     // NB talking about dv.next() is painful because we have to reason about interactions
     // with a moving dv.boundary. Maybe easier to break down the reasoning into pointers
@@ -398,18 +398,19 @@ state_machine!{ AllocationJournal {
 //             Self::au_pages_linked_till_first_in_order(dv, addr)
 //     }
 
-    pub proof fn nonfirst_decodable(dv: DiskView, root: Pointer, first: AU)
-    requires
-        dv.decodable(root),
-        root is Some,
-        root.unwrap().au != first,
-        root.unwrap().page != 0,
-    ensures
-        dv.next(root) is Some,
-        dv.decodable(dv.next(root)),
-    {
-        assume(false); // TODO prove me with a uniquenes argument about boundary page
-    }
+    // deleteme
+//     pub proof fn nonfirst_decodable(dv: DiskView, root: Pointer, first: AU)
+//     requires
+//         dv.decodable(root),
+//         root is Some,
+//         root.unwrap().au != first,
+//         root.unwrap().page != 0,
+//     ensures
+//         dv.next(root) is Some,
+//         dv.decodable(dv.next(root)),
+//     {
+//         assume(false); // TODO prove me with a uniquenes argument about boundary page
+//     }
 
     pub proof fn transitive_ranking(dv: LinkedJournal_v::DiskView, root: Address, later: Address, first: AU)
     requires
@@ -426,7 +427,7 @@ state_machine!{ AllocationJournal {
     decreases later.page
     {
         if root == later { return; }
-        Self::nonfirst_decodable(dv, Some(later), first);
+        //Self::nonfirst_decodable(dv, Some(later), first);
         let prior = dv.next(Some(later));
         Self::transitive_ranking(dv, root, prior.unwrap(), first);
     }
@@ -623,7 +624,7 @@ state_machine!{ AllocationJournal {
 
         if root.unwrap().page != 0 {
 //             assert( dv.entries.contains_key(first_page(root).unwrap()) );
-            assert( Self::au_page_links_to_prior(dv, root.unwrap()) );
+//             assert( Self::au_page_links_to_prior(dv, root.unwrap()) );
             Self::bottom_properties(dv, dv.next(root), first);
         }
     }
@@ -669,63 +670,6 @@ state_machine!{ AllocationJournal {
                 assert( false );
             }
         }
-    }
-
-//     could there be an au in which:
-//         - valid_first_au,
-//             so choose |faddr| faddr.au == au
-//         - page0 points outbound
-//         - page0 is upstream
-//     no because
-//         - every higher-numbered page has higher lsns!
-//     also we know every higher-numbered page must be present on the disk. Do we need that?
-// 
-//     pub proof fn first_au_cannot_point_outbound_inner(dv: DiskView, alo: Address, ahi: Address)
-//     requires
-//         alo.au == ahi.au,
-//     ensures
-//         forall |addr: Address| ({
-//             &&& alo.au == addr.au
-//             &&& alo.page < addr.page <= ahi.page
-//             &&& dv.entries.contains_key(addr)
-//         }) ==> dv.entries[alo].message_seq.seq_end <= dv.entries[addr].message_seq.seq_start,
-//     decreases ahi.page - alo.page
-//     {
-//         if alo.page < ahi.page {
-//             Self::first_au_cannot_point_outbound_inner(dv, alo.next(), ahi);
-//             assert forall |addr: Address| ({
-//                 &&& alo.au == addr.au
-//                 &&& alo.page < addr.page <= ahi.page
-//                 &&& dv.entries.contains_key(addr)
-//             }) implies dv.entries[alo].message_seq.seq_end <= dv.entries[addr].message_seq.seq_start by {
-//                 if addr == alo {
-//                     assert( dv.entries[alo].message_seq.seq_end <= dv.entries[addr].message_seq.seq_start );
-//                 } else {
-//                     let aloinner = alo.next();
-//                     assert( alo.next().au == addr.au );
-//                     assert( alo.next().page < addr.page );
-//                     assert( addr.page <= ahi.page );
-//                     assert( dv.entries.contains_key(addr) );
-//                     assert( dv.entries[aloinner].message_seq.seq_end <= dv.entries[addr].message_seq.seq_start );
-//                     assert( dv.entries.contains_key(aloinner) );
-//                     assert( dv.entries[alo].message_seq.seq_end <= dv.entries[aloinner].message_seq.seq_end );
-//                     assert( dv.entries[alo].message_seq.seq_end <= dv.entries[addr].message_seq.seq_start );
-//                 }
-//             }
-//         }
-//     }
-
-    pub proof fn first_au_cannot_point_outbound(dv: DiskView, first: AU)
-    requires
-        Self::valid_first_au(dv, first),
-        Self::pages_allocated_in_lsn_order(dv),
-    ensures
-        dv.next(Some(Address{au: first, page: 0})) is None,
-    {
-        let zero_page = Address{au: first, page: 0};
-        let first_page = choose |addr: Address| #![auto] addr.au == first && dv.addr_supports_lsn(addr, dv.boundary_lsn);
-        assert( dv.entries.contains_key(zero_page) );
-        assert( dv.entries.contains_key(first_page) );
     }
 
     pub proof fn lemma_aus_hold_contiguous_lsns_first_page(dv: DiskView, root: Pointer, first: AU)
@@ -818,25 +762,25 @@ state_machine!{ AllocationJournal {
         Self::lemma_aus_hold_contiguous_lsns_inner(image.tj.disk_view, image.tj.freshest_rec, image.first)
     }
 
-    proof fn better_smaller_page_has_smaller_lsns(dv: DiskView, alo: Address, ahi: Address, first: AU)
-    requires
-        dv.wf(),
-        alo.au == ahi.au,
-        alo.page < ahi.page,
-        dv.entries.contains_key(alo),
-        dv.entries.contains_key(ahi),
-        
-        Self::all_aus_link_towards_existing_pages(dv),
-    ensures
-        dv.entries[alo].message_seq.seq_end <= dv.entries[ahi].message_seq.seq_start,
-    decreases ahi.page
-    {
-        assert( Self::au_page_links_to_prior(dv, ahi) ); // trigger?
-        if alo.page + 1 < ahi.page {
-            let less_hi = Address{ page: (ahi.page-1) as nat, ..ahi};
-            Self::better_smaller_page_has_smaller_lsns(dv, alo, less_hi, first);
-        }
-    }
+//     proof fn better_smaller_page_has_smaller_lsns(dv: DiskView, alo: Address, ahi: Address, first: AU)
+//     requires
+//         dv.wf(),
+//         alo.au == ahi.au,
+//         alo.page < ahi.page,
+//         dv.entries.contains_key(alo),
+//         dv.entries.contains_key(ahi),
+//         
+// //         Self::all_aus_link_towards_existing_pages(dv),
+//     ensures
+//         dv.entries[alo].message_seq.seq_end <= dv.entries[ahi].message_seq.seq_start,
+//     decreases ahi.page
+//     {
+// //         assert( Self::au_page_links_to_prior(dv, ahi) ); // trigger?
+//         if alo.page + 1 < ahi.page {
+//             let less_hi = Address{ page: (ahi.page-1) as nat, ..ahi};
+//             Self::better_smaller_page_has_smaller_lsns(dv, alo, less_hi, first);
+//         }
+//     }
 
     pub open spec fn has_unique_lsns(dv: DiskView) -> bool
     {
@@ -978,7 +922,7 @@ state_machine!{ AllocationJournal {
 
         //assert( Self::au_page_links_to_prior(pre_dv, Address{au: zaddr.au, page: zaddr.page}) );
         
-        assert( Self::au_page_links_to_prior(pre_dv, zaddr) ); // trigger
+//         assert( Self::au_page_links_to_prior(pre_dv, zaddr) ); // trigger
 
         if xaddr != yaddr {
             assert( post.get_tj().seq_start() < y0lsn );
@@ -1165,7 +1109,6 @@ state_machine!{ AllocationJournal {
             Self::build_lsn_au_index_au_walk(dv, root, first)),
     decreases dv.the_rank_of(root)
     {
-        assume( false );     // argh, proof unstable
         match root {
             None => { },
             Some(addr) => {
@@ -1175,10 +1118,10 @@ state_machine!{ AllocationJournal {
                 else {
                     if root.unwrap().page != 0 {
                         // Walk back a single page, unwinding the Likes index one step.
-                        assert( Self::au_page_links_to_prior(dv, root.unwrap()) ); // trigger
+//                         assert( Self::au_page_links_to_prior(dv, root.unwrap()) ); // trigger
                         Self::build_lsn_au_index_au_walk_consistency(dv, dv.next(root), first); // recursive call
                         let bottom = first_page(root);
-                        Self::better_smaller_page_has_smaller_lsns(dv, bottom.unwrap(), root.unwrap(), first);
+//                         Self::better_smaller_page_has_smaller_lsns(dv, bottom.unwrap(), root.unwrap(), first);
                     } else {
                         // Recurse this function to turn an AU corner.
                         assert( Self::pointer_is_upstream(dv, dv.next(root), first) );
