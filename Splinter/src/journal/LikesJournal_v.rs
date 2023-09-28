@@ -139,6 +139,12 @@ impl DiskView {
 
 // invariant proof stuff that moved here from the Refinement file
 impl DiskView {
+    pub open spec(checked) fn addr_supports_lsn(self, addr: Address, lsn: LSN) -> bool
+    {
+        &&& self.entries.contains_key(addr)
+        &&& self.entries[addr].contains_lsn(self.boundary_lsn, lsn)
+    }
+
     proof fn build_lsn_addr_index_ignores_build_tight(self, bt_root: Pointer, repr_root: Pointer)
     requires
         self.buildable(repr_root),
@@ -206,11 +212,11 @@ impl DiskView {
         self.boundary_lsn < self.entries[root.unwrap()].message_seq.seq_end,
     ensures
         self.tj_at(root).index_domain_valid(self.build_lsn_addr_index(root)),
-        self.tj_at(root).index_keys_map_to_valid_entries(self.build_lsn_addr_index(root)),
+        self.index_keys_map_to_valid_entries(self.build_lsn_addr_index(root)),
     decreases self.the_rank_of(root)
     {
         reveal(TruncatedJournal::index_domain_valid);
-        reveal(TruncatedJournal::index_keys_map_to_valid_entries);
+        reveal(DiskView::index_keys_map_to_valid_entries);
         if root.is_None() {
         } else if self.next(root).is_None() {
             // TODO(chris) These lets are trigger something... not sure why, since we have the same
@@ -230,12 +236,12 @@ impl DiskView {
         root.is_Some() ==> self.entries[root.unwrap()].message_seq.seq_end == tj_end,
         root.is_None() ==> tj_end <= self.boundary_lsn,
         self.tj_at(root).index_domain_valid(self.build_lsn_addr_index(root)),
-        self.tj_at(root).index_keys_map_to_valid_entries(self.build_lsn_addr_index(root)),
+        self.index_keys_map_to_valid_entries(self.build_lsn_addr_index(root)),
     ensures
         self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)),
     {
         reveal(TruncatedJournal::index_domain_valid);
-        reveal(TruncatedJournal::index_keys_map_to_valid_entries);
+        reveal(DiskView::index_keys_map_to_valid_entries);
         if root.is_None() {
             assert( self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)) );
         } else if self.next(root).is_None() {
@@ -266,7 +272,7 @@ impl DiskView {
     decreases self.the_rank_of(root)
     {
         reveal(TruncatedJournal::index_domain_valid);
-        reveal(TruncatedJournal::index_keys_map_to_valid_entries);
+        reveal(DiskView::index_keys_map_to_valid_entries);
 
         if root.is_Some() {
             self.build_lsn_addr_index_gives_representation(self.next(root));
@@ -310,7 +316,7 @@ impl DiskView {
     decreases if ptr.is_Some() { big.the_ranking()[ptr.unwrap()]+1 } else { 0 }
     {
         reveal(TruncatedJournal::index_domain_valid);
-        reveal(TruncatedJournal::index_keys_map_to_valid_entries);
+        reveal(DiskView::index_keys_map_to_valid_entries);
 
         assert( forall |addr| #[trigger] self.entries.contains_key(addr) ==> big.entries.dom().contains(addr) );    // new clunikness related to contains-vs-contains_key
         assert( self.valid_ranking(big.the_ranking()) );
@@ -433,6 +439,28 @@ impl DiskView {
         }
     }
 
+    #[verifier(opaque)]
+    pub closed spec(checked) fn index_keys_map_to_valid_entries(self, lsn_addr_index: LsnAddrIndex) -> bool
+    recommends
+        self.wf(),
+    {
+        forall |lsn| #![auto] lsn_addr_index.contains_key(lsn)
+            ==> self.addr_supports_lsn(lsn_addr_index[lsn], lsn)
+    }
+
+    // one-off explicit instantiation lemma for use in predicates where reveal is verboten.
+    pub proof fn instantiate_index_keys_map_to_valid_entries(self, lsn_addr_index: LsnAddrIndex, lsn: LSN)
+    requires
+        self.wf(),
+        lsn_addr_index.contains_key(lsn),
+        self.index_keys_map_to_valid_entries(lsn_addr_index),
+    ensures
+        self.entries.contains_key(lsn_addr_index[lsn]),
+        self.entries[lsn_addr_index[lsn]].contains_lsn(self.boundary_lsn, lsn),
+    {
+        reveal(DiskView::index_keys_map_to_valid_entries);
+    }
+
 } // DiskView proof bits
 
 pub open spec(checked) fn map_to_likes(lsn_addr_map: LsnAddrIndex) -> Likes
@@ -485,36 +513,16 @@ spec(checked) fn max(a: int, b: int) -> int
 // Definitions that used to live in the Refinement file, but jonh pulled in here so the invariant
 // could be handled using the state_machines invariant machinery.
 impl TruncatedJournal {
-    #[verifier(opaque)]
-    pub closed spec(checked) fn index_keys_map_to_valid_entries(self, lsn_addr_index: LsnAddrIndex) -> bool
-    recommends
-        self.wf(),
-    {
-        &&& (forall |lsn| #![auto] lsn_addr_index.contains_key(lsn)
-            ==> self.disk_view.entries.contains_key(lsn_addr_index[lsn]))
-        &&& (forall |lsn| #![auto] lsn_addr_index.contains_key(lsn)
-            ==> self.disk_view.entries[lsn_addr_index[lsn]].contains_lsn(lsn))
-    }
-
-    // one-off explicit instantiation lemma for use in predicates where reveal is verboten.
-    pub proof fn instantiate_index_keys_map_to_valid_entries(self, lsn_addr_index: LsnAddrIndex, lsn: LSN)
-    requires
-        self.wf(),
-        lsn_addr_index.contains_key(lsn),
-        self.index_keys_map_to_valid_entries(lsn_addr_index),
-    ensures
-        self.disk_view.entries.contains_key(lsn_addr_index[lsn]),
-        self.disk_view.entries[lsn_addr_index[lsn]].contains_lsn(lsn),
-    {
-        reveal(TruncatedJournal::index_keys_map_to_valid_entries);
-    }
-
+    // TODO(jonh): HOW THE HECK IS THIS OKAY?
+    // Why doesn't truncating the first record violate this for lsns between message_seq.start and
+    // boundary!?
+    // ...oh, the relevant inv proof isn't completed. Hah. It's not okay.
     pub open spec(checked) fn valid_entries_appear_in_index(self, lsn_addr_index: LsnAddrIndex) -> bool
     recommends
         self.wf(),
     {
-        &&& (forall |addr, lsn| self.disk_view.entries.contains_key(addr) && #[trigger] self.disk_view.entries[addr].message_seq.contains(lsn)
-            ==> lsn_addr_index.contains_key(lsn) && lsn_addr_index[lsn]==addr)
+        forall |addr, lsn| self.disk_view.addr_supports_lsn(addr, lsn)
+             ==> lsn_addr_index.contains_key(lsn) && lsn_addr_index[lsn]==addr
     }
 
     #[verifier(opaque)]
@@ -530,7 +538,7 @@ impl TruncatedJournal {
     recommends
         self.wf(),
         self.index_domain_valid(lsn_addr_index),
-        self.index_keys_map_to_valid_entries(lsn_addr_index),
+        self.disk_view.index_keys_map_to_valid_entries(lsn_addr_index),
     {
         forall |addr| lsn_addr_index.values().contains(addr) ==> {
             let lsn = choose |lsn| (#[trigger] lsn_addr_index.contains_key(lsn)) && lsn_addr_index[lsn] == addr;
@@ -730,7 +738,7 @@ state_machine!{ LikesJournal {
         &&& self.lsn_addr_index.values() == tj.representation()
         &&& tj.disk_view.index_reflects_disk_view(self.lsn_addr_index)  // TODO or just prove it from build
         &&& tj.index_domain_valid(self.lsn_addr_index)
-        &&& tj.index_keys_map_to_valid_entries(self.lsn_addr_index)
+        &&& tj.disk_view.index_keys_map_to_valid_entries(self.lsn_addr_index)
         &&& tj.valid_entries_appear_in_index(self.lsn_addr_index)
         &&& tj.index_range_valid(self.lsn_addr_index)
         &&& tj.disk_is_tight_wrt_representation()
@@ -761,7 +769,7 @@ state_machine!{ LikesJournal {
     requires
         pre.wf(),
         pre.journal.truncated_journal.index_domain_valid(pre.lsn_addr_index),
-        pre.journal.truncated_journal.index_keys_map_to_valid_entries(pre.lsn_addr_index),
+        pre.journal.truncated_journal.disk_view.index_keys_map_to_valid_entries(pre.lsn_addr_index),
         pre.journal.truncated_journal.index_range_valid(pre.lsn_addr_index),
         pre.journal.truncated_journal.disk_view.acyclic(),
         pre.lsn_addr_index == pre.journal.truncated_journal.build_lsn_addr_index(),
@@ -777,7 +785,7 @@ state_machine!{ LikesJournal {
     requires
         pre.wf(),
         pre.journal.truncated_journal.index_domain_valid(pre.lsn_addr_index),
-        pre.journal.truncated_journal.index_keys_map_to_valid_entries(pre.lsn_addr_index),
+        pre.journal.truncated_journal.disk_view.index_keys_map_to_valid_entries(pre.lsn_addr_index),
         pre.journal.truncated_journal.index_range_valid(pre.lsn_addr_index),
         pre.journal.truncated_journal.disk_view.acyclic(),
         pre.lsn_addr_index == pre.journal.truncated_journal.build_lsn_addr_index(),
@@ -786,11 +794,11 @@ state_machine!{ LikesJournal {
     ensures
         post.wf(),
         post.journal.truncated_journal.index_domain_valid(post.lsn_addr_index),
-        post.journal.truncated_journal.index_keys_map_to_valid_entries(post.lsn_addr_index),
+        post.journal.truncated_journal.disk_view.index_keys_map_to_valid_entries(post.lsn_addr_index),
         post.journal.truncated_journal.index_range_valid(post.lsn_addr_index),
     {
         reveal(TruncatedJournal::index_domain_valid);
-        reveal(TruncatedJournal::index_keys_map_to_valid_entries);
+        reveal(DiskView::index_keys_map_to_valid_entries);
 
         let tj_pre = pre.journal.truncated_journal;
         let tj_post = post.journal.truncated_journal;
@@ -852,9 +860,9 @@ state_machine!{ LikesJournal {
         tj_post.build_lsn_addr_index_gives_representation();
 
         reveal(TruncatedJournal::index_domain_valid);
-        reveal(TruncatedJournal::index_keys_map_to_valid_entries);
+        reveal(DiskView::index_keys_map_to_valid_entries);
         assert( tj_post.index_domain_valid(post.lsn_addr_index) );
-        assert( tj_post.index_keys_map_to_valid_entries(post.lsn_addr_index) );
+        assert( tj_post.disk_view.index_keys_map_to_valid_entries(post.lsn_addr_index) );
         assert( tj_post.index_range_valid(post.lsn_addr_index) );
         assert( post.lsn_addr_index =~= tj_post.build_lsn_addr_index() ); // used to be free :v(
 
@@ -892,7 +900,7 @@ state_machine!{ LikesJournal {
     #[inductive(initialize)]
     fn initialize_inductive(post: Self, ijournal: TruncatedJournal) {
         reveal(TruncatedJournal::index_domain_valid);
-        reveal(TruncatedJournal::index_keys_map_to_valid_entries);
+        reveal(DiskView::index_keys_map_to_valid_entries);
         ijournal.disk_view.build_tight_is_awesome(ijournal.freshest_rec);
         let tight_tj = ijournal.build_tight();
         if tight_tj.freshest_rec.is_Some() {

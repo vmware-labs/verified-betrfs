@@ -10,6 +10,7 @@ use state_machines_macros::state_machine;
 
 use vstd::prelude::*;
 use vstd::map::*;
+use vstd::math;
 use crate::abstract_system::StampedMap_v::LSN;
 use crate::abstract_system::MsgHistory_v::*;
 use crate::disk::GenericDisk_v::*;
@@ -45,8 +46,8 @@ impl JournalRecord {
         if boundary_lsn < self.message_seq.seq_start { self.prior_rec } else { None }
     }
 
-    pub open spec(checked) fn contains_lsn(self, boundary_lsn: LSN) -> bool {
-        self.message_seq.seq_start <= boundary_lsn < self.message_seq.seq_end
+    pub open spec(checked) fn contains_lsn(self, boundary_lsn: LSN, lsn: LSN) -> bool {
+        math::max(self.message_seq.seq_start as int, boundary_lsn as int) as nat <= lsn < self.message_seq.seq_end
     }
 }
 
