@@ -204,11 +204,12 @@ impl DiskView {
         }
     }
 
-    pub open spec(checked) fn is_sub_disk_with_newer_lsn(self, bigger: Self) -> bool
-    {
-        &&& bigger.boundary_lsn <= self.boundary_lsn
-        &&& self.entries.le(bigger.entries)
-    }
+    // dead code, evidently
+//     pub open spec(checked) fn is_sub_disk_with_newer_lsn(self, bigger: Self) -> bool
+//     {
+//         &&& bigger.boundary_lsn <= self.boundary_lsn
+//         &&& self.entries.le(bigger.entries)
+//     }
 
     pub open spec(checked) fn build_tight(self, root: Pointer) -> (out: Self)
     recommends
@@ -845,6 +846,30 @@ impl TruncatedJournal {
     {
         self.disk_view.decodable_implies_lsns_have_entries(self.freshest_rec);
     }
+
+    // An acyclic()-satisyfing ranking when one adds a single addr to self.
+    // TODO(chris): Rather than open, how about spec ensures?
+    // TODO(chris): When (checked), I get a recommendation-not-met here, even though a
+    // corresponding proof fn completes without further triggering (see below).
+    pub open spec/*(checked)*/ fn marshal_ranking(self, addr: Address) -> Ranking
+    recommends
+        self.decodable(),
+    {
+        let pre_rank = self.disk_view.the_ranking();
+        pre_rank.insert(addr,
+                            if self.freshest_rec is None { 0 }
+                            else {pre_rank[self.freshest_rec.unwrap()] + 1 })
+    }
+
+//     pub proof fn no_trigger_needed(self, addr: Address)
+//     requires
+//         self.decodable(),
+//     {
+//         let pre_rank = self.disk_view.the_ranking();
+//         if self.freshest_rec is Some {
+//             assert( pre_rank.contains_key(self.freshest_rec.unwrap()) );
+//         }
+//     }
 }
 
 state_machine!{ LinkedJournal {
@@ -1032,11 +1057,7 @@ state_machine!{ LinkedJournal {
 
     #[inductive(internal_journal_marshal)]
     fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address) {
-        let pre_rank = pre.truncated_journal.disk_view.the_ranking();
-        let post_rank = pre_rank.insert(addr,
-                            if pre.truncated_journal.freshest_rec.is_None() { 0 }
-                            else {pre_rank[pre.truncated_journal.freshest_rec.unwrap()] + 1 });
-        assert( post.truncated_journal.disk_view.valid_ranking(post_rank) );    // witness
+        assert( post.truncated_journal.disk_view.valid_ranking(pre.truncated_journal.marshal_ranking(addr)) );    // witness
     }
 
     #[inductive(internal_journal_no_op)]
