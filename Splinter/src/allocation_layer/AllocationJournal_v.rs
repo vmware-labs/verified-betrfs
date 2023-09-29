@@ -334,33 +334,11 @@ state_machine!{ AllocationJournal {
         Self::build_lsn_au_index_page_walk(small, root) == Self::build_lsn_au_index_page_walk(big, root),
     decreases small.the_rank_of(root)
     {
-//         assert( small.entries.dom().subset_of(big.the_ranking().dom()) );
-        assert forall |addr| small.entries.contains_key(addr) ==> big.entries.contains_key(addr) by {}
+        assert forall |addr| small.entries.contains_key(addr) ==> big.entries.contains_key(addr) by {}  // trigger for ranking
         assert( small.valid_ranking(big.the_ranking()) );
-//         assert( small.acyclic() );
 
         if root is Some {
-
-
             Self::build_lsn_au_index_page_walk_sub_disk(small, big, small.next(root));
-//             let small_curr_msgs = small.entries[root.unwrap()].message_seq;
-//             let small_update = Self::singleton_index(
-//                 math::max(small.boundary_lsn as int, small_curr_msgs.seq_start as int) as nat, small_curr_msgs.seq_end, root.unwrap().au);
-//             let small_prior_result = Self::build_lsn_au_index_page_walk(small, small.next(root));
-//             let small_result = small_prior_result.union_prefer_right(small_update);
-// 
-//             let big_curr_msgs = big.entries[root.unwrap()].message_seq;
-//             let big_update = Self::singleton_index(
-//                 math::max(big.boundary_lsn as int, big_curr_msgs.seq_start as int) as nat, big_curr_msgs.seq_end, root.unwrap().au);
-//             let big_prior_result = Self::build_lsn_au_index_page_walk(big, big.next(root));
-//             let big_result = big_prior_result.union_prefer_right(big_update);
-//             assert( small_prior_result == big_prior_result );
-//             assert( small_result == big_result );
-//         } else {
-//             assert( root is None );
-//             assert( Self::build_lsn_au_index_page_walk(small, root) =~= Map::<LSN,AU>::empty() );
-//             assert( Self::build_lsn_au_index_page_walk(big, root) =~= Map::<LSN,AU>::empty() );
-//             assert( Self::build_lsn_au_index_page_walk(small, root) =~= Self::build_lsn_au_index_page_walk(big, root) );
         }
     }
 
@@ -416,6 +394,7 @@ state_machine!{ AllocationJournal {
                 assert( built_idx == prior_result.union_prefer_right(update) );
 
                 assert( dv.is_sub_disk(adv) );
+                Self::build_lsn_au_index_page_walk_sub_disk(dv, adv, root);
                 assert( built_idx[lsn] == prior_result[lsn] );
 
                 assert( prior_result[lsn] == old_au_idx[lsn] );
