@@ -16,3 +16,6 @@
 /perf.data*
 /.dafny
 /expresults
+
+# Ignore Verus' usage statistics directory
+**/.record-history/
