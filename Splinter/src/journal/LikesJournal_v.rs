@@ -765,7 +765,9 @@ state_machine!{ LikesJournal {
         reveal(LinkedJournal_v::LinkedJournal::State::next_by);
     }
 
-    proof fn discard_old_step_preserves_wf_disk_view(pre: Self, post: Self, lbl: Label)
+    /* `pub` is only being added to avoid a confusing fake error message, originally we didn't intend for this
+       proof function to be `pub` */
+    pub proof fn discard_old_step_preserves_wf_disk_view(pre: Self, post: Self, lbl: Label)
     requires
         pre.wf(),
         pre.journal.truncated_journal.index_domain_valid(pre.lsn_addr_index),
@@ -781,7 +783,7 @@ state_machine!{ LikesJournal {
         assume(false); // TODO port this proof
     }
    
-    proof fn discard_old_step_preserves_wf_and_index(pre: Self, post: Self, lbl: Label)
+    pub proof fn discard_old_step_preserves_wf_and_index(pre: Self, post: Self, lbl: Label)
     requires
         pre.wf(),
         pre.journal.truncated_journal.index_domain_valid(pre.lsn_addr_index),
@@ -817,7 +819,7 @@ state_machine!{ LikesJournal {
         assume(false); // TODO complete this proof
     }
 
-    proof fn discard_old_maintains_repr_index(pre: Self, post: Self, lbl: Label)
+    pub proof fn discard_old_maintains_repr_index(pre: Self, post: Self, lbl: Label)
     requires
         pre.inv(),
         post.wf(),

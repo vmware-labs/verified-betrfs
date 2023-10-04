@@ -793,7 +793,7 @@ state_machine!{ AllocationJournal {
         // dafny had assume false, yet we don't need a proof here!?
     }
 
-    proof fn invoke_submodule_inv(pre: Self, post: Self)
+    pub proof fn invoke_submodule_inv(pre: Self, post: Self)
     requires
         Self::inv(pre),
     ensures
@@ -803,7 +803,7 @@ state_machine!{ AllocationJournal {
     }
 
     #[verifier::spinoff_prover]  // flaky proof
-    proof fn discard_old_helper4(pre: Self, post: Self, lbl: Label, post_journal: LikesJournal::State, xaddr: Address, zaddr: Address)
+    pub proof fn discard_old_helper4(pre: Self, post: Self, lbl: Label, post_journal: LikesJournal::State, xaddr: Address, zaddr: Address)
     requires
         Self::inv(pre),
         Self::discard_old(pre, post, lbl, post_journal),
@@ -949,7 +949,7 @@ state_machine!{ AllocationJournal {
     }
 
     // TODO(jonh): this lemma should just be an ensures on build_lsn_au_index_page_walk.
-    proof fn build_lsn_au_index_page_walk_consistency(dv: DiskView, root: Pointer)
+    pub proof fn build_lsn_au_index_page_walk_consistency(dv: DiskView, root: Pointer)
     requires
         dv.decodable(root),
         dv.acyclic(),
@@ -965,7 +965,7 @@ state_machine!{ AllocationJournal {
     }
 
     // TODO(jonh): this lemma should just be an ensures on build_lsn_au_index_au_walk.
-    proof fn build_lsn_au_index_au_walk_consistency(dv: DiskView, root: Pointer, first: AU)
+    pub proof fn build_lsn_au_index_au_walk_consistency(dv: DiskView, root: Pointer, first: AU)
     requires
         Self::pointer_is_upstream(dv, root, first),
     ensures
@@ -1036,7 +1036,7 @@ state_machine!{ AllocationJournal {
     }
     
     // lemmas used by other refinements
-    proof fn discard_old_accessible_aus(pre: Self, post: Self, lbl: Label)
+    pub proof fn discard_old_accessible_aus(pre: Self, post: Self, lbl: Label)
     requires
         Self::next(pre, post, lbl),
         lbl.is_DiscardOld(),
