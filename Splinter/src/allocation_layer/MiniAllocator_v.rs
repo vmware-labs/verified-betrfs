@@ -23,8 +23,13 @@ impl PageAllocator {
     pub open spec(checked) fn wf(self) -> bool {
         // && observed !! reserved // does not have to be disjoint, cow case
         // && |observed + reserved| <= PageCount()
-        &&& (forall |addr| (#[trigger] (self.observed + self.reserved).contains(addr)) ==> addr.wf())
-        &&& (forall |addr| #[trigger] (self.observed + self.reserved).contains(addr) ==> addr.au == self.au)
+// This is a nasty trigger choice that demands some manual triggerin'
+//         &&& (forall |addr| (#[trigger] (self.observed + self.reserved).contains(addr)) ==> addr.wf())
+//         &&& (forall |addr| #[trigger] (self.observed + self.reserved).contains(addr) ==> addr.au == self.au)
+        &&& (forall |addr| self.observed.contains(addr) ==> addr.wf())
+        &&& (forall |addr| self.reserved.contains(addr) ==> addr.wf())
+        &&& (forall |addr| self.observed.contains(addr) ==> addr.au == self.au)
+        &&& (forall |addr| self.reserved.contains(addr) ==> addr.au == self.au)
     }
 
     pub open spec(checked) fn is_free_addr(self, addr: Address) -> bool {
@@ -61,6 +66,27 @@ impl PageAllocator {
     {
         Self{observed: self.observed+addrs, ..self}
     }
+
+//     pub proof fn observe_wf(self, addrs: Set<Address>)
+//     requires
+//             self.wf(),
+//             forall |addr| #[trigger] addrs.contains(addr) ==> addr.wf() && addr.au == self.au,
+//     ensures self.observe(addrs).wf(),
+//     {
+// //         let out = self.observe(addrs);
+// //         assert forall |ax| (#[trigger] (out.observed + out.reserved).contains(ax))
+// //             implies ax.wf() by {
+// //             if addrs.contains(ax) {
+// //                 assert( ax.wf() );
+// //             } else {
+// //                 assert( (self.observed + self.reserved).contains(ax) );
+// //                 assert( ax.wf() );
+// //             }
+// //         }
+// //         assert forall |ax| #[trigger] (out.observed + out.reserved).contains(ax)
+// //             implies ax.au == out.au by {
+// //         }
+//     }
 
     pub open spec(checked) fn unobserve(self, addrs: Set<Address>) -> (out: Self)
     recommends
@@ -161,6 +187,54 @@ impl MiniAllocator {
         let result = self.allocs[addr.au].observe(set![addr]);
         let new_curr = if result.all_pages_allocated() { None } else { Some(addr.au) };
         Self{ allocs: self.allocs.insert(addr.au, result), curr: new_curr }
+    }
+
+    pub proof fn allocate_and_observe_wf(self, addr: Address)
+    requires
+        self.wf(),
+        self.can_allocate(addr),
+        addr.wf(),
+    ensures
+        self.allocate_and_observe(addr).wf(),
+    {
+//         assume( false );
+//         let alloc = self.allocs[addr.au];
+//         let addrs = set![addr];
+//         assert forall |addr| #[trigger] addrs.contains(addr) implies addr.wf() && addr.au == alloc.au by {
+//         }
+//         let presult = self.allocs[addr.au];
+//         assert( presult.wf() );
+//         let result = presult.observe(set![addr]);
+//         assert( result.reserved == presult.reserved );
+//         assert( result.observed == result.observed + set![addr] );
+//         assert forall |addrx| (#[trigger] (result.observed + result.reserved).contains(addrx)) implies addrx.wf() by {
+//             if result.reserved.contains(addrx) {
+//                 assert( (presult.observed + presult.reserved).contains(addr) );
+//                 assert(addrx.wf());
+//             } else {
+//                 assert( result.observed.contains(addrx) );
+//                 if addrx == addr {
+//                     assert(addrx.wf());
+//                 } else {
+//                     assert( (presult.observed + presult.reserved).contains(addr) );
+//                    assert(addrx.wf());
+//                 }
+//             }
+//         }
+//         assert( result.wf() );
+//         let post = self.allocate_and_observe(addr);
+//         assert forall |au| #[trigger] post.allocs.contains_key(au)
+//             implies post.allocs[au].wf() && post.allocs[au].au == au by {
+//             if au == addr.au {
+//                 assert( post.allocs[au] == result );
+//                 assert( result.wf() );
+//                 assert( post.allocs[au].wf() );
+//                 assert( post.allocs[au].au == au );
+//             } else {
+//                 assert( post.allocs[au].wf() );
+//                 assert( post.allocs[au].au == au );
+//             }
+//         }
     }
 
     pub open spec(checked) fn allocate(self, addr: Address) -> Self

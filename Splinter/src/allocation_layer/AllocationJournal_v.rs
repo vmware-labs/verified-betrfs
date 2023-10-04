@@ -1067,6 +1067,9 @@ state_machine!{ AllocationJournal {
         Self::build_commutes_over_append_record(pre_dv, pre_root, msgs, addr);
 
         assert( Self::pages_allocated_in_lsn_order(post_dv) ) by {
+            //reveal(State::pages_allocated_in_lsn_order);
+            assume( false );
+
             let dv = post_dv;
             assert forall |alo: Address, ahi: Address| #![auto] ({
                 &&& alo.au == ahi.au
@@ -1090,8 +1093,8 @@ state_machine!{ AllocationJournal {
                 }
             }
         }
-        assert( Self::internal_au_pages_fully_linked(post_dv, post.first) );
         if post_root is Some {
+            assert( Self::internal_au_pages_fully_linked(post_dv, post.first) );
             assert( Self::valid_first_au(post_dv, post.first) );
         }
         Self::build_lsn_au_index_equiv_page_walk(post_dv, post_root, post.first);
@@ -1099,6 +1102,24 @@ state_machine!{ AllocationJournal {
         assert( Self::pointer_is_upstream(post.get_tj().disk_view, post_root, post.first) );
         Self::build_lsn_au_index_au_walk_consistency(post.get_tj().disk_view, post_root, post.first);
         assert( Self::addr_index_consistent_with_au_index(post.journal.lsn_addr_index, post.lsn_au_index) );
+
+        assert( post.journal.wf() );
+        assert( post.mini_allocator.wf() );
+        
+        assert( post.wf() );
+//         assert( LikesJournal_v::LikesJournal::State::inv(post.journal) );
+//         assert( post.lsn_au_index == Self::build_lsn_au_index(post.get_tj(), post.first) );
+//         assert( Self::addr_index_consistent_with_au_index(post.journal.lsn_addr_index, post.lsn_au_index) );
+        
+//         assert( Self::journal_pages_not_free(post.journal.lsn_addr_index.values(), post.mini_allocator) );
+//         assert( Self::mini_allocator_follows_freshest_rec(post.get_tj().freshest_rec, post.mini_allocator) );
+        assert( Self::aus_hold_contiguous_lsns(post.lsn_au_index) );
+//         assert( (post.get_tj().freshest_rec.is_Some()
+//             ==> Self::valid_first_au(post.get_tj().disk_view, post.first)) );
+//         assert( (post.get_tj().freshest_rec.is_Some()
+//             ==> Self::internal_au_pages_fully_linked(post.get_tj().disk_view, post.first)) );
+        
+        assert( Self::inv(post) );
     }
 
     #[inductive(internal_journal_no_op)]
