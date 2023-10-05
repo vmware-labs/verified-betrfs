@@ -89,45 +89,38 @@ state_machine!{ CrashTolerantJournal {
     }
 
     transition!{
-        query_end_lsn(lbl: Label, new_journal: AbstractJournal::State, journal_step: AbstractJournal::Step) {
+        query_end_lsn(lbl: Label) {
             require lbl.is_QueryEndLsnLabel();
             require pre.ephemeral.is_Known();
-            require journal_step === AbstractJournal::Step::observe_fresh_journal();
-            require AbstractJournal::State::next_by(
+            require AbstractJournal::State::next(
                 pre.ephemeral.get_Known_v(), 
-                new_journal, 
+                pre.ephemeral.get_Known_v(), 
                 AbstractJournal::Label::QueryEndLsnLabel{ end_lsn: lbl.get_QueryEndLsnLabel_end_lsn() },
-                journal_step
             );
-            update ephemeral = Ephemeral::Known{ v: new_journal };
         }
     }
 
     transition!{
-        put(lbl: Label, new_journal: AbstractJournal::State, journal_step: AbstractJournal::Step) {
+        put(lbl: Label, new_journal: AbstractJournal::State) {
             require lbl.is_PutLabel();
             require pre.ephemeral.is_Known();
-            require journal_step === AbstractJournal::Step::put();
-            require AbstractJournal::State::next_by(
+            require AbstractJournal::State::next(
                 pre.ephemeral.get_Known_v(), 
                 new_journal, 
                 AbstractJournal::Label::PutLabel{ messages: lbl.get_PutLabel_records() },
-                journal_step
             );
             update ephemeral = Ephemeral::Known{ v: new_journal };
         }
     }
 
     transition!{
-        internal(lbl: Label, new_journal: AbstractJournal::State, journal_step: AbstractJournal::Step) {
+        internal(lbl: Label, new_journal: AbstractJournal::State) {
             require lbl.is_InternalLabel();
             require pre.ephemeral.is_Known();
-            require journal_step === AbstractJournal::Step::internal();
-            require AbstractJournal::State::next_by(
+            require AbstractJournal::State::next(
                 pre.ephemeral.get_Known_v(), 
-                new_journal, 
+                new_journal,
                 AbstractJournal::Label::InternalLabel,
-                journal_step
             );
             update ephemeral = Ephemeral::Known{ v: new_journal };
         }
@@ -141,7 +134,7 @@ state_machine!{ CrashTolerantJournal {
     }
 
     transition!{
-        commit_start(lbl: Label, frozen_journal: StoreImage, new_journal: AbstractJournal::State, journal_step: AbstractJournal::Step) {
+        commit_start(lbl: Label, frozen_journal: StoreImage, new_journal: AbstractJournal::State) {
             require lbl.is_CommitStartLabel();
             require pre.ephemeral.is_Known();
             // Can't start a commit if one is in-flight, or we'd forget to maintain the
@@ -159,12 +152,10 @@ state_machine!{ CrashTolerantJournal {
 
             // There should be no way for the frozen journal to have passed the ephemeral map!
             require frozen_journal.seq_start <= lbl.get_CommitStartLabel_max_lsn();
-            require journal_step === AbstractJournal::Step::freeze_for_commit();
-            require AbstractJournal::State::next_by(
+            require AbstractJournal::State::next(
                 pre.ephemeral.get_Known_v(), 
                 new_journal, 
                 AbstractJournal::Label::FreezeForCommitLabel{ frozen_journal: frozen_journal},
-                journal_step
             );
             update ephemeral = Ephemeral::Known{ v: new_journal };
             update in_flight = Option::Some(frozen_journal);

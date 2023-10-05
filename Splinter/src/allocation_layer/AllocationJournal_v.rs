@@ -139,7 +139,7 @@ state_machine!{ AllocationJournal {
     transition!{ freeze_for_commit(lbl: Label, depth: nat, post_journal: LikesJournal::State) {
         require pre.wf();
         require Self::lbl_wf(lbl);
-        require lbl.is_ReadForRecovery();
+        require lbl.is_FreezeForCommit();
         require LikesJournal::State::freeze_for_commit(pre.journal, post_journal, Self::lbl_i(lbl), depth, post_journal.journal);
         update journal = post_journal;
     } }
