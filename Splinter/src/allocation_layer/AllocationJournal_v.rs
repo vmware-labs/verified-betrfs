@@ -940,7 +940,6 @@ state_machine!{ AllocationJournal {
                 assert( post_dv.addr_supports_lsn( bdy_addr, post_dv.boundary_lsn) );  // trigger valid_first_au
             }
 //             let start_lsn = lbl.get_DiscardOld_start_lsn();
-
             assert( Self::internal_au_pages_fully_linked(post.get_tj().disk_view, post.first) );
         }
 
