@@ -116,7 +116,7 @@ impl BufferSeq {
         self.i_filtered_from(offset_map, 0)
     }
 
-    pub open spec(checked) fn key_in_buffer_filtered(self, offset_map: OffsetMap, from_idx: int, k: Key, buffer_idx: int) -> bool
+    pub closed spec(checked) fn key_in_buffer_filtered(self, offset_map: OffsetMap, from_idx: int, k: Key, buffer_idx: int) -> bool
     recommends
         offset_map.is_total(),
         0 <= from_idx,
@@ -125,6 +125,48 @@ impl BufferSeq {
         &&& offset_map.offsets[k] <= buffer_idx
     }
 
+    pub proof fn filter_commutes_with_i(self, offset_map : OffsetMap, filter : Set<Key>, offset_map_filtered : OffsetMap)
+        requires
+            offset_map.is_total(),
+            // the offset and the filter are compatible
+            offset_map_filtered =~= offset_map.apply_filter(filter, self.buffers.len()),
+        ensures
+            self.i_filtered(offset_map).apply_filter(filter) =~= self.i_filtered(offset_map_filtered),
+    {
+        let i_f = self.i_filtered(offset_map).apply_filter(filter);
+        let f_i = self.i_filtered(offset_map_filtered);
+        self.i_filtered_from_domain(offset_map, 0);
+        self.i_filtered_from_domain(offset_map_filtered, 0);
+        assert forall|k| i_f.map.dom().contains(k) implies
+            f_i.map.dom().contains(k) by {
+                let buf_idx = choose |buffer_idx| self.key_in_buffer_filtered(offset_map, 0, k, buffer_idx);
+                assert(self.key_in_buffer_filtered(offset_map_filtered, 0, k, buf_idx)); //TRIGGER
+        }
+        assert forall|k| f_i.map.dom().contains(k) implies
+            i_f.map.dom().contains(k) by {
+                let buf_idx = choose |buffer_idx| self.key_in_buffer_filtered(offset_map_filtered, 0, k, buffer_idx);
+                assert(self.key_in_buffer_filtered(offset_map, 0, k, buf_idx)); //TRIGGER
+        }
+
+        assert forall|k| f_i.map.dom().contains(k) implies
+            f_i.map[k] == i_f.map[k] by {
+            self.query_from_same_as_i_filtered(k, 0, offset_map);
+            self.query_from_same_as_i_filtered(k, 0, offset_map_filtered);
+        }
+        
+    }
+    // hack to try and understand when key in domain fact was used    
+    pub proof fn publish_key_in_buffer_filtered(self, offset_map: OffsetMap, from_idx: int, k: Key, buffer_idx: int)
+        requires
+            offset_map.is_total(),
+            0 <= from_idx,
+        ensures
+            self.key_in_buffer_filtered(offset_map, from_idx, k, buffer_idx) == 
+            (self.key_in_buffer(from_idx, k, buffer_idx) && offset_map.offsets[k] <= buffer_idx)
+    {
+
+    }
+    
     pub proof fn query_agrees_with_i(self, k: Key, start: int)
         requires 0 <= start <= self.len(), 
         ensures 

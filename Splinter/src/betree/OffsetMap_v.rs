@@ -38,5 +38,18 @@ impl OffsetMap {
         OffsetMap{ offsets: Map::new(|k| true, 
             |k| if i <= self.offsets[k] { (self.offsets[k]-i) as nat } else { 0 as nat} )}
     }
+
+    
+    pub open spec(checked) fn apply_filter(self, filter : Set<Key>, max_len : nat) -> Self
+        recommends self.is_total()
+    {
+        OffsetMap{ offsets: Map::new(|k| true,
+            |k| if filter.contains(k) {
+                self.offsets[k]
+            } else {
+                max_len
+            })
+        }
+    }
 } // end impl offsetmap
 }  // end verus!

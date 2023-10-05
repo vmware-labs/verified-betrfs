@@ -448,6 +448,7 @@ impl BetreeNode {
 
         let (left, right) = self.split_index(pivot_idx);
         let (i_left, i_right) = self.i().split_index(pivot_idx);
+        let split_element = self.get_Node_pivots().pivots[pivot_idx as int];
         self.split_index_wf(pivot_idx);
 
         self.i_buffer_domain();
@@ -456,14 +457,14 @@ impl BetreeNode {
 
         assert(left.i().get_Node_buffer() =~= i_left.get_Node_buffer()) 
         by {
-            self.i_preserves_domain_auto();
-            left.i_preserves_domain_auto();
+            let left_filter = Domain::Domain{ start: self.my_domain().get_Domain_start(), end: split_element }.key_set();
+            self.get_Node_buffers().filter_commutes_with_i(self.make_offset_map(), left_filter, left.make_offset_map());
         }
 
         assert(right.i().get_Node_buffer() =~= i_right.get_Node_buffer())
         by {
-            self.i_preserves_domain_auto();
-            right.i_preserves_domain_auto();
+            let right_filter = Domain::Domain{ start: split_element, end: self.my_domain().get_Domain_end() }.key_set();
+            self.get_Node_buffers().filter_commutes_with_i(self.make_offset_map(), right_filter, right.make_offset_map());
         }
 
         BetreeNode::i_children_lemma_auto();

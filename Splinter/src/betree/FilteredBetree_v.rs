@@ -210,7 +210,7 @@ impl BetreeNode {
         &&& 0 < pivot_idx < self.get_Node_pivots().num_ranges()
     }
 
-    pub open spec(checked) fn  split_index(self, pivot_idx: nat) -> (BetreeNode, BetreeNode)
+    pub open spec(checked) fn split_index(self, pivot_idx: nat) -> (BetreeNode, BetreeNode)
         recommends self.can_split_index(pivot_idx)
     {
         let idx = pivot_idx as int;
@@ -423,7 +423,7 @@ impl BetreeNode {
         self.get_Node_children()[self.get_Node_pivots().route(key)]
     }
 
-    pub open spec(checked) fn make_offset_map(self) -> OffsetMap
+    /*pub open spec(checked) fn make_offset_map(self) -> OffsetMap
     {
         OffsetMap{ offsets: Map::new(|k| true,
             |k| if self.key_in_domain(k) {
@@ -432,6 +432,20 @@ impl BetreeNode {
                 self.get_Node_buffers().len()
             })
         }
+    }*/
+    pub open spec(checked) fn domain_keys(self) -> Set<Key>
+    {
+        Set::new(|k| self.key_in_domain(k))       
+    }
+
+    pub open spec(checked) fn flushed_ofs_map(self) -> OffsetMap 
+    {
+        OffsetMap{ offsets: Map::new(|k| true, |k| self.flushed_ofs(k)) }
+    }
+    
+    pub open spec(checked) fn make_offset_map(self) -> OffsetMap
+    {
+        self.flushed_ofs_map().apply_filter(self.domain_keys(), self.get_Node_buffers().len())
     }
 } // end impl BetreeNode
 
