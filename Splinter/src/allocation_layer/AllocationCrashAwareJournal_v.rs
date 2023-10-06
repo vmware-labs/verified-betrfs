@@ -11,6 +11,7 @@ use state_machines_macros::state_machine;
 
 use vstd::prelude::*;
 use vstd::map::*;
+use vstd::map_lib::*;
 use crate::abstract_system::StampedMap_v::LSN;
 use crate::abstract_system::MsgHistory_v::*;
 use crate::disk::GenericDisk_v::*;
@@ -65,8 +66,8 @@ verus!{
 
     transition!{
         load_ephemeral_from_persistent(lbl: Label, new_journal: AllocationJournal::State, journal_config: AllocationJournal::Config) {
-            require lbl.is_LoadEphemeralFromPersistent();
-            require pre.ephemeral.is_Unknown();
+            require lbl is LoadEphemeralFromPersistent;
+            require pre.ephemeral is Unknown;
             require journal_config === AllocationJournal::Config::initialize(new_journal.journal, pre.persistent);
             require AllocationJournal::State::init_by(new_journal, journal_config);
             update ephemeral = Ephemeral::Known{ v: new_journal };
@@ -75,8 +76,8 @@ verus!{
 
     transition!{
         read_for_recovery(lbl: Label) {
-            require lbl.is_ReadForRecovery();
-            require pre.ephemeral.is_Known();
+            require lbl is ReadForRecovery;
+            require pre.ephemeral is Known;
             require AllocationJournal::State::next(
                 pre.ephemeral.get_Known_v(), 
                 pre.ephemeral.get_Known_v(), 
@@ -87,8 +88,8 @@ verus!{
 
     transition!{
         query_end_lsn(lbl: Label) {
-            require lbl.is_QueryEndLsn();
-            require pre.ephemeral.is_Known();
+            require lbl is QueryEndLsn;
+            require pre.ephemeral is Known;
             require AllocationJournal::State::next(
                 pre.ephemeral.get_Known_v(), 
                 pre.ephemeral.get_Known_v(), 
@@ -99,8 +100,8 @@ verus!{
 
     transition!{
         put(lbl: Label, new_journal: AllocationJournal::State) {
-            require lbl.is_Put();
-            require pre.ephemeral.is_Known();
+            require lbl is Put;
+            require pre.ephemeral is Known;
             require AllocationJournal::State::next(
                 pre.ephemeral.get_Known_v(), 
                 new_journal, 
@@ -112,8 +113,8 @@ verus!{
 
     transition!{
         internal(lbl: Label, new_journal: AllocationJournal::State) {
-            require lbl.is_Internal();
-            require pre.ephemeral.is_Known();
+            require lbl is Internal;
+            require pre.ephemeral is Known;
             require AllocationJournal::State::next(
                 pre.ephemeral.get_Known_v(), 
                 new_journal, 
@@ -125,18 +126,18 @@ verus!{
 
     transition!{
         query_lsn_persistence(lbl: Label) {
-            require lbl.is_QueryLsnPersistence();
+            require lbl is QueryLsnPersistence;
             require lbl.get_QueryLsnPersistence_sync_lsn() <= pre.persistent.tj.seq_end();
         }
     }
 
     transition!{
         commit_start(lbl: Label, frozen_journal: StoreImage, new_journal: AllocationJournal::State) {
-            require lbl.is_CommitStart();
-            require pre.ephemeral.is_Known();
+            require lbl is CommitStart;
+            require pre.ephemeral is Known;
             // Can't start a commit if one is in-flight, or we'd forget to maintain the
             // invariants for the in-flight one.
-            require pre.inflight.is_None();
+            require pre.inflight is None;
             // Frozen journal stitches to frozen map
             require frozen_journal.tj.seq_start() == lbl.get_CommitStart_new_boundary_lsn();
             // Journal doesn't go backwards
@@ -155,9 +156,9 @@ verus!{
 
     transition!{
         commit_complete(lbl: Label, new_journal: AllocationJournal::State) {
-            require lbl.is_CommitComplete();
-            require pre.ephemeral.is_Known();
-            require pre.inflight.is_Some();
+            require lbl is CommitComplete;
+            require pre.ephemeral is Known;
+            require pre.inflight is Some;
 
             require AllocationJournal::State::next(
                 pre.ephemeral.get_Known_v(), 
@@ -178,10 +179,123 @@ verus!{
 
     transition!{
         crash(lbl: Label) {
-            require lbl.is_Crash();
+            require lbl is Crash;
             update ephemeral = Ephemeral::Unknown;
-            update in_flight = Option::None;
+            update inflight = Option::None;
         }
+    }
+
+    pub open spec(checked) fn state_relations(self) -> bool 
+    {
+        // persistent and ephemeral agree on values
+        &&& self.ephemeral is Known ==> {
+            let ephemeral_disk = self.ephemeral.get_Known_v().get_tj().disk_view;
+            let persistent_disk = self.persistent.tj.disk_view;
+            &&& Map::agrees(ephemeral_disk.entries, persistent_disk.entries)
+        }
+        // inflight is always a subset of ephemeral
+        &&& self.ephemeral is Known && self.inflight is Some ==> {
+            let ephemeral_disk = self.ephemeral.get_Known_v().get_tj().disk_view;
+            let inflight_disk = self.inflight.get_Some_0().tj.disk_view;
+            &&& inflight_disk.is_sub_disk_with_newer_lsn(ephemeral_disk)
+        }
+    }
+
+    pub open spec(checked) fn journal_pages_not_free(self) -> bool
+        recommends self.ephemeral is Known ==> self.ephemeral.get_Known_v().inv()
+    {
+        // ephemeral pages are not free as promised by the recommends
+        &&& self.ephemeral is Known ==> {
+            let v = self.ephemeral.get_Known_v();
+            let persistent_disk = self.persistent.tj.disk_view;
+            &&& AllocationJournal::State::journal_pages_not_free(persistent_disk.entries.dom(), v.mini_allocator)
+        }
+        &&& self.ephemeral is Known && self.inflight is Some ==> {
+            let v = self.ephemeral.get_Known_v();
+            let inflight_disk = self.inflight.get_Some_0().tj.disk_view;
+            &&& AllocationJournal::State::journal_pages_not_free(inflight_disk.entries.dom(), v.mini_allocator)
+        }
+    }
+
+    #[invariant]
+    pub open spec(checked) fn inv(self) -> bool {
+        &&& self.ephemeral is Unknown ==> self.inflight is None
+        &&& self.ephemeral is Known ==> self.ephemeral.get_Known_v().inv()
+        &&& self.inflight is Some ==> self.inflight.get_Some_0().tj.decodable()
+        &&& self.persistent.tj.decodable()
+        // not used here but easier to maintain here
+        &&& self.state_relations()
+        &&& self.journal_pages_not_free()
+    }
+           
+    #[inductive(initialize)]
+    fn initialize_inductive(post: Self) {
+        assume(post.persistent.tj.decodable()); // show empty is decodable
+    }
+   
+    #[inductive(load_ephemeral_from_persistent)]
+    fn load_ephemeral_from_persistent_inductive(pre: Self, post: Self, lbl: Label,
+        new_journal: AllocationJournal::State, journal_config: AllocationJournal::Config) 
+    { 
+        assert(pre.ephemeral is Known ==> pre.ephemeral.get_Known_v().inv());
+        assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
+        assume(post.journal_pages_not_free());
+    }
+   
+    #[inductive(read_for_recovery)]
+    fn read_for_recovery_inductive(pre: Self, post: Self, lbl: Label) 
+    { 
+        assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
+    }
+   
+    #[inductive(query_end_lsn)]
+    fn query_end_lsn_inductive(pre: Self, post: Self, lbl: Label) 
+    { 
+        assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
+    }
+   
+    #[inductive(put)]
+    fn put_inductive(pre: Self, post: Self, lbl: Label, new_journal: AllocationJournal::State) 
+    { 
+        assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
+        assume(post.journal_pages_not_free());
+        assume(post.state_relations());
+    }
+   
+    #[inductive(internal)]
+    fn internal_inductive(pre: Self, post: Self, lbl: Label, new_journal: AllocationJournal::State) 
+    {
+        assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
+        assume(post.journal_pages_not_free());
+        assume(post.state_relations());
+    }
+   
+    #[inductive(query_lsn_persistence)]
+    fn query_lsn_persistence_inductive(pre: Self, post: Self, lbl: Label) 
+    {
+        assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
+     }
+   
+    #[inductive(commit_start)]
+    fn commit_start_inductive(pre: Self, post: Self, lbl: Label, frozen_journal: StoreImage, new_journal: AllocationJournal::State) 
+    {
+        assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
+        assume(post.inflight is Some ==> post.inflight.get_Some_0().tj.decodable()); // should reveal inflight 
+        assume(post.journal_pages_not_free());
+        assume(post.state_relations());
+    }
+   
+    #[inductive(commit_complete)]
+    fn commit_complete_inductive(pre: Self, post: Self, lbl: Label, new_journal: AllocationJournal::State) 
+    { 
+        assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
+        assume(post.journal_pages_not_free());
+    }
+   
+    #[inductive(crash)]
+    fn crash_inductive(pre: Self, post: Self, lbl: Label) 
+    {
+        assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
     }
 
   }} // state_machine
