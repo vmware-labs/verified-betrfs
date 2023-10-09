@@ -97,7 +97,6 @@ verus! {
             msg_history.can_follow(base.seq_end),
             msg_history.can_discard_to(stable_lsn),
     {
-        MsgHistory::map_plus_history_lemma(base, msg_history);
         FloatingSeq::new(stable_lsn, msg_history.seq_end + 1,
             |lsn: int| MsgHistory::map_plus_history(base, msg_history.discard_recent(lsn as LSN)).to_version()
         )
