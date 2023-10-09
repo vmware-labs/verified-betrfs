@@ -22,6 +22,17 @@ If you find yourself buried in error output, use this command to only get the to
 $verus --verify-module coordination_layer::CoordinationSystemRefinement_v bundle.rs --triggers-silent --expand-errors --multiple-errors 2 --color=always 2>&1 | head -n 50
 ```
 
+#### Pushing `.record-history` History
+
+If you're using the `record-history` feature of verus, here's instructions for how to push the history:
+```
+cd .record-history/git
+RECORDED_ITEMS=`git log --all | grep 'record-history-ref-hash' | wc -l`
+echo Recorded $RECORDED_ITEMS verus runs, pushing...
+git push --all target
+echo Pushed all branches.
+```
+
 ### Verus
 
 We use it. "Documentation" here: https://github.com/verus-lang/verus/tree/main/source/pervasive

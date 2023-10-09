@@ -92,15 +92,18 @@ verus! {
     pub open spec(checked) fn floating_versions(base: StampedMap, msg_history: MsgHistory, stable_lsn: LSN)
         -> (versions: FloatingSeq<Version>)
         recommends
+            base.value.wf(),
+            msg_history.wf(),
             msg_history.can_follow(base.seq_end),
             msg_history.can_discard_to(stable_lsn),
     {
+        MsgHistory::map_plus_history_lemma(base, msg_history);
         FloatingSeq::new(stable_lsn, msg_history.seq_end + 1,
             |lsn: int| MsgHistory::map_plus_history(base, msg_history.discard_recent(lsn as LSN)).to_version()
         )
     }
 
-    // Ic can be skipped as Dafny's CrashTolerantMapSpecMod had empty constants
+    // It can be skipped as Dafny's CrashTolerantMapSpecMod had empty constants
 
     impl CoordinationSystem::State
     {
