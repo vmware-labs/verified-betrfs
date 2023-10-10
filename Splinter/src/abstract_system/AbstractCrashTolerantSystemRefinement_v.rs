@@ -425,14 +425,14 @@ verus! {
         // | pdi.map | pdi.jrnl |
         //  --------- ----------
         //  ______________R__________
-        // | idi.map            | idi.jrnl |
+        // | idi.map      | idi.jrnl |
         //  -------------- ----------
-        //                      ____________________
-        //                   | eph.jrnl                     |
-        //                      --------------------
-        //                               _______________
-        //                              | eph'.jrnl         |
-        //                               ---------------
+        //            ____________________
+        //           | eph.jrnl           |
+        //            --------------------
+        //                 _______________
+        //                | eph'.jrnl     |
+        //                 ---------------
         // "R" is the "reference LSN" -- that's where we're going to prune ephemeral.journal, since
         // after the commit it is going to be the LSN of the persistent map.
 

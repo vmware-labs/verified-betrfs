@@ -35,8 +35,9 @@ impl<T> FloatingSeq<T> {
 
     // TODO if I omit "open" adjective, this file fails to compile!? (Followed, however, by a helpful message
     // about needing 'open' or 'closed'). Tony: As per the guide, spec(checked) funcs must be marked either open or closed
-    // Len() is the number of indices "occupied", *including* the empty space at
-    // the beginning of the index space.
+    
+    // Returns the number of indices "occupied", *including* the empty space at
+    // the beginning of the index space (i.e.: indices [0,start)).
     pub open spec(checked) fn len(self) -> int
     {
         self.start as int + self.entries.len()
@@ -66,15 +67,18 @@ impl<T> FloatingSeq<T> {
         self.entries[i - self.start]
     }
 
-    // You can chop off the right end of a FloatingSeq without shifting the
-    // indices of elements.
-    pub open spec(checked) fn get_prefix(self, count: int) -> FloatingSeq<T>
-        recommends 0 <= count <= self.len()
+    /// Return a FloatingSeq containing the elements of this seq in the range
+    /// [start..end_idx] (exclusive on end_idx).
+    /// i.e.: chop off all elements at index end_idx and beyond. (end_idx is
+    /// in the "absolute space", FloatingSeq handles translation). By the nature
+    /// of FloatingSeq truncating the front does not require shifting any indices.
+    pub open spec(checked) fn get_prefix(self, end_idx: int) -> FloatingSeq<T>
+        recommends 0 <= end_idx <= self.len()
     {
-        if count <= self.start { FloatingSeq{start: count as nat, entries: seq![]} }
+        if end_idx <= self.start { FloatingSeq{start: end_idx as nat, entries: seq![]} }
         // TODO(chris): is there a slice syntax I could use instead of subrange? Chris says: should
         // be, just isn't done yet.
-        else { FloatingSeq{start: self.start, entries: self.entries.subrange(0, count-self.start)} }
+        else { FloatingSeq{start: self.start, entries: self.entries.subrange(0, end_idx-self.start)} }
     }
 
     // This datatype doesn't have a "RightSlice" operator because the intent is

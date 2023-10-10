@@ -39,14 +39,17 @@ module FloatingSeqMod {
       entries[i - start]
     }
 
+    /// Get the elements in the floating seq in the range [start..end_idx].
+    /// i.e.: chop off all elements at index end_idx and beyond. (end_idx is
+    /// in the "absolute space", FloatingSeq handles translation.)
     // You can chop off the right end of a FloatingSeq without shifting the
     // indices of elements.
-    function GetPrefix(count: nat) : FloatingSeq<T>
-      requires count <= Len()
+    function GetPrefix(end_idx: nat) : FloatingSeq<T>
+      requires end_idx <= Len()
     {
-      if count <= start
-      then FloatingSeq(count, [])
-      else FloatingSeq(start, entries[..count-start])
+      if end_idx <= start
+      then FloatingSeq(end_idx, [])
+      else FloatingSeq(start, entries[..end_idx-start])
     }
 
     // This datatype doesn't have a "RightSlice" operator because the intent is

@@ -19,6 +19,10 @@ verus! {
 // Parallels a structure from Dafny (specifically from MapSpec.s.dfy)
 // Where the abstract top-level map specification uses two variables to
 // label its transitions. One of type `Input` and one of type `Output`.
+
+/// An Input represents a possible action that can be taken on an abstract
+/// MapSpec (i.e.: abstract key-value store), and contains the relevant
+/// arguments for performing that operation.
 #[is_variant]
 pub enum Input {
     QueryInput{key: Key},
@@ -26,6 +30,8 @@ pub enum Input {
     NoopInput
 }
 
+/// An Output represents the result from taking an Input action (and contains
+/// any relevant return arguments from performing the corresponding action).
 #[is_variant]
 pub enum Output {
     QueryOutput{value: Value},
@@ -57,6 +63,17 @@ pub open spec(checked) fn getOutput(label: MapSpec::Label) -> Output {
     }
 }
 
+// MapSpec is our top-level trusted spec on what a Map (key-value store)
+// is.
+// 
+// We don't refine to this directly however as it doesn't provide
+// a model that allows for proper concurrent disk I/O access (since there's
+// no concept of asynchronicity between requesting an operation and
+// getting the result).
+// 
+// To achieve this we wrap MapSpec within a AsyncMap state machine. Then
+// to allow for a model where crashes can occur, we then wrap the AsyncMap
+// state machine within a CrashTolerantAsyncMap state machine specification.
 state_machine!{ MapSpec {
     fields { pub kmmap: TotalKMMap }
 
@@ -125,6 +142,10 @@ pub struct Reply {
 // needing/wanting that where PersistentState is used in the original Dafny.
 // It's potentially a constraint from the custom "functor modules" they
 // used for templating modules.
+
+/// PersistentState represents the actual state of the AsyncMap (wraps
+/// the true key-value store). Whenever an operation is executed the
+/// PersistentState is updated.
 pub struct PersistentState {
     pub appv: MapSpec::State
 }
@@ -140,19 +161,44 @@ impl PersistentState {
     {
     }
 }
+
+/// EphemeralState captures the relevant async information we need to
+/// track whether operations violate linearizability (and thus enforce
+/// in our transitions that all operations are linearizable from the 
+/// perspective of the client).
+///
+/// We view our EphemeralState as a set of outstanding client requests
+/// that haven't been executed and a set of executed replies that have
+/// yet to be delivered to the client.
 pub struct EphemeralState {
+    /// The set of received but not yet executed requests.
     pub requests: Set<Request>,
+    /// The set of executed but not yet delivered replies.
     pub replies: Set<Reply>,
 }
 
 // TODO(jonh): `error: state machine field must be marked public`: why make me type 'pub', then?
 // It's our syntax!
 
+// AsyncMap wraps a MapSpec with asynchrony. It represents a spec where
+// map operations are broken down into 3 stages:
+// - Requesting the operation
+// - Executing the operation
+// - Replying (delivering confirmation to client that operation was performed).
+// 
+// An execution is considered valid as long as there's some sequence
+// of events where all requests reflect side effects from all responses
+// received strictly before request is fired. (Standard Distributed
+// Systems linearizability).
 state_machine!{ AsyncMap {
     #[is_variant]
     pub enum Label { // Was AsyncMod.UIOp
+        /// Request transition is labeled with the requested operation.
         RequestOp { req: Request },
+        /// Execute transition is labeled with the requested operation that
+        /// was executed and the produced reply.
         ExecuteOp { req: Request, reply: Reply },
+        /// Reply transition is labeled with what reply is delivered.
         ReplyOp { reply: Reply },
     }
 
@@ -165,16 +211,24 @@ state_machine!{ AsyncMap {
     }
 
     fields {
+        /// Persistent State is the actual state of the map (the cumulative
+        /// state after applying all executions so far).
         pub persistent: PersistentState,
+        /// Ephemeral state is the set of to-be-executed requests and undelivered
+        /// replies.
         pub ephemeral: EphemeralState,
     }
 
+    /// The request transition corresponds to the client requesting an operation
+    /// on the async map.
     transition!{ request(label: Label) {
         require let Label::RequestOp{ req } = label;
         require !pre.ephemeral.requests.contains(req);
         update ephemeral = EphemeralState { requests: pre.ephemeral.requests.insert(req), ..pre.ephemeral };
     } }
 
+    /// The execute transition corresponds to the async map executing an outstanding
+    /// request.
     transition!{ execute(label: Label, map_label: MapSpec::Label, post_persistent: PersistentState) {
         require let Label::ExecuteOp{ req, reply } = label;
         require req.id == reply.id;
@@ -211,10 +265,33 @@ pub type Version = PersistentState;
 // TODO(jonh): was sad to concretize Map (because no module functors). Is there a traity alternative?
 // TODO(jonh): also sad to cram Async into CrashTolerant (because Async wasn't really a real state machine).
 // How do we feel about going slightly off the state machine rails and having it fall apart?
+
+// CrashTolerantAsyncMap is a, well, crash-tolerant asynchronous map. This is the true top-level
+// spec which we refine our implementation to.
+//
+// The CrashTolerantAsyncMap wraps a AsyncMap, but adds the notion of versioning and crashing.
+// Funnily enough we still have to make the crash operation itself "async" (in that we model
+// it as an operation that has to be: requested, executed, replied to).
 state_machine!{ CrashTolerantAsyncMap {
     fields {
+        /// versions is a sequence of snapshots of the map state.
+        /// 
+        /// Invariant: the first active
+        /// index in the floating seq is the "stable index" (i.e.: the latest index which is
+        /// crash-tolerant).
+        /// 
+        /// All snapshots after the first index represent the sequence
+        /// of states the Map has gone through that have yet to be persisted.
+        /// Thus: the last state in `versions` represents the current up-to-date view
+        /// of the map (not necessarily persisted).
         pub versions: FloatingSeq<Version>,
+        /// The async ephemeral state (set of outstanding client requests and replies).
+        /// See comments for EphemeralState struct.
         pub async_ephemeral: EphemeralState,
+        /// The set of outstanding sync requests. Stored as a map mapping from a unique
+        /// sync request ID to the version number "v" the map was at at the time the
+        /// sync was requested. When we deliver a reply for a given sync request we
+        /// ensure that the stable index is >= "v".
         pub sync_requests: Map<SyncReqId, nat>,
     }
 
@@ -229,6 +306,8 @@ state_machine!{ CrashTolerantAsyncMap {
     }
     // TODO: complete this state machine
 
+    /// Return the latest index in `self.versions` which is stable (i.e.: persistent across
+    /// crashes).
     pub open spec(checked) fn stable_index(self) -> int {
         self.versions.first_active_index()
     }
@@ -249,6 +328,9 @@ state_machine!{ CrashTolerantAsyncMap {
       ||| versions_prime == versions
     }
 
+    /// Perform an operation at the AsyncMap state machine level (this could either be
+    /// requesting an operation, executing it, or returning a reply to the client).
+    /// Adds a version to self.versions if the execution modifies the state of the map.
     transition!{
         operate(
             label: Label,
@@ -273,25 +355,43 @@ state_machine!{ CrashTolerantAsyncMap {
             update async_ephemeral = new_async_ephemeral;
     } }
 
+    /// Represents the map crashing. We go back to the stable version (the persisted version)
+    /// and forget all outstanding requests and replies (both for AsyncMap and for Sync
+    /// requests).
     transition!{
         crash(label: Label) {
             require let Label::CrashOp = label;
 
+            // The new versions contains only one element: the first element of pre.versions
+            // (since we maintain that the first element of pre.versions is always the
+            // last stable state).
             update versions = pre.versions.get_prefix(pre.stable_index() + 1);
             update async_ephemeral = AsyncMap::State::init_ephemeral_state();
             update sync_requests = Map::empty();
         }
     }
 
+    /// Perform a sync operation (moves the stable index forward). Doesn't need
+    /// to be triggered by a client request.
     transition!{
         sync(label: Label, new_stable_index: int) {
             require let Label::SyncOp = label;
 
+            // The new stable index just needs to be some valid index within
+            // pre.versions (we allow the new stable index to be the old stable
+            // index, although that would correspond to not necessarily actually
+            // persisting anything).
             require pre.stable_index() <= new_stable_index < pre.versions.len();
+            // We truncate the front of self.versions until the first index is the new
+            // stable index.
             update versions = pre.versions.get_suffix(new_stable_index);
         }
     }
     
+    /// req_sync represents a client requesting a sync operation. Allows us to do
+    /// bookkeeping to specify when the reply is delivered that we actually followed
+    /// good sync semantics (a reply to a sync should mean all observable state at
+    /// time of sync is persisted).
     transition!{
         req_sync(label: Label) {
             require let Label::ReqSyncOp{ sync_req_id } = label;
@@ -303,6 +403,11 @@ state_machine!{ CrashTolerantAsyncMap {
         }
     }
 
+    /// reply_sync represents responding to a client that a requested sync operation
+    /// completed successfully.
+    ///
+    /// We ensure that at the time we deliver reply that our stable index is in fact
+    /// >= the version at the time of the sync request.
     transition!{
         reply_sync(label: Label) {
             require let Label::ReplySyncOp{ sync_req_id } = label;
@@ -315,6 +420,8 @@ state_machine!{ CrashTolerantAsyncMap {
         }
     }
 
+    /// Noop transition allows lower level state machine (which refines to this) to
+    /// do any internal bookkeeping (which isn't reflected in refined state) within a transition.
     transition!{
         noop(label: Label) {
             require let Label::Noop = label;
