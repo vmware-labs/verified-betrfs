@@ -68,10 +68,11 @@ impl<T> FloatingSeq<T> {
     }
 
     /// Return a FloatingSeq containing the elements of this seq in the range
-    /// [start..end_idx] (exclusive on end_idx).
+    /// [start, end_idx). (Note however for all FloatingSeq's we interpret all the
+    /// empty indices [0, start) as "occupied"; they just represent forgotten
+    /// values).
     /// i.e.: chop off all elements at index end_idx and beyond. (end_idx is
-    /// in the "absolute space", FloatingSeq handles translation). By the nature
-    /// of FloatingSeq truncating the front does not require shifting any indices.
+    /// in the "absolute space", FloatingSeq handles translation).
     pub open spec(checked) fn get_prefix(self, end_idx: int) -> FloatingSeq<T>
         recommends 0 <= end_idx <= self.len()
     {
