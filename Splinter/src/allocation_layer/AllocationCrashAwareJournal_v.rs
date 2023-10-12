@@ -19,23 +19,23 @@ use crate::disk::GenericDisk_v::AU;
 use crate::allocation_layer::AllocationJournal_v::*;
 
 verus!{
-  pub type StoreImage = JournalImage;
+pub type StoreImage = JournalImage;
 
-  #[is_variant]
-  pub enum Ephemeral
-  {
+#[is_variant]
+pub enum Ephemeral
+{
     Unknown,
     Known{v: AllocationJournal::State}
-  }
+}
 
-  impl Ephemeral {
+impl Ephemeral {
     pub open spec(checked) fn wf(self) -> bool
     {
       self is Known ==> self.get_Known_v().wf()
     }
-  }
+}
 
-  state_machine!{AllocationCrashAwareJournal{
+state_machine!{AllocationCrashAwareJournal{
     fields {
       pub persistent: StoreImage,
       pub ephemeral: Ephemeral,
@@ -43,10 +43,10 @@ verus!{
     }
 
     init!{
-      initialize() {
-          init persistent = JournalImage::empty();
-          init ephemeral = Ephemeral::Unknown;
-          init inflight = Option::None;
+        initialize() {
+            init persistent = JournalImage::empty();
+            init ephemeral = Ephemeral::Unknown;
+            init inflight = Option::None;
       }
     }
 
