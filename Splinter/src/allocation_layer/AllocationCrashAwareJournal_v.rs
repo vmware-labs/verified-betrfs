@@ -118,7 +118,7 @@ state_machine!{AllocationCrashAwareJournal{
             require AllocationJournal::State::next(
                 pre.ephemeral.get_Known_v(), 
                 new_journal, 
-                AllocationJournal::Label::InternalAllocations{allocs: lbl.get_Internal_allocs(), deallocs: lbl.get_Internal_deallocs() }
+                AllocationJournal::Label::InternalAllocations{ allocs: lbl.get_Internal_allocs(), deallocs: lbl.get_Internal_deallocs() }
             );
             update ephemeral = Ephemeral::Known{ v: new_journal };
         }
