@@ -8,16 +8,23 @@ use crate::abstract_system::StampedMap_v::*;
 
 verus! {
 
+/// A KeyedMessage stores a "key" to perform the operation in the stored
+/// "message" on.
 pub struct KeyedMessage { 
   pub key: Key, 
   pub message: Message 
 }
 
-// A contiguous log of kv-store command messages (keyed by LSN)
-// Stores requests from seq_start <= LSN < seq_end
+/// A contiguous log of kv-store command messages (keyed by LSN)
+/// Stores requests from seq_start <= LSN < seq_end.
 pub struct MsgHistory { 
+  /// The messages stored in this history. Stored as key-value pairs,
+  /// where key is the LSN of the operation, and KeyedMessage stores
+  /// the operation to perform.
   pub msgs: Map<LSN, KeyedMessage>,
+  /// The first LSN in this MsgHistory.
   pub seq_start: LSN, 
+  /// The first LSN *past the end* of this MsgHistory.
   pub seq_end: LSN 
 }
 
@@ -156,6 +163,8 @@ impl MsgHistory {
     self.discard_recent(lsn)
   }
 
+  /// Returns a StampedMap formed by applying the operations in self (MsgHistory)
+  /// to the StampedMap "orig".
   pub open spec fn apply_to_stamped_map(self, orig: StampedMap) -> StampedMap 
     recommends
         self.can_follow(orig.seq_end),
@@ -164,8 +173,14 @@ impl MsgHistory {
     if self.is_empty() {
       orig
     } else {
+      // We define the application of a MsgHistory to a StampedMap recursively.
+
+      // First we pop off the last log entry and apply the prefix log to the
+      // stamped map.
       let last_lsn = (self.seq_end - 1) as nat;
       let sub_map = self.discard_recent(last_lsn).apply_to_stamped_map(orig);
+
+      // Then we apply the last entry in the log to the StampedMap.
       let key = self.msgs[last_lsn].key;
       let new_message = self.msgs[last_lsn].message;
       let old_message = sub_map.value[key];

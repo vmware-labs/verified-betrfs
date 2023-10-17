@@ -9,9 +9,14 @@ use crate::abstract_system::MsgHistory_v::*;
 
 verus! {
 
+// An AbstractJournal is an abstract view of a, well, journal. It logs
+// a set of operations, which should eventually be compacted and applied
+// to a map.
 state_machine!{ AbstractJournal {
-    // Dafny Variables definition equivalent
-    fields { pub journal: MsgHistory }
+    fields {
+        /// The log of messages this AbstractJournal contains.
+        pub journal: MsgHistory
+    }
 
     pub open spec(checked) fn wf(self) -> bool
     {

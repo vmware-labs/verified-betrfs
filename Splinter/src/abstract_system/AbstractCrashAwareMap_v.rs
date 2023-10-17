@@ -1,3 +1,7 @@
+/// An AbstractMap (see `AbstractMap_v.rs`) but wrapped with the concept of crashes and recovery.
+/// We use this as the abstract crash tolerant map which is coordinated with the
+/// CrashAwareJournal in the coordination layer in our refinement proof.
+
 #[allow(unused_imports)]
 use builtin::*;
 

@@ -1,3 +1,8 @@
+/// AbstractCrashTolerantSystem. Formerly named AbstractCoordinationSystem.
+/// Coordinates a map and a journal to present a unified map once abstracted.
+///
+/// This is the final refinement layer before the top level trusted spec.
+
 use builtin::*;
 
 use builtin_macros::*;
@@ -18,30 +23,28 @@ use crate::abstract_system::MsgHistory_v::{MsgHistory, KeyedMessage};
 
 verus! {
 
+/// SyncReqId's are used to assign sync requests unique IDs. Actual value is meaningless beyond
+/// identifying a specific sync request.
 type SyncReqId = nat;
+
+/// SyncReqs represents a set of outstanding sync requests. Sync requests are stored as key-value
+/// pairs: (key, map_lsn), where "key" is the sync request ID, and "map_lsn" was the last executed
+/// LSN on the map at the time the sync request was made.
 type SyncReqs = Map<SyncReqId, LSN>;
 
-// Does magic I guess
-// #[is_variant]
-// pub enum Ephemeral {
-//   Unknown,
-//   Known {
-//     // TODO: is this right? I think this should actually be the MapSpec_t ephemeral state
-//     progress: MapSpec_t::EphemeralState,
-//     sync_reqs: SyncReqs,
-//     map_lsn: LSN  // invariant: agrees with mapadt.stampedMap.seqEnd
-//   },
-// }
-
+/// The ephemeral state of the Coordination Layer (when known).
 pub struct Known {
+  /// Tracks the set of outstanding client requests and undelivered replies. See MapSpec_t::EphemeralState.
   pub progress: MapSpec_t::EphemeralState,
+  /// The set of outstanding sync requests.
   pub sync_reqs: SyncReqs,
+  /// The LSN one past the end of 
   pub map_lsn: LSN  // invariant: agrees with mapadt.stampedMap.seqEnd
 }
 
 // Ephemeral state for coordination layer can be known or unknown. The ephemeral
 // state is known if the Option type is Some, and unknown if the Option type is
-// None
+// None.
 type Ephemeral = Option<Known>;
 
 state_machine!{ CoordinationSystem {

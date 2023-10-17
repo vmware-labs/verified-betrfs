@@ -9,11 +9,16 @@ pub type LSN = nat;
 
 // TODO(jonh): Templating isn't helping, would
 // like to define wf for StampedMap
+
+/// A Stamped type is one which has the concept of a seq_end.
+/// I guess the original naming was meant to refer to how
+/// you "stamp" the end with an LSN? IDK.
 pub struct Stamped<T> {
   pub value: T, 
   pub seq_end: LSN 
 }
 
+/// A TotalKMMap with a seq_end field.
 pub type StampedMap = Stamped<TotalKMMap>;
 
 pub open spec(checked) fn empty() -> StampedMap {
@@ -26,6 +31,8 @@ impl StampedMap {
     &&& self.seq_end == other.seq_end
   }
 
+  /// Returns a StampedMap formed by applying the operations in the given journal
+  /// (aka Message History) to this StampedMap.
   pub open spec(checked) fn plus_history(self, history: MsgHistory) -> StampedMap
     recommends
       self.value.wf(),

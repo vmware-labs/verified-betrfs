@@ -7,6 +7,8 @@ use crate::spec::Messages_t::*;
 
 verus!{
 
+/// A TotalKMMap wraps a regular verus map. Maps Keys to Messages.
+/// We use this to represent our abstract map state.
 #[verifier::ext_equal]
 pub struct TotalKMMap(pub Map<Key, Message>);
 

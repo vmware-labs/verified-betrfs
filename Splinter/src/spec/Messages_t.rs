@@ -23,10 +23,15 @@ pub open spec(checked) fn nop_delta() -> Delta {
     Delta(0)
 }
 
-
+/// Messages represent operations that can be performed to update/define the
+/// state of values in a map.
+/// Messages can themselves be used as the values of a map as long as only "Define"
+/// messages are stored (see TotalKMMap).
 #[is_variant]
 pub enum Message {
+    /// A Define message represents setting a variable to the given value.
     Define{ value: Value },
+    /// An Update message represents updating a variable by the given delta.
     Update{ delta: Delta },
 }
 
@@ -44,6 +49,7 @@ impl Message {
         }
     }
 
+    // Place holder. Eventually applying a delta should apply some offset.
     pub open spec(checked) fn apply_delta(delta: Delta, value: Value) -> Value
     {
         value
