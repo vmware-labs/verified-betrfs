@@ -3,27 +3,27 @@ use builtin::*;
 
 use builtin_macros::*;
 use state_machines_macros::state_machine;
+use vstd::map::*;
 use vstd::prelude::*;
 use vstd::seq_lib::*;
-use vstd::map::*;
 use vstd::set_lib::*;
 
-use crate::spec::Messages_t::*;
+use crate::spec::FloatingSeq_t::*;
 use crate::spec::MapSpec_t;
 use crate::spec::MapSpec_t::*;
-use crate::spec::FloatingSeq_t::*;
-use crate::spec::TotalKMMap_t;
+use crate::spec::Messages_t::*;
 use crate::spec::Option_t;
+use crate::spec::TotalKMMap_t;
 
-use crate::abstract_system::AbstractJournal_v::AbstractJournal;
-use crate::abstract_system::AbstractCrashTolerantSystem_v::*;
 use crate::abstract_system::AbstractCrashAwareJournal_v;
 use crate::abstract_system::AbstractCrashAwareJournal_v::*;
-use crate::abstract_system::AbstractCrashAwareMap_v::*;
 use crate::abstract_system::AbstractCrashAwareMap_v;
+use crate::abstract_system::AbstractCrashAwareMap_v::*;
+use crate::abstract_system::AbstractCrashTolerantSystem_v::*;
+use crate::abstract_system::AbstractJournal_v::AbstractJournal;
 use crate::abstract_system::AbstractMap_v::*;
+use crate::abstract_system::MsgHistory_v::{KeyedMessage, MsgHistory};
 use crate::abstract_system::StampedMap_v::*;
-use crate::abstract_system::MsgHistory_v::{MsgHistory, KeyedMessage};
 
 verus! {
     impl CrashTolerantJournal::State
@@ -72,6 +72,8 @@ verus! {
 
     impl CoordinationSystem::State
     {
+        /// Return the "seq_end" of the ephemeral (most up-to-date, not necessarily persisted)
+        /// state.
         pub open spec(checked) fn ephemeral_seq_end(self) -> LSN
             recommends
                 self.ephemeral.is_Some(),
@@ -79,33 +81,9 @@ verus! {
         {
             self.journal.i().seq_end
         }
-    }
 
-    impl StampedMap
-    {
-        pub open spec(checked) fn to_version(self) -> Version
-        {
-            PersistentState{ appv: MapSpec::State{ kmmap: self.value } }
-        }
-    }
-
-    pub open spec(checked) fn floating_versions(base: StampedMap, msg_history: MsgHistory, stable_lsn: LSN)
-        -> (versions: FloatingSeq<Version>)
-        recommends
-            base.value.wf(),
-            msg_history.wf(),
-            msg_history.can_follow(base.seq_end),
-            msg_history.can_discard_to(stable_lsn),
-    {
-        FloatingSeq::new(stable_lsn, msg_history.seq_end + 1,
-            |lsn: int| MsgHistory::map_plus_history(base, msg_history.discard_recent(lsn as LSN)).to_version()
-        )
-    }
-
-    // It can be skipped as Dafny's CrashTolerantMapSpecMod had empty constants
-
-    impl CoordinationSystem::State
-    {
+        /// Return the CrashTolerantAsyncMap state that this CoordinationSystem state
+        /// corresponds to. (Interpretation function).
         pub open spec(checked) fn i(self) -> CrashTolerantAsyncMap::State
         recommends
             self.inv(),
@@ -133,6 +111,49 @@ verus! {
                 }
             }
         }
+    }
+
+    /// Convert a StampedMap to a Version. (Both are representations of a map's concrete
+    /// state (key-value pairs), Version just doesn't have seq_end).
+    impl StampedMap
+    {
+        pub open spec(checked) fn to_version(self) -> Version
+        {
+            PersistentState{ appv: MapSpec::State{ kmmap: self.value } }
+        }
+    }
+
+    /// Return a FloatingSeq `s` of Versions (map state snapshots), with active
+    /// indices in the range [stable_lsn, msg_history.seq_end], where
+    /// `s[stable_lsn + i]` is the state of the map after the first `i` active
+    /// operations in `msg_history` have been applied to `base`.
+    pub open spec(checked) fn floating_versions(base: StampedMap, msg_history: MsgHistory, stable_lsn: LSN)
+        -> (versions: FloatingSeq<Version>)
+        recommends
+            base.value.wf(),
+            msg_history.wf(),
+            msg_history.can_follow(base.seq_end),
+            msg_history.can_discard_to(stable_lsn),
+    {
+        // We iterate from [stable_lsn, msg_history.seq_end] (but to match
+        // FloatingSeq::new's API, we actually encode [stable_lsn,
+        // msg_history.seq_end + 1)). An easy way to think about this: if
+        // `msg_history` can be applied to `base`, then after applying all of
+        // `msg_history` to `base`, the seq_end of the resulting map will just
+        // be the `seq_end` of the original `msg_history`.
+        FloatingSeq::new(
+            stable_lsn,
+            msg_history.seq_end + 1,
+            |lsn: int| MsgHistory::map_plus_history(
+                base, msg_history.discard_recent(lsn as LSN))
+                .to_version()
+        )
+    }
+
+    // It can be skipped as Dafny's CrashTolerantMapSpecMod had empty constants
+
+    impl CoordinationSystem::State
+    {
     }
 
     pub closed spec(checked) fn journal_overlaps_agree(j0: Journal, j1: Journal) -> bool
@@ -237,7 +258,7 @@ verus! {
         {
             // invariant: the in_flight map agrees with the persistent map,
             // plus has extra entries from the ephemeral journal.
-            self.mapadt.in_flight.get_Some_0() == 
+            self.mapadt.in_flight.get_Some_0() ==
                 MsgHistory::map_plus_history(
                     self.mapadt.persistent,
                     self.journal.i().discard_recent(self.mapadt.in_flight.get_Some_0().seq_end)
@@ -328,13 +349,13 @@ verus! {
         // Was going to attempt this, but then you need to init a config with your own
         // thing but that just feels silly.
         // assert(CoordinationSystem::State::init_by(v, CoordinationSystem::Config::initialize()));
-        
+
         // https://verus-lang.github.io/verus/guide/exists.html#choose
         // verus docs suggest that when a precondition contains an exists using
         // a choose statement is the canonical way to get it
         // let a = choose(|config: CoordinationSystem::Config| A::State::init_by(v, config))
         // assert(CoordinationSystem::State::initialize(v, v));
-        
+
         // Despite requiring that this is true in the `initialize` of CoordinationSystem
         // this still isn't properly detected. My guess is that it's because `init`
         // actually uses an `exists` clause to determine which initialization function
@@ -363,7 +384,7 @@ verus! {
         {
             CoordinationSystem::Config::initialize(state) => {
                 v.i().versions.extensionality(FloatingSeq::new(0, 1, |i| AsyncMap::State::init_persistent_state()));
-                
+
                 assert(CrashTolerantAsyncMap::State::initialize(v.i()));
 
                 CrashTolerantAsyncMap::show::initialize(v.i());
@@ -465,7 +486,7 @@ verus! {
         // Discard is associative with concat: ej[..ref_lsn]+(ej[ref_lsn..][..lsn]) = (ej[..ref_lsn]+ej[ref_lsn..])[..lsn]
         // Note that ej[..ref_lsn]+ej[ref_lsn..] should just be ej
         assert_maps_equal!(ej.discard_recent(ref_lsn).concat(ej.discard_old(ref_lsn).discard_recent(lsn)).msgs, ej.discard_recent(ref_lsn).concat(ej.discard_old(ref_lsn)).discard_recent(lsn).msgs);
-        
+
         MsgHistory::map_plus_history_forall_lemma();
         MsgHistory::map_plus_history_seq_end_lemma(v.mapadt.persistent, v.journal.i().discard_recent(lsn));
         // Proving that right's seq_end == lsn
@@ -499,7 +520,7 @@ verus! {
                     y.concat(ztrim).msgs
                 );
             }
- 
+
             // assert_maps_equal!(left.value, right.value);
             assert(left == right);
         } else {
@@ -538,7 +559,7 @@ verus! {
 
         if v.map_is_frozen() {
             let frozen_end = v.mapadt.in_flight.get_Some_0().seq_end;
-            assert(v.journal.i().discard_recent(frozen_end) 
+            assert(v.journal.i().discard_recent(frozen_end)
                 == vp.journal.i().discard_recent(frozen_end))
             by
             {
@@ -560,7 +581,7 @@ verus! {
         };
 
         let singleton = MsgHistory::singleton_at(v.ephemeral.get_Some_0().map_lsn, keyed_message);
-        
+
         assert(CrashTolerantJournal::State::next(v.journal, vp.journal, CrashTolerantJournal::Label::PutLabel{ records: singleton }));
 
         journal_associativity(v.mapadt.persistent, v.journal.i(), singleton);
@@ -575,7 +596,7 @@ verus! {
         // This should be true by the definition of the transition (just leaving
         // this assertion to remember that)
         assert(vp.mapadt.i() == MsgHistory::map_plus_history(v.mapadt.i(), singleton));
-    
+
         // Because `verus` spec(checked) functions don't have ensures clauses, we need a separate lemma to
         // prove properties of certain operations.
         MsgHistory::map_plus_history_forall_lemma();
@@ -670,7 +691,7 @@ verus! {
         // Show that ej[:em_end] == ej[:im_end] + ej[im_end:em_end]
         // Needed an extensionality argument... took a while to find
         // Maybe I should make this a lemma on the concat operator...
-        assert(ej.discard_recent(em_end) 
+        assert(ej.discard_recent(em_end)
             == ej.discard_recent(im_end).concat(ej.discard_old(im_end).discard_recent(em_end)))
         by
         {
@@ -679,7 +700,7 @@ verus! {
             assert_maps_equal!(left.msgs, right.msgs);
         }
 
-        // Argue that pre.pm + pre.ej[:im_end] + pre.ej[im_end:em_end] 
+        // Argue that pre.pm + pre.ej[:im_end] + pre.ej[im_end:em_end]
         // == pre.pm + (pre.ej[:im_end] + pre.ej[im_end:em_end]
         journal_associativity(
             v.mapadt.persistent,
@@ -720,7 +741,7 @@ verus! {
         StampedMap::ext_equal_is_equality();
 
         let step = choose |s| CoordinationSystem::State::next_by(v, vp, label, s);
-        
+
         match step {
             CoordinationSystem::Step::load_ephemeral_from_persistent(..) => {
                 // Verifies for free! (Well, besides all of the reveals lol)
@@ -873,7 +894,7 @@ verus! {
 
         // BEGIN - CrashTolerant::Next proof
         let new_versions = vp.i().versions;
-        let new_async_ephemeral = vp.i().async_ephemeral; 
+        let new_async_ephemeral = vp.i().async_ephemeral;
 
         let ctam_step = CrashTolerantAsyncMap::Step::operate(
             new_versions,
@@ -936,6 +957,80 @@ verus! {
         // assert(v.i().versions.ext_equal(vp.i().versions.drop_last()));
         assert(CrashTolerantAsyncMap::State::next_by(v.i(), vp.i(), label.get_Label_ctam_label(), ctam_step));
         assert(CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label.get_Label_ctam_label()));
+    }
+
+    /// Proof that a "commit_complete" transition maps to a "sync" transition
+    /// in abstract CrashTolerantAsyncMap.
+    pub proof fn commit_complete_step_refines(
+        v: CoordinationSystem::State,
+        vp: CoordinationSystem::State,
+        label: CoordinationSystem::Label,
+        step: CoordinationSystem::Step
+    )
+        requires
+            v.inv(),
+            CoordinationSystem::State::next(v, vp, label),
+            CoordinationSystem::State::next_by(v, vp, label, step),
+            matches!(step, CoordinationSystem::Step::commit_complete(..)),
+        ensures
+            vp.inv(),
+            CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label.get_Label_ctam_label()),
+    {
+        reveal(CoordinationSystem::State::next);
+        reveal(CoordinationSystem::State::next_by);
+        reveal(CrashTolerantJournal::State::next);
+        reveal(CrashTolerantJournal::State::next_by);
+        reveal(AbstractJournal::State::next);
+        reveal(AbstractJournal::State::next_by);
+        reveal(CrashTolerantMap::State::next);
+        reveal(CrashTolerantMap::State::next_by);
+        reveal(AbstractMap::State::next);
+        reveal(AbstractMap::State::next_by);
+
+        // Be careful to reveal init and init_by transitions as well!
+        reveal(CrashTolerantJournal::State::init);
+        reveal(CrashTolerantJournal::State::init_by);
+        // No direct dependencies on init()
+        // reveal(AbstractJournal::State::init);
+        reveal(AbstractJournal::State::init_by);
+
+        // Reveal refinement transitions
+        reveal(CrashTolerantAsyncMap::State::next);
+        reveal(CrashTolerantAsyncMap::State::next_by);
+        reveal(AsyncMap::State::next);
+        reveal(AsyncMap::State::next_by);
+        reveal(MapSpec::State::next);
+        reveal(MapSpec::State::next_by);
+
+        // Proof strategy of `CommitCompleteNext` in original Dafny
+        // See description & diagram in CommitStepPreservesHistory.
+        inv_inductive(v, vp, label);
+
+        let new_stable_index = vp.i().stable_index();
+
+        // Proving equality of the two Version histories (one formed from getting suffix).
+        let vers_s = v.i().versions.get_suffix(new_stable_index);
+        let vers_p = vp.i().versions;
+
+        assert forall |lsn| { vers_p.is_active(lsn) }
+            implies { vers_p[lsn] == vers_s[lsn] } by
+        {
+            if (v.journal.in_flight.get_Some_0().seq_end <= lsn) {
+                commit_step_preserves_history(v, vp, label, step, lsn as nat);
+            }
+        }
+
+        // Thankfully extensional equality is wrapped in a lemma already written by Jon.
+        vers_s.extensionality(vers_p);
+
+        // Couldn't assert `=~~=` without adding the `extensionality` lemma, why?
+        // Is it because `Version` (which is just `PersistentState`, contains `MapSpec::State`, which
+        // doesn't have `#[verifier::ext_equal]`? (We can't add it due to state_machine! macro rules))
+        // assert(vers_p =~~= vers_s);
+
+        // Proof goal: Show that it refines to a sync operation.
+        assert(CrashTolerantAsyncMap::State::sync(v.i(), vp.i(), CrashTolerantAsyncMap::Label::SyncOp{}, new_stable_index));
+        CrashTolerantAsyncMap::show::sync(v.i(), vp.i(), CrashTolerantAsyncMap::Label::SyncOp{}, new_stable_index);
     }
 
 } // verus!

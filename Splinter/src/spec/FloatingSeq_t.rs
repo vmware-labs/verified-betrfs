@@ -14,7 +14,7 @@ verus!{
 // this datatype was designed for: a log whose prefix is truncated. The log
 // might be empty, but wants to remember how many entries have gone before even
 // though their values are forgotten now.)
-
+#[verifier::ext_equal]
 pub struct FloatingSeq<T> {
     // TODO: Want to make these private, which entails making most specs in here closed,
     // but that would kill all automation. Waiting for some way to "broadcast-forall"
@@ -27,6 +27,9 @@ pub struct FloatingSeq<T> {
 }
 
 impl<T> FloatingSeq<T> {
+    /// Returns a new FloatingSeq with active indices in the range [start, length). The entries
+    /// in the active indices are populated using a caller-provided lambda, which should map
+    /// active indices to the element that should populate that index.
     pub open spec(checked) fn new(start: nat, length: nat, f: FnSpec(int) -> T) -> FloatingSeq<T>
         recommends start <= length
     {
@@ -82,14 +85,17 @@ impl<T> FloatingSeq<T> {
         else { FloatingSeq{start: self.start, entries: self.entries.subrange(0, end_idx-self.start)} }
     }
 
-    // This datatype doesn't have a "RightSlice" operator because the intent is
-    // that object indices don't move; the origin stays put. The closest analog
-    // is this GetSuffix operation, which forgets some of the `entries`,
-    // remembering only how many there used to be (in `start`), so that the
-    // offsets of the surviving entries don't change.
+    /// Return a FloatingSeq containing the elements of this FloatingSeq in the range
+    /// [newStart, self.len()).
+    
     pub open spec(checked) fn get_suffix(self, newStart: int) -> FloatingSeq<T>
         recommends self.is_active(newStart) || newStart == self.len()
     {
+        // This datatype doesn't have a "RightSlice" operator because the intent is
+        // that object indices don't move; the origin stays put. The closest analog
+        // is this GetSuffix operation, which forgets some of the `entries`,
+        // remembering only how many there used to be (in `start`), so that the
+        // offsets of the surviving entries don't change.
         FloatingSeq{start: newStart as nat, entries: self.entries.subrange(newStart - self.start, self.entries.len() as int)}
     }
 

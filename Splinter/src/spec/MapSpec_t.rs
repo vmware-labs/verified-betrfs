@@ -141,11 +141,14 @@ pub struct Reply {
 // It does make it a separate type, but there's no clear reason for
 // needing/wanting that where PersistentState is used in the original Dafny.
 // It's potentially a constraint from the custom "functor modules" they
-// used for templating modules.
+// used for templating modules. I think we should just delete this type.
+// It causes confusion since there's so many names for things that are
+// the same thing.
 
 /// PersistentState represents the actual state of the AsyncMap (wraps
 /// the true key-value store). Whenever an operation is executed the
 /// PersistentState is updated.
+#[verifier::ext_equal]
 pub struct PersistentState {
     pub appv: MapSpec::State
 }
@@ -260,6 +263,9 @@ state_machine!{ AsyncMap {
 } }
 
 type SyncReqId = nat;
+
+/// A Version is a snapshot of a map (its key-value pairs).
+#[verifier::ext_equal]
 pub type Version = PersistentState;
 
 // TODO(jonh): was sad to concretize Map (because no module functors). Is there a traity alternative?
@@ -274,11 +280,13 @@ pub type Version = PersistentState;
 // it as an operation that has to be: requested, executed, replied to).
 state_machine!{ CrashTolerantAsyncMap {
     fields {
-        /// versions is a sequence of snapshots of the map state.
+        /// `versions` is a sequence of snapshots of the map state. `versions[i]` is a
+        /// snapshot of the map when `map.seq_end == i` (i.e.: when the next LSN to-be-executed
+        /// was `i`).
         /// 
         /// Invariant: the first active
         /// index in the floating seq is the "stable index" (i.e.: the latest index which is
-        /// crash-tolerant).
+        /// crash-tolerant). AKA "stable LSN".
         /// 
         /// All snapshots after the first index represent the sequence
         /// of states the Map has gone through that have yet to be persisted.

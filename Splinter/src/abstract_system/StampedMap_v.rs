@@ -50,8 +50,6 @@ impl StampedMap {
   }
 }
 
-// Proofs:
-
 }
 
 

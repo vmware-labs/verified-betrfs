@@ -15,7 +15,7 @@ pub struct KeyedMessage {
   pub message: Message 
 }
 
-/// A contiguous log of kv-store command messages (keyed by LSN)
+/// A contiguous log of kv-store command messages (keyed by LSN).
 /// Stores requests from seq_start <= LSN < seq_end.
 pub struct MsgHistory { 
   /// The messages stored in this history. Stored as key-value pairs,
@@ -146,6 +146,7 @@ impl MsgHistory {
     self.seq_start <= lsn <= self.seq_end
   }
 
+  /// Returns this[start, lsn). (Slice off right side).
   pub open spec(checked) fn discard_recent(self, lsn: LSN) -> MsgHistory 
     recommends self.can_discard_to(lsn)
   {
