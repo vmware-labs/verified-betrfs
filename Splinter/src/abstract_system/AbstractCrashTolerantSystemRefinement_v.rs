@@ -1033,4 +1033,69 @@ verus! {
         CrashTolerantAsyncMap::show::sync(v.i(), vp.i(), CrashTolerantAsyncMap::Label::SyncOp{}, new_stable_index);
     }
 
+    // /// Proof that a "Crash" transition maps to a "Crash" transition
+    // /// in abstract CrashTolerantAsyncMap.
+    // pub proof fn crash_step_refines(
+    //     v: CoordinationSystem::State,
+    //     vp: CoordinationSystem::State,
+    //     label: CoordinationSystem::Label,
+    //     step: CoordinationSystem::Step
+    // )
+    //     requires
+    //         v.inv(),
+    //         CoordinationSystem::State::next(v, vp, label),
+    //         CoordinationSystem::State::next_by(v, vp, label, step),
+    //         matches!(step, CoordinationSystem::Step::crash(..)),
+    //     ensures
+    //         vp.inv(),
+    //         CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label.get_Label_ctam_label()),
+    // {
+    //     reveal(CoordinationSystem::State::next);
+    //     reveal(CoordinationSystem::State::next_by);
+    //     reveal(CrashTolerantJournal::State::next);
+    //     reveal(CrashTolerantJournal::State::next_by);
+    //     reveal(AbstractJournal::State::next);
+    //     reveal(AbstractJournal::State::next_by);
+    //     reveal(CrashTolerantMap::State::next);
+    //     reveal(CrashTolerantMap::State::next_by);
+    //     reveal(AbstractMap::State::next);
+    //     reveal(AbstractMap::State::next_by);
+
+    //     // Be careful to reveal init and init_by transitions as well!
+    //     reveal(CrashTolerantJournal::State::init);
+    //     reveal(CrashTolerantJournal::State::init_by);
+    //     // No direct dependencies on init()
+    //     // reveal(AbstractJournal::State::init);
+    //     reveal(AbstractJournal::State::init_by);
+
+    //     // Reveal refinement transitions
+    //     reveal(CrashTolerantAsyncMap::State::next);
+    //     reveal(CrashTolerantAsyncMap::State::next_by);
+    //     reveal(AsyncMap::State::next);
+    //     reveal(AsyncMap::State::next_by);
+    //     reveal(MapSpec::State::next);
+    //     reveal(MapSpec::State::next_by);
+
+    //     // PROOF ZONE
+    //     // It's possible that this isn't necessary.
+    //     reveal(journal_overlaps_agree);
+        
+    //     let stable_lsn = vp.journal.persistent.seq_end;
+    //     if (v.ephemeral.is_Some())
+    //     {
+    //         // trigger... for what?
+    //         // assert(forall |lsn: LSN| (#[trigger](v.mapadt.persistent.seq_end <= lsn) && lsn < stable_lsn) ==> true);
+            
+    //         // Alright. So if v.ephemeral is some I actually don't see why this has any implications on our map.
+    //         assert(vp.journal.persistent.discard_recent(stable_lsn).ext_equal(v.journal.i().discard_recent(stable_lsn)));
+    //     }
+
+    //     // TODO: remove. For now focusing on the is_Some thing.
+    //     assume(false);
+
+    //     // GOAL
+    //     assert(CrashTolerantAsyncMap::State::crash(v.i(), vp.i(), label.get_Label_ctam_label()));
+    //     CrashTolerantAsyncMap::show::crash(v.i(), vp.i(), label.get_Label_ctam_label());
+    // }
+
 } // verus!

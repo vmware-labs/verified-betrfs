@@ -22,6 +22,8 @@ verus! {
 
 type StoreImage = StampedMap;
 
+/// Ephemeral state of crash aware map is the ephemeral (not crash-tolerant)
+/// view of the map.
 #[is_variant]
 pub enum Ephemeral {
     Unknown,
@@ -29,9 +31,18 @@ pub enum Ephemeral {
 }
 
 state_machine!{ CrashTolerantMap {
-    fields { 
+    fields {
+        /// The persistent view of the map. (Just a StampedMap, so a pure map
+        /// data structure). Only modified during commit_complete transitions
+        /// (when the persisted snapshot of the map is updated).
         pub persistent: StoreImage,
+        /// The ephemeral view of the map. When Known it's an AbstractMap's state
+        /// (which just wraps a StampedMap with no extra details). All operations
+        /// act on the ephemeral version of the map.
         pub ephemeral: Ephemeral,
+        /// in_flight when `Some` represents a snapshot of the map that is going
+        /// to be persisted but hasn't been switched over to as our persistent state
+        /// yet.
         pub in_flight: Option<StoreImage>,
     }
 

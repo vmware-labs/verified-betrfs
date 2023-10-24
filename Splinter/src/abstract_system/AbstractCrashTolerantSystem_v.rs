@@ -42,15 +42,22 @@ pub struct Known {
   pub map_lsn: LSN  // invariant: agrees with mapadt.stampedMap.seqEnd
 }
 
-// Ephemeral state for coordination layer can be known or unknown. The ephemeral
-// state is known if the Option type is Some, and unknown if the Option type is
-// None.
+/// Ephemeral state for coordination layer can be known or unknown. The ephemeral
+/// state is known if the Option type is Some, and unknown if the Option type is
+/// None.
 type Ephemeral = Option<Known>;
 
 state_machine!{ CoordinationSystem {
   fields {
+    /// The state of the journal in our system.
     pub journal: CrashTolerantJournal::State,
+    /// State of the map backing our system.
     pub mapadt: CrashTolerantMap::State,
+    /// The ephemeral state of the coordination system tracks the outstanding
+    /// requests and replies for map operations, as well as the set of outstanding
+    /// sync requests. Invariant: if not Known, then we cannot accept new requests
+    /// (represents that our in-memory state has crashed and isn't fully up to date
+    /// with persistent information yet).
     pub ephemeral: Ephemeral,
   }
 
@@ -166,6 +173,10 @@ state_machine!{ CoordinationSystem {
   }
 
   transition! {
+    // accept_request indicates when the coordination system receives
+    // a request for an operation on the abstract key-value store. We don't
+    // execute it yet, this transition just notes that the request has occurred
+    // at this point.
     accept_request(
       label: Label,
     ) {
@@ -215,6 +226,7 @@ state_machine!{ CoordinationSystem {
   }
 
   transition! {
+    // Execute a previously requested query on the kv-store.
     query(
       label: Label,
       new_journal: CrashTolerantJournal::State,
@@ -224,31 +236,12 @@ state_machine!{ CoordinationSystem {
       require pre.ephemeral.is_Some();
       let pre_ephemeral = pre.ephemeral.get_Some_0();
 
-      // Dear lord my brain melted having to look up all of these
-      // names
-      // require let Label::Label{
-      //   ctam_label: CrashTolerantAsyncMap::Label::OperateOp{
-      //     base_op: AsyncMap::Label::ExecuteOp{
-      //       req,
-      //       reply,
-      //     }
-      //   }
-      // } = label;
-
-      // require let Request{
-      //   input: Input::QueryInput{
-      //     key
-      //   },
-      //   id: request_id,
-      // } = req;
-
-      // require let Reply{
-      //   output: Output::QueryOutput{
-      //     value
-      //   },
-      //   id: reply_id,
-      // } = reply;
-
+      // The query transition label is labeled with the input and output of the
+      // query operation. We want to dissect that information out so that we can
+      // require that we only execute a query transition if it corresponds to a
+      // previously requested query (as well as assert that enums are of right
+      // type along the way). (Unfortunately this requires a series of rather
+      // ugly calls).
       let ctam_label = label.get_Label_ctam_label();
 
       require ctam_label.is_OperateOp();
@@ -282,6 +275,8 @@ state_machine!{ CoordinationSystem {
         },
       );
 
+      // Remove the request from outstanding requests, and add corresponding
+      // response to set of undelivered replies.
       update ephemeral = Some(
         Known{
           progress: MapSpec_t::EphemeralState{
