@@ -378,6 +378,7 @@ state_machine!{ AllocationJournal {
         Self::build_lsn_au_index_au_walk(dv, root, first) == Self::build_lsn_au_index_page_walk(dv, root),
     decreases dv.the_rank_of(root)
     {
+        assume(false);  // Narrator: it doesn't.
 //         match root {
 //             None => {
 //                 //assert( Self::build_lsn_au_index_au_walk(dv, root, first) == Self::build_lsn_au_index_page_walk(dv, root) );
@@ -411,6 +412,7 @@ state_machine!{ AllocationJournal {
         let new_first = Self::new_first(dv.tj_at(root), old_lsn_au_index, old_first, new_bdy);
         assert( discarded_tj.disk_view.valid_ranking(dv.the_ranking()) );   // trigger witness to acyclic
         //Self::build_lsn_au_index_equiv_page_walk(discarded_tj.disk_view, discarded_tj.freshest_rec, new_first);
+        assume(false);    // proof incomplete; pick up here
     }
 
     pub open spec(checked) fn upstream(dv: DiskView, addr: Address) -> bool
@@ -454,9 +456,34 @@ state_machine!{ AllocationJournal {
         &&& Self::pages_allocated_in_lsn_order(dv)
     }
 
+    pub proof fn nonfirst_properties(dv: DiskView, root: Pointer, first: AU)
+    requires
+        Self::pointer_is_upstream(dv, root, first),
+        root.is_Some(),
+        root.unwrap().au != first,
+    ensures
+        forall |ptr: Pointer|
+            ptr is Some && ptr.unwrap().au==root.unwrap().au && ptr.unwrap().page <= root.unwrap().page
+            ==> Self::pointer_is_upstream(dv, ptr, first),
+        forall |ptr: Pointer|
+            ptr is Some && ptr.unwrap().au==root.unwrap().au && 0 < ptr.unwrap().page <= root.unwrap().page
+            ==> dv.next(ptr) is Some && dv.next(ptr).unwrap().au == root.unwrap().au
+    decreases dv.the_rank_of(root)
+    {
+        if dv.next(root) is None {
+            assert( dv.addr_supports_lsn(root.unwrap(), dv.boundary_lsn) );
+            assert( false );
+        }
+
+        if root.unwrap().page != 0 {
+            Self::nonfirst_properties(dv, dv.next(root), first);
+        }
+    }
+
     pub proof fn transitive_ranking(dv: LinkedJournal_v::DiskView, root: Address, later: Address, first: AU)
     requires
-        dv.decodable(Some(later)),
+        Self::pointer_is_upstream(dv, Some(later), first),
+        dv.decodable(Some(root)),
         dv.acyclic(),
         root.au != first,
         root.au == later.au,
@@ -464,14 +491,59 @@ state_machine!{ AllocationJournal {
         Self::internal_au_pages_fully_linked(dv, first),
     // should be less than <= bc it's enough to prove termination, cause later is already < caller's root
     ensures
-        dv.decodable(Some(root)),
         dv.the_rank_of(Some(root)) <= dv.the_rank_of(Some(later)),
     decreases later.page
     {
-        if root == later { return; }
+        if root == later {
+            assert( dv.decodable(Some(later)) );
+            return; }
         //Self::nonfirst_decodable(dv, Some(later), first);
         let prior = dv.next(Some(later));
+//         assert( dv.entries.contains_key(later) );    // todo deleteme
+//         assert( dv.entries[later].prior_rec is Some );
+//         assert( prior is Some );
+//         assert( prior.unwrap().page + 1 == later.page );
+        Self::nonfirst_properties(dv, Some(later), first);
         Self::transitive_ranking(dv, root, prior.unwrap(), first);
+    }
+
+    pub open spec fn pointer_is_upstream(dv: DiskView, root: Pointer, first: AU) -> bool
+    {
+        &&& dv.decodable(root)
+        &&& dv.acyclic()
+        &&& Self::internal_au_pages_fully_linked(dv, first)
+        &&& Self::valid_first_au(dv, first)
+        &&& Self::has_unique_lsns(dv)
+        &&& root is Some ==> Self::upstream(dv, root.unwrap())
+//        &&& root.is_Some() ==> dv.boundary_lsn < dv.entries[root.unwrap()].message_seq.seq_end
+    }
+
+    pub proof fn bottom_properties(dv: DiskView, root: Pointer, first: AU)
+    requires
+        Self::pointer_is_upstream(dv, root, first),
+        root.is_Some(),
+        root.unwrap().au != first,
+    ensures
+        // TODO wish I had a superlet for bottom=first_page(root) here
+        dv.next(first_page(root)) is Some,    // else root.au == first
+        dv.decodable(dv.next(first_page(root))), // because decodable-ity is recursive
+        dv.buildable(dv.next(first_page(root))),
+
+        // a couple uglies I threw in to complete lemma_aus_hold_contiguous_lsns_inner
+        Self::pointer_is_upstream(dv, first_page(root), first),
+        dv.tj_at(dv.next(first_page(root))).seq_end() <= dv.tj_at(root).seq_end(),
+    decreases dv.the_rank_of(root)
+    {
+        if dv.next(root) is None {
+            assert( dv.addr_supports_lsn(root.unwrap(), dv.boundary_lsn) );
+            assert( false );
+        }
+
+        if root.unwrap().page != 0 {
+//             assert( dv.entries.contains_key(first_page(root).unwrap()) );
+//             assert( Self::au_page_links_to_prior(dv, root.unwrap()) );
+            Self::bottom_properties(dv, dv.next(root), first);
+        }
     }
 
     #[verifier(decreases_by)]
@@ -484,6 +556,7 @@ state_machine!{ AllocationJournal {
                 else {
                     // Nine lines of boilerplate to insert this one line in the right place. :v/
                     let bottom = first_page(root);
+                    Self::bottom_properties(dv, root, first);
                     Self::transitive_ranking(dv, bottom.unwrap(), root.unwrap(), first);
                 }
             }
@@ -492,13 +565,13 @@ state_machine!{ AllocationJournal {
 
     pub open spec/*(checked)*/ fn build_lsn_au_index_au_walk(dv: DiskView, root: Pointer, first: AU) -> Map<LSN, AU>
     recommends
-        dv.decodable(root),
+        Self::pointer_is_upstream(dv, root, first),
         dv.acyclic(),
         Self::internal_au_pages_fully_linked(dv, first),
     decreases dv.the_rank_of(root)
     {
         decreases_when({
-            &&& dv.decodable(root)
+            &&& Self::pointer_is_upstream(dv, root, first)
             &&& dv.acyclic()
             &&& Self::internal_au_pages_fully_linked(dv, first)
         });
@@ -528,6 +601,7 @@ state_machine!{ AllocationJournal {
             Some(addr) => {
                 if addr.au == first { }
                 else {
+                    Self::bottom_properties(tj.disk_view, tj.freshest_rec, first);
                     Self::transitive_ranking(tj.disk_view, tj.freshest_rec.unwrap().first_page(), tj.freshest_rec.unwrap(), first);
                 }
             }
@@ -536,8 +610,7 @@ state_machine!{ AllocationJournal {
 
     pub open spec(checked) fn build_lsn_au_index(tj: TruncatedJournal, first: AU) -> Map<LSN, AU>
     recommends
-        tj.decodable(),
-        Self::internal_au_pages_fully_linked(tj.disk_view, first),
+        Self::pointer_is_upstream(tj.disk_view, tj.freshest_rec, first),
     {
         recommends_by(Self::build_lsn_au_index_helper);
         Self::build_lsn_au_index_au_walk(tj.disk_view, tj.freshest_rec, first)
@@ -551,17 +624,6 @@ state_machine!{ AllocationJournal {
     pub open spec(checked) fn valid_first_au(dv: DiskView, first: AU) -> bool
     {
         exists |addr: Address| #![auto] addr.au == first && dv.addr_supports_lsn(addr, dv.boundary_lsn)
-    }
-
-    pub open spec fn pointer_is_upstream(dv: DiskView, root: Pointer, first: AU) -> bool
-    {
-        &&& dv.decodable(root)
-        &&& dv.acyclic()
-        &&& Self::internal_au_pages_fully_linked(dv, first)
-        &&& Self::valid_first_au(dv, first)
-        &&& Self::has_unique_lsns(dv)
-        &&& root is Some ==> Self::upstream(dv, root.unwrap())
-//        &&& root.is_Some() ==> dv.boundary_lsn < dv.entries[root.unwrap()].message_seq.seq_end
     }
 
     pub open spec(checked) fn valid_journal_image(image: JournalImage) -> bool
@@ -641,34 +703,6 @@ state_machine!{ AllocationJournal {
     pub open spec fn au_domain_valid(dv: DiskView, root: Pointer, lsn_au_index: Map<LSN, AU>) -> bool
     {
         forall |lsn| lsn_au_index.contains_key(lsn) <==> (dv.tj_at(root).seq_start() <= lsn < dv.tj_at(root).seq_end())
-    }
-
-    pub proof fn bottom_properties(dv: DiskView, root: Pointer, first: AU)
-    requires
-        Self::pointer_is_upstream(dv, root, first),
-        root.is_Some(),
-        root.unwrap().au != first,
-    ensures
-        // TODO wish I had a superlet for bottom=first_page(root) here
-        dv.next(first_page(root)) is Some,    // else root.au == first
-        dv.decodable(dv.next(first_page(root))), // because decodable-ity is recursive
-        dv.buildable(dv.next(first_page(root))),
-
-        // a couple uglies I threw in to complete lemma_aus_hold_contiguous_lsns_inner
-        Self::pointer_is_upstream(dv, first_page(root), first),
-        dv.tj_at(dv.next(first_page(root))).seq_end() <= dv.tj_at(root).seq_end(),
-    decreases dv.the_rank_of(root)
-    {
-        if dv.next(root) is None {
-            assert( dv.addr_supports_lsn(root.unwrap(), dv.boundary_lsn) );
-            assert( false );
-        }
-
-        if root.unwrap().page != 0 {
-//             assert( dv.entries.contains_key(first_page(root).unwrap()) );
-//             assert( Self::au_page_links_to_prior(dv, root.unwrap()) );
-            Self::bottom_properties(dv, dv.next(root), first);
-        }
     }
 
     pub proof fn lemma_next_au_doesnt_intersect(dv: DiskView, root: Pointer, first: AU, prior_result: Map<LSN, AU>)
@@ -810,7 +844,7 @@ state_machine!{ AllocationJournal {
         // building an isolation cell!)
         &&& LikesJournal_v::LikesJournal::State::inv(self.journal)
         &&& self.lsn_au_index == Self::build_lsn_au_index(self.get_tj(), self.first)
-        &&& Self::addr_index_consistent_with_au_index(self.journal.lsn_addr_index, self.lsn_au_index)   // I think this can deriver from prev
+        &&& Self::addr_index_consistent_with_au_index(self.journal.lsn_addr_index, self.lsn_au_index)   // I think this can derive from prev
         &&& Self::journal_pages_not_free(self.journal.lsn_addr_index.values(), self.mini_allocator)
         &&& Self::mini_allocator_follows_freshest_rec(self.get_tj().freshest_rec, self.mini_allocator)
         &&& Self::aus_hold_contiguous_lsns(self.lsn_au_index)
@@ -1062,9 +1096,31 @@ state_machine!{ AllocationJournal {
         let post_root = post.get_tj().freshest_rec;
 
         assert( pre.lsn_au_index == Self::build_lsn_au_index(pre.get_tj(), pre.first) );
-        // TODO(jonh): why assume here?
-        assume( post.lsn_au_index == Self::build_lsn_au_index_page_walk(post_dv, post_root) );
+        if pre_root is Some {
+            Self::build_lsn_au_index_equiv_page_walk(pre_dv, pre_root, pre.first);
+            assert( pre.lsn_au_index == Self::build_lsn_au_index_page_walk(pre_dv, pre_root) );
+        } else {
+            assert( Self::build_lsn_au_index(pre.get_tj(), pre.first) =~= Map::empty() );
+            assert( Self::build_lsn_au_index_page_walk(pre_dv, pre_root) =~= Map::empty() );
+            assert( pre.lsn_au_index == Self::build_lsn_au_index_page_walk(pre_dv, pre_root) );
+        }
+
+        let curr_msgs = post_dv.entries[post_root.unwrap()].message_seq;
+        let update = Self::singleton_index(
+            math::max(post_dv.boundary_lsn as int, curr_msgs.seq_start as int) as nat, curr_msgs.seq_end, post_root.unwrap().au);
+        
+        assert( post_dv.next(post_root) == pre_root );
+        Self::build_lsn_au_index_page_walk_sub_disk(pre_dv, post_dv, pre_root);
+        assert( Self::build_lsn_au_index_page_walk(post_dv, pre_root)
+                == Self::build_lsn_au_index_page_walk(pre_dv, pre_root) );
+        assert( Self::build_lsn_au_index_page_walk(post_dv, post_root) ==
+            Self::build_lsn_au_index_page_walk(post_dv, pre_root).union_prefer_right(update) );
+        let au_update = Self::singleton_index(msgs.seq_start, msgs.seq_end, addr.au);
+        assert( au_update == update );
+                
+        assert( post.lsn_au_index == Self::build_lsn_au_index_page_walk(post_dv, post_root) );
         Self::build_commutes_over_append_record(pre_dv, pre_root, msgs, addr);
+        assume(false);
 
         assert( Self::pages_allocated_in_lsn_order(post_dv) ) by {
             //reveal(State::pages_allocated_in_lsn_order);

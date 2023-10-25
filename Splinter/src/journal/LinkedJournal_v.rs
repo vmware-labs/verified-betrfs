@@ -204,12 +204,11 @@ impl DiskView {
         }
     }
 
-    // dead code, evidently
-//     pub open spec(checked) fn is_sub_disk_with_newer_lsn(self, bigger: Self) -> bool
-//     {
-//         &&& bigger.boundary_lsn <= self.boundary_lsn
-//         &&& self.entries.le(bigger.entries)
-//     }
+    pub open spec(checked) fn is_sub_disk_with_newer_lsn(self, bigger: Self) -> bool
+    {
+        &&& bigger.boundary_lsn <= self.boundary_lsn
+        &&& self.entries.le(bigger.entries)
+    }
 
     pub open spec(checked) fn build_tight(self, root: Pointer) -> (out: Self)
     recommends

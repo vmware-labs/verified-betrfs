@@ -26,10 +26,10 @@ impl PageAllocator {
 // This is a nasty trigger choice that demands some manual triggerin'
 //         &&& (forall |addr| (#[trigger] (self.observed + self.reserved).contains(addr)) ==> addr.wf())
 //         &&& (forall |addr| #[trigger] (self.observed + self.reserved).contains(addr) ==> addr.au == self.au)
-        &&& (forall |addr| self.observed.contains(addr) ==> addr.wf())
-        &&& (forall |addr| self.reserved.contains(addr) ==> addr.wf())
-        &&& (forall |addr| self.observed.contains(addr) ==> addr.au == self.au)
-        &&& (forall |addr| self.reserved.contains(addr) ==> addr.au == self.au)
+        &&& (forall |addr| #![auto] self.observed.contains(addr) ==> addr.wf())
+        &&& (forall |addr| #![auto] self.reserved.contains(addr) ==> addr.wf())
+        &&& (forall |addr| #![auto] self.observed.contains(addr) ==> addr.au == self.au)
+        &&& (forall |addr| #![auto] self.reserved.contains(addr) ==> addr.au == self.au)
     }
 
     pub open spec(checked) fn is_free_addr(self, addr: Address) -> bool {
