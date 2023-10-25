@@ -622,7 +622,7 @@ state_machine!{ LikesJournal {
     pub open spec(checked) fn wf(self) -> bool {
         &&& self.journal.wf()
         // TODO this conjunct ought to be part of journal.wf, at least.
-        &&& self.journal.truncated_journal.seq_start() <= self.journal.truncated_journal.seq_end()
+        // &&& self.journal.truncated_journal.seq_start() <= self.journal.truncated_journal.seq_end()
     }
 
     pub open spec fn transitive_likes(self) -> Likes

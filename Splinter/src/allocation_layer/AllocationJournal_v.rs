@@ -16,7 +16,7 @@ use crate::abstract_system::MsgHistory_v::*;
 use crate::disk::GenericDisk_v::*;
 use crate::disk::GenericDisk_v::AU;
 use crate::journal::LinkedJournal_v;
-use crate::journal::LinkedJournal_v::{DiskView, TruncatedJournal};
+use crate::journal::LinkedJournal_v::{DiskView, TruncatedJournal, LinkedJournal};
 use crate::journal::LikesJournal_v;
 use crate::journal::LikesJournal_v::LikesJournal;
 use crate::allocation_layer::MiniAllocator_v::*;
@@ -41,7 +41,7 @@ impl JournalImage {
 
     pub open spec(checked) fn empty() -> Self
     {
-        Self{ tj: LinkedJournal_v::TruncatedJournal::mkfs(), first: 0 }
+        Self{ tj: TruncatedJournal::mkfs(), first: 0 }
     }
 }
 
@@ -124,9 +124,7 @@ state_machine!{ AllocationJournal {
         let new_lsn_au_index = Self::lsn_au_index_discarding_up_to(pre.lsn_au_index, lbl.get_DiscardOld_start_lsn());
         let discarded_aus = pre.lsn_au_index.values().difference(new_lsn_au_index.values());
         let new_first = Self::new_first(pre.journal.journal.truncated_journal, pre.lsn_au_index, pre.first, lbl.get_DiscardOld_start_lsn());
-// deleteme
-//             if post_journal.journal.truncated_journal.freshest_rec.is_None() { pre.first }
-//             else { pre.lsn_au_index[lbl.get_DiscardOld_start_lsn()] };
+
         require lbl.get_DiscardOld_deallocs() == discarded_aus;
 
         update journal = post_journal;
@@ -144,26 +142,27 @@ state_machine!{ AllocationJournal {
         update journal = post_journal;
     } }
 
-    transition!{ internal_journal_marshal(lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal_v::LinkedJournal::State) {
+    transition!{ internal_journal_marshal(lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal::State) {
         require pre.wf();
         require Self::lbl_wf(lbl);
-        require lbl.is_InternalAllocations();
-        require pre.valid_next_journal_addr(addr);
-        // TODO(jialin): How do we feel about reaching up two layers to a transition? Eww?
-        require LinkedJournal_v::LinkedJournal::State::internal_journal_marshal(
-            pre.journal.journal, post_linked_journal,
-            LikesJournal::State::lbl_i(Self::lbl_i(lbl)), cut, addr);
+        require lbl is InternalAllocations;
+        require lbl.get_InternalAllocations_allocs() == Set::<AU>::empty();
+        require lbl.get_InternalAllocations_deallocs() == Set::<AU>::empty();
+        require  Self::valid_next_journal_addr(
+                pre.mini_allocator, 
+                pre.journal.journal.truncated_journal.freshest_rec, 
+                addr);
+        require LinkedJournal::State::internal_journal_marshal(
+                pre.journal.journal, post_linked_journal,
+                LikesJournal::State::lbl_i(Self::lbl_i(lbl)), cut, addr);
         let marshal_msgs = pre.journal.journal.unmarshalled_tail.discard_recent(cut);
         update journal = LikesJournal::State{
             journal: post_linked_journal,
             lsn_addr_index: LikesJournal_v::lsn_addr_index_append_record(
                 pre.journal.lsn_addr_index, marshal_msgs, addr),
             };
-        update first =
-            if pre.journal.journal.truncated_journal.freshest_rec.is_Some() { pre.first }
-            else { addr.au };
-        let au_update = Self::singleton_index(marshal_msgs.seq_start, marshal_msgs.seq_end, addr.au);
-        update lsn_au_index = pre.lsn_au_index.union_prefer_right(au_update);
+        update lsn_au_index = Self::lsn_au_index_append_record(pre.lsn_au_index, marshal_msgs, addr.au);
+        update first = if pre.journal.journal.truncated_journal.freshest_rec.is_Some() { pre.first } else { addr.au };
         update mini_allocator = pre.mini_allocator.allocate_and_observe(addr);
     } }
 
@@ -191,7 +190,7 @@ state_machine!{ AllocationJournal {
     } }
 
     // TODO(jonh): delete. Subsumed by only_advance_likes_journal.
-    transition!{ internal_journal_no_op(lbl: Label, post_linked_journal: LinkedJournal_v::LinkedJournal::State) {
+    transition!{ internal_journal_no_op(lbl: Label, post_linked_journal: LinkedJournal::State) {
         require pre.wf();
         require Self::lbl_wf(lbl);
         require lbl.is_InternalAllocations();
@@ -247,14 +246,15 @@ state_machine!{ AllocationJournal {
         out
     }
 
-    pub open spec(checked) fn valid_next_journal_addr(self, addr: Address) -> bool {
-        &&& self.mini_allocator.can_allocate(addr)
-        &&& (self.mini_allocator.curr is None ==> {
-              &&& self.mini_allocator.allocs[addr.au].all_pages_free()
+    pub open spec(checked) fn valid_next_journal_addr(mini_allocator: MiniAllocator, freshest_rec: Pointer, addr: Address) -> bool {
+        &&& mini_allocator.can_allocate(addr)
+        &&& (mini_allocator.curr is None ==> {
+              &&& mini_allocator.allocs[addr.au].all_pages_free()
               &&& addr.page == 0
         })
-        &&& (self.mini_allocator.curr is Some && self.journal.journal.truncated_journal.freshest_rec is Some ==>
-                addr == self.journal.journal.truncated_journal.freshest_rec.unwrap().next())
+        &&& (mini_allocator.curr is Some && freshest_rec is Some ==> 
+            addr == freshest_rec.unwrap().next()
+        )
     }
 
     pub open spec(checked) fn build_lsn_au_index_page_walk(dv: DiskView, root: Pointer) -> Map<LSN, AU>
@@ -734,7 +734,7 @@ state_machine!{ AllocationJournal {
 
                     let prior_last = (dv.entries[addrp].message_seq.seq_end - 1) as nat;
                     assert( lsn <= prior_last ) by {
-                        reveal(LinkedJournal_v::TruncatedJournal::index_domain_valid);
+                        reveal(TruncatedJournal::index_domain_valid);
                         dv.build_lsn_addr_index_domain_valid(dv.next(bottom));
                     }
 
@@ -842,7 +842,7 @@ state_machine!{ AllocationJournal {
         // The following is opaqued in AllocationJournalRefinement.
         // (Note: that suggests this is a good place to think about
         // building an isolation cell!)
-        &&& LikesJournal_v::LikesJournal::State::inv(self.journal)
+        &&& LikesJournal::State::inv(self.journal)
         &&& self.lsn_au_index == Self::build_lsn_au_index(self.get_tj(), self.first)
         &&& Self::addr_index_consistent_with_au_index(self.journal.lsn_addr_index, self.lsn_au_index)   // I think this can derive from prev
         &&& Self::journal_pages_not_free(self.journal.lsn_addr_index.values(), self.mini_allocator)
@@ -858,7 +858,7 @@ state_machine!{ AllocationJournal {
 
     #[inductive(freeze_for_commit)]
     fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label, depth: nat, post_journal: LikesJournal::State) {
-        reveal( LinkedJournal_v::LinkedJournal::State::next_by );
+        reveal(LinkedJournal::State::next_by );
     }
 
     #[inductive(internal_mini_allocator_fill)]
@@ -915,7 +915,7 @@ state_machine!{ AllocationJournal {
         }
         assert( post.journal.lsn_addr_index.contains_key(zlsn) );
         assert( post.get_tj().seq_start() <= zlsn < post.get_tj().seq_end() ) by {
-            reveal(LinkedJournal_v::TruncatedJournal::index_domain_valid);
+            reveal(TruncatedJournal::index_domain_valid);
         }
 
         assert( post.journal.lsn_addr_index.contains_key(zlsn) );
@@ -980,10 +980,10 @@ state_machine!{ AllocationJournal {
 
     #[inductive(discard_old)]
     fn discard_old_inductive(pre: Self, post: Self, lbl: Label, post_journal: LikesJournal::State) {
-        reveal( LikesJournal_v::LikesJournal::State::next );
-        reveal( LikesJournal_v::LikesJournal::State::next_by );
+        reveal( LikesJournal::State::next );
+        reveal( LikesJournal::State::next_by );
         //reveal( LinkedJournal_v::LinkedJournal::State::next );
-        reveal( LinkedJournal_v::LinkedJournal::State::next_by );
+        reveal( LinkedJournal::State::next_by );
 
         Self::invoke_submodule_inv(pre, post);
         assert( post.wf() );
@@ -1012,7 +1012,7 @@ state_machine!{ AllocationJournal {
 
         if post.get_tj().freshest_rec.is_Some() {
             assert( Self::valid_first_au(post_dv, post.first) ) by {
-                reveal(LinkedJournal_v::TruncatedJournal::index_domain_valid);
+                reveal(TruncatedJournal::index_domain_valid);
                 assert( post.journal.lsn_addr_index.contains_key(post_dv.boundary_lsn) );    // trigger index_domain_valid
                 // this is going to be the `first` addr
                 let bdy_addr = post.journal.lsn_addr_index[post_dv.boundary_lsn];
@@ -1082,11 +1082,11 @@ state_machine!{ AllocationJournal {
     }
 
     #[inductive(internal_journal_marshal)]
-    fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal_v::LinkedJournal::State) {
+    fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal::State) {
         Self::invoke_submodule_inv(pre, post);
         let discard_msgs = pre.journal.journal.unmarshalled_tail.discard_recent(cut);
         assert( LikesJournal_v::lsn_disjoint(pre.lsn_au_index.dom(), discard_msgs) ) by {
-            reveal(LinkedJournal_v::TruncatedJournal::index_domain_valid);
+            reveal(TruncatedJournal::index_domain_valid);
         }
 
         let msgs = pre.journal.journal.unmarshalled_tail.discard_recent(cut);
@@ -1179,12 +1179,12 @@ state_machine!{ AllocationJournal {
     }
 
     #[inductive(internal_journal_no_op)]
-    fn internal_journal_no_op_inductive(pre: Self, post: Self, lbl: Label, post_linked_journal: LinkedJournal_v::LinkedJournal::State) { }
+    fn internal_journal_no_op_inductive(pre: Self, post: Self, lbl: Label, post_linked_journal: LinkedJournal::State) { }
 
     #[inductive(initialize)]
     fn initialize_inductive(post: Self, journal: LikesJournal::State, image: JournalImage) {
         //assert( post.journal.lsn_au_index = Linked::build_lsn_au_index(image.tj, image.first);
-        assume( LikesJournal_v::LikesJournal::State::inv(post.journal) );   // TODO(travis): help!
+        assume( LikesJournal::State::inv(post.journal) );   // TODO(travis): help!
 
         let TruncatedJournal{disk_view: dv, freshest_rec: root} = image.tj;
         Self::build_lsn_au_index_au_walk_consistency(dv, root, image.first);
@@ -1193,9 +1193,9 @@ state_machine!{ AllocationJournal {
 
     #[inductive(only_advance_likes_journal)]
     fn only_advance_likes_journal_inductive(pre: Self, post: Self, lbl: Label, depth: nat, post_likes_journal: LikesJournal::State) {
-        reveal( LikesJournal_v::LikesJournal::State::next );
-        reveal( LikesJournal_v::LikesJournal::State::next_by );
-        reveal( LinkedJournal_v::LinkedJournal::State::next_by );
+        reveal( LikesJournal::State::next );
+        reveal( LikesJournal::State::next_by );
+        reveal( LinkedJournal::State::next_by );
     }
     
     // lemmas used by other refinements

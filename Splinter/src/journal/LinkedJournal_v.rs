@@ -880,7 +880,7 @@ state_machine!{ LinkedJournal {
     pub open spec(checked) fn wf(self) -> bool {
         &&& self.truncated_journal.wf()
         &&& self.unmarshalled_tail.wf()
-
+        &&& self.truncated_journal.seq_start() <= self.truncated_journal.seq_end()
         // TODO(jonh): can probably delete this conjunct, since it's proven by interp
         &&& self.truncated_journal.seq_end() == self.unmarshalled_tail.seq_start
     }

@@ -16,21 +16,25 @@ use crate::abstract_system::StampedMap_v::LSN;
 use crate::abstract_system::MsgHistory_v::*;
 use crate::disk::GenericDisk_v::*;
 use crate::disk::GenericDisk_v::AU;
+use crate::journal::LinkedJournal_v;
+use crate::journal::LinkedJournal_v::LinkedJournal;
 use crate::journal::LinkedJournal_v::JournalRecord;
 use crate::allocation_layer::AllocationJournal_v::*;
 use crate::allocation_layer::MiniAllocator_v::*;
 
 verus!{
-pub struct StoreState {
+pub type JournalDiskView = LinkedJournal_v::DiskView;
+
+pub struct ImageState {
     pub freshest_rec: Pointer,  // from LinkedJournal::TruncatedJournal
     pub boundary_lsn: LSN,      // from LinkedJournal::TruncatedJournal
     pub first: AU,              // from AllocationJournal::State
     pub dom: Set<Address>       // domain of the store image
 }
 
-impl StoreState {
+impl ImageState {
     pub open spec(checked) fn empty() -> Self {
-        StoreState {
+        ImageState {
             freshest_rec: None,
             boundary_lsn: 0,
             first: 0,
@@ -42,36 +46,144 @@ impl StoreState {
         self.freshest_rec is Some ==> self.dom.contains(self.freshest_rec.unwrap())
     }
 
-    // pub open spec(checked) fn seq_end(self, entries: Map<Address, JournalRecord>) -> LSN
-    // {
-    //     if self.freshest_rec is None {
-    //         self.boundary_lsn
-    //     } else {
-    //         if entries.contains_key(self.freshest_rec.get_Some_0()) {
-    //             entries[self.freshest_rec.unwrap()].message_seq.seq_end
-    //         } else {
-    //             0 // DUMMY VALUE, never reaches here
-    //         }
-    //     }
-    // }
+    // equivalent to AllocationJournal::valid_journal_image
+    pub open spec(checked) fn valid_image(self, dv: DiskView) -> bool
+    {
+        &&& dv.to_JournalDiskView(self.boundary_lsn).wf()
+        &&& AllocationJournal::State::pointer_is_upstream(
+                dv.to_JournalDiskView(self.boundary_lsn), 
+                self.freshest_rec, 
+                self.first
+            )
+    }
+
+    pub open spec(checked) fn to_tj(self, dv: DiskView) -> LinkedJournal_v::TruncatedJournal
+    {
+        LinkedJournal_v::TruncatedJournal{
+            freshest_rec: self.freshest_rec,
+            disk_view: dv.to_JournalDiskView(self.boundary_lsn)
+        }
+    }
 }
 
 pub struct EphemeralState {
-    pub image_state: StoreState,
+    pub image: ImageState,
     pub unmarshalled_tail: MsgHistory,  // from LinkedJournal::State
     pub lsn_au_index: Map<LSN, AU>,     // from AllocationJournal::State
     pub mini_allocator: MiniAllocator,  // from AllocationJournal::State
 }
 
 impl EphemeralState {
-    // pub open spec(checked) fn new(state: StoreState, ) -> Self
-    // {
-    // seq_end
+    // equivalent to AllocationJournal_v::initialize
+    pub open spec(checked) fn init_by(self, image: ImageState, dv: DiskView) -> bool
+        recommends image.valid_image(dv)
+    {
+        let tj = self.image.to_tj(dv);
+        &&& self.image == image
+        &&& self.unmarshalled_tail == MsgHistory::empty_history_at(tj.build_tight().seq_end()) // LikesJournal::initialize
+        &&& self.lsn_au_index == AllocationJournal::State::build_lsn_au_index(tj, self.image.first)
+        &&& self.mini_allocator == MiniAllocator::empty()
+    }
 
-    //     EphemeralState{
-    //         image_state: state,
-    //     }
-    // }
+    pub open spec(checked) fn wf(self, dv: DiskView) -> bool 
+    {
+        &&& self.image.to_tj(dv).wf()
+        &&& self.unmarshalled_tail.wf()
+    }
+
+    pub open spec(checked) fn decodable(self, dv: DiskView) -> bool
+        recommends self.wf(dv)
+    {
+        self.image.to_tj(dv).decodable()
+    }
+
+    pub open spec(checked) fn to_lj(self, dv: DiskView) -> LinkedJournal::State
+    {
+        LinkedJournal::State{
+            truncated_journal: self.image.to_tj(dv),
+            unmarshalled_tail: self.unmarshalled_tail,
+        }
+    }
+
+    pub open spec(checked) fn same_except_lj(self, new_state: Self) -> bool
+    {
+        // more readable??
+        new_state == EphemeralState{
+            image: ImageState{
+                freshest_rec: new_state.image.freshest_rec,
+                boundary_lsn: new_state.image.boundary_lsn,
+                .. self.image
+            },
+            unmarshalled_tail: new_state.unmarshalled_tail,
+            ..self
+        }
+        // &&& self.image.first == new_state.image.first
+        // &&& self.image.dom == new_state.image.dom
+        // &&& self.lsn_au_index == new_state.lsn_au_index
+        // &&& self.mini_allocator == new_state.mini_allocator
+    }
+
+    pub open spec(checked) fn is_marshalled_state(self, dv: DiskView, allocs: Set<AU>, deallocs: Set<AU>,
+        cut: LSN, addr: Address, new_state: Self, new_dv: DiskView) -> bool
+    {
+        &&& self.mini_allocator.wf()
+        &&& self.to_lj(dv).wf()
+        &&& allocs == Set::<AU>::empty()
+        &&& deallocs == Set::<AU>::empty()
+        &&& AllocationJournal::State::valid_next_journal_addr(self.mini_allocator, self.image.freshest_rec, addr)
+        &&& LinkedJournal::State::internal_journal_marshal(
+                self.to_lj(dv), new_state.to_lj(new_dv),
+                LinkedJournal::Label::Internal{}, cut, addr
+            )
+        // &&& new_state.image == StoreImage{
+        //     freshest_rec: new_state.image.freshest_rec,
+        //     boundary_lsn: new_state.image.boundary_lsn,
+        //     first: if self.image.freshest_rec is Some { self.image.first } else { addr.au },
+        //     ..state.image
+        // }
+
+        &&& new_state.image.dom == self.image.dom
+        &&& new_state.image.first == if self.image.freshest_rec is Some { self.image.first } else { addr.au }
+        &&& new_state.lsn_au_index == AllocationJournal::State::lsn_au_index_append_record(
+                self.lsn_au_index, self.unmarshalled_tail.discard_recent(cut), addr.au)
+        &&& new_state.mini_allocator == self.mini_allocator.allocate_and_observe(addr)
+    }
+
+    pub open spec(checked) fn is_allocator_fill(self, dv: DiskView, allocs: Set<AU>, deallocs: Set<AU>, new_state: Self, new_dv: DiskView) -> bool
+    {
+        &&& self.mini_allocator.wf()
+        &&& self.to_lj(dv).wf()
+        &&& allocs.disjoint(self.mini_allocator.allocs.dom())
+        &&& deallocs == Set::<AU>::empty()
+        &&& new_state == EphemeralState{ mini_allocator: self.mini_allocator.add_aus(allocs), ..self}
+        &&& new_dv == dv
+    }
+
+    pub open spec(checked) fn is_allocator_prune(self, dv: DiskView, allocs: Set<AU>, deallocs: Set<AU>, new_state: Self, new_dv: DiskView) -> bool
+    {
+        &&& self.mini_allocator.wf()
+        &&& self.to_lj(dv).wf()
+        &&& allocs == Set::<AU>::empty()
+        &&& forall |au| #![auto] deallocs.contains(au) ==> self.mini_allocator.can_remove(au)
+        &&& new_state == EphemeralState{ mini_allocator: self.mini_allocator.prune(deallocs), ..self}
+        &&& new_dv == dv
+    }
+
+    pub open spec(checked) fn is_no_op(self, dv: DiskView, allocs: Set<AU>, deallocs: Set<AU>, new_state: Self, new_dv: DiskView) -> bool
+    {
+        &&& allocs == Set::<AU>::empty()
+        &&& deallocs == Set::<AU>::empty()
+        &&& new_state == self
+        &&& new_dv == dv
+    }
+
+    pub open spec(checked) fn is_internal_op(self, dv: DiskView, allocs: Set<AU>, deallocs: Set<AU>, new_state: Self, new_dv: DiskView) -> bool
+    {
+        ||| exists |cut, addr| self.is_marshalled_state(dv, allocs, deallocs, cut, addr, new_state, new_dv) == true
+        ||| self.is_allocator_fill(dv, allocs, deallocs, new_state, new_dv) == true
+        ||| self.is_allocator_prune(dv, allocs, deallocs, new_state, new_dv) == true
+        ||| self.is_no_op(dv, allocs, deallocs, new_state, new_dv) == true
+    }
 }
 
 #[is_variant]
@@ -86,6 +198,11 @@ pub struct DiskView {
 }
 
 impl DiskView {
+    pub open spec(checked) fn to_JournalDiskView(self, boundary_lsn: LSN) -> JournalDiskView
+    {
+        JournalDiskView{ boundary_lsn: boundary_lsn, entries: self.entries }
+    }
+
     pub open spec(checked) fn entries_wf(self) -> bool
     {
         forall |addr| #[trigger] self.entries.contains_key(addr) ==> self.entries[addr].wf()
@@ -104,17 +221,17 @@ impl DiskView {
     }
 }
 
-state_machine!{AllocationCrashAwareJournal{
+state_machine!{UnifiedCrashAwareJournal{
     fields {
         pub ephemeral: Ephemeral,
-        pub persistent: StoreState,
-        pub inflight: Option<StoreState>,
+        pub persistent: ImageState,
+        pub inflight: Option<ImageState>,
         pub dv: DiskView,  // shared disk
     }
 
     init!{
         initialize() {
-            init persistent = StoreState::empty();
+            init persistent = ImageState::empty();
             init ephemeral = Ephemeral::Unknown;
             init inflight = Option::None;
             init dv = DiskView{entries: Map::empty()};
@@ -135,109 +252,78 @@ state_machine!{AllocationCrashAwareJournal{
         Crash,
     }
 
-    // transition!{
-    //     load_ephemeral_from_persistent(lbl: Label, new_ephemeral: EphemeralState) {
-    //         require lbl is LoadEphemeralFromPersistent;
-    //         require pre.ephemeral is Unknown;
-            // require new_ephemeral.image_state == pre.persistent;
-            // require new_ephemeral.unmarshalled_tail == MsgHistory::empty_history_at(truncated_journal.seq_end());
-            
-            // Set::empty();
+    transition!{
+        load_ephemeral_from_persistent(lbl: Label, new_ephemeral: EphemeralState) {
+            require lbl is LoadEphemeralFromPersistent;
+            require pre.ephemeral is Unknown;
+            require pre.persistent.valid_image(pre.dv);
+            require new_ephemeral.init_by(pre.persistent, pre.dv);
+            update ephemeral = Ephemeral::Known{ v: new_ephemeral };
+        }
+    }
 
-            // pub struct EphemeralState {
-            //     pub unmarshalled_tail: MsgHistory,  // from LinkedJournal::State
-            //     pub lsn_au_index: Map<LSN, AU>,     // from AllocationJournal::State
-            //     pub mini_allocator: MiniAllocator,  // from AllocationJournal::State
-            // }
-            
-            // addr.wf
-            // persistent 
+    transition!{
+        read_for_recovery(lbl: Label) {
+            require lbl is ReadForRecovery;
+            require pre.ephemeral is Known;
+            require LinkedJournal::State::next(
+                pre.ephemeral.get_Known_v().to_lj(pre.dv), 
+                pre.ephemeral.get_Known_v().to_lj(pre.dv), 
+                LinkedJournal::Label::ReadForRecovery{ messages: lbl.get_ReadForRecovery_records() }
+            );
+        }
+    }
 
+    transition!{
+        query_end_lsn(lbl: Label) {
+            require lbl is QueryEndLsn;
+            require pre.ephemeral is Known;
+            require LinkedJournal::State::next(
+                pre.ephemeral.get_Known_v().to_lj(pre.dv), 
+                pre.ephemeral.get_Known_v().to_lj(pre.dv), 
+                LinkedJournal::Label::QueryEndLsn{ end_lsn: lbl.get_QueryEndLsn_end_lsn() },
+            );
+        }
+    }
 
-        // require Self::valid_journal_image(image);
-        // require LikesJournal::State::initialize(journal, image.tj);
-        // let lsn_au_index = Self::build_lsn_au_index(image.tj, image.first);
+    transition!{
+        put(lbl: Label, new_ephemeral: EphemeralState) {
+            require lbl is Put;
+            require pre.ephemeral is Known;
+            require LinkedJournal::State::next(
+                pre.ephemeral.get_Known_v().to_lj(pre.dv),
+                new_ephemeral.to_lj(pre.dv), 
+                LinkedJournal::Label::Put{ messages: lbl.get_Put_records() },
+            );
+            // NOTE (jialin): predicate and update style don't mix well here
+            require pre.ephemeral.get_Known_v().same_except_lj(new_ephemeral);
+            update ephemeral = Ephemeral::Known{ v: new_ephemeral };
+        }
+    }
 
-        // init journal = journal;
-        // init lsn_au_index = lsn_au_index;
-        // init first = image.first;
-        // init mini_allocator = MiniAllocator::empty();
+    transition!{
+        internal(lbl: Label, new_ephemeral: EphemeralState, new_dv: DiskView) {
+            require lbl is Internal;
+            require pre.ephemeral is Known;
+            require pre.ephemeral.get_Known_v().is_internal_op(
+                pre.dv, 
+                lbl.get_Internal_allocs(),
+                lbl.get_Internal_deallocs(),
+                new_ephemeral,
+                new_dv,
+            );
+            update ephemeral = Ephemeral::Known{ v: new_ephemeral };
+            update dv = new_dv;
+        }
+    }
 
-
-            // require Self::valid_journal_image(image);
-            // require LikesJournal::State::initialize(journal, image.tj);
-            // let lsn_au_index = Self::build_lsn_au_index(image.tj, image.first);
-    
-            // init journal = journal;
-            // init lsn_au_index = lsn_au_index;
-            // init first = image.first;
-            // init mini_allocator = MiniAllocator::empty();
-
-            // journal state
-
-            
-            // require journal_config === AllocationJournal::Config::initialize(new_journal.journal, pre.persistent);
-            // require AllocationJournal::State::init_by(new_journal, journal_config);
-            // update ephemeral = Ephemeral::Known{ v: new_journal };
-    //     }
-    // }
-
-//     transition!{
-//         read_for_recovery(lbl: Label) {
-//             require lbl is ReadForRecovery;
-//             require pre.ephemeral is Known;
-//             require AllocationJournal::State::next(
-//                 pre.ephemeral.get_Known_v(), 
-//                 pre.ephemeral.get_Known_v(), 
-//                 AllocationJournal::Label::ReadForRecovery{ messages: lbl.get_ReadForRecovery_records() }
-//             );
-//         }
-//     }
-
-//     transition!{
-//         query_end_lsn(lbl: Label) {
-//             require lbl is QueryEndLsn;
-//             require pre.ephemeral is Known;
-//             require AllocationJournal::State::next(
-//                 pre.ephemeral.get_Known_v(), 
-//                 pre.ephemeral.get_Known_v(), 
-//                 AllocationJournal::Label::QueryEndLsn{ end_lsn: lbl.get_QueryEndLsn_end_lsn() },
-//             );
-//         }
-//     }
-
-//     transition!{
-//         put(lbl: Label, new_journal: AllocationJournal::State) {
-//             require lbl is Put;
-//             require pre.ephemeral is Known;
-//             require AllocationJournal::State::next(
-//                 pre.ephemeral.get_Known_v(), 
-//                 new_journal, 
-//                 AllocationJournal::Label::Put{ messages: lbl.get_Put_records() },
-//             );
-//             update ephemeral = Ephemeral::Known{ v: new_journal };
-//         }
-//     }
-
-//     transition!{
-//         internal(lbl: Label, new_journal: AllocationJournal::State) {
-//             require lbl is Internal;
-//             require pre.ephemeral is Known;
-//             require AllocationJournal::State::next(
-//                 pre.ephemeral.get_Known_v(), 
-//                 new_journal, 
-//                 AllocationJournal::Label::InternalAllocations{allocs: lbl.get_Internal_allocs(), deallocs: lbl.get_Internal_deallocs() }
-//             );
-//             update ephemeral = Ephemeral::Known{ v: new_journal };
-//         }
-//     }
-
-//     transition!{
-//         query_lsn_persistence(lbl: Label) {
-//             require lbl is QueryLsnPersistence;
-//             require lbl.get_QueryLsnPersistence_sync_lsn() <= pre.persistent.tj.seq_end();
-//         }
-//     }
+    transition!{
+        query_lsn_persistence(lbl: Label) {
+            require lbl is QueryLsnPersistence;
+            require lbl.get_QueryLsnPersistence_sync_lsn() 
+                <= pre.persistent.to_tj(pre.dv).seq_end();
+        }
+    }
 
 //     transition!{
 //         commit_start(lbl: Label, frozen_journal: StoreImage, new_journal: AllocationJournal::State) {
@@ -285,13 +371,13 @@ state_machine!{AllocationCrashAwareJournal{
 //         }
 //     }
 
-//     transition!{
-//         crash(lbl: Label) {
-//             require lbl is Crash;
-//             update ephemeral = Ephemeral::Unknown;
-//             update inflight = Option::None;
-//         }
-//     }
+    transition!{
+        crash(lbl: Label) {
+            require lbl is Crash;
+            update ephemeral = Ephemeral::Unknown;
+            update inflight = Option::None;
+        }
+    }
 
 //     pub open spec(checked) fn state_relations(self) -> bool 
 //     {
