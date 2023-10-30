@@ -11,7 +11,7 @@ verus! {
 
 // An AbstractJournal is an abstract view of a, well, journal. It logs
 // a set of operations, which should eventually be compacted and applied
-// to a map.
+// to a map. (The state of an AbstractJournal is just a MsgHistory).
 state_machine!{ AbstractJournal {
     fields {
         /// The log of messages this AbstractJournal contains.

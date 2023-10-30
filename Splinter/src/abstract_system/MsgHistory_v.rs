@@ -15,8 +15,13 @@ pub struct KeyedMessage {
   pub message: Message 
 }
 
+// (Tenzin): It seems that given MsgHistory is required to be contiguous,
+// reusing a FloatingSeq of the appropriate type would provide better
+// type reusage.
+
 /// A contiguous log of kv-store command messages (keyed by LSN).
 /// Stores requests from seq_start <= LSN < seq_end.
+#[verifier::ext_equal]
 pub struct MsgHistory { 
   /// The messages stored in this history. Stored as key-value pairs,
   /// where key is the LSN of the operation, and KeyedMessage stores
