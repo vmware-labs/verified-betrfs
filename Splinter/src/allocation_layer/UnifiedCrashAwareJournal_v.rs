@@ -107,7 +107,6 @@ impl EphemeralState {
 
     pub open spec(checked) fn same_except_lj(self, new_state: Self) -> bool
     {
-        // more readable??
         new_state == EphemeralState{
             image: ImageState{
                 freshest_rec: new_state.image.freshest_rec,
@@ -117,10 +116,6 @@ impl EphemeralState {
             unmarshalled_tail: new_state.unmarshalled_tail,
             ..self
         }
-        // &&& self.image.first == new_state.image.first
-        // &&& self.image.dom == new_state.image.dom
-        // &&& self.lsn_au_index == new_state.lsn_au_index
-        // &&& self.mini_allocator == new_state.mini_allocator
     }
 
     pub open spec(checked) fn is_marshalled_state(self, dv: DiskView, allocs: Set<AU>, deallocs: Set<AU>,
@@ -135,15 +130,12 @@ impl EphemeralState {
                 self.to_lj(dv), new_state.to_lj(new_dv),
                 LinkedJournal::Label::Internal{}, cut, addr
             )
-        // &&& new_state.image == StoreImage{
-        //     freshest_rec: new_state.image.freshest_rec,
-        //     boundary_lsn: new_state.image.boundary_lsn,
-        //     first: if self.image.freshest_rec is Some { self.image.first } else { addr.au },
-        //     ..state.image
-        // }
-
-        &&& new_state.image.dom == self.image.dom
-        &&& new_state.image.first == if self.image.freshest_rec is Some { self.image.first } else { addr.au }
+        &&& new_state.image == ImageState{
+            freshest_rec: new_state.image.freshest_rec,
+            boundary_lsn: new_state.image.boundary_lsn,
+            first: if self.image.freshest_rec is Some { self.image.first } else { addr.au },
+            ..self.image
+        }
         &&& new_state.lsn_au_index == AllocationJournal::State::lsn_au_index_append_record(
                 self.lsn_au_index, self.unmarshalled_tail.discard_recent(cut), addr.au)
         &&& new_state.mini_allocator == self.mini_allocator.allocate_and_observe(addr)
@@ -325,15 +317,15 @@ state_machine!{UnifiedCrashAwareJournal{
         }
     }
 
-//     transition!{
-//         commit_start(lbl: Label, frozen_journal: StoreImage, new_journal: AllocationJournal::State) {
-//             require lbl is CommitStart;
-//             require pre.ephemeral is Known;
-//             // Can't start a commit if one is in-flight, or we'd forget to maintain the
-//             // invariants for the in-flight one.
-//             require pre.inflight is None;
-//             // Frozen journal stitches to frozen map
-//             require frozen_journal.tj.seq_start() == lbl.get_CommitStart_new_boundary_lsn();
+    transition!{
+        commit_start(lbl: Label, frozen_journal: ImageState, new_ephemeral: EphemeralState) {
+            require lbl is CommitStart;
+            require pre.ephemeral is Known;
+            // Can't start a commit if one is in-flight, or we'd forget to maintain the
+            // invariants for the in-flight one.
+            require pre.inflight is None;
+            // Frozen journal stitches to frozen map
+            // require frozen_journal.tj.seq_start() == lbl.get_CommitStart_new_boundary_lsn();
 //             // Journal doesn't go backwards
 //             require pre.persistent.tj.seq_end() <= frozen_journal.tj.seq_end();
 //             // There should be no way for the frozen journal to have passed the ephemeral map!
@@ -345,8 +337,8 @@ state_machine!{UnifiedCrashAwareJournal{
 //             );
 //             update ephemeral = Ephemeral::Known{ v: new_journal };
 //             update inflight = Option::Some(frozen_journal);
-//         }
-//     }
+        }
+    }
 
 //     transition!{
 //         commit_complete(lbl: Label, new_journal: AllocationJournal::State) {

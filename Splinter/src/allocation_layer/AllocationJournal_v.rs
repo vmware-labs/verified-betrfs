@@ -115,6 +115,22 @@ state_machine!{ AllocationJournal {
         else { lsn_au_index[new_bdy] }
     }
 
+    transition!{ read_for_recovery(lbl: Label) {
+        require LikesJournal_v::LikesJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
+    } }
+
+    transition!{ freeze_for_commit(lbl: Label) {
+        require LikesJournal_v::LikesJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
+    } }
+
+    transition!{ query_end_lsn(lbl: Label) {
+        require LikesJournal_v::LikesJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
+    } }
+    
+    transition!{ put(lbl: Label) {
+        require LikesJournal_v::LikesJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
+    } }
+
     transition!{ discard_old(lbl: Label, post_journal: LikesJournal::State) {
         require pre.wf();
         require Self::lbl_wf(lbl);
@@ -132,14 +148,6 @@ state_machine!{ AllocationJournal {
         update first = new_first;
         update mini_allocator = pre.mini_allocator.prune(discarded_aus.intersect(pre.mini_allocator.allocs.dom()));
       // note that these AUs refine to free (in the frozen freeset)
-    } }
-
-    transition!{ freeze_for_commit(lbl: Label, depth: nat, post_journal: LikesJournal::State) {
-        require pre.wf();
-        require Self::lbl_wf(lbl);
-        require lbl.is_FreezeForCommit();
-        require LikesJournal::State::freeze_for_commit(pre.journal, post_journal, Self::lbl_i(lbl), depth, post_journal.journal);
-        update journal = post_journal;
     } }
 
     transition!{ internal_journal_marshal(lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal::State) {
@@ -189,28 +197,8 @@ state_machine!{ AllocationJournal {
         update mini_allocator = pre.mini_allocator.prune(lbl.get_InternalAllocations_deallocs());
     } }
 
-    // TODO(jonh): delete. Subsumed by only_advance_likes_journal.
-    transition!{ internal_journal_no_op(lbl: Label, post_linked_journal: LinkedJournal::State) {
-        require pre.wf();
-        require Self::lbl_wf(lbl);
-        require lbl.is_InternalAllocations();
-    } }
-
-    transition!{ only_advance_likes_journal(lbl: Label, depth: nat, post_likes_journal: LikesJournal::State) {
-        require pre.wf();
-        require Self::lbl_wf(lbl);
-        require {
-            ||| lbl.is_ReadForRecovery()
-            ||| lbl.is_QueryEndLsn()
-            ||| lbl.is_Put()
-            // TODO add InternalJournalNoOp?
-        };
-
-        require LikesJournal::State::next(
-            pre.journal, post_likes_journal,
-            Self::lbl_i(lbl));
-
-        update journal = post_likes_journal;
+    transition!{ internal_journal_no_op(lbl: Label) {
+        require lbl is InternalAllocations;
     } }
 
     // Update lsnAUIndex with by discarding lsn's strictly smaller than bdy
@@ -857,9 +845,19 @@ state_machine!{ AllocationJournal {
     }
 
     #[inductive(freeze_for_commit)]
-    fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label, depth: nat, post_journal: LikesJournal::State) {
+    fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label) {
+        reveal(LinkedJournal::State::next);
         reveal(LinkedJournal::State::next_by );
     }
+
+    #[inductive(read_for_recovery)]
+    fn read_for_recovery_inductive(pre: Self, post: Self, lbl: Label) { }
+       
+    #[inductive(query_end_lsn)]
+    fn query_end_lsn_inductive(pre: Self, post: Self, lbl: Label) { }
+       
+    #[inductive(put)]
+    fn put_inductive(pre: Self, post: Self, lbl: Label) { }
 
     #[inductive(internal_mini_allocator_fill)]
     fn internal_mini_allocator_fill_inductive(pre: Self, post: Self, lbl: Label) {
@@ -1179,7 +1177,7 @@ state_machine!{ AllocationJournal {
     }
 
     #[inductive(internal_journal_no_op)]
-    fn internal_journal_no_op_inductive(pre: Self, post: Self, lbl: Label, post_linked_journal: LinkedJournal::State) { }
+    fn internal_journal_no_op_inductive(pre: Self, post: Self, lbl: Label) { }
 
     #[inductive(initialize)]
     fn initialize_inductive(post: Self, journal: LikesJournal::State, image: JournalImage) {
@@ -1191,13 +1189,6 @@ state_machine!{ AllocationJournal {
         Self::lemma_aus_hold_contiguous_lsns(image);
     }
 
-    #[inductive(only_advance_likes_journal)]
-    fn only_advance_likes_journal_inductive(pre: Self, post: Self, lbl: Label, depth: nat, post_likes_journal: LikesJournal::State) {
-        reveal( LikesJournal::State::next );
-        reveal( LikesJournal::State::next_by );
-        reveal( LinkedJournal::State::next_by );
-    }
-    
     // lemmas used by other refinements
     pub proof fn discard_old_accessible_aus(pre: Self, post: Self, lbl: Label)
     requires

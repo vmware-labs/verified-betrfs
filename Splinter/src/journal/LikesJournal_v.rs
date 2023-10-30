@@ -635,28 +635,20 @@ state_machine!{ LikesJournal {
         Multiset::from_set(self.lsn_addr_index.values())
     }
 
-    transition!{ read_for_recovery(lbl: Label, depth: nat, newjournal: LinkedJournal_v::LinkedJournal::State) {
-        require LinkedJournal_v::LinkedJournal::State::next_by(
-            pre.journal, newjournal, Self::lbl_i(lbl), LinkedJournal_v::LinkedJournal::Step::read_for_recovery(depth));
-        update journal = newjournal;
+    transition!{ read_for_recovery(lbl: Label) {
+        require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
     } }
 
-    transition!{ freeze_for_commit(lbl: Label, depth: nat, newjournal: LinkedJournal_v::LinkedJournal::State) {
-        require LinkedJournal_v::LinkedJournal::State::next_by(
-            pre.journal, newjournal, Self::lbl_i(lbl), LinkedJournal_v::LinkedJournal::Step::freeze_for_commit(depth));
-        update journal = newjournal;
+    transition!{ freeze_for_commit(lbl: Label) {
+        require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
     } }
 
-    transition!{ query_end_lsn(lbl: Label, newjournal: LinkedJournal_v::LinkedJournal::State) {
-        require LinkedJournal_v::LinkedJournal::State::next_by(
-            pre.journal, newjournal, Self::lbl_i(lbl), LinkedJournal_v::LinkedJournal::Step::query_end_lsn());
-        update journal = newjournal;
+    transition!{ query_end_lsn(lbl: Label) {
+        require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
     } }
     
-    transition!{ put(lbl: Label, newjournal: LinkedJournal_v::LinkedJournal::State) {
-        require LinkedJournal_v::LinkedJournal::State::next_by(
-            pre.journal, newjournal, Self::lbl_i(lbl), LinkedJournal_v::LinkedJournal::Step::put());
-        update journal = newjournal;
+    transition!{ put(lbl: Label) {
+        require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
     } }
     
     transition!{ discard_old(lbl: Label) {
@@ -704,7 +696,7 @@ state_machine!{ LikesJournal {
     } }
 
     transition!{ internal_no_op(lbl: Label) {
-        require lbl.is_Internal();
+        require lbl is Internal;
     } }
 
     // TODO(travis): Weird that I can't call my only init operation "init"
@@ -746,22 +738,26 @@ state_machine!{ LikesJournal {
     }
 
     #[inductive(read_for_recovery)]
-    fn read_for_recovery_inductive(pre: Self, post: Self, lbl: Label, depth: nat, newjournal: LinkedJournal_v::LinkedJournal::State) {
+    fn read_for_recovery_inductive(pre: Self, post: Self, lbl: Label) {
+        reveal(LinkedJournal_v::LinkedJournal::State::next);
         reveal(LinkedJournal_v::LinkedJournal::State::next_by);
     }
    
     #[inductive(freeze_for_commit)]
-    fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label, depth: nat, newjournal: LinkedJournal_v::LinkedJournal::State) {
+    fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label) {
+        reveal(LinkedJournal_v::LinkedJournal::State::next);
         reveal(LinkedJournal_v::LinkedJournal::State::next_by);
     }
 
     #[inductive(query_end_lsn)]
-    fn query_end_lsn_inductive(pre: Self, post: Self, lbl: Label, newjournal: LinkedJournal_v::LinkedJournal::State) {
+    fn query_end_lsn_inductive(pre: Self, post: Self, lbl: Label) {
+        reveal(LinkedJournal_v::LinkedJournal::State::next);
         reveal(LinkedJournal_v::LinkedJournal::State::next_by);
     }
    
     #[inductive(put)]
-    fn put_inductive(pre: Self, post: Self, lbl: Label, newjournal: LinkedJournal_v::LinkedJournal::State) {
+    fn put_inductive(pre: Self, post: Self, lbl: Label) {
+        reveal(LinkedJournal_v::LinkedJournal::State::next);
         reveal(LinkedJournal_v::LinkedJournal::State::next_by);
     }
 

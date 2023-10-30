@@ -19,25 +19,25 @@ use crate::journal::LikesJournal_v::*;
 verus!{
 
 impl LikesJournal::Step {
-    proof fn i(self) -> LinkedJournal::Step {
-        match self {
-            Self::read_for_recovery(depth, _new_journal) =>
-                LinkedJournal::Step::read_for_recovery(depth),
-            Self::freeze_for_commit(depth, _new_journal) =>
-                LinkedJournal::Step::freeze_for_commit(depth),
-            Self::query_end_lsn(_new_journal) =>
-                LinkedJournal::Step::query_end_lsn(),
-            Self::put(_new_journal) =>
-                LinkedJournal::Step::put(),
-            Self::discard_old() =>
-                LinkedJournal::Step::discard_old(),
-            Self::internal_journal_marshal(cut, addr, _new_journal) =>
-                LinkedJournal::Step::internal_journal_marshal(cut, addr),
-            Self::internal_no_op() =>
-                LinkedJournal::Step::internal_journal_no_op(),
-            _ => arbitrary(),   // TODO(travis): wart on the state machine language
-        }
-    }
+    // proof fn i(self) -> LinkedJournal::Step {
+    //     match self {
+    //         Self::read_for_recovery() =>
+    //             LinkedJournal::Step::read_for_recovery(depth),
+    //         Self::freeze_for_commit(depth) =>
+    //             LinkedJournal::Step::freeze_for_commit(depth),
+    //         Self::query_end_lsn() =>
+    //             LinkedJournal::Step::query_end_lsn(),
+    //         Self::put(_new_journal) =>
+    //             LinkedJournal::Step::put(),
+    //         Self::discard_old() =>
+    //             LinkedJournal::Step::discard_old(),
+    //         Self::internal_journal_marshal(cut, addr, _new_journal) =>
+    //             LinkedJournal::Step::internal_journal_marshal(cut, addr),
+    //         Self::internal_no_op() =>
+    //             LinkedJournal::Step::internal_journal_no_op(),
+    //         _ => arbitrary(),   // TODO(travis): wart on the state machine language
+    //     }
+    // }
 }
 
 impl DiskView {
