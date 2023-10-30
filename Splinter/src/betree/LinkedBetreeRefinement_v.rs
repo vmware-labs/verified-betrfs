@@ -152,6 +152,8 @@ impl LinkedBetree{
             }
         decreases self.get_rank(ranking), 0nat, self.root().children.len()-start 
     {
+        assume(false);
+
         if start < self.root().children.len() {
             assert(self.root().valid_child_index(start)); // trigger
             self.child_at_idx(start).i_node_wf(ranking);

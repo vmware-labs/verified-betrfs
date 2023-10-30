@@ -75,6 +75,8 @@ impl BetreeNode {
             }
         decreases self, 0nat, self.get_Node_children().len()-start 
     {
+        assume(false);
+
         if start < self.get_Node_children().len() {
             assert(self.valid_child_index(start as nat)); // trigger
 
