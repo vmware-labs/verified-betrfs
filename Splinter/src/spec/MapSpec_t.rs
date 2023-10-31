@@ -173,6 +173,7 @@ impl PersistentState {
 /// We view our EphemeralState as a set of outstanding client requests
 /// that haven't been executed and a set of executed replies that have
 /// yet to be delivered to the client.
+#[verifier::ext_equal]
 pub struct EphemeralState {
     /// The set of received but not yet executed requests.
     pub requests: Set<Request>,
@@ -264,7 +265,8 @@ state_machine!{ AsyncMap {
 
 type SyncReqId = nat;
 
-/// A Version is a snapshot of a map (its key-value pairs).
+/// A Version is a snapshot of a map (its key-value pairs). Specifically it wraps
+/// a `MapSpec::State`.
 #[verifier::ext_equal]
 pub type Version = PersistentState;
 
