@@ -382,75 +382,23 @@ state_machine!{ AllocationJournal {
                     Self::bottom_properties(dv, root, first);
         
 
-                    let bottom = first_page(root);
-                    let last_lsn = dv.entries[root.unwrap()].message_seq.seq_end;
-                    let first_lsn = dv.entries[bottom.unwrap()].message_seq.seq_start;
-                    let update = Self::singleton_index(first_lsn, last_lsn, bottom.unwrap().au);
-                    let prior_result = Self::build_lsn_au_index_au_walk(dv, dv.next(bottom), first);
-                    let output = prior_result.union_prefer_right(update);
-                    assert( output == Self::build_lsn_au_index_au_walk(dv, root, first) );
-
-                    // by au
-//                     let n_bottom = first_page(root);
-//                     let n_last_lsn = dv.entries[root.unwrap()].message_seq.seq_end;
-//                     let n_first_lsn = dv.entries[n_bottom.unwrap()].message_seq.seq_start;
-//                     let n_update = Self::singleton_index(n_first_lsn, n_last_lsn, n_bottom.unwrap().au);
-//                     let n_prior_result = Self::build_lsn_au_index_au_walk(dv, dv.next(n_bottom), first);
-//                     let n_au_walk = n_prior_result.union_prefer_right(n_update);
-//                     assert( Self::build_lsn_au_index_au_walk(dv, root, first) == n_au_walk );
+//                     let bottom = first_page(root);
+//                     let last_lsn = dv.entries[root.unwrap()].message_seq.seq_end;
+//                     let first_lsn = dv.entries[bottom.unwrap()].message_seq.seq_start;
+//                     let update = Self::singleton_index(first_lsn, last_lsn, bottom.unwrap().au);
+//                     let prior_result = Self::build_lsn_au_index_au_walk(dv, dv.next(bottom), first);
+//                     let output = prior_result.union_prefer_right(update);
+//                     assert( output == Self::build_lsn_au_index_au_walk(dv, root, first) );
 
                     if 0 < root.unwrap().page {    // zero case is easy; au-walk and page-walk do the same thing
                         assert(dv.next(root) is Some) by /*contradiction*/ {
                             if dv.next(root) is None {
-    //                             assert( dv.entries[root.unwrap()].message_seq.contains(dv.boundary_lsn) );
-    //                             let addr = choose |addr: Address| #![auto] addr.au == first && dv.addr_supports_lsn(addr, dv.boundary_lsn);
                                 assert( dv.addr_supports_lsn(root.unwrap(), dv.boundary_lsn) ); // witness
-    //                             assert( addr == root.unwrap() );
                                 assert( false );
                             }
                         }
 
-    //                     assert(dv.next(root).unwrap().au == root.unwrap().au) by {
-    // //                         assert( Self::nonzero_pages_point_backward(dv) );
-    // //                         let addr = root.unwrap();
-    // // //                         assert( dv.next(root) == dv.entries[addr].prior_rec );
-    // // //                         assert( addr.page != 0 );
-    // //                         assert( dv.entries.contains_key(addr) );
-    // //                         assert( dv.entries[addr].prior_rec == Some(addr.previous()) );
-    //                     }
-
                         Self::bottom_properties(dv, dv.next(root), first);
-    //                     let nextroot = dv.next(root);
-    //                     let p_bottom = first_page(nextroot);
-    //                     assert( nextroot is Some ); // red herring error
-    //                     assert( dv.is_nondangling_pointer(root) );  // red herring
-    //                     assert( dv.entries.contains_key(nextroot.unwrap()) );   // red herring
-    //                     let p_last_lsn = dv.entries[nextroot.unwrap()].message_seq.seq_end;
-    //                     assert( dv.entries.contains_key(p_bottom.unwrap()) );   // red herring
-    //                     let p_first_lsn = dv.entries[p_bottom.unwrap()].message_seq.seq_start;
-    //                     let p_update = Self::singleton_index(p_first_lsn, p_last_lsn, p_bottom.unwrap().au);
-    //                     assert( Self::pointer_is_upstream(dv, dv.next(p_bottom), first) );  // red herring
-    //                     let p_prior_result = Self::build_lsn_au_index_au_walk(dv, dv.next(p_bottom), first);
-    //                     let p_au_walk = p_prior_result.union_prefer_right(p_update);
-    // 
-    //                     // by page
-    //                     let curr_msgs = dv.entries[root.unwrap()].message_seq;
-    //                     let update = Self::singleton_index(
-    //                         math::max(dv.boundary_lsn as int, curr_msgs.seq_start as int) as nat, curr_msgs.seq_end, root.unwrap().au);
-    //                     let p_page_walk = Self::build_lsn_au_index_page_walk(dv, dv.next(root));
-    //                     let n_page_walk = p_page_walk.union_prefer_right(update);
-    // 
-    //                     assert( Self::build_lsn_au_index_page_walk(dv, root) == n_page_walk );
-
-    //                     assert( n_page_walk.dom() =~= n_au_walk.dom() );
-    //                     assert forall |lsn| n_page_walk.contains_key(lsn) implies n_page_walk[lsn] == n_au_walk[lsn] by {
-    //                     }
-                        // =~= is ridiculous. I spent how many minutes trying to prove this. Somehow the
-                        // one below didn't solve my problem, and it didn't occur to me to ~ this one.
-                        // Not an experience I ever wasted time on in Dafny. >:v(
-    //                     assert( n_page_walk =~= n_au_walk );
-                        
-                        assert( Self::build_lsn_au_index_au_walk(dv, root, first) =~= Self::build_lsn_au_index_page_walk(dv, root) );
                     }
                 }
             }
