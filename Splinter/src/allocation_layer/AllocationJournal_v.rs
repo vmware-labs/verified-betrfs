@@ -361,27 +361,100 @@ state_machine!{ AllocationJournal {
 // I am surprised this proves for free.
     pub proof fn build_lsn_au_index_equiv_page_walk(dv: DiskView, root: Pointer, first: AU)
     requires
-        dv.decodable(root),
+        Self::pointer_is_upstream(dv, root, first),
         dv.acyclic(),
-        Self::internal_au_pages_fully_linked(dv, first),
+        Self::internal_au_pages_fully_linked(dv),
         root is Some ==> Self::valid_first_au(dv, first),
     ensures
-        Self::build_lsn_au_index_au_walk(dv, root, first) == Self::build_lsn_au_index_page_walk(dv, root),
+        Self::build_lsn_au_index_au_walk(dv, root, first) =~= Self::build_lsn_au_index_page_walk(dv, root),
     decreases dv.the_rank_of(root)
     {
-        assume(false);  // Narrator: it doesn't.
-//         match root {
-//             None => {
-//                 //assert( Self::build_lsn_au_index_au_walk(dv, root, first) == Self::build_lsn_au_index_page_walk(dv, root) );
-//             }
-//             Some(addr) => {
-//                 if addr.au == first {
-//                     //assert( Self::build_lsn_au_index_au_walk(dv, root, first) == Self::build_lsn_au_index_page_walk(dv, root) );
-//                 } else {
-//                     //assert( Self::build_lsn_au_index_au_walk(dv, root, first) == Self::build_lsn_au_index_page_walk(dv, root) );
-//                 }
-//             }
-//         }
+        match root {
+            None => { }
+            Some(addr) => {
+                if addr.au == first {
+                } else {
+                    Self::build_lsn_au_index_equiv_page_walk(dv, dv.next(root), first);
+
+                    // TODO(andrea): rediscovering this is brutal. I copy-pasted the definition
+                    // three times before realizing I hadn't satisfied decreases_by. This should
+                    // have been dispatched in the spec fn.  Aaargh.
+                    Self::bottom_properties(dv, root, first);
+        
+
+                    let bottom = first_page(root);
+                    let last_lsn = dv.entries[root.unwrap()].message_seq.seq_end;
+                    let first_lsn = dv.entries[bottom.unwrap()].message_seq.seq_start;
+                    let update = Self::singleton_index(first_lsn, last_lsn, bottom.unwrap().au);
+                    let prior_result = Self::build_lsn_au_index_au_walk(dv, dv.next(bottom), first);
+                    let output = prior_result.union_prefer_right(update);
+                    assert( output == Self::build_lsn_au_index_au_walk(dv, root, first) );
+
+                    // by au
+//                     let n_bottom = first_page(root);
+//                     let n_last_lsn = dv.entries[root.unwrap()].message_seq.seq_end;
+//                     let n_first_lsn = dv.entries[n_bottom.unwrap()].message_seq.seq_start;
+//                     let n_update = Self::singleton_index(n_first_lsn, n_last_lsn, n_bottom.unwrap().au);
+//                     let n_prior_result = Self::build_lsn_au_index_au_walk(dv, dv.next(n_bottom), first);
+//                     let n_au_walk = n_prior_result.union_prefer_right(n_update);
+//                     assert( Self::build_lsn_au_index_au_walk(dv, root, first) == n_au_walk );
+
+                    if 0 < root.unwrap().page {    // zero case is easy; au-walk and page-walk do the same thing
+                        assert(dv.next(root) is Some) by /*contradiction*/ {
+                            if dv.next(root) is None {
+    //                             assert( dv.entries[root.unwrap()].message_seq.contains(dv.boundary_lsn) );
+    //                             let addr = choose |addr: Address| #![auto] addr.au == first && dv.addr_supports_lsn(addr, dv.boundary_lsn);
+                                assert( dv.addr_supports_lsn(root.unwrap(), dv.boundary_lsn) ); // witness
+    //                             assert( addr == root.unwrap() );
+                                assert( false );
+                            }
+                        }
+
+    //                     assert(dv.next(root).unwrap().au == root.unwrap().au) by {
+    // //                         assert( Self::nonzero_pages_point_backward(dv) );
+    // //                         let addr = root.unwrap();
+    // // //                         assert( dv.next(root) == dv.entries[addr].prior_rec );
+    // // //                         assert( addr.page != 0 );
+    // //                         assert( dv.entries.contains_key(addr) );
+    // //                         assert( dv.entries[addr].prior_rec == Some(addr.previous()) );
+    //                     }
+
+                        Self::bottom_properties(dv, dv.next(root), first);
+    //                     let nextroot = dv.next(root);
+    //                     let p_bottom = first_page(nextroot);
+    //                     assert( nextroot is Some ); // red herring error
+    //                     assert( dv.is_nondangling_pointer(root) );  // red herring
+    //                     assert( dv.entries.contains_key(nextroot.unwrap()) );   // red herring
+    //                     let p_last_lsn = dv.entries[nextroot.unwrap()].message_seq.seq_end;
+    //                     assert( dv.entries.contains_key(p_bottom.unwrap()) );   // red herring
+    //                     let p_first_lsn = dv.entries[p_bottom.unwrap()].message_seq.seq_start;
+    //                     let p_update = Self::singleton_index(p_first_lsn, p_last_lsn, p_bottom.unwrap().au);
+    //                     assert( Self::pointer_is_upstream(dv, dv.next(p_bottom), first) );  // red herring
+    //                     let p_prior_result = Self::build_lsn_au_index_au_walk(dv, dv.next(p_bottom), first);
+    //                     let p_au_walk = p_prior_result.union_prefer_right(p_update);
+    // 
+    //                     // by page
+    //                     let curr_msgs = dv.entries[root.unwrap()].message_seq;
+    //                     let update = Self::singleton_index(
+    //                         math::max(dv.boundary_lsn as int, curr_msgs.seq_start as int) as nat, curr_msgs.seq_end, root.unwrap().au);
+    //                     let p_page_walk = Self::build_lsn_au_index_page_walk(dv, dv.next(root));
+    //                     let n_page_walk = p_page_walk.union_prefer_right(update);
+    // 
+    //                     assert( Self::build_lsn_au_index_page_walk(dv, root) == n_page_walk );
+
+    //                     assert( n_page_walk.dom() =~= n_au_walk.dom() );
+    //                     assert forall |lsn| n_page_walk.contains_key(lsn) implies n_page_walk[lsn] == n_au_walk[lsn] by {
+    //                     }
+                        // =~= is ridiculous. I spent how many minutes trying to prove this. Somehow the
+                        // one below didn't solve my problem, and it didn't occur to me to ~ this one.
+                        // Not an experience I ever wasted time on in Dafny. >:v(
+    //                     assert( n_page_walk =~= n_au_walk );
+                        
+                        assert( Self::build_lsn_au_index_au_walk(dv, root, first) =~= Self::build_lsn_au_index_page_walk(dv, root) );
+                    }
+                }
+            }
+        }
     }
 
     pub proof fn build_commutes_over_discard(dv: DiskView, root: Pointer, old_first: AU, new_bdy: LSN)
@@ -389,7 +462,7 @@ state_machine!{ AllocationJournal {
         dv.tj_at(root).decodable(),
         dv.tj_at(root).can_discard_to(new_bdy),
         root is Some ==> Self::valid_first_au(dv, old_first),
-        Self::internal_au_pages_fully_linked(dv, old_first),
+        Self::internal_au_pages_fully_linked(dv),
     ensures ({
         let old_lsn_au_index = Self::build_lsn_au_index(dv.tj_at(root), old_first); // super-let, please
         Self::build_lsn_au_index(dv.tj_at(root).discard_old(new_bdy), Self::new_first(dv.tj_at(root), old_lsn_au_index, old_first, new_bdy))
@@ -439,8 +512,7 @@ state_machine!{ AllocationJournal {
         }) ==> dv.entries[alo].message_seq.seq_end <= dv.entries[ahi].message_seq.seq_start
     }
 
-    // TODO(jonh): XXX first argument unused
-    pub open spec(checked) fn internal_au_pages_fully_linked(dv: DiskView, first: AU) -> bool
+    pub open spec(checked) fn internal_au_pages_fully_linked(dv: DiskView) -> bool
     recommends
         dv.wf(),
     {
@@ -480,7 +552,7 @@ state_machine!{ AllocationJournal {
         root.au != first,
         root.au == later.au,
         root.page <= later.page,
-        Self::internal_au_pages_fully_linked(dv, first),
+        Self::internal_au_pages_fully_linked(dv),
     // should be less than <= bc it's enough to prove termination, cause later is already < caller's root
     ensures
         dv.the_rank_of(Some(root)) <= dv.the_rank_of(Some(later)),
@@ -503,7 +575,7 @@ state_machine!{ AllocationJournal {
     {
         &&& dv.decodable(root)
         &&& dv.acyclic()
-        &&& Self::internal_au_pages_fully_linked(dv, first)
+        &&& Self::internal_au_pages_fully_linked(dv)
         &&& Self::valid_first_au(dv, first)
         &&& Self::has_unique_lsns(dv)
         &&& root is Some ==> Self::upstream(dv, root.unwrap())
@@ -559,13 +631,13 @@ state_machine!{ AllocationJournal {
     recommends
         Self::pointer_is_upstream(dv, root, first),
         dv.acyclic(),
-        Self::internal_au_pages_fully_linked(dv, first),
+        Self::internal_au_pages_fully_linked(dv),
     decreases dv.the_rank_of(root)
     {
         decreases_when({
             &&& Self::pointer_is_upstream(dv, root, first)
             &&& dv.acyclic()
-            &&& Self::internal_au_pages_fully_linked(dv, first)
+            &&& Self::internal_au_pages_fully_linked(dv)
         });
         decreases_by(Self::build_lsn_au_index_au_walk_helper);
         match root {
@@ -685,7 +757,7 @@ state_machine!{ AllocationJournal {
     recommends
         dv.decodable(root),
         dv.acyclic(),
-        Self::internal_au_pages_fully_linked(dv, first),
+        Self::internal_au_pages_fully_linked(dv),
     {
         forall |lsn, addr: Address| #![auto] au_index.contains_key(lsn) && addr.au == au_index[lsn]
              && dv.addr_supports_lsn(addr, lsn)
@@ -716,7 +788,7 @@ state_machine!{ AllocationJournal {
     pub proof fn build_lsn_addr_index_returns_upstream_pages(dv: DiskView, root: Pointer, first: AU)
     requires
         Self::has_unique_lsns(dv),
-        Self::internal_au_pages_fully_linked(dv, first),
+        Self::internal_au_pages_fully_linked(dv),
         dv.buildable(root),
         Self::valid_first_au(dv, first),
     ensures ({
@@ -971,7 +1043,7 @@ state_machine!{ AllocationJournal {
         &&& (self.get_tj().freshest_rec.is_Some()
             ==> Self::valid_first_au(self.get_tj().disk_view, self.first))
         &&& (self.get_tj().freshest_rec.is_Some()
-            ==> Self::internal_au_pages_fully_linked(self.get_tj().disk_view, self.first))
+            ==> Self::internal_au_pages_fully_linked(self.get_tj().disk_view))
 
         // TODO: miniAllocator can remove means that it's not in lsnauindex.values
     }
@@ -1149,7 +1221,7 @@ state_machine!{ AllocationJournal {
                 assert( post_dv.addr_supports_lsn( bdy_addr, post_dv.boundary_lsn) );  // trigger valid_first_au
             }
 //             let start_lsn = lbl.get_DiscardOld_start_lsn();
-            assert( Self::internal_au_pages_fully_linked(post.get_tj().disk_view, post.first) ) by {
+            assert( Self::internal_au_pages_fully_linked(post.get_tj().disk_view) ) by {
                 reveal(AllocationJournal::State::pages_allocated_in_lsn_order);
             }
         }
@@ -1257,7 +1329,7 @@ state_machine!{ AllocationJournal {
             }
         }
         if post_root is Some {
-            assert( Self::internal_au_pages_fully_linked(post_dv, post.first) );
+            assert( Self::internal_au_pages_fully_linked(post_dv) );
             assert( Self::valid_first_au(post_dv, post.first) );
         }
         Self::build_lsn_au_index_equiv_page_walk(post_dv, post_root, post.first);
@@ -1280,7 +1352,7 @@ state_machine!{ AllocationJournal {
 //         assert( (post.get_tj().freshest_rec.is_Some()
 //             ==> Self::valid_first_au(post.get_tj().disk_view, post.first)) );
 //         assert( (post.get_tj().freshest_rec.is_Some()
-//             ==> Self::internal_au_pages_fully_linked(post.get_tj().disk_view, post.first)) );
+//             ==> Self::internal_au_pages_fully_linked(post.get_tj().disk_view)) );
         
         assert( Self::inv(post) );
     }
