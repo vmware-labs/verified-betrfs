@@ -1265,12 +1265,57 @@ verus! {
             v.i(), vp.i(), ctam_label, new_versions, new_async_ephemeral);
     }
 
-    //     // GOAL
-    //     assert(CrashTolerantAsyncMap::State::operate(
-    //         v.i(), vp.i(), ctam_label, new_versions, new_async_ephemeral));
-    //     CrashTolerantAsyncMap::show::operate(
-    //         v.i(), vp.i(), ctam_label, new_versions, new_async_ephemeral);
-    // }
+    // Prove accept_request refines to a valid operate transition. (In Dafny this was
+    // automatic, didn't require a lemma).
+    pub proof fn accept_request_step_refines(
+        v: CoordinationSystem::State,
+        vp: CoordinationSystem::State,
+        label: CoordinationSystem::Label,
+        step: CoordinationSystem::Step
+    )
+    requires
+        v.inv(),
+        CoordinationSystem::State::next(v, vp, label),
+        CoordinationSystem::State::next_by(v, vp, label, step),
+        matches!(step, CoordinationSystem::Step::accept_request(..)),
+    ensures
+        vp.inv(),
+        CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label.get_Label_ctam_label()),
+    {
+        reveal(CoordinationSystem::State::next);
+        reveal(CoordinationSystem::State::next_by);
+        reveal(CrashTolerantJournal::State::next);
+        reveal(CrashTolerantJournal::State::next_by);
+        reveal(AbstractJournal::State::next);
+        reveal(AbstractJournal::State::next_by);
+        reveal(CrashTolerantMap::State::next);
+        reveal(CrashTolerantMap::State::next_by);
+        reveal(AbstractMap::State::next);
+        reveal(AbstractMap::State::next_by);
+
+        // Be careful to reveal init and init_by transitions as well!
+        reveal(CrashTolerantJournal::State::init);
+        reveal(CrashTolerantJournal::State::init_by);
+        // No direct dependencies on init()
+        // reveal(AbstractJournal::State::init);
+        reveal(AbstractJournal::State::init_by);
+
+        // Reveal refinement transitions
+        reveal(CrashTolerantAsyncMap::State::next);
+        reveal(CrashTolerantAsyncMap::State::next_by);
+        reveal(AsyncMap::State::next);
+        reveal(AsyncMap::State::next_by);
+        reveal(MapSpec::State::next);
+        reveal(MapSpec::State::next_by);
+
+        // PROOF ZONE
+        inv_inductive(v, vp, label);
+
+        // Need to construct a MapSpec::Step from a CoordSys::Step.
+        // How did this work in the Dafny?
+
+        assert(CrashTolerantAsyncMap::State::next_by(v.i(), vp.i(), label.get_Label_ctam_label(), step));
+    }
 
     // pub proof fn next_refines(
     //     v: CoordinationSystem::State,
