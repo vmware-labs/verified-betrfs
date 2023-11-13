@@ -1172,80 +1172,98 @@ verus! {
     // automatic, didn't require a lemma). Here there's a ton of boilerplate to
     // do the transition nesting unwrapping (although that may be specific to
     // how we did our state machine tranisitions).
-    // pub proof fn query_step_refines(
-    //     v: CoordinationSystem::State,
-    //     vp: CoordinationSystem::State,
-    //     label: CoordinationSystem::Label,
-    //     step: CoordinationSystem::Step
-    // )
-    // requires
-    //     v.inv(),
-    //     CoordinationSystem::State::next(v, vp, label),
-    //     CoordinationSystem::State::next_by(v, vp, label, step),
-    //     matches!(step, CoordinationSystem::Step::query(..)),
-    // ensures
-    //     vp.inv(),
-    //     CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label.get_Label_ctam_label()),
-    // {
-    //     reveal(CoordinationSystem::State::next);
-    //     reveal(CoordinationSystem::State::next_by);
-    //     reveal(CrashTolerantJournal::State::next);
-    //     reveal(CrashTolerantJournal::State::next_by);
-    //     reveal(AbstractJournal::State::next);
-    //     reveal(AbstractJournal::State::next_by);
-    //     reveal(CrashTolerantMap::State::next);
-    //     reveal(CrashTolerantMap::State::next_by);
-    //     reveal(AbstractMap::State::next);
-    //     reveal(AbstractMap::State::next_by);
+    pub proof fn query_step_refines(
+        v: CoordinationSystem::State,
+        vp: CoordinationSystem::State,
+        label: CoordinationSystem::Label,
+        step: CoordinationSystem::Step
+    )
+    requires
+        v.inv(),
+        CoordinationSystem::State::next(v, vp, label),
+        CoordinationSystem::State::next_by(v, vp, label, step),
+        matches!(step, CoordinationSystem::Step::query(..)),
+    ensures
+        vp.inv(),
+        CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label.get_Label_ctam_label()),
+    {
+        reveal(CoordinationSystem::State::next);
+        reveal(CoordinationSystem::State::next_by);
+        reveal(CrashTolerantJournal::State::next);
+        reveal(CrashTolerantJournal::State::next_by);
+        reveal(AbstractJournal::State::next);
+        reveal(AbstractJournal::State::next_by);
+        reveal(CrashTolerantMap::State::next);
+        reveal(CrashTolerantMap::State::next_by);
+        reveal(AbstractMap::State::next);
+        reveal(AbstractMap::State::next_by);
 
-    //     // Be careful to reveal init and init_by transitions as well!
-    //     reveal(CrashTolerantJournal::State::init);
-    //     reveal(CrashTolerantJournal::State::init_by);
-    //     // No direct dependencies on init()
-    //     // reveal(AbstractJournal::State::init);
-    //     reveal(AbstractJournal::State::init_by);
+        // Be careful to reveal init and init_by transitions as well!
+        reveal(CrashTolerantJournal::State::init);
+        reveal(CrashTolerantJournal::State::init_by);
+        // No direct dependencies on init()
+        // reveal(AbstractJournal::State::init);
+        reveal(AbstractJournal::State::init_by);
 
-    //     // Reveal refinement transitions
-    //     reveal(CrashTolerantAsyncMap::State::next);
-    //     reveal(CrashTolerantAsyncMap::State::next_by);
-    //     reveal(AsyncMap::State::next);
-    //     reveal(AsyncMap::State::next_by);
-    //     reveal(MapSpec::State::next);
-    //     reveal(MapSpec::State::next_by);
+        // Reveal refinement transitions
+        reveal(CrashTolerantAsyncMap::State::next);
+        reveal(CrashTolerantAsyncMap::State::next_by);
+        reveal(AsyncMap::State::next);
+        reveal(AsyncMap::State::next_by);
+        reveal(MapSpec::State::next);
+        reveal(MapSpec::State::next_by);
 
-    //     // PROOF ZONE
-    //     inv_inductive(v, vp, label);
-    //     let ctam_label = label.get_Label_ctam_label();
-    //     let ctam_pre = v.i();
-    //     let ctam_post = vp.i();
+        // PROOF ZONE
+        inv_inductive(v, vp, label);
+        let ctam_label = label.get_Label_ctam_label();
+        let ctam_pre = v.i();
+        let ctam_post = vp.i();
 
-    //     let new_versions = vp.i().versions;
-    //     let new_async_ephemeral = vp.i().async_ephemeral;
+        let new_versions = vp.i().versions;
+        let new_async_ephemeral = vp.i().async_ephemeral;
 
-    //     // Seems like last time we had to do this was in the put step
-    //     // refinement. Essentially Because showing `transition` is insufficient
-    //     // for showing `next` without the show lemmas etc., and because our
-    //     // operate transition is defined in terms of three layers of nesting, we
-    //     // have to reach through all of that gunk and sort of unwind the
-    //     // assertions and "show" statements to get it done.
+        // Seems like last time we had to do this was in the put step
+        // refinement. Essentially Because showing `transition` is insufficient
+        // for showing `next` without the show lemmas etc., and because our
+        // operate transition is defined in terms of three layers of nesting, we
+        // have to reach through all of that gunk and sort of unwind the
+        // assertions and "show" statements to get it done.
 
-    //     // So let's unwind our types here. We need to unwind to show all the way
-    //     // down to MapSpec state.
+        // So let's unwind our types here. We need to unwind to show all the way
+        // down to MapSpec state.
 
-    //     // BEGIN - GOAL 1 (AsyncMap)
-    //     // Pulling out label and pre + post states for AsyncMap transition.
-    //     let async_label = ctam_label.get_OperateOp_base_op();
-    //     let async_pre = AsyncMap::State { persistent: ctam_pre.versions.last(), ephemeral: ctam_pre.async_ephemeral };
-    //     let async_post = AsyncMap::State { persistent: ctam_post.versions.last(), ephemeral: ctam_post.async_ephemeral };
+        // BEGIN - GOAL 1 (AsyncMap)
+        // Pulling out label and pre + post states for AsyncMap transition.
+        let async_label = ctam_label.get_OperateOp_base_op();
+        let async_pre = AsyncMap::State { persistent: ctam_pre.versions.last(), ephemeral: ctam_pre.async_ephemeral };
+        let async_post = AsyncMap::State { persistent: ctam_post.versions.last(), ephemeral: ctam_post.async_ephemeral };
 
-    //     // GOAL 2
-    //     let map_label = async_label.get_Exec
+        // BEGIN - GOAL 2 (MapSpec)
+        // Pull out label and pre and post states for MapSpec transition
+        let map_pre = async_pre.persistent.appv;
+        let map_post = async_post.persistent.appv;
+        // What was I trying to destructure here? This doesn't work
+        // let AsyncMap::Step::execute(map_label, post_persistent) = step;
+        let req = async_label.get_ExecuteOp_req();
+        let reply = async_label.get_ExecuteOp_reply();
 
-    //     // assert (some MapSpec transition)
+        // Figure out map label for AsyncMap::State::execute()
+        let map_label = MapSpec::Label::Query{ input: req.input, output: reply.output };
 
-    //     // GOAL 1
-    //     assert(AsyncMap::State::execute(pre_async_map, post_async_map, async_label, MapSpecLabel, post_persistent state));
-    //     AsyncMap::show::execute(pre_async_map, post_async_map, AsyncMapLabel, MapSpecLabel, post_persistent state);
+        // END - GOAL 2 (MapSpec)
+        // assert(MapSpec::State::query(map_pre, map_post, map_label));
+        MapSpec::show::query(map_pre, map_post, map_label);
+
+        // END - GOAL 1 (AsyncMap)
+        // assert(AsyncMap::State::execute(async_pre, async_post, async_label, map_label, async_post.persistent));
+        AsyncMap::show::execute(async_pre, async_post, async_label, map_label, async_post.persistent);
+
+        // GOAL
+        // assert(CrashTolerantAsyncMap::State::operate(
+        //     v.i(), vp.i(), ctam_label, new_versions, new_async_ephemeral));
+        CrashTolerantAsyncMap::show::operate(
+            v.i(), vp.i(), ctam_label, new_versions, new_async_ephemeral);
+    }
 
     //     // GOAL
     //     assert(CrashTolerantAsyncMap::State::operate(
