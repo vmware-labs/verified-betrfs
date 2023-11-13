@@ -1265,12 +1265,98 @@ verus! {
             v.i(), vp.i(), ctam_label, new_versions, new_async_ephemeral);
     }
 
-    //     // GOAL
-    //     assert(CrashTolerantAsyncMap::State::operate(
-    //         v.i(), vp.i(), ctam_label, new_versions, new_async_ephemeral));
-    //     CrashTolerantAsyncMap::show::operate(
-    //         v.i(), vp.i(), ctam_label, new_versions, new_async_ephemeral);
-    // }
+    // Prove accept_request refines to a valid operate transition. (In Dafny this was
+    // automatic, didn't require a lemma).
+    // Grouping it with the deliver reply proof as well (since they're mostly the same, each
+    // just requires a separate trigger).
+    pub proof fn accept_request_step_and_deliver_reply_step_refine(
+        v: CoordinationSystem::State,
+        vp: CoordinationSystem::State,
+        label: CoordinationSystem::Label,
+        step: CoordinationSystem::Step
+    )
+    requires
+        v.inv(),
+        CoordinationSystem::State::next(v, vp, label),
+        CoordinationSystem::State::next_by(v, vp, label, step),
+        match step {
+            CoordinationSystem::Step::accept_request(..) => true,
+            CoordinationSystem::Step::deliver_reply(..) => true,
+            _ => false,
+        }
+    ensures
+        vp.inv(),
+        CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label.get_Label_ctam_label()),
+    {
+        reveal(CoordinationSystem::State::next);
+        reveal(CoordinationSystem::State::next_by);
+        reveal(CrashTolerantJournal::State::next);
+        reveal(CrashTolerantJournal::State::next_by);
+        reveal(AbstractJournal::State::next);
+        reveal(AbstractJournal::State::next_by);
+        reveal(CrashTolerantMap::State::next);
+        reveal(CrashTolerantMap::State::next_by);
+        reveal(AbstractMap::State::next);
+        reveal(AbstractMap::State::next_by);
+
+        // Be careful to reveal init and init_by transitions as well!
+        reveal(CrashTolerantJournal::State::init);
+        reveal(CrashTolerantJournal::State::init_by);
+        // No direct dependencies on init()
+        // reveal(AbstractJournal::State::init);
+        reveal(AbstractJournal::State::init_by);
+
+        // Reveal refinement transitions
+        reveal(CrashTolerantAsyncMap::State::next);
+        reveal(CrashTolerantAsyncMap::State::next_by);
+        reveal(AsyncMap::State::next);
+        reveal(AsyncMap::State::next_by);
+        reveal(MapSpec::State::next);
+        reveal(MapSpec::State::next_by);
+
+        // PROOF ZONE
+        inv_inductive(v, vp, label);
+
+        // In Dafny accept_request, deliver_reply, and query all proved essentially for
+        // free. Only requiring a single trigger with no fancy lemmas. Just required a trigger
+        // asserting that a CTAM transition was taken. Here we have to dig in and do two levels
+        // of assertions (because we've defined our transitions for the CrashTolerant wrapper in
+        // terms of the `Next`'s of the wrapped transitions (which introduces `exists` clauses)).
+        // In Dafny CrashTolerants.s layer calls into `NextStep` of AsyncMod!! (Rather than `Next`)
+        // By doing this it doesn't introduce any nested quantifiers that also need triggering.
+
+        // BEGIN - GOAL 1 (CTAM)
+        let ctam_pre = v.i();
+        let ctam_post = vp.i();
+        let ctam_label = label.get_Label_ctam_label();
+
+        // BEGIN - GOAL 2 (AsyncMap)
+        let async_pre = AsyncMap::State {
+            persistent: ctam_pre.versions.last(), ephemeral: ctam_pre.async_ephemeral };
+        let async_post = AsyncMap::State {
+            persistent: ctam_post.versions.last(), ephemeral: ctam_post.async_ephemeral };
+        let async_label = ctam_label.get_OperateOp_base_op();
+
+        // END - GOAL 2 (AsyncMap)
+        match async_label {
+            AsyncMap::Label::RequestOp{..} => {
+                // assert(AsyncMap::State::request(async_pre, async_post, async_label));
+                AsyncMap::show::request(async_pre, async_post, async_label);
+            },
+            AsyncMap::Label::ReplyOp{..} => {
+                // assert(AsyncMap::State::reply(async_pre, async_post, async_label));
+                AsyncMap::show::reply(async_pre, async_post, async_label);
+            },
+            _ => {},
+        }
+
+        // END - GOAL 1 (CTAM)
+
+        // assert(CrashTolerantAsyncMap::State::operate(
+        //     ctam_pre, ctam_post, label.get_Label_ctam_label(), ctam_post.versions, ctam_post.async_ephemeral));
+        CrashTolerantAsyncMap::show::operate(
+            ctam_pre, ctam_post, label.get_Label_ctam_label(), ctam_post.versions, ctam_post.async_ephemeral);
+    }
 
     // pub proof fn next_refines(
     //     v: CoordinationSystem::State,
