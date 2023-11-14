@@ -1317,13 +1317,15 @@ verus! {
         // PROOF ZONE
         inv_inductive(v, vp, label);
 
-        // In Dafny accept_request, deliver_reply, and query all proved essentially for
-        // free. Only requiring a single trigger with no fancy lemmas. Just required a trigger
-        // asserting that a CTAM transition was taken. Here we have to dig in and do two levels
-        // of assertions (because we've defined our transitions for the CrashTolerant wrapper in
-        // terms of the `Next`'s of the wrapped transitions (which introduces `exists` clauses)).
-        // In Dafny CrashTolerants.s layer calls into `NextStep` of AsyncMod!! (Rather than `Next`)
-        // By doing this it doesn't introduce any nested quantifiers that also need triggering.
+        // In Dafny accept_request, deliver_reply, and query all proved
+        // essentially for free. Only requiring a single trigger with no fancy
+        // lemmas. Just required a trigger asserting that a CTAM transition was
+        // taken. Here we have to dig in and do two levels of assertions
+        // (because we've defined our transitions for the CrashTolerant wrapper
+        // in terms of the `Next`'s of the wrapped transitions (which introduces
+        // `exists` clauses)). In Dafny CrashTolerants.s layer calls into
+        // `NextStep` of AsyncMod!! (Rather than `Next`) By doing this it
+        // doesn't introduce any nested quantifiers that also need triggering.
 
         // BEGIN - GOAL 1 (CTAM)
         let ctam_pre = v.i();
@@ -1355,28 +1357,59 @@ verus! {
         // assert(CrashTolerantAsyncMap::State::operate(
         //     ctam_pre, ctam_post, label.get_Label_ctam_label(), ctam_post.versions, ctam_post.async_ephemeral));
         CrashTolerantAsyncMap::show::operate(
-            ctam_pre, ctam_post, label.get_Label_ctam_label(), ctam_post.versions, ctam_post.async_ephemeral);
+            ctam_pre,
+            ctam_post,
+            label.get_Label_ctam_label(),
+            ctam_post.versions,
+            ctam_post.async_ephemeral);
     }
 
-    // pub proof fn next_refines(
-    //     v: CoordinationSystem::State,
-    //     vp: CoordinationSystem::State,
-    //     label: CoordinationSystem::Label,
-    // )
-    // requires
-    //     v.inv(),
-    //     CoordinationSystem::State::next(v, vp, label),
-    // ensures
-    //     vp.inv(),
-    //     CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label.get_Label_ctam_label()),
-    // {
-    //     inv_inductive(v, vp, label);
+    // The goal lemma of all of this refinement. Shows that a "next" transition in
+    // the CoordinationSystem always corresponds to "next" transition in the CTAM
+    // state machine.
+    pub proof fn next_refines(
+        v: CoordinationSystem::State,
+        vp: CoordinationSystem::State,
+        label: CoordinationSystem::Label,
+    )
+    requires
+        v.inv(),
+        CoordinationSystem::State::next(v, vp, label),
+    ensures
+        vp.inv(),
+        CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label.get_Label_ctam_label()),
+    {
+        // This was yet another sneaky reveal that was necessary. Without it verifier didn't
+        // believe that there necessarily existed `s` such that `next_by` was satisfied
+        // :face_palm:.
+        reveal(CoordinationSystem::State::next);
 
-    //     let step = choose |s| CoordinationSystem::State::next_by(v, vp, label, s);
-    //     match step {
-    //         CoordinationSystem::Step::load_ephemeral_from_persistent(..) => { load }
-    //     }
-    // }
+        // PROOF ZONE
+        inv_inductive(v, vp, label);
 
+        let step = choose |s| CoordinationSystem::State::next_by(v, vp, label, s);
+        assert(CoordinationSystem::State::next_by(v, vp, label, step));
+
+        // Order of match arms was chosen to match Dafny CoordinationSystemRefinement
+        // proof.
+        match step {
+            CoordinationSystem::Step::load_ephemeral_from_persistent(..) =>
+                noop_steps_refine(v, vp, label, step),
+            CoordinationSystem::Step::recover(..) =>
+                noop_steps_refine(v, vp, label, step),
+            CoordinationSystem::Step::accept_request(..) =>
+                accept_request_step_and_deliver_reply_step_refine(v, vp, label, step),
+            CoordinationSystem::Step::query(..) =>
+                query_step_refines(v, vp, label, step),
+            CoordinationSystem::Step::deliver_reply(..) =>
+                accept_request_step_and_deliver_reply_step_refine(v, vp, label, step),
+
+            /* Turns out I totally missed that BatchNextB are new lemmas. Let's see
+               if we can just lump them into other stuff... */
+            // CoordinationSystem::Step::journal_internal(..) =>
+            //     journal_int
+            _ => { /*TODO: remove*/ assume(false); }
+        }
+    }
 
 } // verus!
