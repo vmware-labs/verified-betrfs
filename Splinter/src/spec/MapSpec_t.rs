@@ -329,6 +329,9 @@ state_machine!{ CrashTolerantAsyncMap {
         init sync_requests = Map::empty();
     } }
 
+    /// Returns true iff versions_prime is one of the following:
+    /// - Equal to versions.
+    /// - Equal to versions with a single version appended.
     pub open spec(checked) fn optionally_append_version(versions: FloatingSeq<Version>, versions_prime: FloatingSeq<Version>) -> bool
     {
       // new versions list is either some new thing appended to the old one,

@@ -1122,6 +1122,9 @@ verus! {
             match step {
                 CoordinationSystem::Step::load_ephemeral_from_persistent(..) => true,
                 CoordinationSystem::Step::recover(..) => true,
+                CoordinationSystem::Step::journal_internal(..) => true,
+                CoordinationSystem::Step::map_internal(..) => true,
+                CoordinationSystem::Step::commit_start(..) => true,
                 _ => false,
             },
         ensures
@@ -1282,6 +1285,8 @@ verus! {
         match step {
             CoordinationSystem::Step::accept_request(..) => true,
             CoordinationSystem::Step::deliver_reply(..) => true,
+            // CoordinationSystem::Step::req_sync(..) => true,
+            // CoordinationSystem::Step::reply_sync(..) => true,
             _ => false,
         }
     ensures
@@ -1364,6 +1369,97 @@ verus! {
             ctam_post.async_ephemeral);
     }
 
+    // Prove that the "req_sync" and "reply_sync" operations refine to the matching
+    // "req_sync" and "reply_sync" operations in the refined CTAM state machine.
+    pub proof fn req_sync_step_and_reply_sync_step_refine(
+        v: CoordinationSystem::State,
+        vp: CoordinationSystem::State,
+        label: CoordinationSystem::Label,
+        step: CoordinationSystem::Step
+    )
+    requires
+        v.inv(),
+        CoordinationSystem::State::next(v, vp, label),
+        CoordinationSystem::State::next_by(v, vp, label, step),
+        match step {
+            CoordinationSystem::Step::req_sync(..) => true,
+            CoordinationSystem::Step::reply_sync(..) => true,
+            _ => false,
+        }
+    ensures
+        vp.inv(),
+        CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label.get_Label_ctam_label()),
+    {
+        reveal(CoordinationSystem::State::next);
+        reveal(CoordinationSystem::State::next_by);
+        reveal(CrashTolerantJournal::State::next);
+        reveal(CrashTolerantJournal::State::next_by);
+        reveal(AbstractJournal::State::next);
+        reveal(AbstractJournal::State::next_by);
+        reveal(CrashTolerantMap::State::next);
+        reveal(CrashTolerantMap::State::next_by);
+        reveal(AbstractMap::State::next);
+        reveal(AbstractMap::State::next_by);
+
+        // Be careful to reveal init and init_by transitions as well!
+        reveal(CrashTolerantJournal::State::init);
+        reveal(CrashTolerantJournal::State::init_by);
+        // No direct dependencies on init()
+        // reveal(AbstractJournal::State::init);
+        reveal(AbstractJournal::State::init_by);
+
+        // Reveal refinement transitions
+        reveal(CrashTolerantAsyncMap::State::next);
+        reveal(CrashTolerantAsyncMap::State::next_by);
+        reveal(AsyncMap::State::next);
+        reveal(AsyncMap::State::next_by);
+        reveal(MapSpec::State::next);
+        reveal(MapSpec::State::next_by);
+
+        // PROOF ZONE
+        inv_inductive(v, vp, label);
+
+        // BEGIN - GOAL 1 (CTAM)
+        let ctam_pre = v.i();
+        let ctam_post = vp.i();
+        let ctam_label = label.get_Label_ctam_label();
+
+        let ctam_step = choose |step: CrashTolerantAsyncMap::Step|
+            CrashTolerantAsyncMap::State::next_by(ctam_pre, ctam_post, ctam_label, step);
+
+        // In Dafny originally all of these branch arms could be handled under a
+        // single triggering assert on `NextStep`. This worked since we could
+        // just pass the ctam_label to use (which also contained the verus
+        // `Step` information) to `NextStep` since all it required was a label.
+        // Here we also need a `Step`. However constructing a concrete instance
+        // only works for a single `next_by` branch. And `choose`'ing a step
+        // into existence doesn't work since we haven't proven at this point
+        // that there exists some step such that
+        // `CrashTolerantAsyncMap::State::next_by` said step is valid.
+
+        // Unfortunately I think this problem is baked into the `verus`
+        // state_machine macro. Since to avoid this we'd have to not require a
+        // `Step` argument to `next_by`, but one is always going to be
+        // auto-generated (since `Step` enum and parameter is always generated
+        // by `state_machine!`). Not too bad on the boilerplate side I guess
+        // since it's okay to argue that you can/should right a lemma branch for
+        // each transition (although it would be nice to be able to lump the
+        // trivial ones).
+        match step {
+            CoordinationSystem::Step::req_sync(..) => {
+                // assert(CrashTolerantAsyncMap::State::req_sync(ctam_pre, ctam_post, ctam_label));
+                CrashTolerantAsyncMap::show::req_sync(ctam_pre, ctam_post, ctam_label);
+            },
+            CoordinationSystem::Step::reply_sync(..) => {
+                // assert(CrashTolerantAsyncMap::State::reply_sync(ctam_pre, ctam_post, ctam_label));
+                CrashTolerantAsyncMap::show::reply_sync(ctam_pre, ctam_post, ctam_label);
+            },
+            _ => {},
+        }
+
+        assert(CrashTolerantAsyncMap::State::next_by(ctam_pre, ctam_post, ctam_label, ctam_step));
+    }
+
     // The goal lemma of all of this refinement. Shows that a "next" transition in
     // the CoordinationSystem always corresponds to "next" transition in the CTAM
     // state machine.
@@ -1383,6 +1479,10 @@ verus! {
         // believe that there necessarily existed `s` such that `next_by` was satisfied
         // :face_palm:.
         reveal(CoordinationSystem::State::next);
+        // Need to reveal this so that `verus` understands we don't need to prove anything
+        // about `dummy_to_use_type_params` step since it's not a valid step (in next_by
+        // it's never a valid step).
+        reveal(CoordinationSystem::State::next_by);
 
         // PROOF ZONE
         inv_inductive(v, vp, label);
@@ -1401,14 +1501,27 @@ verus! {
                 accept_request_step_and_deliver_reply_step_refine(v, vp, label, step),
             CoordinationSystem::Step::query(..) =>
                 query_step_refines(v, vp, label, step),
+            CoordinationSystem::Step::put(..) =>
+                put_step_refines(v, vp, label, step),
             CoordinationSystem::Step::deliver_reply(..) =>
                 accept_request_step_and_deliver_reply_step_refine(v, vp, label, step),
-
-            /* Turns out I totally missed that BatchNextB are new lemmas. Let's see
-               if we can just lump them into other stuff... */
-            // CoordinationSystem::Step::journal_internal(..) =>
-            //     journal_int
-            _ => { /*TODO: remove*/ assume(false); }
+            CoordinationSystem::Step::journal_internal(..) =>
+                noop_steps_refine(v, vp, label, step),
+            CoordinationSystem::Step::map_internal(..) =>
+                noop_steps_refine(v, vp, label, step),
+            CoordinationSystem::Step::req_sync(..) =>
+                req_sync_step_and_reply_sync_step_refine(v, vp, label, step),
+            CoordinationSystem::Step::reply_sync(..) =>
+                req_sync_step_and_reply_sync_step_refine(v, vp, label, step),
+            CoordinationSystem::Step::commit_start(..) =>
+                noop_steps_refine(v, vp, label, step),
+            CoordinationSystem::Step::commit_complete(..) =>
+                commit_complete_step_refines(v, vp, label, step),
+            CoordinationSystem::Step::crash(..) =>
+                crash_step_refines(v, vp, label, step),
+            // Don't need to prove anything about dummy step as long as `next_by`
+            // is revealed (as dummy step should never satisfy precondition).
+            CoordinationSystem::Step::dummy_to_use_type_params(..) => {},
         }
     }
 
