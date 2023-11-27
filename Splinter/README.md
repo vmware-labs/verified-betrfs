@@ -1,8 +1,18 @@
 # Splinter Verification 
 
-TODO fill this in
+Work on verifying an implementation of the SplinterDB key-value store.
 
-### Commands
+Initially this work was being done in Dafny. The Dafny proofs live in this folder (`verified-betrfs/Splinter/`).
+
+We are now working on a Rust implementation (and corresponding proof of correctness) using `verus` which lives in
+`verified-betrfs/Splinter/src/`.
+
+## Proof Layout
+
+For a diagram of the refinement proof structure we're building in the `verus` see [`splinter/docs/refinement-hierarchy.svg proof`](https://github.com/vmware-labs/verified-betrfs/blob/splinter/docs/refinement-hierarchy.svg).
+
+
+## Commands
 
 `$verus -Zunpretty=expanded bundle.rs` to get expanded macro representation of a verus file.
 
@@ -22,7 +32,7 @@ If you find yourself buried in error output, use this command to only get the to
 $verus --verify-module coordination_layer::CoordinationSystemRefinement_v bundle.rs --triggers-silent --expand-errors --multiple-errors 2 --color=always 2>&1 | head -n 50
 ```
 
-#### Pushing `.record-history` History
+### Pushing `.record-history` History
 
 If you're using the `record-history` feature of verus, here's instructions for how to push the history:
 ```
@@ -33,6 +43,6 @@ git push --all target
 echo Pushed all branches.
 ```
 
-### Verus
+## Verus
 
 We use it. "Documentation" here: https://github.com/verus-lang/verus/tree/main/source/pervasive
