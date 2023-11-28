@@ -292,7 +292,7 @@ impl DiskView {
 
     pub open spec(checked) fn is_subdisk(self, bigger: DiskView) -> bool
     {
-        self.entries.le(bigger.entries)  
+        self.entries <= bigger.entries  
     }
 
     pub open spec(checked) fn node_children_respects_rank(self, ranking: Ranking, addr: Address) -> bool

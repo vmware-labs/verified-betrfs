@@ -42,7 +42,7 @@ pub open spec fn lsn_addr_index_discard_up_to(lsn_addr_index: LsnAddrIndex, bdy:
 pub proof fn lsn_addr_index_discard_up_to_ensures(lsn_addr_index: LsnAddrIndex, bdy: LSN)
 ensures ({
     let out = lsn_addr_index_discard_up_to(lsn_addr_index, bdy);
-    &&& out.le(lsn_addr_index)
+    &&& out <= lsn_addr_index
     &&& forall |k| out.contains_key(k) ==> bdy <= k
     &&& forall |k| lsn_addr_index.contains_key(k) && bdy <= k ==> out.contains_key(k)
 })

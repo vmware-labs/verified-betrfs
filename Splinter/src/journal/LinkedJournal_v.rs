@@ -188,7 +188,7 @@ impl DiskView {
     pub open spec(checked) fn is_sub_disk(self, bigger: Self) -> bool
     {
         &&& bigger.boundary_lsn == self.boundary_lsn
-        &&& self.entries.le(bigger.entries)
+        &&& self.entries <= bigger.entries
     }
 
     // TODO: should probably promote to maps::le_transitive_auto
@@ -207,7 +207,7 @@ impl DiskView {
     pub open spec(checked) fn is_sub_disk_with_newer_lsn(self, bigger: Self) -> bool
     {
         &&& bigger.boundary_lsn <= self.boundary_lsn
-        &&& self.entries.le(bigger.entries)
+        &&& self.entries <= bigger.entries
     }
 
     pub open spec(checked) fn build_tight(self, root: Pointer) -> (out: Self)

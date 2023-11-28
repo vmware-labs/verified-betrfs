@@ -45,7 +45,7 @@ impl DiskView {
 
     pub open spec(checked) fn is_subdisk(self, bigger: DiskView) -> bool
     {
-        self.entries.le(bigger.entries)  
+        self.entries <= bigger.entries
     }
 
     pub open spec(checked) fn merge_disk(self, other: DiskView) -> DiskView

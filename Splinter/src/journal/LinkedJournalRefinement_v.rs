@@ -73,9 +73,10 @@ impl DiskView {
         assert( post.iptr(ptr) =~= PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn) );
     }
 
+// Tenzin: LOL (idk the context but love the lemma name here)
 //      pub proof fn sigh<K, V>(small: Map<K, V>, big: Map<K, V>)
 //      requires
-//          small.le(big),
+//          small <= big,
 //      ensures
 //          //small.dom().subset_of(big.dom()),
 //          small.dom().subset_of(big.dom()),

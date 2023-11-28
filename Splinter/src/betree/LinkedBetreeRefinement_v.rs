@@ -29,7 +29,7 @@ pub type LinkedBufferSeq = LinkedBufferSeq_v::BufferSeq;
 impl DiskView{
     pub open spec(checked) fn fresh_ranking_extension(self, r1: Ranking, r2: Ranking) -> bool
     {
-        &&& r1.le(r2)
+        &&& r1 <= r2
         &&& forall |addr| #![auto] !r1.contains_key(addr) && r2.contains_key(addr) ==> !self.entries.contains_key(addr)
     }
 
