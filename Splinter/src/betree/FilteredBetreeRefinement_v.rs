@@ -428,7 +428,7 @@ impl BetreeNode {
         self.i_preserves_domain_auto();
 
         assert(left.i().get_Node_buffer().map.dom() =~= i_left.get_Node_buffer().map.dom());
-        assert(right.i().get_Node_buffer().map.dom() =~= i_right.get_Node_buffer().map.dom());
+        assert(right.i().get_Node_buffer().map.dom() =~~= i_right.get_Node_buffer().map.dom());
         assert(left.i().get_Node_buffer() =~= i_left.get_Node_buffer());
         assert(right.i().get_Node_buffer() =~= i_right.get_Node_buffer());
     }

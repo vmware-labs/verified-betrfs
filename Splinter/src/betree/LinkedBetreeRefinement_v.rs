@@ -607,8 +607,13 @@ impl LinkedBetree{
         let new_ranking = old_ranking.insert(new_addrs.addr1, new_rank);
 
         if self.has_root() {
+            // Add this to suppress "recommends" warning for `result.root()` call.
+            assert(result.has_root());
             assert forall |i| result.root().valid_child_index(i) ==> self.root().valid_child_index(i) by {} // trigger
         }
+
+        // tenzinhl: Adding this assertion caused the proof to go through. Unsure what it's triggering.
+        assert(result.dv.valid_ranking(new_ranking));
 
         assert(result.valid_ranking(new_ranking));
         result.build_tight_preserves_wf(new_ranking);
