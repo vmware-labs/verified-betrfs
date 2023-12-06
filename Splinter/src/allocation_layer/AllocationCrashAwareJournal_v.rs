@@ -236,7 +236,8 @@ state_machine!{AllocationCrashAwareJournal{
     #[inductive(load_ephemeral_from_persistent)]
     fn load_ephemeral_from_persistent_inductive(pre: Self, post: Self, lbl: Label,
         new_journal: AllocationJournal::State, journal_config: AllocationJournal::Config) 
-    { 
+    {
+        reveal(AllocationJournal::State::init_by);
         assert(pre.ephemeral is Known ==> pre.ephemeral.get_Known_v().inv());
         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
         assume(post.journal_pages_not_free());
@@ -288,6 +289,8 @@ state_machine!{AllocationCrashAwareJournal{
     #[inductive(commit_complete)]
     fn commit_complete_inductive(pre: Self, post: Self, lbl: Label, new_journal: AllocationJournal::State) 
     { 
+        reveal(AllocationJournal::State::next);
+        reveal(AllocationJournal::State::next_by);
         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
         assume(post.journal_pages_not_free());
     }
