@@ -121,6 +121,9 @@ state_machine!{ AllocationJournal {
 
     transition!{ freeze_for_commit(lbl: Label) {
         require LikesJournal_v::LikesJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
+        let frozen_journal = lbl.get_FreezeForCommit_frozen_journal();
+        let frozen_first = Self::new_first(frozen_journal.tj, pre.lsn_au_index, pre.first, frozen_journal.tj.seq_start());
+        require frozen_journal.first == frozen_first;
     } }
 
     transition!{ query_end_lsn(lbl: Label) {
@@ -135,7 +138,7 @@ state_machine!{ AllocationJournal {
         require pre.wf();
         require Self::lbl_wf(lbl);
         require lbl.is_DiscardOld();
-        require LikesJournal::State::discard_old(pre.journal, post_journal, Self::lbl_i(lbl));
+        require LikesJournal::State::discard_old(pre.journal, post_journal, Self::lbl_i(lbl), post_journal.journal);
 
         let new_lsn_au_index = Self::lsn_au_index_discarding_up_to(pre.lsn_au_index, lbl.get_DiscardOld_start_lsn());
         let discarded_aus = pre.lsn_au_index.values().difference(new_lsn_au_index.values());

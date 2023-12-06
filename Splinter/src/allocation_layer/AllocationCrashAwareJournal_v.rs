@@ -132,7 +132,7 @@ state_machine!{AllocationCrashAwareJournal{
     }
 
     transition!{
-        commit_start(lbl: Label, frozen_journal: StoreImage, new_journal: AllocationJournal::State) {
+        commit_start(lbl: Label, frozen_journal: StoreImage) {
             require lbl is CommitStart;
             require pre.ephemeral is Known;
             // Can't start a commit if one is in-flight, or we'd forget to maintain the
@@ -146,10 +146,9 @@ state_machine!{AllocationCrashAwareJournal{
             require frozen_journal.tj.seq_start() <= lbl.get_CommitStart_max_lsn();
             require AllocationJournal::State::next(
                 pre.ephemeral.get_Known_v(), 
-                new_journal, 
+                pre.ephemeral.get_Known_v(),
                 AllocationJournal::Label::FreezeForCommit{ frozen_journal: frozen_journal},
             );
-            update ephemeral = Ephemeral::Known{ v: new_journal };
             update inflight = Option::Some(frozen_journal);
         }
     }
@@ -241,6 +240,7 @@ state_machine!{AllocationCrashAwareJournal{
         assert(pre.ephemeral is Known ==> pre.ephemeral.get_Known_v().inv());
         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
         assume(post.journal_pages_not_free());
+        assume(post.state_relations());
     }
    
     #[inductive(read_for_recovery)]
@@ -278,7 +278,7 @@ state_machine!{AllocationCrashAwareJournal{
      }
    
     #[inductive(commit_start)]
-    fn commit_start_inductive(pre: Self, post: Self, lbl: Label, frozen_journal: StoreImage, new_journal: AllocationJournal::State) 
+    fn commit_start_inductive(pre: Self, post: Self, lbl: Label, frozen_journal: StoreImage) 
     {
         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
         assume(post.inflight is Some ==> post.inflight.get_Some_0().tj.decodable()); // should reveal inflight 
@@ -293,6 +293,7 @@ state_machine!{AllocationCrashAwareJournal{
         reveal(AllocationJournal::State::next_by);
         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
         assume(post.journal_pages_not_free());
+        assume(post.state_relations());
     }
    
     #[inductive(crash)]

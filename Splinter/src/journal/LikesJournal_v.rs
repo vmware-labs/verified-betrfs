@@ -20,7 +20,7 @@ use crate::allocation_layer::Likes_v::*;
 
 verus!{
 
-impl TruncatedJournal  {
+impl TruncatedJournal {
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -488,19 +488,27 @@ impl TruncatedJournal {
         else { Multiset::from_set(self.build_lsn_addr_index().values()) }
     }
 
-    pub open spec fn discard_old_and_garbage_collect(self, new_bdy: LSN, keep: Set<Address>) -> Self
+    pub open spec(checked) fn tight_discard_old(self, new: Self, new_bdy: LSN, keep: Set<Address>) -> bool
     recommends
         self.wf(),
+        new.wf(),
         self.disk_view.boundary_lsn <= new_bdy,
     {
-        let new_entries = self.disk_view.entries.restrict(keep);
-        let new_disk_view = LinkedJournal_v::DiskView{boundary_lsn: new_bdy, entries: new_entries};
-        Self{
-            freshest_rec: 
-                if self.seq_end() == new_bdy { None }
-                else { self.freshest_rec },
-            disk_view: new_disk_view,
-        }
+        &&& new.disk_view.boundary_lsn == new_bdy
+        &&& new.disk_view.entries.dom() =~= keep
+        &&& new.disk_view.entries.agrees(self.disk_view.entries)
+        &&& new.freshest_rec == if self.seq_end() == new_bdy { None } else { self.freshest_rec }
+    }
+}
+
+impl MsgHistory {
+    pub open spec(checked) fn tight_discard_old(self, new: Self, new_bdy: LSN) -> bool
+    recommends
+        self.wf(),
+        new.wf(),
+    {
+        let msgs = if self.seq_start <= new_bdy { self.discard_old(new_bdy) } else { self };
+        &&& new.ext_equal(msgs)
     }
 }
 
@@ -625,7 +633,7 @@ state_machine!{ LikesJournal {
         // &&& self.journal.truncated_journal.seq_start() <= self.journal.truncated_journal.seq_end()
     }
 
-    pub open spec fn transitive_likes(self) -> Likes
+    pub open spec fn transitive_likes(self) -> Likes 
     {
         self.journal.truncated_journal.transitive_likes()
     }
@@ -647,18 +655,18 @@ state_machine!{ LikesJournal {
         require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
     } }
     
-    transition!{ put(lbl: Label) {
-        require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
+    transition!{ put(lbl: Label, new_journal: LinkedJournal_v::LinkedJournal::State) {
+        require LinkedJournal_v::LinkedJournal::State::next(pre.journal, new_journal, Self::lbl_i(lbl));
     } }
     
-    transition!{ discard_old(lbl: Label) {
-        require lbl.is_DiscardOld();
+    transition!{ discard_old(lbl: Label, new_journal: LinkedJournal_v::LinkedJournal::State) {
+        require lbl is DiscardOld;
 
         // TODO These verbose accessors are really unpleasant to read.
         let start_lsn = lbl.get_DiscardOld_start_lsn();
 
-        require pre.journal.wf();   // TODO delete; it's in inv
-        require pre.journal.truncated_journal.disk_view.acyclic();   // TODO delete; it's in inv
+        // require pre.journal.wf();   // TODO delete; it's in inv
+        // require pre.journal.truncated_journal.disk_view.acyclic();   // TODO delete; it's in inv
         require pre.journal.seq_start() <= start_lsn <= pre.journal.seq_end();
         require lbl.get_DiscardOld_require_end() == pre.journal.seq_end();
         require pre.journal.truncated_journal.can_discard_to(start_lsn);
@@ -669,15 +677,13 @@ state_machine!{ LikesJournal {
         let keep_addrs = lsn_addr_index_post.values();
         let unref_addrs = pre.lsn_addr_index.values().difference(keep_addrs);
 
-        update journal = LinkedJournal_v::LinkedJournal::State{
-            truncated_journal:
-                pre.journal.truncated_journal.discard_old_and_garbage_collect(start_lsn, keep_addrs),
-            unmarshalled_tail:
-                if pre.journal.unmarshalled_tail.seq_start <= start_lsn
-                    { pre.journal.unmarshalled_tail.discard_old(start_lsn) }
-                else
-                    { pre.journal.unmarshalled_tail },
-        };
+        require new_journal.wf();
+        require pre.journal.truncated_journal.tight_discard_old(
+            new_journal.truncated_journal, start_lsn, keep_addrs);
+        require pre.journal.unmarshalled_tail.tight_discard_old(
+            new_journal.unmarshalled_tail, start_lsn);
+
+        update journal = new_journal;
         update lsn_addr_index = lsn_addr_index_post;
     } }
 
@@ -756,7 +762,7 @@ state_machine!{ LikesJournal {
     }
    
     #[inductive(put)]
-    fn put_inductive(pre: Self, post: Self, lbl: Label) {
+    fn put_inductive(pre: Self, post: Self, lbl: Label, new_journal: LinkedJournal_v::LinkedJournal::State) {
         reveal(LinkedJournal_v::LinkedJournal::State::next);
         reveal(LinkedJournal_v::LinkedJournal::State::next_by);
     }
@@ -772,7 +778,7 @@ state_machine!{ LikesJournal {
         pre.journal.truncated_journal.disk_view.acyclic(),
         pre.lsn_addr_index == pre.journal.truncated_journal.build_lsn_addr_index(),
         pre.lsn_addr_index.values() == pre.journal.truncated_journal.representation(),
-        Self::discard_old(pre, post, lbl),
+        Self::discard_old(pre, post, lbl, post.journal),
     ensures
         post.journal.truncated_journal.wf(),
     {
@@ -788,7 +794,7 @@ state_machine!{ LikesJournal {
         pre.journal.truncated_journal.disk_view.acyclic(),
         pre.lsn_addr_index == pre.journal.truncated_journal.build_lsn_addr_index(),
         pre.lsn_addr_index.values() == pre.journal.truncated_journal.representation(),
-        Self::discard_old(pre, post, lbl),
+        Self::discard_old(pre, post, lbl, post.journal),
     ensures
         post.wf(),
         post.journal.truncated_journal.index_domain_valid(post.lsn_addr_index),
@@ -819,7 +825,7 @@ state_machine!{ LikesJournal {
     requires
         pre.inv(),
         post.wf(),
-        Self::discard_old(pre, post, lbl),
+        Self::discard_old(pre, post, lbl, post.journal),
         pre.journal.truncated_journal.disk_view.acyclic(),
     ensures
         post.lsn_addr_index == post.journal.truncated_journal.build_lsn_addr_index(),
@@ -828,9 +834,8 @@ state_machine!{ LikesJournal {
     }
 
     #[inductive(discard_old)]
-    fn discard_old_inductive(pre: Self, post: Self, lbl: Label) {
+    fn discard_old_inductive(pre: Self, post: Self, lbl: Label, new_journal: LinkedJournal_v::LinkedJournal::State) {
         reveal(LinkedJournal_v::LinkedJournal::State::next_by);
-
         Self::discard_old_step_preserves_wf_and_index(pre, post, lbl);
         let ranking = pre.journal.truncated_journal.disk_view.the_ranking();  // witness to acyclicity
         assert( post.journal.truncated_journal.disk_view.valid_ranking(ranking) );
