@@ -152,8 +152,6 @@ impl LinkedBetree{
             }
         decreases self.get_rank(ranking), 0nat, self.root().children.len()-start 
     {
-        assume(false);
-
         if start < self.root().children.len() {
             assert(self.root().valid_child_index(start)); // trigger
             self.child_at_idx(start).i_node_wf(ranking);
@@ -1033,6 +1031,7 @@ impl LinkedBetree{
         assert(a =~= b);
     }
 
+    #[verifier::spinoff_prover]
     pub proof fn compact_new_ranking(self, start: nat, end: nat, compacted_buffer: Buffer, new_addrs: TwoAddrs, ranking: Ranking) -> (new_ranking: Ranking)
         requires 
             self.wf(), self.has_root(),
@@ -1053,6 +1052,7 @@ impl LinkedBetree{
         assert forall |i| #[trigger] new_root.valid_child_index(i) ==> self.root().valid_child_index(i) by {} // trigger
         assert(result.dv.valid_ranking(new_ranking));
 
+
         assert forall |addr| result.dv.entries.contains_key(addr)
         implies #[trigger] result.dv.entries[addr].buffers.valid(result.buffer_dv)
         by {
@@ -1067,6 +1067,7 @@ impl LinkedBetree{
         assert(result.dv.no_dangling_buffer_ptr(result.buffer_dv));
         new_ranking
     }
+
 
     pub proof fn can_compact_commutes_with_i(self, start: nat, end: nat, compacted_buffer: Buffer, new_addrs: TwoAddrs)
         requires 
@@ -1119,6 +1120,7 @@ impl LinkedBetree{
         }
     }
 
+    #[verifier::spinoff_prover]
     pub proof fn compact_commutes_with_i(self, start: nat, end: nat, compacted_buffer: Buffer, new_addrs: TwoAddrs)
         requires 
             self.acyclic(), 
@@ -1322,6 +1324,7 @@ impl Path{
         }
     }
 
+    #[verifier::spinoff_prover]
     pub proof fn substitute_preserves_wf(self, replacement: LinkedBetree, path_addrs: PathAddrs)
         requires 
             self.can_substitute(replacement, path_addrs),
