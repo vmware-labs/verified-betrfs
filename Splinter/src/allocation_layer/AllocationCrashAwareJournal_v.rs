@@ -168,6 +168,7 @@ state_machine!{AllocationCrashAwareJournal{
                 AllocationJournal::Label::DiscardOld{ 
                     start_lsn: pre.inflight.get_Some_0().tj.seq_start(), 
                     require_end: lbl.get_CommitComplete_require_end(),
+                    // where do we specify which aus are in deallocs?
                     deallocs: lbl.get_CommitComplete_discarded(),
                 },
             );
@@ -294,29 +295,40 @@ state_machine!{AllocationCrashAwareJournal{
                     let post_persistent_disk = post.persistent.tj.disk_view;
                     assert forall |addr| post_persistent_disk.entries.dom().contains(addr) implies !post_aj.mini_allocator.can_allocate(addr) by {
                         if (aj_lbl.get_InternalAllocations_allocs().contains(addr.au)) {
-                            // one of these has to be true
-                            // assert(false);
-                            // assert(!post_aj.mini_allocator.allocs.contains_key(addr.au));
+                            // this is true because in commit complete, after entries are persisted their aus are
+                            // pruned from mini allocator
+                            assert(!pre_aj.mini_allocator.allocs.contains_key(addr.au));
 
                             // this is always true because observed, reserved are empty
                             // assert(post_aj.mini_allocator.allocs[addr.au].is_free_addr(addr));
+
+                            // so one of these two has to be true
+
+                            // 1)
+                            // assert(false);
+                            // the only way to prove is to assert addr.au is in pre_aj.mini_allocator dom
+                            // but this is false
+
+                            // 2)
+                            // assert(!post_aj.mini_allocator.allocs.contains_key(addr.au));
+                            // this is false in this case since addr.au is in allocs
                         }
                     }
                     assert(AllocationJournal::State::journal_pages_not_free(post_persistent_disk.entries.dom(), post_aj.mini_allocator));
-                    // assert forall |addr| pre_persistent_disk.entries.dom().contains(addr)
-                    //     implies (forall |au| aj_lbl.get_InternalAllocations_allocs().contains(au) ==> addr.au != au) by {
-                    //         assert forall |au| aj_lbl.get_InternalAllocations_allocs().contains(au) implies addr.au != au by {
-                    //             assert(pre_aj.mini_allocator.allocs.dom().contains(addr.au));
-                    //         }
-                    // }
-                }
-                
-                if (pre.ephemeral is Known && pre.inflight is Some) {
-                    assume(false);
-                    let pre_inflight_disk = pre.inflight.get_Some_0().tj.disk_view;
-                    assert forall |addr| pre_inflight_disk.entries.dom().contains(addr)
-                        implies (forall |au| aj_lbl.get_InternalAllocations_allocs().contains(au) ==> addr.au != au) by {
 
+                    if (pre.inflight is Some) {
+                        // assume(false);
+                        let pre_inflight_disk = pre.inflight.get_Some_0().tj.disk_view;
+                        let post_inflight_disk = post.inflight.get_Some_0().tj.disk_view;
+                        assert forall |addr| post_inflight_disk.entries.dom().contains(addr) implies !post_aj.mini_allocator.can_allocate(addr) by {
+                            if (aj_lbl.get_InternalAllocations_allocs().contains(addr.au)) {
+                                // similar to persistent case
+                                // this 
+                                assert(pre_aj.mini_allocator.allocs.contains_key(addr.au));
+                                assert(false);
+                            }
+                        }
+                        assert(AllocationJournal::State::journal_pages_not_free(post_inflight_disk.entries.dom(), post_aj.mini_allocator));
                     }
                 }
                 assert(post.journal_pages_not_free());
