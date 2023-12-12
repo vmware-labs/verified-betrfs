@@ -444,17 +444,6 @@ impl Path{
         }
     }
 
-    // TODO(jonh): kill this boilerplate
-    pub proof fn target_ensures(self)
-    requires
-        self.valid()
-    ensures
-        self.target().wf(),
-        self.target().is_Node(),
-    {
-        assume(false); // XXX
-    }
-
     //XXX apply target_ensures
     pub open spec/*XXX(checked)*/ fn can_substitute(self, replacement: BetreeNode) -> bool
     {

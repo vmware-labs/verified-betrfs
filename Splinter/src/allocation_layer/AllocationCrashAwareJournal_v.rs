@@ -67,6 +67,16 @@ state_machine!{AllocationCrashAwareJournal{
         Crash,
     }
 
+    pub open spec(checked) fn fresh_label(self, lbl: Label) -> bool
+        recommends lbl is Internal ==> self.ephemeral is Known
+    {
+        lbl is Internal ==> {
+            &&& lbl.get_Internal_allocs().disjoint(self.persistent.accessible_aus())
+            &&& lbl.get_Internal_allocs().disjoint(self.ephemeral.get_Known_v().accessible_aus())
+            &&& self.inflight is Some ==> lbl.get_Internal_allocs().disjoint(self.inflight.unwrap().accessible_aus())
+        }
+    }
+
     transition!{
         load_ephemeral_from_persistent(lbl: Label, new_journal: AllocationJournal::State, journal_config: AllocationJournal::Config) {
             require lbl is LoadEphemeralFromPersistent;
@@ -118,6 +128,7 @@ state_machine!{AllocationCrashAwareJournal{
         internal(lbl: Label, new_journal: AllocationJournal::State) {
             require lbl is Internal;
             require pre.ephemeral is Known;
+            require pre.fresh_label(lbl);
             require AllocationJournal::State::next(
                 pre.ephemeral.get_Known_v(), 
                 new_journal, 
