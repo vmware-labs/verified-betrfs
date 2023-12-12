@@ -357,8 +357,8 @@ state_machine!{AllocationCrashAwareJournal{
         reveal(AllocationJournal::State::next);
         reveal(AllocationJournal::State::next_by);
         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
-        assume(post.journal_pages_not_free());
-        assume(post.state_relations());
+        assert(post.journal_pages_not_free());
+        assert(post.state_relations());
     }
    
     #[inductive(crash)]
