@@ -422,15 +422,17 @@ impl BetreeNode {
         let (i_left, i_right) = self.i().split_leaf(split_key);
         self.split_leaf_wf(split_key);
 
-        left.i_buffer_domain();
-        right.i_buffer_domain();
         self.i_buffer_domain();
         self.i_preserves_domain_auto();
 
-        assert(left.i().get_Node_buffer().map.dom() =~= i_left.get_Node_buffer().map.dom());
-        assert(right.i().get_Node_buffer().map.dom() =~= i_right.get_Node_buffer().map.dom());
+        left.i_buffer_domain();
+        right.i_buffer_domain();
+
         assert(left.i().get_Node_buffer() =~= i_left.get_Node_buffer());
         assert(right.i().get_Node_buffer() =~= i_right.get_Node_buffer());
+
+        assert(left.i().get_Node_children() =~= i_left.get_Node_children());
+        assert(right.i().get_Node_children() =~= i_right.get_Node_children());
     }
     
     pub proof fn split_index_commutes_with_i(self, pivot_idx: nat)
