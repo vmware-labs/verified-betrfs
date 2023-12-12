@@ -656,6 +656,7 @@ state_machine!{ LikesJournal {
     } }
     
     transition!{ put(lbl: Label, new_journal: LinkedJournal_v::LinkedJournal::State) {
+        require lbl is Put;
         require LinkedJournal_v::LinkedJournal::State::next(pre.journal, new_journal, Self::lbl_i(lbl));
     } }
     

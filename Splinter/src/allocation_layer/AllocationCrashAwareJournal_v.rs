@@ -17,6 +17,9 @@ use crate::abstract_system::MsgHistory_v::*;
 use crate::disk::GenericDisk_v::*;
 use crate::disk::GenericDisk_v::AU;
 use crate::allocation_layer::AllocationJournal_v::*;
+use crate::allocation_layer::MiniAllocator_v::*;
+use crate::journal::LinkedJournal_v;
+use crate::journal::LikesJournal_v::*;
 
 verus!{
 pub type StoreImage = JournalImage;
@@ -226,10 +229,11 @@ state_machine!{AllocationCrashAwareJournal{
         &&& self.state_relations()
         &&& self.journal_pages_not_free()
     }
-           
+
     #[inductive(initialize)]
     fn initialize_inductive(post: Self) {
-        assume(post.persistent.tj.decodable()); // show empty is decodable
+        LinkedJournal_v::TruncatedJournal::mkfs_ensures();
+        assert(post.persistent.tj.decodable()); // show empty is decodable
     }
    
     #[inductive(load_ephemeral_from_persistent)]
@@ -239,8 +243,10 @@ state_machine!{AllocationCrashAwareJournal{
         reveal(AllocationJournal::State::init_by);
         assert(pre.ephemeral is Known ==> pre.ephemeral.get_Known_v().inv());
         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
-        assume(post.journal_pages_not_free());
-        assume(post.state_relations());
+
+        assert(new_journal.mini_allocator == MiniAllocator::empty());
+        assert(post.journal_pages_not_free());
+        assert(post.state_relations());
     }
    
     #[inductive(read_for_recovery)]
@@ -259,16 +265,69 @@ state_machine!{AllocationCrashAwareJournal{
     fn put_inductive(pre: Self, post: Self, lbl: Label, new_journal: AllocationJournal::State) 
     { 
         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
-        assume(post.journal_pages_not_free());
-        assume(post.state_relations());
+
+        reveal(AllocationJournal::State::next);
+        reveal(AllocationJournal::State::next_by);
+
+        assert(post.journal_pages_not_free());
+        assert(post.state_relations());
     }
    
     #[inductive(internal)]
     fn internal_inductive(pre: Self, post: Self, lbl: Label, new_journal: AllocationJournal::State) 
     {
         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
-        assume(post.journal_pages_not_free());
-        assume(post.state_relations());
+
+        reveal(AllocationJournal::State::next);
+        reveal(AllocationJournal::State::next_by);
+
+        let aj_lbl = AllocationJournal::Label::InternalAllocations{ allocs: lbl.get_Internal_allocs(), deallocs: lbl.get_Internal_deallocs() };
+
+        match choose |step| AllocationJournal::State::next_by(pre.ephemeral.get_Known_v(), post.ephemeral.get_Known_v(), aj_lbl, step)
+        {
+            AllocationJournal::Step::internal_journal_marshal(cut, addr, post_linked_journal) => {}
+            AllocationJournal::Step::internal_mini_allocator_fill() => {
+                if (pre.ephemeral is Known) {
+                    let pre_aj = pre.ephemeral.get_Known_v();
+                    let post_aj = post.ephemeral.get_Known_v();
+                    let pre_persistent_disk = pre.persistent.tj.disk_view;
+                    let post_persistent_disk = post.persistent.tj.disk_view;
+                    assert forall |addr| post_persistent_disk.entries.dom().contains(addr) implies !post_aj.mini_allocator.can_allocate(addr) by {
+                        if (aj_lbl.get_InternalAllocations_allocs().contains(addr.au)) {
+                            // one of these has to be true
+                            // assert(false);
+                            // assert(!post_aj.mini_allocator.allocs.contains_key(addr.au));
+
+                            // this is always true because observed, reserved are empty
+                            // assert(post_aj.mini_allocator.allocs[addr.au].is_free_addr(addr));
+                        }
+                    }
+                    assert(AllocationJournal::State::journal_pages_not_free(post_persistent_disk.entries.dom(), post_aj.mini_allocator));
+                    // assert forall |addr| pre_persistent_disk.entries.dom().contains(addr)
+                    //     implies (forall |au| aj_lbl.get_InternalAllocations_allocs().contains(au) ==> addr.au != au) by {
+                    //         assert forall |au| aj_lbl.get_InternalAllocations_allocs().contains(au) implies addr.au != au by {
+                    //             assert(pre_aj.mini_allocator.allocs.dom().contains(addr.au));
+                    //         }
+                    // }
+                }
+                
+                if (pre.ephemeral is Known && pre.inflight is Some) {
+                    assume(false);
+                    let pre_inflight_disk = pre.inflight.get_Some_0().tj.disk_view;
+                    assert forall |addr| pre_inflight_disk.entries.dom().contains(addr)
+                        implies (forall |au| aj_lbl.get_InternalAllocations_allocs().contains(au) ==> addr.au != au) by {
+
+                    }
+                }
+                assert(post.journal_pages_not_free());
+            }
+            AllocationJournal::Step::internal_mini_allocator_prune() => {}
+            AllocationJournal::Step::internal_journal_no_op() => {}
+            _ => { assert(false); } 
+        }
+
+        assert(post.journal_pages_not_free());
+        assert(post.state_relations());
     }
    
     #[inductive(query_lsn_persistence)]

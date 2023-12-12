@@ -78,7 +78,7 @@ state_machine!{ AllocationJournal {
         }
     }
 
-    pub closed spec(checked) fn lbl_i(lbl: Label) -> LikesJournal::Label {
+    pub open spec(checked) fn lbl_i(lbl: Label) -> LikesJournal::Label {
         match lbl {
             Label::ReadForRecovery{messages} =>
                 LikesJournal::Label::ReadForRecovery{messages},
@@ -116,10 +116,12 @@ state_machine!{ AllocationJournal {
     }
 
     transition!{ read_for_recovery(lbl: Label) {
+        require lbl is ReadForRecovery;
         require LikesJournal_v::LikesJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
     } }
 
     transition!{ freeze_for_commit(lbl: Label) {
+        require lbl is FreezeForCommit;
         require LikesJournal_v::LikesJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
         let frozen_journal = lbl.get_FreezeForCommit_frozen_journal();
         let frozen_first = Self::new_first(frozen_journal.tj, pre.lsn_au_index, pre.first, frozen_journal.tj.seq_start());
@@ -127,10 +129,12 @@ state_machine!{ AllocationJournal {
     } }
 
     transition!{ query_end_lsn(lbl: Label) {
+        require lbl is QueryEndLsn;
         require LikesJournal_v::LikesJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
     } }
     
     transition!{ put(lbl: Label) {
+        require lbl is Put;
         require LikesJournal_v::LikesJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
     } }
 
