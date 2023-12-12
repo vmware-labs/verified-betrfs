@@ -74,7 +74,6 @@ impl BetreeNode {
             }
         decreases self, 0nat, self.get_Node_children().len()-start 
     {
-        assume(false);
         if start < self.get_Node_children().len() {
             let result = self.i_children_seq(start);
             let child = self.get_Node_children()[start];
@@ -409,6 +408,7 @@ impl BetreeNode {
         assert(new_parent.linked_children());
     }
 
+    #[verifier::spinoff_prover]
     pub proof fn split_leaf_commutes_with_i(self, split_key: Key)
         requires self.can_split_leaf(split_key)
         ensures 
@@ -428,12 +428,11 @@ impl BetreeNode {
         self.i_preserves_domain_auto();
 
         assert(left.i().get_Node_buffer().map.dom() =~= i_left.get_Node_buffer().map.dom());
-        assert(right.i().get_Node_buffer().map.dom() =~~= i_right.get_Node_buffer().map.dom());
+        assert(right.i().get_Node_buffer().map.dom() =~= i_right.get_Node_buffer().map.dom());
         assert(left.i().get_Node_buffer() =~= i_left.get_Node_buffer());
         assert(right.i().get_Node_buffer() =~= i_right.get_Node_buffer());
     }
     
-    // #[verifier::spinoff_prover]
     pub proof fn split_index_commutes_with_i(self, pivot_idx: nat)
         requires self.can_split_index(pivot_idx)
         ensures
@@ -477,7 +476,6 @@ impl BetreeNode {
         requires self.can_split_parent(request), self.i().can_split_parent(request)
         ensures self.i().split_parent(request).get_Node_buffer() == self.split_parent(request).i().get_Node_buffer()
     {
-        assume(false); // taking a long time
         self.split_parent_wf(request);
         self.i().split_parent_wf(request);
         BetreeNode::i_wf_auto();
