@@ -40,6 +40,10 @@ module Maps {
     && (forall key :: key in sub.Keys ==> MapsAgreeOnKey(sub, sup, key))
   }
 
+  predicate MapsAgree<K,V>(ma: map<K,V>, mb: map<K,V>) {
+    && (forall key | key in ma.Keys && key in mb.Keys :: MapsAgreeOnKey(ma, mb, key))
+  }
+
   function {:opaque} MapRemove<K,V>(m:map<K,V>, ks:set<K>) : (m':map<K,V>)
     ensures forall k :: k in m && k !in ks ==> k in m'
     ensures forall k :: k in m' ==> k in m && k !in ks
@@ -157,7 +161,10 @@ module Maps {
 		ensures forall k :: k in mapa.Keys -mapb.Keys ==> mapa[k] == mapc[k];
 		ensures forall k :: k in mapb.Keys - mapa.Keys ==> mapb[k] == mapc[k];
 		ensures forall k :: k in mapa.Keys * mapb.Keys ==>	mapb[k] == mapc[k] || mapa[k] == mapc[k];
-	{
+    ensures mapa.Keys !! mapb.Keys ==> mapc.Values == mapa.Values + mapb.Values
+    ensures mapa.Keys !! mapb.Keys ==> IsSubMap(mapa, mapc)
+    ensures mapa.Keys !! mapb.Keys ==> IsSubMap(mapb, mapc)
+  {
 		MapUnionPreferA(mapa, mapb)
 	}
 
@@ -243,4 +250,16 @@ module Maps {
     var u := MapDisjointUnion(a, b);
     assert |u.Keys| == |a.Keys| + |b.Keys|;
   }
+
+  lemma MapRange<A,B>(m: map<A, B>, v: B) 
+    requires 0 < |m|
+    requires forall x | x in m :: m[x] == v
+    ensures m.Values == {v}
+  {}
+
+  lemma MapEquality<A,B>(m1: map<A, B>, m2: map<A, B>)
+    requires IsSubMap(m1, m2)
+    requires IsSubMap(m2, m1)
+    ensures m2 == m1
+  {}
 }

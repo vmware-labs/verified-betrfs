@@ -29,7 +29,7 @@ module Example {
       repr: set<int>,
       disk: DiskView)
 
-  datatype Interpretation = Interpretation(
+  datatype StampedMapretation = StampedMapretation(
       allocation: set<int>,
       list: seq<int>)
 
@@ -48,13 +48,13 @@ module Example {
           && view[disk_idx].next.value != 0))
   }
 
-  function Interp(view: DiskView) : Interpretation
+  function StampedMap(view: DiskView) : StampedMapretation
   requires InvView(view)
   {
-    Interpretation(view[0].alloc, InterpLinkedList(view, 1, 100))
+    StampedMapretation(view[0].alloc, StampedMapLinkedList(view, 1, 100))
   }
 
-  function InterpLinkedList(view: DiskView, i: int, max_size: nat) : seq<int>
+  function StampedMapLinkedList(view: DiskView, i: int, max_size: nat) : seq<int>
   requires InvView(view)
   requires i in view
   requires view[i].Link?
@@ -62,7 +62,7 @@ module Example {
   {
     if max_size == 0 then []
     else if view[i].next.Some? then
-      [view[i].value] + InterpLinkedList(view, view[i].next.value, max_size - 1)
+      [view[i].value] + StampedMapLinkedList(view, view[i].next.value, max_size - 1)
     else
       [view[i].value]
   }
@@ -73,7 +73,7 @@ module Example {
     // This view is well-formed
     && InvView(view)
     // The interpretation's allocation table matches our 'ghost' repr
-    && Interp(view).allocation == s.repr
+    && StampedMap(view).allocation == s.repr
   }
 
   // really dumb operation

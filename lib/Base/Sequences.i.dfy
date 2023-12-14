@@ -345,6 +345,24 @@ module Sequences {
     else f(FoldFromRight(f, init, DropLast(run)), Last(run))
   }
 
+  function FoldSets<E>(run: seq<set<E>>) : set<E> 
+  {
+    FoldRight((a, e) => a + e, {}, run)
+  }
+
+  lemma WhichFold<E>(run: seq<set<E>>, e: E) returns (i:int) 
+    requires e in FoldSets(run)
+    ensures 0 <= i < |run|
+    ensures e in run[i]
+  {
+    if e in run[0] {
+      i := 0;
+    } else {
+      var j := WhichFold(run[1..], e);
+      i := j + 1;
+    }
+  }
+
   function {:opaque} remove<A>(s: seq<A>, pos: int) : seq<A>
   requires 0 <= pos < |s|
   ensures |remove(s, pos)| == |s| - 1
@@ -872,5 +890,9 @@ module Sequences {
   requires |a| <= i <= j <= |a| + |b|
   ensures (a+b)[i..j] == b[i-|a| .. j-|a|]
   {
+  }
+
+  predicate SeqHasUniqueElems<T>(s: seq<T>) {
+    forall i, j | 0 <= i < |s| && 0 <= j < |s| && s[i] == s[j] :: i == j
   }
 }

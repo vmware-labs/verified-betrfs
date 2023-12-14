@@ -1,16 +1,18 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
+include "SequenceSets.i.dfy"
 include "../lib/Base/total_order.i.dfy"
 include "../lib/Base/Maps.i.dfy"
 include "IndirectionTable.i.dfy"
 include "AllocationTable.i.dfy"
 include "AllocationTableMachine.i.dfy"
-include "MsgHistory.i.dfy"
-include "Message.s.dfy"
-include "Interp.s.dfy"
+include "CoordinationLayer/MsgHistory.i.dfy"
+include "../Spec/Message.s.dfy"
+include "CoordinationLayer/StampedMap.i.dfy"
 include "BranchTree.i.dfy"
-include "MsgSeq.i.dfy"
+include "BranchTreeInterp.i.dfy"
+include "../lib/Buckets/BoundedPivotsLib.i.dfy"
 
 /*
 a Splinter tree consists of:
@@ -101,28 +103,39 @@ module SplinterTreeMachineMod {
   import opened Options
   import opened Sequences
   import opened Maps
+  import opened SequenceSetsMod
   import opened ValueMessage
   import opened KeyType
-  import opened InterpMod
+  import opened StampedMapMod
   import opened DiskTypesMod
   import opened AllocationMod
   import opened MsgHistoryMod
   import AllocationTableMachineMod
   import IndirectionTableMod
   import CacheIfc
-  import BranchTreeMod
   import MsgSeqMod
+  import opened BoundedPivotsLib
+
+  // I'd rather not have to pull the whole interp library in here,
+  // but export sets really blow.
+  import BranchTreeInterpIfc
 
   // TODO: Rename this module
   datatype Superblock = Superblock(
     indTbl: IndirectionTableMod.Superblock,
     endSeq: LSN,
-    // Sowmya -- We need this no??
-    root: Option<CU>)
+    root: CU)
 
-  function MkfsSuperblock() : Superblock
+  // This has to mkfs the initial root of the trunk tree which is just an
+  // empty trunk node -- TODO: finish
+  predicate Mkfs(dv: DiskView, treeRootCU: CU)
   {
-    Superblock(IndirectionTableMod.EmptySuperblock(), 0, None)
+    parseTrunkNode(dv[treeRootCU]) == Some(Leaf([]))
+  }
+
+  function MkfsSuperblock(rootCU : CU) : Superblock
+  {
+    Superblock(IndirectionTableMod.EmptySuperblock(), 0, rootCU)
   }
 
 
@@ -130,7 +143,7 @@ module SplinterTreeMachineMod {
       // TODO
 
   // Parses CU units to BranchNodes that we can use
-  function CUToTrunkNode(cu : CU, cache: CacheIfc.Variables) : Option<TrunkNode>
+  function CUToTrunkNode(cache: CacheIfc.Variables, cu : CU) : Option<TrunkNode>
     {
         var diskPage := CacheIfc.ReadValue(cache, cu);
         if diskPage == None
@@ -147,26 +160,76 @@ module SplinterTreeMachineMod {
   type TrunkId = nat
   function RootId() : TrunkId { 0 }
 
-  // Note that branches are ordered from oldest to youngest. So 0 is the oldest branch and 1 is the youngest
-  // activeBranches tells us the lowest index of an active branch tree for the corresponding child
-  datatype TrunkNode = TrunkNode(branches : seq<BranchTreeMod.Variables>,
-                                     children : seq<TrunkNode>,
-                                     pivots : seq<BranchTreeMod.Key>,
-                                     activeBranches : seq<nat>)
+  datatype NodeAssignment = NodeAssignment(id: TrunkId, cu: CU, node: TrunkNode)
   {
+
     predicate WF()
     {
+       && node.WF()
+       && cu in CUsInDisk()
+       // Note that every piece of information associated with a node must exist in the trunkNode
+       // Since it has to parsable from a cu. We could get rid of this here?
+    }
+
+    predicate Valid(v: Variables, cache: CacheIfc.Variables)
+    {
+      && WF()
+      && node.Valid(v, cache)
+    }
+  }
+
+  // Note that branches are ordered from oldest to youngest. So 0 is the oldest branch and 1 is the youngest
+  // activeBranches tells us the lowest index of an active branch tree for the corresponding child
+  datatype TrunkNode =
+    | Index(branches : seq<BranchTreeInterpIfc.BranchTop>,
+        children : seq<CU>,
+        pivots : PivotTable,
+        activeBranches : seq<nat>)
+    | Leaf(branches : seq<BranchTreeInterpIfc.BranchTop>)
+  {
+
+    predicate WFIndexNode()
+      requires this.Index?
+    {
+      && WFPivots(pivots)
+      && |children| == NumBuckets(pivots)
       && |children| == |activeBranches|
       // activeBranches can only point to actual branch trees
-      && forall i :: ( (0 <= i < |activeBranches|) ==> (0 <= activeBranches[i] < |branches|))
-      // WF conditions on the pivots
-      && (|children| > 0) ==> (|children| == |pivots| + 1)
-      && forall pivot :: (1 <= pivot < |pivots| && pivots[pivot - 1] < pivots[pivot])
+      && (0 < |branches| ==> forall i |  0 <= i < |activeBranches| :: 0 <= activeBranches[i] < |branches|)
+    }
+
+    predicate WF()
+    {
+       && this.Index? ==> WFIndexNode()
+    }
+
+    predicate ValidCU(cache : CacheIfc.Variables)
+    {
+//      && var unparsedPage := CacheIfc.ReadValue(cache, cu);
+//      && unparsedPage.Some?
+//      && var node := parseTrunkNode(unparsedPage.value);
+//      && node.Some?
+//      && this == node.value
+      true
+    }
+
+    predicate Valid(v: Variables, cache: CacheIfc.Variables)
+    {
+      && WF()
+      && ValidCU(cache)
+    }
+
+    function nextStep(k : Key) : CU
+      requires this.Index?
+      requires WFIndexNode()
+      requires BoundedKey(pivots, k)
+    {
+      var slot := Route(pivots, k);
+      children[slot]
     }
 
     // TODO: Collapse all the in all the branch nodes in this level
     function AllMessages() : map<Key, Message>
-
   }
 
   // Three states : STatble persistent disk state , ephemeral working state and a frozen ephemeral state
@@ -192,23 +255,43 @@ module SplinterTreeMachineMod {
     endSeq: LSN)
 
   datatype Variables = Variables(
-    // Write Opt file systems allows us to leverage immutability to simplfy reasoning about crash safety using cow
-    // Add a layer of indirection over Immutable splinter tree. This indirection table adds mutability over the tree
+    endSeq: LSN,  // SB fields
+    root: CU,     // SB fields
     indTbl: IndirectionTableMod.IndirectionTable,
     memBuffer: map<Key, Message>,  // Real Splinter (next layer down? :v) has >1 memBuffers so we can be inserting at the front while flushing at the back.
     // TODO add a membuffer to record LSN; a frozen-like transition to keep one membuffer available
     // for filling while packing the other into a b+tree in the top trunk.
     // OR just have freeze drain the membuffer, introducing a write hiccup every 20GB.
-    nextSeq: LSN,  // exclusive
-    frozen: Frozen,
-    root : Option<CU> // The CU to the root of the trunk tree
+    // TODO replace nextSeq, root with SB!
+    // we need this because we need ro
+    //rootNode : TrunkNode
+    frozen: Frozen
   )
   {
-      function BetreeEndsLSNExclusive() : LSN {
-        nextSeq
+      predicate WF()
+      {
+        root in CUsInDisk()
       }
 
-      function getRoot() : Option<CU> {
+      predicate Valid(cache : CacheIfc.Variables)
+      {
+        && WF()
+        && var diskPage := CacheIfc.ReadValue(cache, root);
+        && diskPage.Some?
+        && parseTrunkNode(diskPage.value).Some?
+      }
+
+      function rootNode(cache : CacheIfc.Variables) : TrunkNode
+        requires Valid(cache)
+      {
+        CUToTrunkNode(cache, root).value
+      }
+
+      function BetreeEndsLSNExclusive() : LSN {
+        endSeq
+      }
+
+      function getRoot() : CU {
         root
       }
   }
@@ -217,85 +300,46 @@ module SplinterTreeMachineMod {
   function FindCorrectBranch(v : Variables, k: Key) : Option<TrunkPath>
 
   // TODO replay log!
-  predicate Start(v: Variables, v': Variables, cache: CacheIfc.Variables, sb: Superblock)
+  predicate Init(v: Variables, v': Variables, cache: CacheIfc.Variables, sb: Superblock)
   {
     // Note predicate-style assignment of some fields of v'
     && IndirectionTableMod.DurableAt(v'.indTbl, cache, sb.indTbl) // Parse ind tbl from cache
     && v'.memBuffer == map[]
-    && v'.nextSeq == sb.endSeq
+    && v'.endSeq == sb.endSeq
     && v'.frozen == Idle
   }
-
-  datatype NodeAssignment = NodeAssignment(id: TrunkId, cu: CU, node: TrunkNode)
-  {
-    predicate InIndTable(v: Variables)
-    {
-      && id in v.indTbl
-      && v.indTbl[id] == cu
-    }
-
-    predicate ValidCU(cache : CacheIfc.Variables)
-    {
-      && var unparsedPage := CacheIfc.ReadValue(cache, cu);
-      && unparsedPage.Some?
-      && Some(node) == parseTrunkNode(unparsedPage.value)
-    }
-
-    predicate Valid(v: Variables, cache: CacheIfc.Variables)
-    {
-      && InIndTable(v)
-      && ValidCU(cache)
-    }
-
-  }
-
-  // TODO find in library: Done look at Message.s.dfy
-  // function CombineMessages(newer: Message, older: Message) : Message
-  // function EvaluateMessage(m: Message) : Value
-  // function MakeValueMessage(value:Value) : Message
-
-  // QUESTION : What does this do???
-  // TODO: Change this to actually fold the messages
-  // function MessageFolder(newer: map<Key,Message>, older: map<Key,Message>) : map<Key,Message>
-  // {
-	// 	map x : Key | (x in newer.Keys + older.Keys) ::
-  //     if x in newer
-  //     then if x in older
-  //       then CombineMessages(newer[x], older[x])
-  //       else newer[x]
-  //     else older[x]
-  // }
 
   datatype TrunkStep = TrunkStep(
     // The information about the trunk node of this step
     na: NodeAssignment,
     // The Branch Receipts of a lookup from all the branches of this trunk node
-    branchReceipts: seq<BranchTreeMod.BranchReceipt>,
-    // The messages accumulated in till the previous trunkStep
-    accumulatedMsgs: seq<Message>)
+    branchReceipts: seq<BranchTreeInterpIfc.BranchReceipt>)
+    // The messages accumulated in till the previous trunkStep -- don't need this might change later
+    // accumulatedMsgs: seq<Message>)
   {
     predicate WF()
     {
-      && na.node.WF()
-      && ( forall i :: 0 <= i < |branchReceipts| && branchReceipts[i].branchTree.WF() )
+      && na.WF()
+      && ( forall i | 0 <= i < |branchReceipts| :: branchReceipts[i].WF() )
       // We have all the receipts. Does this go in WF() or Valid()??
       && |branchReceipts| == |na.node.branches|
     }
 
-    predicate Valid(v: Variables, cache: CacheIfc.Variables) {
-      && na.Valid(v, cache)
-      && ( forall i :: 0 <= i < |branchReceipts| && branchReceipts[i].Valid(cache) )
-      // Note: Here we require one to one correspondance between the node's branches and the corresponding look up receipt
-      && (forall i :: 0 <= i < |branchReceipts| && na.node.branches[i] == branchReceipts[i].branchTree)
+    predicate hasSameKey(key : Key) {
+      ( forall i | 0 <= i < |branchReceipts| :: branchReceipts[i].Key() == key )
     }
 
     function MsgSeqRecurse(count : nat) : (out: seq<Message>)
+      requires WF()
+      requires count <= |branchReceipts|
     {
       if count == 0
       then
         []
       else
-        var currBranchVal := branchReceipts[count-1].branchPath.Decode();
+        assert branchReceipts[count-1].WF();
+        //assert branchReceipts[count-1].branchPath.WF();
+        var currBranchVal := branchReceipts[count-1].Decode();
         ( if currBranchVal.Some?
         then
           [currBranchVal.value]
@@ -305,75 +349,232 @@ module SplinterTreeMachineMod {
     }
 
     // Messages in all the branch receipts at this layer
-    function MsgSeq() : seq<Message>
+    function MsgHistory() : seq<Message>
+      requires WF()
     {
       MsgSeqRecurse(|branchReceipts|)
     }
-  }
 
-  datatype TrunkPath = TrunkPath(k: Key, steps: seq<TrunkStep>)
-  {
-    predicate {:opaque} ValidPrefix(cache: CacheIfc.Variables) {
-      && forall i :: (0 < i < |steps|) && steps[i].na.node in steps[i-1].na.node.children
+    predicate ValidCUsInductive(cus: seq<CU>, count : nat)
+      requires WF()
+      requires count <= |branchReceipts|
+    {
+      && na.cu in cus
+      && (forall i | 0<=i<=count-1 :: branchReceipts[i].ValidCUs())
+      && (forall i | 0<=i<=count-1 :: SequenceSubset(branchReceipts[i].CUs(), cus))
+      && (forall cu | cu in cus :: cu in CUsInDisk())
     }
 
-    function msgSeqRecurse(count : nat) : (out : seq<Message>)
+    function CUsRecurse(count: nat) : (cus: seq<CU>)
+      requires WF()
+      requires count <= |branchReceipts|
+      ensures ValidCUsInductive(cus, count)
     {
       if count == 0
       then
-          []
+         // add trunk node
+        assert na.cu in CUsInDisk();
+        [na.cu]
       else
-         msgSeqRecurse(count-1) + steps[count-1].MsgSeq()
+        var branch := branchReceipts[count-1];
+        assert branch.WF(); // TRIGGER (Seems to have trouble parsing this from the forall)
+        assert branch.ValidCUs();
+        branch.CUs() + CUsRecurse(count - 1)
+    }
+
+    predicate ValidCUs(cus: seq<CU>)
+      requires WF()
+    {
+      ValidCUsInductive(cus, |branchReceipts|)
+    }
+
+    function {:opaque} CUs() : (cus: seq<CU>)
+      requires WF()
+      ensures na.cu in cus
+      ensures ValidCUs(cus)
+    {
+      CUsRecurse(|branchReceipts|)
+    }
+
+    predicate Valid(v: Variables, cache: CacheIfc.Variables)
+       requires WF()
+    {
+      && na.Valid(v, cache)
+      && ( forall i | 0 <= i < |branchReceipts| :: branchReceipts[i].Valid(cache) )
+      // Note: Here we require one to one correspondance between the node's branches and the corresponding look up receipt
+      && (forall i | 0 <= i < |branchReceipts| :: na.node.branches[i] == branchReceipts[i].Top())
+      && var cus := CUs();
+      && ValidCUs(cus)
+    }
+
+  }
+
+  datatype TrunkPath = TrunkPath(k: Key,
+                                 membufferMsgs: seq<Message>,
+                                 steps: seq<TrunkStep>)
+  {
+
+    predicate WF() {
+       // Every path should at least have a root
+       && 0 < |steps|
+       // All the nodes but the last one shound be Index nodes
+       && (forall i | 0 <= i < |steps|-1 :: steps[i].na.node.Index?)
+       //  The last step's node has to be a Leaf
+       && (0 < |steps| ==> steps[|steps| - 1].na.node.Leaf?)
+       && (forall i | 0 <= i < |steps| :: steps[i].WF())
+       // BoundedKey is derivable from ContainsRange, but that requires a mutual induction going down
+       // the tree. It's easier to demand forall-i-BoundedKey so that we can call Route to get the slots
+       // for ContainsRange.
+       && (forall i | 0 <= i < |steps|-1 :: BoundedKey(steps[i].na.node.pivots, k))
+       && (forall i | 0 <= i < |steps| :: steps[i].hasSameKey(k))
+     }
+
+     predicate LinkedAt(childIdx : nat)
+       requires 0 < childIdx < |steps|
+       requires WF()
+     {
+       && var parentNode := steps[childIdx-1].na.node;
+       && var childStep := steps[childIdx].na;
+       && var slot := Route(parentNode.pivots, k);
+       // When coverting to clone edges use, ParentKeysInChildRange in TranslationLib
+       && (childIdx < |steps|-1 ==> ContainsRange(childStep.node.pivots, parentNode.pivots[slot], parentNode.pivots[slot+1]))
+       && childStep.cu == parentNode.children[slot]
+     }
+
+     predicate Linked()
+       requires WF()
+     {
+       && (forall i | 0 < i < |steps| :: LinkedAt(i))
+     }
+
+    predicate {:opaque} ValidPrefix()
+      requires WF()
+    {
+      // TODO: show that the child is also right pivot  // Find from Rob's pivot library
+      && forall i :: (0 < i < |steps|) && steps[i].na.cu in steps[i-1].na.node.children
+    }
+
+
+    function msgSeqRecurse(count : nat) : (out : seq<Message>)
+      requires WF()
+      requires count <= |steps|
+    {
+      if count == 0
+      then
+          membufferMsgs
+      else
+         msgSeqRecurse(count-1) + steps[count-1].MsgHistory()
     }
 
     // Collapse all the messages in this trunk path
-    function MsgSeq() : (out : seq<Message>)
+    function MsgHistory() : (out : seq<Message>)
+      requires WF()
     {
       msgSeqRecurse(|steps|)
     }
 
-    predicate Valid(cache: CacheIfc.Variables) {
-      && forall i :: (0 <= i < |steps|) && steps[i].na.ValidCU(cache)
-      && steps[0].na.id == 0 // check for root
-      && 0 < |MsgSeq()|
-      && Last(MsgSeq()).Define?
-      && ValidPrefix(cache)
+    predicate ContainsAllStepCUs(cus: seq<CU>, step : TrunkStep)
+      requires WF()
+      requires step.WF()
+    {
+      && SequenceSubset(step.CUs(), cus)
     }
 
-    function Decode() : Value
+
+    predicate ValidCUsInductive(cus: seq<CU>, count : nat)
+      requires WF()
+      requires count <= |steps|
     {
-      var msg := MsgSeqMod.CombineDeltasWithDefine(MsgSeq());
+      && (forall i | 0<=i<count :: steps[i].ValidCUs(cus))
+      && (forall i | 0<=i<count :: ContainsAllStepCUs(cus, steps[i]))
+    }
+
+    // Return the sequence of CUs (aka nodes) this path touches
+    function CUsRecurse(count : nat) : (cus : seq<CU>)
+      requires WF()
+      requires count <= |steps|
+      ensures (forall i | 0<=i<count
+        :: ValidCUsInductive(cus, count))
+    {
+       if count == 0
+       then
+         []
+       else
+         steps[count-1].CUs() +  CUsRecurse(count - 1)
+    }
+
+    predicate ValidCUs(cus: seq<CU>)
+      requires WF()
+    {
+      ValidCUsInductive(cus, |steps|)
+    }
+
+    // Return the sequence of CUs (aka nodes) this path touches
+    function  CUs() : (cus: seq<CU>)
+      requires WF()
+      ensures ValidCUs(cus)
+    {
+      CUsRecurse(|steps|)
+    }
+
+    // TODO: reorg into WF
+
+    predicate Valid(v : Variables, cache: CacheIfc.Variables)
+    {
+      && WF()
+      && (forall i | (0 <= i < |steps|) :: steps[i].Valid(v, cache))
+      && (0 < |steps| ==> steps[0].na.id == RootId()) // check for root
+      && 0 < |MsgHistory()|
+      && Last(MsgHistory()).Define?
+      && ValidPrefix()
+      // check that the first step is the root
+      && (0 < |steps| ==> steps[0].na.cu == v.root)
+      // make sure we have the valid memBuffer lookup for this prefix
+      && membufferMsgs == MemtableLookup(v, k)
+      // NOte that cu corresponds to the correct node assignment
+      && (forall i | 0 <= i < |steps| :: steps[i].Valid(v, cache))
+      && Linked()
+      // ensure that the path belongs to the tree in Variables
+    }
+
+    function Decode() : (msg : Message)
+      requires WF()
+      ensures msg.Define?
+    {
+      var msg := MsgSeqMod.CombineDeltasWithDefine(MsgHistory());
       if msg.None?
       then
-        DefaultValue()
+        DefaultMessage()
       else
-        EvaluateMessage(msg.value)
+        msg.value
     }
   }
 
   // QUESTION: Not everything is compacted all at once, should we have this Recipt
   // also have what branches we're compacting
-  datatype CompactReceipt = CompactReceipt(path: TrunkPath, newna: NodeAssignment)
+  datatype CompactReceipt = CompactReceipt(nodeIdx: nat, path: TrunkPath, newna: NodeAssignment)
   {
     predicate WF() {
       && 0 < |path.steps|
+      && 0 <= nodeIdx < |path.steps|
     }
 
-    //
     function Oldna() : NodeAssignment
       requires WF()
     {
-      Last(path.steps).na
+       Last(path.steps).na
     }
 
-    predicate Valid(cache: CacheIfc.Variables)
+    predicate Valid(v : Variables, cache: CacheIfc.Variables)
     {
       && WF()
-      && path.Valid(cache)
+      && path.Valid(v, cache)
       && Oldna().id == newna.id
+      && var oldna := path.steps[nodeIdx].na;
+      && IsCompaction(oldna, newna)
     }
-  }
 
+  }
 
   datatype Skolem =
     | QueryStep(trunkPath: TrunkPath)
@@ -381,59 +582,69 @@ module SplinterTreeMachineMod {
     | FlushStep(flush: FlushRec) // pushdown branch pointers to children
     | DrainMemBufferStep(oldRoot: NodeAssignment, newRoot: NodeAssignment) // Push the memory only stuff into the persistent root of spliten tree as a branctree
     | CompactBranchStep(receipt: CompactReceipt) // Rewrite branches into a new branch.
-    | BranchInteralStep(branchSk : BranchTreeMod.Skolem)
+    | BranchInteralStep(branchSk : BranchTreeInterpIfc.Skolem)
 
 
-  predicate CheckMemtable(v: Variables, v': Variables, key: Key, value: Value)
+  function MemtableLookup(v: Variables, key: Key) : seq<Message>
   {
-    && key in v.memBuffer
-    && v.memBuffer[key].Define?
-    && v.memBuffer[key].value == value
+    if key in v.memBuffer
+    then
+      [v.memBuffer[key]]
+    else
+      []
   }
 
-  predicate checkSpinterTree(v: Variables, v': Variables, cache: CacheIfc.Variables, key: Key, value: Value, sk: Skolem)
+  // A valid lookup is something that produces a non DefaultMessage from the membuffer or has a valid trunk path
+  // in the splinter tree
+  predicate ValidLookup(v: Variables, cache: CacheIfc.Variables, key: Key, trunkPath : TrunkPath)
   {
-    && var trunkPath := sk.trunkPath;
-    && trunkPath.Valid(cache)
+    && trunkPath.Valid(v, cache)
     && trunkPath.k == key
-    && trunkPath.Decode() == value
-    && v' == v
   }
 
   predicate Query(v: Variables, v': Variables, cache: CacheIfc.Variables, key: Key, value: Value, sk: Skolem)
   {
     && sk.QueryStep?
-    && var inMemBuffer := CheckMemtable(v, v', key, value);
-    && var splinterTreePred := checkSpinterTree(v, v', cache, key, value, sk);
-    && (|| inMemBuffer
-        // We only return the result of the splinterTree if it cannot be found in the membuf
-        || !inMemBuffer ==> splinterTreePred
-       )
+    && var trunkPath := sk.trunkPath;
+    && ValidLookup(v, cache, key, trunkPath)
+    && EvaluateMessage(trunkPath.Decode()) == value
+    // No change to the state
+    && v == v'
   }
 
   predicate Put(v: Variables, v': Variables, key: Key, value: Value, sk: Skolem)
   {
     && sk.PutStep?
     && var newMessage := MakeValueMessage(value);
-    && v' == v.(memBuffer := v.memBuffer[key := newMessage], nextSeq := v.nextSeq + 1)
+    && v' == v.(memBuffer := v.memBuffer[key := newMessage], endSeq := v.endSeq + 1)
   }
 
-  predicate PutMany(v: Variables, v': Variables, puts: MsgSeq) {
-    &&  v' == v.(memBuffer := puts.ApplyToKeyMap(v.memBuffer), nextSeq := v.nextSeq + puts.Len())
+  predicate PutMany(v: Variables, v': Variables, puts: MsgHistory)
+    requires puts.WF()
+  {
+    &&  v' == v.(memBuffer := puts.ApplyToKeyMap(v.memBuffer), endSeq := v.endSeq + puts.Len())
   }
 
   datatype FlushRec = FlushRec(
     trunkPath: TrunkPath,
+    oldParentIdx: nat,
     newParent: NodeAssignment,
     newChild: NodeAssignment)
   {
     predicate WF() {
-      2<=|trunkPath.steps|
+      && trunkPath.WF()
+      && newParent.WF()
+      && newChild.WF()
+      && newParent.node.Index?
+      && 0 <= oldParentIdx < |trunkPath.steps|-1
+      && trunkPath.steps[oldParentIdx].na.node.Index?
     }
-    predicate Valid(cache: CacheIfc.Variables) {
+    predicate Valid(v: Variables, cache: CacheIfc.Variables) {
       && WF()
-      && trunkPath.ValidPrefix(cache)
+      && trunkPath.Valid(v, cache)
+      && trunkPath.ValidPrefix()
     }
+
     function ParentStep() : TrunkStep
       requires WF()
       { trunkPath.steps[|trunkPath.steps|-2] }
@@ -448,34 +659,81 @@ module SplinterTreeMachineMod {
       { ChildStep().na.node }
   }
 
+  predicate IsCompaction(oldna : NodeAssignment, newna : NodeAssignment)
+  {
+   true
+   // TODO: Need to finish the relation between BranchTreeMod and BranchTreeStackMod before then
+  }
+
+  predicate Compaction(v: Variables, v': Variables, cache: CacheIfc.Variables, sk: Skolem)
+    requires v.WF()
+    requires v'.WF()
+  {
+    && v.Valid(cache)
+    && v'.Valid(cache)
+    && sk.CompactBranchStep?
+    && sk.receipt.Valid(v, cache)
+    && var nodeIdx := sk.receipt.nodeIdx;
+    && var oldna := sk.receipt.path.steps[nodeIdx].na;
+    && IsCompaction(oldna, sk.receipt.newna)
+  }
+
   // TODO: We need make sure this flush op is flushing entire prefix of local trunk versions
-  predicate FlushesNodes(oldParent: TrunkNode, oldChild: TrunkNode, newParent: TrunkNode, newChild: TrunkNode)
+  // We could make this a separate Flush receipt ??
+  predicate FlushesNodes(oldParent: TrunkNode, oldChild: NodeAssignment, newParent: TrunkNode, newChild: NodeAssignment)
     requires oldParent.WF()
     requires newParent.WF()
     requires oldChild.WF()
     requires newChild.WF()
+    requires oldParent.Index?
+    requires newParent.Index?
   {
     // ensure that they're still children of the parent
-    && newChild in newParent.children
-    && oldChild in oldParent.children
+    && newChild.cu in newParent.children
+    && oldChild.cu in oldParent.children
     && newParent.branches == oldParent.branches
     && newParent.children == oldParent.children
-    && newChild.children == oldChild.children
-    && newChild.activeBranches == oldChild.activeBranches // Our flush is only one layer, so the activeBranches here shouldn't change
+    && (oldChild.node.Index? ==> && newChild.node.Index?
+                            && newChild.node.children == oldChild.node.children
+                            // Our flush is only one layer, so the activeBranches here shouldn't change
+                            && newChild.node.activeBranches == oldChild.node.activeBranches)
     // check that newChild got a branch from the oldParent
-    && var oldChildId :| (0 <= oldChildId < |oldParent.children|) && oldParent.children[oldChildId] == oldChild;
-    && var newChildId :| (0 <= newChildId < |newParent.children|) && newParent.children[newChildId] == newChild;
+    && var oldChildId :| (0 <= oldChildId < |oldParent.children|) && oldParent.children[oldChildId] == oldChild.cu;
+    && var newChildId :| (0 <= newChildId < |newParent.children|) && newParent.children[newChildId] == newChild.cu;
     && oldChildId == newChildId
     // for now we're flushing all current branches??
-    && forall i :: (&& oldParent.activeBranches[oldChildId] <= i < |oldParent.branches|
-                    && oldParent.branches[i] in newChild.branches)
+    && (forall i | oldParent.activeBranches[oldChildId] <= i < |oldParent.branches| :: oldParent.branches[i] in newChild.node.branches)
+    && assert newParent.WF();
+    && assert |newParent.activeBranches| == |newParent.children|;
+    && assert 0 <= newChildId < |newParent.children|;
     && newParent.activeBranches[newChildId] == |newParent.branches|
-
   }
 
-  predicate CUIsAllocatable(cu: CU)
+  predicate ValidLookupHasCU(v: Variables, cache: CacheIfc.Variables, lookup: TrunkPath, cu: CU)
   {
-    && true // TODO cu unallocated across all live views
+    && lookup.Valid(v, cache)
+    && cu in lookup.CUs()
+  }
+
+
+ function {:opaque} IReads(v: Variables, cache: CacheIfc.Variables) : set<CU> {
+   set cu:CU |
+     && cu in CUsInDisk()
+     && (exists lookup :: ValidLookupHasCU(v, cache, lookup, cu))
+    :: cu
+ }
+
+ function IReadsSeq(v: Variables, cache: CacheIfc.Variables) : seq<CU> {
+   ArbitrarySequentialization(IReads(v, cache))
+ }
+
+
+  predicate CUIsAllocatable(v: Variables, cache: CacheIfc.Variables, cu: CU)
+  {
+    && cu in CUsInDisk()
+    // TODO : we have to make sure the cu is not in the frozen/persistent copies of the tree nor in the journal
+    && cu !in IReads(v, cache)
+
   }
 
   // Internal operation; noop -- atomic
@@ -483,14 +741,14 @@ module SplinterTreeMachineMod {
   {
     && sk.FlushStep?
     && var flush := sk.flush;
-    && flush.Valid(cache)
+    && flush.Valid(v, cache)
     // TODO keep the parent's trunkId, but move the child, so that other nodes' outbound links
     // to existing child don't change.
-    && FlushesNodes(flush.ParentNode(), flush.ChildNode(), flush.newParent.node, flush.newChild.node)
+    && FlushesNodes(flush.ParentNode(), flush.ChildStep().na, flush.newParent.node, flush.newChild)
     && flush.newParent.id == flush.ParentStep().na.id  // parent keeps its id
     && true // UnusedId(flush.newChild.id) child gets id unallocated in eph ind tbl
-    && CUIsAllocatable(flush.newParent.cu)
-    && CUIsAllocatable(flush.newChild.cu)
+    && CUIsAllocatable(v, cache, flush.newParent.cu)
+    && CUIsAllocatable(v, cache, flush.newChild.cu)
     && cacheOps == [
       CacheIfc.Write(flush.newParent.cu, marshalTrunkNode(flush.newParent.node)),
       CacheIfc.Write(flush.newChild.cu, marshalTrunkNode(flush.newChild.node))
@@ -520,7 +778,7 @@ module SplinterTreeMachineMod {
     && newRoot.id == RootId()
     // when we're done, newRoot.Valid(v', cache')
 
-    && CUIsAllocatable(newRoot.cu)
+    && CUIsAllocatable(v, cache, newRoot.cu)
     && MergeBuffer(oldRoot.node, v.memBuffer, newRoot.node)
     && cacheOps == [ CacheIfc.Write(newRoot.cu, marshalTrunkNode(newRoot.node)) ]
     && v' == v.(
@@ -540,8 +798,8 @@ module SplinterTreeMachineMod {
   {
     && sk.CompactBranchStep?
     && var r := sk.receipt;
-    && r.Valid(cache)
-    && CUIsAllocatable(r.newna.cu)
+    && r.Valid(v, cache)
+    && CUIsAllocatable(v, cache, r.newna.cu)
     && EquivalentNodes(r.Oldna().node, r.newna.node)  // Buffer replacements
       // TODO need to establish replacement B+tree is correct
     // check that we update the trunknode we're compacting in the cache
@@ -554,7 +812,7 @@ module SplinterTreeMachineMod {
   {
     && v.frozen.Idle?
     && v.memBuffer == map[]  // someday we'd like to avoid clogging the memtable during freeze, but...
-    && v' == v.(frozen := Frozen(v.indTbl,  v.nextSeq))
+    && v' == v.(frozen := Frozen(v.indTbl,  v.endSeq))
   }
 
   predicate KnowFrozenIsClean(v: Variables, sb: Superblock, cache: CacheIfc.Variables)

@@ -1,7 +1,7 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-include "Spec.s.dfy"
+include "../Spec/MapSpec.s.dfy"
 include "../lib/Base/MapRemove.s.dfy"
 include "../lib/Checksums/CRC32C.s.dfy"
 include "AsyncDisk.s.dfy"
@@ -15,7 +15,7 @@ abstract module IOSystem {
   import D = AsyncDisk
   import P : AsyncDiskProgram
   import opened NativeTypes
-  import AsyncMapSpecMod
+  import AsyncMapSpecMod = CrashTolerantMapSpecMod.async
 
   type DiskOp = P.DiskOp
   datatype Variables = Variables(program: P.Variables, disk: D.Variables, requests: set<AsyncMapSpecMod.Request>, replies: set<AsyncMapSpecMod.Reply>)
@@ -102,21 +102,5 @@ abstract module IOSystem {
 
   predicate Next(s: Variables, s': Variables, uiop: UIOp) {
     exists step :: NextStep(s, s', uiop, step)
-  }
-
-  predicate BlocksWrittenInByteSeq(
-      contents: map<uint64, seq<byte>>,
-      byteSeq: seq<byte>)
-  {
-    && (forall addr: uint64 | addr in contents ::
-        && 0 <= addr as int <= |byteSeq|
-        && addr as int + |contents[addr]| <= |byteSeq|
-        && byteSeq[addr .. addr as int + |contents[addr]|] == contents[addr])
-  }
-
-  predicate BlocksDontIntersect(contents: map<uint64, seq<byte>>)
-  {
-    && (forall addr1, addr2 | addr1 in contents && addr2 in contents
-        && addr1 != addr2 :: !D.overlap(addr1 as int, |contents[addr1]|, addr2 as int, |contents[addr2]|))
   }
 }

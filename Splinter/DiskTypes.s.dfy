@@ -11,14 +11,16 @@ module DiskTypesMod {
   function AUSizeInCUs() : (s:nat)
     ensures 2<=s  // TODO(jonh): explain why
 
-  function {:opaque} CUsInDisk() : set<CU>
-  {
-    set au,offset | 0<=au<DiskSizeInAU() && 0<=offset<AUSizeInCUs() :: CU(au,offset)
-  }
-
   predicate ValidCU(cu: CU) {
     && 0 <= cu.au < DiskSizeInAU()
     && 0 <= cu.offset < AUSizeInCUs()
+  }
+
+  function {:opaque} CUsInDisk() : set<CU>
+    // This is the same as | ValidCU(), but written in a way to satisfy Dafny's finite-set heuristics.
+    ensures forall cu :: cu in CUsInDisk() <==> ValidCU(cu)
+  {
+    set au,offset | 0<=au<DiskSizeInAU() && 0<=offset<AUSizeInCUs() :: CU(au,offset)
   }
 
   type DiskView = map<CU, UninterpretedDiskPage>

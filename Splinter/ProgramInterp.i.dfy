@@ -18,7 +18,7 @@ module ProgramInterpMod {
   import opened Options
   import opened ValueMessage
   import opened KeyType
-  import opened InterpMod
+  import opened StampedMapMod
   import opened DiskTypesMod
   import opened AllocationMod
   import opened MsgHistoryMod
@@ -30,72 +30,104 @@ module ProgramInterpMod {
 
   function ISuperblock(dv: DiskView) : Option<Superblock>
   {
-    var bcu0 := CU(0, 0);
-    var bcu1 := CU(0, 1);
-    if bcu0 in dv && bcu1 in dv
+    if (
+      var cu0 := SUPERBLOCK_ADDRESSES()[0];
+      && cu0 in dv
+      && var sb0 := parseSuperblock(dv[cu0]);
+      && (forall cu | cu in SUPERBLOCK_ADDRESSES() ::
+          && cu in dv
+          && sb0.Some?
+          && parseSuperblock(dv[cu]) == sb0)
+      )
     then
-      var sb0 := parseSuperblock(dv[bcu0]);
-      var sb1 := parseSuperblock(dv[bcu1]);
-      if sb0.Some? && sb1.Some? && sb0.value.serial == sb1.value.serial
-      then
-        sb0
-      else
-        None  // Stop! Recovery should ... copy the newer one?
-          // well I think I() of that should be the newer one, but we should just
-          // not be allowed to write anything until we've got them back in sync.
+      // all the superblocks are present, parseable, and match each other.
+      parseSuperblock(dv[SUPERBLOCK_ADDRESSES()[0]])
     else
-      None  // silly expression: DV has holes in it
+      // Stop! Recovery should ... copy the newer one?
+      // well I think I() of that should be the newer one, but we should just
+      // not be allowed to write anything until we've got them back in sync.
+      None
   }
 
   function ISuperblockReads(dv: DiskView) : seq<CU>
   {
-    [ SUPERBLOCK_ADDRESS() ]
+    SUPERBLOCK_ADDRESSES()
   }
 
-  // Program will have a runtime view of what (ghost) alloc each subsystem thinks it's using,
-  // and use that to filter the dvs here.
-  // Those ghost views will invariantly match the IReads functions of the actual disk -- that is,
-  // * if we were to recover after a crash (when the physical alloc is empty), we'd fault in
-  // an alloc table for the subsystem.
-  // * that alloc table would invariantly match IReads.
-  //
-  // IM == Interpret as InterpMod
-  // TODO NEXT well actually we need a chain of Interps; see CrashTolerantMapSpecMod
-  // Journal interprets to a MsgSeq. The not-yet-sb-persistent part of that chain
-  // is the set of versions. Yeah we need to put richer interps down in JournalInterp
-  // before we try to add them here?
-  function IMNotRunning(dv: DiskView) : (iv:CrashTolerantMapSpecMod.Variables)
-    ensures iv.WF()
+  predicate Invariant(v: Variables)
   {
-    var pretendCache := CacheIfc.Variables(dv);
-    var sb := ISuperblock(dv);
-    if sb.Some?
-    then
-      var splinterTreeInterp := SplinterTreeInterpMod.IMNotRunning(pretendCache, sb.value.betree);
-      var journalInterp := JournalInterpMod.IMNotRunning(pretendCache, sb.value.journal, splinterTreeInterp);
-      journalInterp
-    else
-      CrashTolerantMapSpecMod.Empty()
+    && v.WF()
+    && ISuperblock(v.cache.dv).Some?
+    && v.journal.boundaryLSN == v.betree.endSeq
   }
 
   function IMRunning(v: Variables) : (iv:CrashTolerantMapSpecMod.Variables)
+    requires Invariant(v)
+    requires v.phase.Running?
     ensures iv.WF()
   {
-    var sb := ISuperblock(v.cache.dv);
-    if sb.Some?
-    then
-      var splinterTreeInterp := SplinterTreeInterpMod.IMStable(v.cache, sb.value.betree);
-      var journalInterp := JournalInterpMod.IM(v.journal, v.cache, splinterTreeInterp);
-      journalInterp
-    else
-      CrashTolerantMapSpecMod.Empty()
+    var sb := ISuperblock(v.cache.dv).value;
+    var splinterTreeInterp := SplinterTreeInterpMod.IM(v.cache, v.betree);
+    var journalInterp := JournalInterpMod.I(v.journal, v.cache).AsCrashTolerantMapSpec(splinterTreeInterp);
+    journalInterp
   }
 
-  function IM(v: Variables) : (iv:CrashTolerantMapSpecMod.Variables)
+  // Dummy values for when we can't decode the disk. Not actually used in real behaviors
+  // since the Invariant keeps us from needing it; used to complete definitions when
+  // knowledge of the Invariant isn't at hand.
+  function EmptyVars() : (ev: Variables)
+    ensures Invariant(ev)
   {
-    if v.phase.Running?
-    then IMRunning(v)
-    else IMNotRunning(v.cache.dv) // fresh start or recovered
+    var sb := Superblock(
+      0,
+      JournalMachineMod.MkfsSuperblock(),
+      SplinterTreeMachineMod.MkfsSuperblock(TREE_ROOT_ADDRESS()));
+    var sbPage := marshalSuperblock(sb);
+    var fakeDv := map cu | cu in CUsInDisk() :: sbPage;
+    var v := Variables(
+      Running,
+      sb,
+      CacheIfc.Variables(fakeDv),
+      JournalInterpMod.EmptyVars(),
+      SplinterTreeInterpMod.EmptyVars(sb.betree),
+      None
+      );
+    v
+  }
+
+  // Any given view of the disk implies some set of Variables that we'd get if we were
+  // to Init from that disk image.
+  function SynthesizeRunningVariables(dv: DiskView) : (sv: Variables)
+    ensures Invariant(sv)
+  {
+    var sb := ISuperblock(dv);
+    if sb.Some?
+    then
+      var stv := SplinterTreeInterpMod.SynthesizeRunningVariables(dv, sb.value.betree);
+      var jv := JournalInterpMod.SynthesizeRunningVariables(dv, sb.value.journal);
+      if stv.endSeq == jv.boundaryLSN
+      then
+        Variables(Running, sb.value, CacheIfc.Variables(dv), jv, stv, None)
+      else
+        EmptyVars()
+    else
+      EmptyVars()
+  }
+
+  function IM(v: Variables, dv: DiskView) : (iv:CrashTolerantMapSpecMod.Variables)
+    requires v.WF()
+    ensures iv.WF()
+  {
+    if !Invariant(v)  // keep Invariant out of requires by providing a dummy answer.
+    then
+      CrashTolerantMapSpecMod.InitState()
+    else if !v.phase.Running?
+      // Until we're running, there's no state in memory that's not also on the
+      // disk.
+    then IMRunning(SynthesizeRunningVariables(dv))
+      // Once Program is running, stitch together the ephemeral state of the journal & tree.
+      // Generally they'll agree, but during recovery, the journal may be ahead of the tree.
+    else IMRunning(v)
   }
 
   function IMReads(v: Variables) : seq<CU> {
@@ -104,8 +136,8 @@ module ProgramInterpMod {
     if sb.Some?
     then
       sbreads
-        + JournalInterpMod.IReads(v.journal, v.cache, sb.value.journal)
-        + SplinterTreeInterpMod.IReads(v.betree, v.cache, sb.value.betree)
+        + JournalInterpMod.IReads(v.cache, sb.value.journal)
+        + SplinterTreeMachineMod.IReadsSeq(v.betree, v.cache)
     else
       sbreads
   }
@@ -115,17 +147,30 @@ module ProgramInterpMod {
   }
 
   lemma Framing(v0: Variables, v1: Variables)
-    requires DiskViewsEquivalentForSet(v0.cache.dv, v1.cache.dv, IReads(v0))
+    requires v0.WF() && Invariant(v0) && v0.phase.Running?
+    requires v1.WF() && Invariant(v1) && v1.phase.Running?
+    requires DiskViewsEquivalentForSeq(v0.cache.dv, v1.cache.dv, IReads(v0))
     requires v0.betree == v1.betree
     requires v0.journal == v1.journal
-    ensures IM(v0) == IM(v1)
+    ensures IMRunning(v0) == IMRunning(v1)
   {
+    assert CU(0, 0) in IReads(v0);
+    assert CU(0, 1) in IReads(v0);
     assert ISuperblock(v0.cache.dv) == ISuperblock(v1.cache.dv);
     var sb := ISuperblock(v0.cache.dv);
     if sb.Some? {
-      SplinterTreeInterpMod.Framing(v0.betree, v0.cache, v1.cache, sb.value.betree);
-      var betreeInterp := SplinterTreeInterpMod.IMStable(v0.cache, sb.value.betree);
-      JournalInterpMod.Framing(v0.journal, v0.cache, v1.cache, betreeInterp);
+      assert IReads(v0) == ISuperblockReads(v0.cache.dv)
+        + JournalInterpMod.IReads(v0.cache, sb.value.journal)
+        + SplinterTreeMachineMod.IReadsSeq(v0.betree, v0.cache);
+      assert forall cu | cu in SplinterTreeMachineMod.IReads(v0.betree, v0.cache) :: cu in IReads(v0);
+      assert DiskViewsEquivalent(v0.cache.dv, v1.cache.dv, SplinterTreeMachineMod.IReads(v0.betree, v0.cache));
+      SplinterTreeInterpMod.Framing(v0.betree, v0.cache, v1.cache);
+//      var betreeInterp := SplinterTreeInterpMod.IMStable(v0.cache, sb.value.betree);
+
+//      assert ISuperblock(v0.cache.dv).value.journal == v0.journal.CurrentSuperblock();
+//      assert forall cu | cu in JournalInterpMod.IReads(v0.cache, v0.journal.CurrentSuperblock()) :: cu in IReads(v0);
+//      assert DiskViewsEquivalentForSeq(v0.cache.dv, v1.cache.dv, JournalInterpMod.IReads(v0.cache, v0.journal.CurrentSuperblock()));
+//      JournalInterpMod.Framing(v0.journal, v0.cache, v1.cache, betreeInterp);
     }
   }
 

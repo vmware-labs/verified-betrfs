@@ -22,8 +22,8 @@
 set -e
 set -x
 
-# currently set to 'betr' branch
-commit=f6a0d73385d62
+# currently set snapshot of 'mod-params-bryan' branch
+commit=839d95b05462b2265c6d2ac2c164763fa728548e
 if [ $1 ]; then
    commit=$1
 fi

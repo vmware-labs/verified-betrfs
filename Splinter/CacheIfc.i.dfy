@@ -62,17 +62,19 @@ module CacheIfc {
     else None
   }
 
-  // TLA+-style partial actions
-  predicate ApplyWrites(s: Variables, s': Variables, ops: Ops)
+  function {:opaque} ApplyWrites(v: Variables, ops: Ops) : (v': Variables)
+    requires WFOpSeq(ops)
+    requires FullView(v.dv)
+    ensures FullView(v'.dv)
   {
-    && FullView(s.dv)
-    && FullView(s'.dv)
+    Variables(map cu | cu in CUsInDisk() :: if WriteAt(ops, cu).Some? then WriteAt(ops, cu).value else v.dv[cu])
+  }
+
+  // TLA+-style partial actions
+  predicate WritesApplied(v: Variables, v': Variables, ops: Ops)
+  {
+    && FullView(v.dv)
     && WFOpSeq(ops)
-    && (forall cu | ValidCU(cu) ::
-      s'.dv[cu] ==
-        if WriteAt(ops, cu).Some?
-        then WriteAt(ops, cu).value
-        else s.dv[cu]
-      )
+    && v' == ApplyWrites(v, ops)
   }
 }

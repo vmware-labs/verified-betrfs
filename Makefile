@@ -5,7 +5,7 @@
 # System configuration
 
 # You can build anything reachable from these root files.
-DAFNY_ROOTS=Impl/Bundle.i.dfy build-tests/test-suite.i.dfy Splinter/RefinementProof.i.dfy Filesys/FileSystemInv.i.dfy
+DAFNY_ROOTS=Impl/Bundle.i.dfy build-tests/test-suite.i.dfy Splinter/RefinementProof.i.dfy Filesys/FileSystemInv.i.dfy Splinter/BlockLayer/Bundle.i.dfy Splinter/Journal/Bundle.i.dfy
 
 DAFNY_ROOT?=.dafny/dafny/
 DAFNY_CMD=$(DAFNY_ROOT)/Scripts/dafny
@@ -218,7 +218,8 @@ build/PivotBetree/Bounds.i.verchk: NONLINEAR_FLAGS=
 build/Impl/Mkfs.i.verchk: NONLINEAR_FLAGS=
 build/Impl/MkfsModel.i.verchk: NONLINEAR_FLAGS=
 build/Impl/MarshallingImpl.i.verchk: NONLINEAR_FLAGS=
-
+build/Splinter/SplinterTree.i.verchk: NONLINEAR_FLAGS=
+build/Splinter/BranchTree.i.verchk: NONLINEAR_FLAGS=
 
 ### Put all the flags together
 

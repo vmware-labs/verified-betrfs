@@ -9,7 +9,6 @@ include "CacheIfc.i.dfy"
 
 include "AsyncDisk.s.dfy"
 include "AsyncDiskProgram.s.dfy"
-include "IOSystem.s.dfy"
 include "../lib/Base/KeyType.s.dfy"
 
 
@@ -27,11 +26,12 @@ module ProgramMachineMod {
   import opened AllocationMod
   import opened DiskTypesMod
   import opened CrashTolerantMapSpecMod
-  import opened InterpMod
+  import opened StampedMapMod
   import opened ValueMessage
   import opened KeyType
   import opened MsgHistoryMod
   import opened Options
+  import opened SequenceSetsMod
   import CacheIfc
   import D = AsyncDisk  // Importing for the interface, not the entire disk
 
@@ -48,12 +48,19 @@ module ProgramMachineMod {
   function marshalSuperblock(sb: Superblock) : (b: UninterpretedDiskPage)
     ensures parseSuperblock(b) == Some(sb)
 
-  function SUPERBLOCK_ADDRESS(): CU
+  function SUPERBLOCK_ADDRESSES(): seq<CU>
   {
-    CU(0, 0)
+    [CU(0, 0), CU(0, 1)]
   }
 
-  datatype Phase = SuperblockUnknown | RecoveringJournal | Running
+  // TODO: why does ProgramMachine know that the tree needs somewhere to store
+  // an empty tree? Poor isolation.
+  function TREE_ROOT_ADDRESS(): CU
+  {
+    CU(0, 1)
+  }
+
+  datatype Phase = SuperblockUnknown | ReplayingJournal | Running
 
   datatype Variables = Variables(
     phase: Phase,
@@ -65,7 +72,7 @@ module ProgramMachineMod {
     )
   {
     predicate WF() {
-      true
+      && journal.WF()
     }
   }
 
@@ -76,12 +83,16 @@ module ProgramMachineMod {
     var initsb := Superblock(
       0,  // serial
       JournalMachineMod.MkfsSuperblock(),
-      SplinterTreeMachineMod.MkfsSuperblock());
-    && SUPERBLOCK_ADDRESS() in dv
-    && parseSuperblock(dv[SUPERBLOCK_ADDRESS()]) == Some(initsb)
+      SplinterTreeMachineMod.MkfsSuperblock(TREE_ROOT_ADDRESS()));
+    && (forall cu | cu in SUPERBLOCK_ADDRESSES() ::
+      && cu in dv
+      && parseSuperblock(dv[cu]) == Some(initsb)
+      )
+    && SplinterTreeMachineMod.Mkfs(dv, TREE_ROOT_ADDRESS())
   }
 
   // Initialization of the program, which happens at the beginning but also after a crash.
+  // Phase SuperblockUnknown means we get the interpretation straight from the disk.
   predicate Init(v: Variables)
   {
     && v.phase.SuperblockUnknown?
@@ -89,40 +100,56 @@ module ProgramMachineMod {
     // Journal and Betree get initialized once we know their superblocks
   }
 
+  // Now we know what the disk superblock says, and we can initialize the Journal, Tree Variables.
+  // They'll still not be ready to go, so they'll probably defer StampedMapretation to the disk,
+  // but *we* don't have to know that.
   predicate LearnSuperblock(v: Variables, v': Variables, rawSuperblock: UninterpretedDiskPage, sk: JournalMachineMod.InitSkolems)
   {
-    && CacheIfc.Read(v.cache, SUPERBLOCK_ADDRESS(), rawSuperblock)
+    && (forall cu | cu in SUPERBLOCK_ADDRESSES() :: CacheIfc.Read(v.cache, cu, rawSuperblock))
     && var superblock := parseSuperblock(rawSuperblock);
     && superblock.Some?
 
-    && v'.phase.RecoveringJournal?
+    && v'.phase.ReplayingJournal?
     && v'.stableSuperblock == superblock.value
     && v'.cache == v.cache  // no cache writes
     && JournalMachineMod.Init(v'.journal, superblock.value.journal, v.cache, sk)
-    && SplinterTreeMachineMod.Start(v.betree, v'.betree, v.cache, superblock.value.betree)
+    && SplinterTreeMachineMod.Init(v.betree, v'.betree, v.cache, superblock.value.betree)
     && v'.inFlightSuperblock.None?
   }
 
-  predicate Recover(v: Variables, v': Variables, uiop : UIOp, puts:MsgSeq, newbetree: SplinterTreeMachineMod.Variables)
+  // Then some JournalInternal steps occur. The Journal knows it's in the Loading phase, but
+  // we don't need to know that.
+
+  // Once the Journal is ready to read, and for as long as it's ahead of the Tree, we PutMany
+  // messages from Journal to Tree.
+  // StampedMapretation is still punted to the disk, although routing it to the Journal would also
+  // be okay right now, since its Variables match the disk and no writes have occurred since Init.
+  predicate Recover(v: Variables, v': Variables, uiop : UIOp, puts:MsgHistory, newbetree: SplinterTreeMachineMod.Variables)
   {
-    && v.phase.RecoveringJournal?
+    && v.WF()
+    && v'.WF()
+    && v.phase.ReplayingJournal?
     && puts.WF()
     && puts.seqStart == v.betree.BetreeEndsLSNExclusive()
     && puts.seqStart + |puts.msgs| <= v.journal.JournalBeginsLSNInclusive()
     && JournalMachineMod.MessageSeqMatchesJournalAt(v.journal, puts)
 
-    // NB that Recover can interleave with BetreeInternal steps, which push stuff into the
+    // NB that Recover can interleave with SplinterTreeInternal steps, which push stuff into the
     // cache to flush it out of the Betree's membuffer to make room for more recovery.
 
     && SplinterTreeMachineMod.PutMany(v.betree, newbetree, puts)
     && v' == v.(betree := newbetree)
   }
 
+  // Once we've brought the tree up-to-date with respect to the journal,
+  // we can enter normal operations.
+  // StampedMapretation goes to the Tree's variables. (It could point to the
+  // Journal, too, since their ephemeral views are kept synchronized -- but if
+  // we ever want to support a mode where we abandon the Journal during long
+  // periods of no sync requests, we need to use the Tree.)
   predicate CompleteRecovery(v: Variables, v': Variables)
   {
-    && v.phase.RecoveringJournal?
-    // We've brought the tree up-to-date with respect to the journal, so
-    // we can enter normal operations
+    && v.phase.ReplayingJournal?
     && v.betree.BetreeEndsLSNExclusive() == v.journal.JournalBeginsLSNInclusive()
 
     && v' == v.(phase := Running)
@@ -180,7 +207,7 @@ module ProgramMachineMod {
   predicate AllocsDisjoint(v: Variables)
   {
     SetsMutuallyDisjoint([
-      {SUPERBLOCK_ADDRESS()},
+      Members(SUPERBLOCK_ADDRESSES()),
       JournalMachineMod.Alloc(v.journal),
       SplinterTreeMachineMod.Alloc(v.betree, v.cache, v.stableSuperblock.betree)
       ])
@@ -235,20 +262,22 @@ module ProgramMachineMod {
     && v'.betree == v.betree
     // Superblock constraints
     && v'.stableSuperblock == v.stableSuperblock
-    && CacheIfc.ApplyWrites(v.cache, v'.cache, cacheOps)
+    && CacheIfc.WritesApplied(v.cache, v'.cache, cacheOps)
     && WritesOkay(cacheOps, JournalMachineMod.Alloc(v'.journal))
     && AllocsDisjoint(v')
   }
 
-  predicate BetreeInternal(v: Variables, v': Variables, uiop : UIOp, cacheOps: CacheIfc.Ops, sk: SplinterTreeMachineMod.Skolem)
+  predicate SplinterTreeInternal(v: Variables, v': Variables, uiop : UIOp, cacheOps: CacheIfc.Ops, sk: SplinterTreeMachineMod.Skolem)
   {
     && uiop.NoopOp?
     && v.WF()
     && !v.phase.SuperblockUnknown?  // Betree not initted until we leave this phase
-    && v'.journal == v.journal
+    && v'.phase == v.phase
     && v'.stableSuperblock == v.stableSuperblock
+    && CacheIfc.WritesApplied(v.cache, v'.cache, cacheOps)
+    && v'.journal == v.journal
     && SplinterTreeMachineMod.Internal(v.betree, v'.betree, v.cache, cacheOps, sk)
-    && CacheIfc.ApplyWrites(v.cache, v'.cache, cacheOps)
+    && v'.inFlightSuperblock == v.inFlightSuperblock
     && AllocsDisjoint(v')
   }
 
@@ -291,7 +320,9 @@ module ProgramMachineMod {
     && (exists alloc :: JournalMachineMod.CommitStart(v.journal, v'.journal, v.cache, sb.journal, seqBoundary, alloc))
     && SplinterTreeMachineMod.CommitStart(v.betree, v'.betree, v.cache, sb.betree, seqBoundary)
 //    && sb.serial == v.stableSuperblock.serial + 1 // I think this isn't needed until duplicate-superblock code
-    && CacheIfc.ApplyWrites(v.cache, v'.cache, [CacheIfc.Write(SUPERBLOCK_ADDRESS(), marshalSuperblock(sb))])
+    && CacheIfc.WritesApplied(v.cache, v'.cache,
+      seq(|SUPERBLOCK_ADDRESSES()|,
+        cui requires 0<=cui<|SUPERBLOCK_ADDRESSES()| => CacheIfc.Write(SUPERBLOCK_ADDRESSES()[cui], marshalSuperblock(sb))))
     && v'.stableSuperblock == v.stableSuperblock // only inFlightSuperblock should change at this step. stable should be well ... stable
   }
 
@@ -300,7 +331,7 @@ module ProgramMachineMod {
     && uiop.NoopOp?
     && v.phase.Running?
     && v.inFlightSuperblock.Some?
-    && CacheIfc.IsClean(v.cache, SUPERBLOCK_ADDRESS())
+    && (forall cu | cu in SUPERBLOCK_ADDRESSES() :: CacheIfc.IsClean(v.cache, cu))
 
     && var sb := v.inFlightSuperblock.value;
     && v'.stableSuperblock == sb
@@ -311,11 +342,11 @@ module ProgramMachineMod {
   }
 
   datatype Step =
-    | RecoverStep(puts:MsgSeq, newbetree: SplinterTreeMachineMod.Variables)
+    | RecoverStep(puts:MsgHistory, newbetree: SplinterTreeMachineMod.Variables)
     | QueryStep(key: Key, val: Value, bsk: SplinterTreeMachineMod.Skolem)
     | PutStep(bsk: SplinterTreeMachineMod.Skolem)
     | JournalInternalStep(jsk: JournalMachineMod.Skolem)
-    | BetreeInternalStep(SplinterTreeMachineMod.Skolem)
+    | SplinterTreeInternalStep(SplinterTreeMachineMod.Skolem)
     | ReqSyncStep(syncReqId: SyncReqId)
     | CompleteSyncStep(syncReqId: SyncReqId)
     | CommitStartStep(seqBoundary: LSN)
@@ -327,7 +358,7 @@ module ProgramMachineMod {
       case QueryStep(key, val, sk) => Query(v, v', uiop, key, val, sk)
       case PutStep(sk) => Put(v, v', uiop, sk)
       case JournalInternalStep(sk) => JournalInternal(v, v', uiop, cacheOps, sk)
-      case BetreeInternalStep(sk) => BetreeInternal(v, v', uiop, cacheOps, sk)
+      case SplinterTreeInternalStep(sk) => SplinterTreeInternal(v, v', uiop, cacheOps, sk)
       case ReqSyncStep(syncReqId) => ReqSync(v, v', uiop, syncReqId)
       case CompleteSyncStep(syncReqId) => CompleteSync(v, v', uiop, syncReqId)
       case CommitStartStep(seqBoundary) => CommitStart(v, v', uiop, seqBoundary)
