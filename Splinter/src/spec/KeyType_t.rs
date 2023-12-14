@@ -38,6 +38,21 @@ impl Key {
         &&& Key::lte(a, b) 
         &&& a != b
     }
+
+    pub open spec(checked) fn is_strictly_sorted(run: Seq<Key>) -> bool
+    {
+        forall |i: int, j: int| 0 <= i < j < run.len() ==> Key::lt(run[i], run[j])
+    }
+
+    pub open spec(checked) fn largest_lte(run: Seq<Key>, needle: Key) -> int
+        decreases run.len()
+    {
+        if run.len() == 0 || Key::lt(needle, run[0]) {
+            -1
+        } else {
+            1 + Key::largest_lte(run.subrange(1, run.len() as int), needle)
+        }
+    }
 }
 
 impl Element {
