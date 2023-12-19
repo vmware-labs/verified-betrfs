@@ -53,6 +53,16 @@ impl Key {
             1 + Key::largest_lte(run.subrange(1, run.len() as int), needle)
         }
     }
+
+    pub open spec(checked) fn largest_lt(run: Seq<Key>, needle: Key) -> int
+        decreases run.len()
+    {
+        if run.len() == 0 || Key::lte(needle, run[0]) {
+            -1
+        } else {
+            1 + Key::largest_lt(run.subrange(1, run.len() as int), needle)
+        }
+    }
 }
 
 impl Element {

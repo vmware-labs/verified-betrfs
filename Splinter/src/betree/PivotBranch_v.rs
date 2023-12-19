@@ -5,14 +5,46 @@ use builtin::*;
 use builtin_macros::*;
 
 use vstd::prelude::*;
-use vstd::seq::*;
-use vstd::seq_lib::*;
+// use vstd::seq::*;
+// use vstd::seq_lib::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
-use crate::betree::Buffer_v::*;
-use crate::betree::Domain_v::*;
+// use crate::betree::Buffer_v::*;
+// use crate::betree::Domain_v::*;
 
 verus! {
+
+#[is_variant]
+pub enum SplitArg {
+    SplitIndex{pivot: Key, pivot_index: int},
+    SplitLeaf{pivot: Key}
+}
+
+impl SplitArg {
+    pub open spec(checked) fn wf(self, split_node: Node) -> bool
+    {
+        match self {
+            Self::SplitLeaf{pivot} => {
+                &&& split_node is Leaf
+                &&& 0 < Key::largest_lt(split_node.get_Leaf_keys(), pivot) + 1 < split_node.get_Leaf_keys().len()
+            }
+            Self::SplitIndex{pivot, pivot_index} => {
+                &&& split_node is Index
+                &&& 0 <= pivot_index < split_node.get_Index_pivots().len()
+                &&& split_node.get_Index_pivots()[pivot_index] == pivot
+            }
+        }
+    }
+
+    pub open spec(checked) fn get_pivot(self) -> Key
+    {
+        if self is SplitLeaf {
+            self.get_SplitLeaf_pivot()
+        } else {
+            self.get_SplitIndex_pivot()
+        }
+    }
+}
 
 #[is_variant]
 pub enum Node {
@@ -81,10 +113,11 @@ impl Node {
         Key::largest_lte(s, key)
     }
 
-    pub open spec(checked) fn query(self, key: Key) -> Message
+    pub open spec/*XXX (checked)*/ fn query(self, key: Key) -> Message
         recommends self.wf()
         decreases self when self is Index && 0 <= self.route(key)+1 < self.get_Index_children().len()
     {
+        // Need ensures from route to restore checked
         let r = self.route(key);
         match self {
             Node::Leaf{keys, msgs} => {
@@ -101,11 +134,12 @@ impl Node {
         Node::Index{pivots: seq![], children: seq![self]}
     }
 
-    pub open spec(checked) fn insert_leaf(self, key: Key, msg: Message) -> Node
+    pub open spec/* XXX (checked)*/ fn insert_leaf(self, key: Key, msg: Message) -> Node
         recommends
             self is Leaf,
             self.wf()
     {
+        // Need largest_lte ensures to restore checked
         let llte = Key::largest_lte(self.get_Leaf_keys(), key);
         if 0 <= llte && self.get_Leaf_keys()[llte] == key {
             Node::Leaf{
@@ -128,17 +162,49 @@ impl Node {
         Node::Leaf{ keys: new_keys, msgs: new_msgs }
     }
 
-    pub open spec(checked) fn split_leaf(self, pivot: Key, left_leaf: Node, right_leaf: Node) -> bool
+    pub open spec/* XXX (checked)*/ fn insert(self, key: Key, msg: Message, path: Path) -> Node
+        recommends
+            self.wf(),
+            path.valid(),
+            path.node == self,
+            path.key == key,
+            path.target() is Leaf
     {
-        &&& self is Leaf
-        &&& left_leaf is Leaf
-        &&& right_leaf is Leaf
-        &&& 0 < left_leaf.get_Leaf_keys().len() == left_leaf.get_Leaf_msgs().len()
-        &&& 0 < right_leaf.get_Leaf_keys().len() == right_leaf.get_Leaf_msgs().len()
-        &&& self.get_Leaf_keys() == left_leaf.get_Leaf_keys() + right_leaf.get_Leaf_keys()
-        &&& self.get_Leaf_msgs() == left_leaf.get_Leaf_msgs() + right_leaf.get_Leaf_msgs()
-        &&& Key::lt(left_leaf.get_Leaf_keys().last(), pivot)
-        &&& Key::lte(pivot, right_leaf.get_Leaf_keys()[0])
+        // Need target ensures to restore checked
+        path.substitute(path.target().insert_leaf(key, msg))
+    }
+
+    pub open spec(checked) fn append(self, keys: Seq<Key>, msgs: Seq<Message>, path: Path) -> Node
+        recommends
+            self.wf(),
+            path.valid(),
+            path.node == self,
+            path.target() == self.empty(),
+            keys.len() > 0,
+            keys.len() == msgs.len(),
+            Key::is_strictly_sorted(keys),
+            path.key == keys[0],
+            path.path_equiv(keys.last()) // all new keys must route to the same location
+    {
+        path.substitute(path.target().append_to_new_leaf(keys, msgs))
+    }
+
+    pub open spec(checked) fn split_leaf(self, split_arg: SplitArg) -> (Node, Node)
+        recommends
+            self is Leaf,
+            split_arg.wf(self)
+    {
+        let pivot = split_arg.get_pivot();
+        let split_index = Key::largest_lt(self.get_Leaf_keys(), pivot) + 1;
+        let left_leaf = Node::Leaf{
+            keys: self.get_Leaf_keys().take(split_index),
+            msgs: self.get_Leaf_msgs().take(split_index)
+        };
+        let right_leaf = Node::Leaf{
+            keys: self.get_Leaf_keys().skip(split_index),
+            msgs: self.get_Leaf_msgs().skip(split_index)
+        };
+        (left_leaf, right_leaf)
     }
 
     pub open spec(checked) fn sub_index(self, from: int, to: int) -> Node
@@ -150,77 +216,66 @@ impl Node {
         Node::Index{ pivots: self.get_Index_pivots().subrange(from, to-1), children: self.get_Index_children().subrange(from, to) }
     }
 
-    pub open spec(checked) fn split_index(self, pivot: Key, left_index: Node, right_index: Node) -> bool
+    pub open spec(checked) fn split_index(self, split_arg: SplitArg) -> (Node, Node)
+        recommends
+            self.wf(),
+            self is Index,
+            split_arg.wf(self)
+    {
+        let pivot_index = split_arg.get_SplitIndex_pivot_index();
+        let left_index = self.sub_index(0, pivot_index + 1);
+        let right_index = self.sub_index(pivot_index + 1, self.get_Index_children().len() as int);
+        (left_index, right_index)
+    }
+
+    pub open spec(checked) fn split_node(self, split_arg: SplitArg) -> (Node, Node)
+        recommends
+            self.wf(),
+            split_arg.wf(self)
+    {
+        if (self is Leaf) {
+            self.split_leaf(split_arg)
+        } else {
+            self.split_index(split_arg)
+        }
+    }
+
+    pub open spec/* XXX (checked)*/ fn can_split_child_of_index(self, split_arg: SplitArg) -> bool
     {
         &&& self.wf()
         &&& self is Index
-        &&& left_index is Index
-        &&& right_index is Index
-        &&& 0 < left_index.get_Index_children().len() < self.get_Index_children().len()
-
-        &&& left_index == self.sub_index(0, left_index.get_Index_children().len() as int)
-        &&& right_index == self.sub_index(left_index.get_Index_children().len() as int, self.get_Index_children().len() as int)
-        &&& forall |key| left_index.get_Index_children().last().all_keys().contains(key) ==> #[trigger] Key::lt(key, pivot)
-        &&& forall |key| right_index.get_Index_children()[0].all_keys().contains(key) ==> #[trigger] Key::lte(pivot, key)
-        &&& pivot == self.get_Index_pivots()[left_index.get_Index_pivots().len() as int]
+        &&& {
+            // Need route ensures to restore checked
+            let child_idx = self.route(split_arg.get_pivot()) + 1;
+            split_arg.wf(self.get_Index_children()[child_idx])
+            }
     }
 
-    pub open spec(checked) fn split_node(self, pivot: Key, left_node: Node, right_node: Node) -> bool
+    pub open spec/* XXX (checked)*/ fn split_child_of_index(self, split_arg: SplitArg) -> Node
+        recommends
+            self.can_split_child_of_index(split_arg)
     {
-        ||| self.split_leaf(pivot, left_node, right_node)
-        ||| self.split_index(pivot, left_node, right_node)
-    }
-
-    pub open spec(checked) fn split_child_of_index(self, pivot: Key, new_index: Node) -> bool
-    {
+        // Need route ensures to restore checked
+        let pivot = split_arg.get_pivot();
         let child_idx = self.route(pivot) + 1;
-        &&& self.wf()
-        &&& self is Index
-        &&& new_index is Index
-        &&& new_index.get_Index_children().len() == self.get_Index_children().len() + 1
-        &&& new_index.get_Index_pivots() == self.get_Index_pivots().insert(child_idx, pivot)
-        &&& new_index.get_Index_children() == self.get_Index_children()
-            .update(child_idx, new_index.get_Index_children()[child_idx])
-            .insert(child_idx + 1, new_index.get_Index_children()[child_idx + 1])
-        &&& self.get_Index_children()[child_idx].split_node(pivot, new_index.get_Index_children()[child_idx], new_index.get_Index_children()[child_idx + 1])
+        let (left_node, right_node) = self.get_Index_children()[child_idx].split_node(split_arg);
+        Node::Index{
+            pivots: self.get_Index_pivots().insert(child_idx, pivot),
+            children: self.get_Index_children()
+                .update(child_idx, left_node)
+                .insert(child_idx + 1, right_node)
+        }
     }
 
-    pub open spec(checked) fn insert(self, key: Key, msg: Message, path: Path, new_target: Node) -> Node
+    pub open spec(checked) fn split(self, path: Path, split_arg: SplitArg) -> Node
         recommends
             self.wf(),
             path.valid(),
             path.node == self,
-            path.key == key,
-            path.target() is Leaf,
-            path.target().insert_leaf(key, msg) == new_target
+            path.key == split_arg.get_pivot(),
+            path.target().can_split_child_of_index(split_arg)
     {
-        path.substitute(new_target)
-    }
-
-    pub open spec(checked) fn append(self, keys: Seq<Key>, msgs: Seq<Message>, path: Path, new_target: Node) -> Node
-        recommends
-            self.wf(),
-            path.valid(),
-            path.node == self,
-            path.target() == self.empty(),
-            keys != Seq::<Key>::empty(),
-            keys.len() == msgs.len(),
-            Key::is_strictly_sorted(keys),
-            new_target == path.target().append_to_new_leaf(keys, msgs),
-            path.key == new_target.get_Leaf_keys()[0],
-            path.path_equiv(new_target.get_Leaf_keys().last()) // all new keys must route to the same location
-    {
-        path.substitute(new_target)
-    }
-
-    pub open spec(checked) fn split(self, path: Path, new_target: Node) -> Node
-        recommends
-            self.wf(),
-            path.valid(),
-            path.node == self,
-            path.target().split_child_of_index(path.key, new_target),
-    {
-        path.substitute(new_target)
+        path.substitute(path.target().split_child_of_index(split_arg))
     }
 
     pub open spec(checked) fn empty(self) -> Node
@@ -237,12 +292,13 @@ pub struct Path {
 }
 
 impl Path {
-    pub open spec(checked) fn subpath(self) -> Path
+    pub open spec/* XXX (checked)*/ fn subpath(self) -> Path
         recommends
             0 < self.depth,
             self.node.wf(),
             self.node is Index
     {
+        // Need route ensures to restore checked
         Path{
             node: self.node.get_Index_children()[self.node.route(self.key) + 1],
             key: self.key,
@@ -269,12 +325,13 @@ impl Path {
         }
     }
 
-    pub open spec(checked) fn replaced_children(self, replacement: Node) -> Seq<Node>
+    pub open spec/* XXX (checked)*/ fn replaced_children(self, replacement: Node) -> Seq<Node>
         recommends
             self.valid(),
             0 < self.depth
         decreases self.subpath().depth
     {
+        // Need route ensures to restore checked
         let new_child = self.subpath().substitute(replacement);
         self.node.get_Index_children().update(self.node.route(self.key) + 1, new_child)
     }
