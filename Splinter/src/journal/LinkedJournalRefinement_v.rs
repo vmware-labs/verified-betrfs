@@ -58,17 +58,10 @@ impl DiskView {
         if ptr.is_Some() && lsn < self.entries[ptr.unwrap()].message_seq.seq_start {
             self.discard_interp(lsn, post, post.next(ptr));
         }
-        // TODO(chris): adding this assert completes the proof, even though the identical string
-        // appears in the ensures.
-        // Well actually, sometimes with == it completes the proof, but (AAAARGH) it's super flaky.
-        // trying =~=...
-        //assume(false); // Goodness this is hella flaky.
         if post.iptr(ptr).is_None() {
             assert( PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn).is_None() );
         } else {
             assert( PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn).is_Some() );
-//             assert( post.iptr(ptr).unwrap().message_seq =~= PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn).unwrap().message_seq );
-//             assert( post.iptr(ptr).unwrap().prior_rec =~= PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn).unwrap().prior_rec );
         }
         assert( post.iptr(ptr) =~= PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn) );
     }
@@ -205,6 +198,7 @@ impl DiskView {
         }
     }
 
+    #[verifier::spinoff_prover]
     pub proof fn iptr_framing(self, dv2: Self, ptr: Pointer)
     requires
         self.wf() && self.acyclic(),
@@ -219,7 +213,6 @@ impl DiskView {
         if ptr.is_Some() {
             self.iptr_framing(dv2, self.next(ptr));
         }
-        //assume(false); // and now this thing is flaky
     }
         
     pub proof fn build_tight_is_awesome(self, root: Pointer)
@@ -555,7 +548,8 @@ impl LinkedJournal::State {
                 unmarshalled_tail: self.unmarshalled_tail,
             }
         } else {
-            choose |v| PagedJournal::State::init(v)
+            //choose |v| PagedJournal::State::init(v)
+            arbitrary()
         }
     }
 

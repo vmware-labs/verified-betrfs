@@ -194,7 +194,7 @@ impl DiskView {
         }
     }
 
-    spec(checked) fn cropped_lsn(boundary: LSN, message_seq: MsgHistory, lsn: LSN) -> bool
+    spec(checked) fn cropped_msg_seq_contains_lsn(boundary: LSN, message_seq: MsgHistory, lsn: LSN) -> bool
     {
         max(boundary as int, message_seq.seq_start as int) <= lsn < message_seq.seq_end
     }
@@ -252,7 +252,21 @@ impl DiskView {
             assert( self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)) );
         } else {
             self.build_lsn_addr_index_domain_valid(self.next(root));
-            assume( false );    // do we ever actually use index_range_valid? That's one ugly definition
+            let tj = self.tj_at(root);
+            let lsn_addr_index = self.build_lsn_addr_index(root);
+            assert forall |addr| lsn_addr_index.values().contains(addr)
+                implies tj.every_lsn_at_addr_indexed_to_addr(lsn_addr_index, addr)
+            by {
+                let msgs = tj.disk_view.entries[addr].message_seq;
+                let boundary_lsn = tj.disk_view.boundary_lsn;
+                assert forall |lsn| #![auto] DiskView::cropped_msg_seq_contains_lsn(boundary_lsn, msgs, lsn) implies {
+                    &&& lsn_addr_index.contains_key(lsn)
+                    &&& lsn_addr_index[lsn] == addr
+                } by {
+                    assume( false );
+                }
+                assert( tj.every_lsn_at_addr_indexed_to_addr(lsn_addr_index, addr) );
+            }
             assert( self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)) );
         }
     }
@@ -506,6 +520,7 @@ impl MsgHistory {
     recommends
         self.wf(),
         new.wf(),
+        self.can_discard_to(new_bdy),
     {
         let msgs = if self.seq_start <= new_bdy { self.discard_old(new_bdy) } else { self };
         &&& new.ext_equal(msgs)
@@ -542,6 +557,22 @@ impl TruncatedJournal {
         &&& forall |lsn| lsn_addr_index.contains_key(lsn) <==> (self.seq_start() <= lsn < self.seq_end())
     }
 
+    pub closed spec /*XXX (checked)*/ fn every_lsn_at_addr_indexed_to_addr(self, lsn_addr_index: LsnAddrIndex, addr: Address) -> bool
+    {
+        let msgs = self.disk_view.entries[addr].message_seq;
+        let boundary_lsn = self.disk_view.boundary_lsn;
+        forall |lsn| #![auto] DiskView::cropped_msg_seq_contains_lsn(boundary_lsn, msgs, lsn) ==> {
+            &&& lsn_addr_index.contains_key(lsn)
+            &&& lsn_addr_index[lsn] == addr
+        }
+    }
+
+// deleteme
+//     pub closed spec fn any_lsn(lsn_addr_index: LsnAddrIndex, addr: Address) -> LSN
+//     {
+//         choose |lsn| (#[trigger] lsn_addr_index.contains_key(lsn)) && lsn_addr_index[lsn] == addr
+//     }
+
     pub closed spec /*XXX (checked)*/ fn index_range_valid(self, lsn_addr_index: LsnAddrIndex) -> bool
     recommends
         self.wf(),
@@ -549,15 +580,7 @@ impl TruncatedJournal {
         self.disk_view.index_keys_map_to_valid_entries(lsn_addr_index),
     {
         forall |addr| lsn_addr_index.values().contains(addr) ==> {
-            let lsn = choose |lsn| (#[trigger] lsn_addr_index.contains_key(lsn)) && lsn_addr_index[lsn] == addr;
-            // TODO(jonh): need to invoke instantiate_index_keys_map_to_valid_entries here to
-            // satisfy recommendation check.
-            let msgs = self.disk_view.entries[addr].message_seq;
-            let boundary_lsn = self.disk_view.boundary_lsn;
-            forall |lsn| #![auto] DiskView::cropped_lsn(boundary_lsn, msgs, lsn) ==> {
-                &&& lsn_addr_index.contains_key(lsn)
-                &&& lsn_addr_index[lsn] == addr
-            }
+            self.every_lsn_at_addr_indexed_to_addr(lsn_addr_index, addr)
         }
     }
 
@@ -844,6 +867,7 @@ state_machine!{ LikesJournal {
         post.journal.truncated_journal.build_lsn_addr_index_gives_representation();
         assert( post.journal.truncated_journal.index_range_valid(post.lsn_addr_index) );
         assume(post.journal.truncated_journal.disk_is_tight_wrt_representation()); // TODO something didn't prove for free
+        assume( post.journal.truncated_journal.valid_entries_appear_in_index(post.lsn_addr_index) );    // unstable. Works under --verify-module. :v(
         assert( post.inv() );
     }
 
@@ -872,7 +896,7 @@ state_machine!{ LikesJournal {
 
         tj_post.disk_view.representation_ensures(tj_post.freshest_rec); // not helpful; delete
 
-        assert forall |addr| #![auto] tj_post.disk_view.entries.dom().contains(addr)
+        assert forall |addr| #[trigger] tj_post.disk_view.entries.dom().contains(addr)
             implies tj_post.representation().contains(addr) by {
             if tj_pre.disk_view.entries.dom().contains(addr) {
                 assert( tj_pre.representation().contains(addr) );
@@ -886,7 +910,7 @@ state_machine!{ LikesJournal {
             }
         }
         assert forall |addr|
-            tj_post.representation().contains(addr)
+            #[trigger] tj_post.representation().contains(addr)
             implies
             tj_post.disk_view.entries.dom().contains(addr)
             by {
