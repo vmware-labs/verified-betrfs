@@ -245,16 +245,88 @@ trait SeqMarshalling<C: Config, U, Elt: Marshalling<C, U>> : Marshalling<Default
         Self::get(cfg, slice, data, idx).valid(data)
     ;
 
-// trait default methods are not yet supported :v(
-//     spec fn get_data(cfg: &DefaultConfig, slice: Slice, data: Seq<u8>, idx: int) -> (edata: Seq<u8>)
-//     recommends
-//         cfg.valid(),
-//         Self::gettable(cfg, slice.i(data), idx),
+    spec fn get_data(cfg: &DefaultConfig, slice: Slice, data: Seq<u8>, idx: int) -> (edata: Seq<u8>)
+    recommends
+        cfg.valid(),
+        Self::gettable(cfg, slice.i(data), idx)
+    ;
+//     Wants to be a default method
 //     {
 //         Self::get(cfg, Slice::all(data), data, idx).i(data)
 //     }
-    
 
+    spec fn elt_parsable(cfg: &DefaultConfig, data: Seq<u8>, idx: int) -> bool
+    recommends
+        cfg.valid(),
+        Self::gettable(cfg, data, idx)
+//     Wants to be a default method
+//     {
+//         Elt.parsable(Self::spec_elt_cfg(cfg), Self::get_data(cfg, slic, data, idx))
+//     }
+    ;
+
+    spec fn get_elt(cfg: &DefaultConfig, slice: Slice, data: Seq<u8>, idx: int) -> (elt: Elt)
+    recommends
+        cfg.valid(),
+        Self::gettable(cfg, slice.i(data), idx),
+        Self::elt_parsable(cfg, slice.i(data), idx)
+//     Wants to be a default method
+//     {
+//         Elt.parse(Self::spec_elt_cfg(cfg), Self::get_data(cfg, slic, data, idx))
+//     }
+    ;
+
+    fn try_get(cfg: &DefaultConfig, slice: Slice, data: Seq<u8>, idx: int) -> (oeslice: Option<Slice>)
+    requires
+        cfg.valid(),
+        slice.valid(data),
+    ensures
+        oeslice is Some <==> Self::gettable(cfg, slice.i(data), idx as int),
+        oeslice is Some ==> oeslice.unwrap() == Self::get(cfg, slice, data, idx as int)
+    ;
+
+    // jonh skipped over the `exec fn get` that requires gettable, perhaps a useful optimization
+    // for some other day..
+
+    fn try_get_elt(cfg: &DefaultConfig, slice: Slice, data: Seq<u8>, idx: int) -> (oelt: Option<Elt>)
+    requires
+        cfg.valid(),
+    ensures
+        oelt is Some <==> {
+                &&& Self::gettable(cfg, slice.i(data), idx as int)
+                &&& Self::elt_parsable(cfg, data, idx as int)
+        },
+        oelt is Some ==> oelt.unwrap() == Self::get_elt(cfg, slice, data, idx as int)
+//     Wants to be a default method
+//     {
+//         match try_get(cfg, slice, data, idx) {
+//            None => None,
+//            Some(slice) => {
+//              Elt::try_parse(Self::elt_cfg(cfg), slice, data)
+//            }
+//         }
+//     }
+    ;
+
+    spec fn settable(cfg: &DefaultConfig, data: Seq<u8>, idx: int, value: U)
+    recommends
+        cfg.valid(),
+        Elt::marshallable(&Self::spec_elt_cfg(cfg), &value)
+    ;
+// 
+//     spec fn preserves_entry(cfg: &DefaultConfig, data: Seq<u8>, idx: int, new_data: Seq<u8>)
+//     recommends
+//         cfg.valid(),
+//     {
+//         &&& Self::gettable(cfg, data, i) ==> Self::gettable(cfg, new_data, i)
+//         &&& (Self::gettable(cfg, data, i) && Self::elt_parsable(cfg, new_data, i)) ==> {
+//             &&& Self::elt_parsable(cfg, new_data, i)
+//             &&& Self::get_elt(cfg, new_data, i) == Self::get_elt(cfg, new_data, i)
+//     }
 }
+
+
+// trait default methods are not yet supported :v(
+
 
 } // verus!
