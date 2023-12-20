@@ -6,6 +6,7 @@ use builtin_macros::*;
 use vstd::prelude::*;
 use vstd::bytes::*;
 use vstd::slice::*;
+use crate::marshalling::Slice_v::*;
 
 verus! {
 
@@ -33,7 +34,7 @@ trait Marshalling<C: Config, U> {
         Self::parsable(cfg, data@) ==> ov.unwrap() == Self::parse(cfg, data@)
     ;
 
-    fn is_parsable(cfg: &C, data: &Vec<u8>) -> (p: bool)
+    fn exec_parsable(cfg: &C, data: &Vec<u8>) -> (p: bool)
     requires
         cfg.valid(),
     ensures
@@ -52,7 +53,7 @@ trait Marshalling<C: Config, U> {
         Self::marshallable(cfg, value)
     ;
 
-    fn do_size(cfg: &C, value: &U) -> (sz: u64)
+    fn exec_size(cfg: &C, value: &U) -> (sz: u64)
     requires 
         cfg.valid(),
         Self::marshallable(cfg, value),
@@ -115,7 +116,7 @@ impl Marshalling<DefaultConfig, u64> for IntegerMarshalling {
         }
     }
 
-    fn is_parsable(cfg: &DefaultConfig, data: &Vec<u8>) -> (p: bool)
+    fn exec_parsable(cfg: &DefaultConfig, data: &Vec<u8>) -> (p: bool)
 //     requires
 //         cfg.valid(),
 //     ensures
@@ -137,7 +138,7 @@ impl Marshalling<DefaultConfig, u64> for IntegerMarshalling {
         8
     }
 
-    fn do_size(cfg: &DefaultConfig, value: &u64) -> (sz: u64)
+    fn exec_size(cfg: &DefaultConfig, value: &u64) -> (sz: u64)
 //     requires 
 //         cfg.valid(),
 //         Self::marshallable(cfg, value),
@@ -187,4 +188,73 @@ impl Marshalling<DefaultConfig, u64> for IntegerMarshalling {
     }
 }
 
+trait SeqMarshalling<C: Config, U, Elt: Marshalling<C, U>> : Marshalling<DefaultConfig, Vec<U>> {
+    spec fn spec_elt_cfg(cfg: &DefaultConfig) -> (elt_cfg: C)
+    recommends
+        cfg.valid()
+//     ensures
+//         elt_cfg.valid()
+    ;
+
+    // sure can't stand those spec ensures. Such a hassle!
+    proof fn spec_elt_cfg_ensures(cfg: &DefaultConfig) -> (elt_cfg: C)
+    requires
+        cfg.valid(),
+    ensures
+        elt_cfg.valid()
+    ;
+
+    // True if the sequence length (count of elements) in data can be determined from data.
+    spec fn lengthable(cfg: &DefaultConfig, data: Seq<u8>) -> bool
+    recommends
+        cfg.valid()
+    ;
+
+    spec fn length(cfg: &DefaultConfig, data: Seq<u8>) -> int
+    recommends
+        cfg.valid(),
+        Self::lengthable(cfg, data)
+    ;
+
+    fn try_length(cfg: &DefaultConfig, data: &Vec<u8>) -> (out: Option<u64>)
+    requires
+        cfg.valid(),
+    ensures
+        out is Some <==> Self::lengthable(cfg, data@),
+        out is Some ==> out.unwrap() as int == Self::length(cfg, data@)
+    ;
+
+    spec fn gettable(cfg: &DefaultConfig, data: Seq<u8>, idx: int) -> bool
+    recommends
+        cfg.valid()
+    ;
+
+    spec fn get(cfg: &DefaultConfig, slice: Slice, data: Seq<u8>, idx: int) -> (eslice: Slice)
+    recommends
+        cfg.valid(),
+        slice.valid(data),
+        Self::gettable(cfg, slice.i(data), idx)
+    ;
+
+    proof fn get_ensures(cfg: &DefaultConfig, slice: Slice, data: Seq<u8>, idx: int)
+    requires
+        cfg.valid(),
+        slice.valid(data),
+        Self::gettable(cfg, slice.i(data), idx),
+    ensures
+        Self::get(cfg, slice, data, idx).valid(data)
+    ;
+
+// trait default methods are not yet supported :v(
+//     spec fn get_data(cfg: &DefaultConfig, slice: Slice, data: Seq<u8>, idx: int) -> (edata: Seq<u8>)
+//     recommends
+//         cfg.valid(),
+//         Self::gettable(cfg, slice.i(data), idx),
+//     {
+//         Self::get(cfg, Slice::all(data), data, idx).i(data)
+//     }
+    
+
 }
+
+} // verus!
