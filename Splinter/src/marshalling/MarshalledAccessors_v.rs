@@ -265,11 +265,11 @@ trait SeqMarshalling<C: Config, U, Elt: Marshalling<C, U>> : Marshalling<Default
 //     }
     ;
 
-    spec fn get_elt(cfg: &DefaultConfig, slice: Slice, data: Seq<u8>, idx: int) -> (elt: Elt)
+    spec fn get_elt(cfg: &DefaultConfig, data: Seq<u8>, idx: int) -> (elt: U)
     recommends
         cfg.valid(),
-        Self::gettable(cfg, slice.i(data), idx),
-        Self::elt_parsable(cfg, slice.i(data), idx)
+        Self::gettable(cfg, data, idx),
+        Self::elt_parsable(cfg, data, idx)
 //     Wants to be a default method
 //     {
 //         Elt.parse(Self::spec_elt_cfg(cfg), Self::get_data(cfg, slic, data, idx))
@@ -288,7 +288,7 @@ trait SeqMarshalling<C: Config, U, Elt: Marshalling<C, U>> : Marshalling<Default
     // jonh skipped over the `exec fn get` that requires gettable, perhaps a useful optimization
     // for some other day..
 
-    fn try_get_elt(cfg: &DefaultConfig, slice: Slice, data: Seq<u8>, idx: int) -> (oelt: Option<Elt>)
+    fn try_get_elt(cfg: &DefaultConfig, slice: Slice, data: Seq<u8>, idx: int) -> (oelt: Option<U>)
     requires
         cfg.valid(),
     ensures
@@ -296,37 +296,79 @@ trait SeqMarshalling<C: Config, U, Elt: Marshalling<C, U>> : Marshalling<Default
                 &&& Self::gettable(cfg, slice.i(data), idx as int)
                 &&& Self::elt_parsable(cfg, data, idx as int)
         },
-        oelt is Some ==> oelt.unwrap() == Self::get_elt(cfg, slice, data, idx as int)
+        oelt is Some ==> oelt.unwrap() == Self::get_elt(cfg, slice.i(data), idx as int)
 //     Wants to be a default method
 //     {
-//         match try_get(cfg, slice, data, idx) {
+//         match Self::try_get(cfg, slice, data, idx) {
 //            None => None,
 //            Some(slice) => {
-//              Elt::try_parse(Self::elt_cfg(cfg), slice, data)
+//              Elt::try_parse(Self::exec_elt_cfg(cfg), slice, data)
 //            }
 //         }
 //     }
     ;
 
-    spec fn settable(cfg: &DefaultConfig, data: Seq<u8>, idx: int, value: U)
+    spec fn settable(cfg: &DefaultConfig, data: Seq<u8>, idx: int, value: U) -> bool
     recommends
         cfg.valid(),
         Elt::marshallable(&Self::spec_elt_cfg(cfg), &value)
     ;
-// 
-//     spec fn preserves_entry(cfg: &DefaultConfig, data: Seq<u8>, idx: int, new_data: Seq<u8>)
-//     recommends
-//         cfg.valid(),
+
+    spec fn preserves_entry(cfg: &DefaultConfig, data: Seq<u8>, idx: int, new_data: Seq<u8>) -> bool
+    recommends
+        cfg.valid()
+//     Wants to be a default method
 //     {
-//         &&& Self::gettable(cfg, data, i) ==> Self::gettable(cfg, new_data, i)
-//         &&& (Self::gettable(cfg, data, i) && Self::elt_parsable(cfg, new_data, i)) ==> {
-//             &&& Self::elt_parsable(cfg, new_data, i)
-//             &&& Self::get_elt(cfg, new_data, i) == Self::get_elt(cfg, new_data, i)
+//         &&& Self::gettable(cfg, data, idx) ==> Self::gettable(cfg, new_data, idx)
+//         &&& (Self::gettable(cfg, data, idx) && Self::elt_parsable(cfg, new_data, idx)) ==> {
+//             &&& Self::elt_parsable(cfg, new_data, idx)
+//             &&& Self::get_elt(cfg, new_data, idx) == Self::get_elt(cfg, new_data, idx)
+//             }
 //     }
+    ;
+
+    // if preserves_entry(data, middle) && preserves_entry(middle, new_data), then preserves_entry(data, new_data)
+//  proof fn preserves_entry_transitive(cfg: &DefaultConfig, data: Seq<u8>, idx: int, middle: Seq<u8>, new_data: Seq<u8>) -> bool
+
+    spec fn sets(cfg: &DefaultConfig, data: Seq<u8>, idx: int, value: U, new_data: Seq<u8>) -> bool
+    recommends
+        cfg.valid(),
+        Elt::marshallable(&Self::spec_elt_cfg(cfg), &value),
+        Self::settable(cfg, data, idx, value)
+//     {
+//         &&& new_data.len() == data.len()
+//         &&& Self::lengthable(cfg, data) ==> {
+//             &&& Self::lengthable(cfg, new_data)
+//             &&& Self::length(cfg, new_data) == Self::length(cfg, data)
+//             }
+//         &&& forall |i| i!=idx ==> Self::preserves_entry(cfg, data, i, new_data)
+//         &&& Self::gettable(cfg, new_data, idx)
+//         &&& Self::elt_parsable(cfg, new_data, idx)
+//         &&& Self::get_elt(cfg, new_data, idx) == value
+//     }
+       ;
+    
+    fn is_settable(cfg: &DefaultConfig, slice: Slice, data: &Vec<u8>, idx: int, value: U) -> (s: bool)
+    requires
+        cfg.valid(),
+        Elt::marshallable(&Self::spec_elt_cfg(cfg), &value),
+    ensures
+        s == Self::settable(cfg, slice.i(data@), idx, value)
+    ;
+    
+    fn exec_set(cfg: &DefaultConfig, slice: Slice, data: &mut Vec<u8>, idx: u64, value: U)
+    requires
+        cfg.valid(),
+        slice.valid(old(data)@),
+        Elt::marshallable(&Self::spec_elt_cfg(cfg), &value),
+        Self::settable(cfg, slice.i(old(data)@), idx as int, value),
+    ensures
+        slice.agree_beyond_slice(old(data)@, data@),
+        Self::sets(cfg, slice.i(old(data)@), idx as int, value, slice.i(data@))
+    ;
 }
 
 
-// trait default methods are not yet supported :v(
 
 
 } // verus!

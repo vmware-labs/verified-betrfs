@@ -30,6 +30,13 @@ impl Slice {
     {
         Slice{start: 0, end: data.len() as u64}
     }
+
+    pub open spec fn agree_beyond_slice<T>(&self, data: Seq<T>, new_data: Seq<T>) -> bool
+    {
+        &&& data.len() == new_data.len()
+        &&& forall |i| 0<=i<self.start ==> data[i] == new_data[i]
+        &&& forall |i| self.end<=i<data.len() ==> data[i] == new_data[i]
+    }
 }
 
 } //verus!
