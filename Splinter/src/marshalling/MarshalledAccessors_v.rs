@@ -162,24 +162,11 @@ impl Marshalling<DefaultConfig, u64> for IntegerMarshalling {
     {
         // TODO this interface from verus pervasive bytes.rs can't be fast...
         let s = u64_to_le_bytes(*value);
-//         assert( s@.subrange(0, 8) == s@ );
         proof { lemma_auto_spec_u64_to_from_le_bytes(); }
-        assert( s@ == spec_u64_to_le_bytes(*value) );
-        assert( spec_u64_from_le_bytes(spec_u64_to_le_bytes(*value)) == *value );
-        assert( s@.subrange(0, 8) =~= s@ );
-        assert( s@ == spec_u64_to_le_bytes(*value) );
-        assert( spec_u64_from_le_bytes(s@.subrange(0, 8)) == spec_u64_from_le_bytes(s@) );
-        assert( spec_u64_from_le_bytes(s@.subrange(0, 8))
-                == spec_u64_from_le_bytes(spec_u64_to_le_bytes(*value)) );
-        assert( spec_u64_from_le_bytes(s@.subrange(0, 8)) == *value );
-        assert( spec_u64_from_le_bytes(s@.subrange(0, 8)) == value );
-        assert( Self::parse(cfg, s@) == value );
+        assert( s@.subrange(0, 8) =~= s@ ); // need a little extensionality? Do it by hand!
+
         let end = start + 8;
         let mut k:usize = 0;
-        assert( start as int + 8 == end );
-        assert( start as int + 8 <= old(data)@.len() );
-        assert( (start as int + 8) <= data@.len() );
-        assert( end <= data.len() );
         while k < 8
         invariant
             end == start + Self::size(cfg, value),
@@ -191,14 +178,11 @@ impl Marshalling<DefaultConfig, u64> for IntegerMarshalling {
             forall |i| end <= i < data.len() ==> data[i] == old(data)[i],
         {
             //data[k] = s[k];
-            assert( 0 <= start as int + k as int );
-            assert( (start as int + k as int) < data@.len() );
-            assert( data@.len() == old(data)@.len() );
+            // Do we want some sort of intrinsic so we don't have to copy u64s a byte at a time!?
             data.set(start as usize + k, s[k]);
             k += 1;
         }
-        assert( data@.subrange(start as int, end as int) =~= s@ );
-        assert( Self::parse(cfg, data@.subrange(start as int, end as int)) == value );
+        assert( data@.subrange(start as int, end as int) =~= s@ );  // extensionality: it's what's for ~.
         end
     }
 }
