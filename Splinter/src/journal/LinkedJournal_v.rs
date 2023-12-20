@@ -871,6 +871,17 @@ impl TruncatedJournal {
 //     }
 }
 
+impl MsgHistory {
+    pub open spec(checked) fn bounded_discard(self, new_bdy: LSN) -> Self
+    {
+        if self.seq_start <= new_bdy { 
+            self.discard_old(new_bdy) 
+        } else { 
+            self
+        }
+    }
+}
+
 state_machine!{ LinkedJournal {
     fields {
         pub truncated_journal: TruncatedJournal,
@@ -981,16 +992,14 @@ state_machine!{ LinkedJournal {
         require pre.wf();
         require Self::lbl_wf(lbl);
         require lbl.is_DiscardOld();
-        require pre.seq_start() <= lbl.get_DiscardOld_start_lsn() <= pre.seq_end();
 
-        require lbl.get_DiscardOld_require_end() == pre.seq_end();
-        require pre.truncated_journal.can_discard_to(lbl.get_DiscardOld_start_lsn());
-        update truncated_journal = pre.truncated_journal.discard_old(lbl.get_DiscardOld_start_lsn()).build_tight();
-        update unmarshalled_tail =
-            if pre.unmarshalled_tail.seq_start <= lbl.get_DiscardOld_start_lsn()
-                { pre.unmarshalled_tail.discard_old(lbl.get_DiscardOld_start_lsn()) }
-            else
-                { pre.unmarshalled_tail };
+        let start_lsn = lbl.get_DiscardOld_start_lsn();
+        let require_end = lbl.get_DiscardOld_require_end();
+
+        require require_end == pre.seq_end();
+        require pre.truncated_journal.can_discard_to(start_lsn);
+        update truncated_journal = pre.truncated_journal.discard_old(start_lsn).build_tight();
+        update unmarshalled_tail = pre.unmarshalled_tail.bounded_discard(start_lsn);
     }}
 
     // TODO: Hmm, in dfy the transition is split into partial actions
@@ -1013,7 +1022,7 @@ state_machine!{ LinkedJournal {
         update unmarshalled_tail = pre.unmarshalled_tail.discard_old(cut);
     }}
 
-    transition!{ internal_journal_no_op(lbl: Label) {
+    transition!{ internal_no_op(lbl: Label) {
         require pre.wf();
         require lbl.is_Internal();
     }}
@@ -1059,8 +1068,8 @@ state_machine!{ LinkedJournal {
         assert( post.truncated_journal.disk_view.valid_ranking(pre.truncated_journal.marshal_ranking(addr)) );    // witness
     }
 
-    #[inductive(internal_journal_no_op)]
-    fn internal_journal_no_op_inductive(pre: Self, post: Self, lbl: Label) { }
+    #[inductive(internal_no_op)]
+    fn internal_no_op_inductive(pre: Self, post: Self, lbl: Label) { }
 
     #[inductive(initialize)]
     fn initialize_inductive(post: Self, truncated_journal: TruncatedJournal) { }

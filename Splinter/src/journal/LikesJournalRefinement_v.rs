@@ -34,7 +34,7 @@ impl LikesJournal::Step {
     //         Self::internal_journal_marshal(cut, addr, _new_journal) =>
     //             LinkedJournal::Step::internal_journal_marshal(cut, addr),
     //         Self::internal_no_op() =>
-    //             LinkedJournal::Step::internal_journal_no_op(),
+    //             LinkedJournal::Step::internal_no_op(),
     //         _ => arbitrary(),   // TODO(travis): wart on the state machine language
     //     }
     // }

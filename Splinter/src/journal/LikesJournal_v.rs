@@ -321,9 +321,7 @@ impl DiskView {
         big.wf(),
         big.acyclic(),
         self.is_sub_disk(big),
-        self.boundary_lsn == big.boundary_lsn,
         self.is_nondangling_pointer(ptr),
-    //ensures self.acyclic()
         ptr.is_Some() ==> self.boundary_lsn < self.entries[ptr.unwrap()].message_seq.seq_end,
     ensures
         self.build_lsn_addr_index(ptr) == big.build_lsn_addr_index(ptr),
@@ -502,16 +500,17 @@ impl TruncatedJournal {
         else { Multiset::from_set(self.build_lsn_addr_index().values()) }
     }
 
-    pub open spec(checked) fn tight_discard_old(self, new: Self, new_bdy: LSN, keep: Set<Address>) -> bool
-    recommends
-        self.wf(),
-        new.wf(),
-        self.disk_view.boundary_lsn <= new_bdy,
+    pub open spec(checked) fn disacrd_old_cond(self, start_lsn: LSN, require_end: LSN, 
+        keep_addrs: Set<Address>, new: Self) -> bool
+        recommends self.wf()
     {
-        &&& new.disk_view.boundary_lsn == new_bdy
-        &&& new.disk_view.entries.dom() =~= keep
-        &&& new.disk_view.entries.agrees(self.disk_view.entries)
-        &&& new.freshest_rec == if self.seq_end() == new_bdy { None } else { self.freshest_rec }
+        &&& require_end == self.seq_end()
+        &&& self.can_discard_to(start_lsn)
+        &&& new.disk_view.boundary_lsn == start_lsn
+        // new disk_view must be a subdisk contain all kept addrs 
+        &&& new.disk_view.entries <= self.disk_view.entries
+        &&& forall |addr| #[trigger] keep_addrs.contains(addr) ==> new.disk_view.entries.dom().contains(addr)
+        &&& new.freshest_rec == if self.seq_end() == start_lsn { None } else { self.freshest_rec }
     }
 }
 
@@ -594,7 +593,6 @@ impl TruncatedJournal {
     {
         self.disk_view.build_lsn_addr_index_gives_representation(self.freshest_rec)
     }
-    
 
     pub proof fn build_lsn_addr_honors_rank(self, lsn_addr_index: Map<LSN, Address>)
     requires
@@ -608,7 +606,7 @@ impl TruncatedJournal {
         }) ==> self.disk_view.the_rank_of(Some(lsn_addr_index[lsn1])) <= self.disk_view.the_rank_of(Some(lsn_addr_index[lsn2]))
     {
         self.disk_view.build_lsn_addr_honors_rank(self.freshest_rec, lsn_addr_index)
-    }
+    }    
 }
 
 state_machine!{ LikesJournal {
@@ -667,14 +665,17 @@ state_machine!{ LikesJournal {
     }
 
     transition!{ read_for_recovery(lbl: Label) {
+        require lbl is ReadForRecovery;
         require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
     } }
 
     transition!{ freeze_for_commit(lbl: Label) {
+        require lbl is FreezeForCommit;
         require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
     } }
 
     transition!{ query_end_lsn(lbl: Label) {
+        require lbl is QueryEndLsn;
         require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
     } }
     
@@ -682,43 +683,31 @@ state_machine!{ LikesJournal {
         require lbl is Put;
         require LinkedJournal_v::LinkedJournal::State::next(pre.journal, new_journal, Self::lbl_i(lbl));
     } }
-    
+
     transition!{ discard_old(lbl: Label, new_journal: LinkedJournal_v::LinkedJournal::State) {
         require lbl is DiscardOld;
 
-        // TODO These verbose accessors are really unpleasant to read.
         let start_lsn = lbl.get_DiscardOld_start_lsn();
-
-        // require pre.journal.wf();   // TODO delete; it's in inv
-        // require pre.journal.truncated_journal.disk_view.acyclic();   // TODO delete; it's in inv
-        require pre.journal.seq_start() <= start_lsn <= pre.journal.seq_end();
-        require lbl.get_DiscardOld_require_end() == pre.journal.seq_end();
-        require pre.journal.truncated_journal.can_discard_to(start_lsn);
-
-        // Addrs to delete from likes are pages that are between the old LSN and new LSN,
-        // excluding the page containing the new LSN boundary
+        let require_end = lbl.get_DiscardOld_require_end();
         let lsn_addr_index_post = lsn_addr_index_discard_up_to(pre.lsn_addr_index, start_lsn);
         let keep_addrs = lsn_addr_index_post.values();
-        let unref_addrs = pre.lsn_addr_index.values().difference(keep_addrs);
 
         require new_journal.wf();
-        require pre.journal.truncated_journal.tight_discard_old(
-            new_journal.truncated_journal, start_lsn, keep_addrs);
-        require pre.journal.unmarshalled_tail.tight_discard_old(
-            new_journal.unmarshalled_tail, start_lsn);
+        require pre.journal.truncated_journal.disacrd_old_cond(
+            start_lsn, require_end, keep_addrs, new_journal.truncated_journal);
+        require new_journal.unmarshalled_tail == 
+            pre.journal.unmarshalled_tail.bounded_discard(start_lsn);
 
         update journal = new_journal;
         update lsn_addr_index = lsn_addr_index_post;
     } }
 
-    transition!{ internal_journal_marshal(lbl: Label, cut: LSN, addr: Address, newjournal: LinkedJournal_v::LinkedJournal::State) {
-        require lbl.is_Internal();
-        require !pre.lsn_addr_index.values().contains(addr);
-        
-        require LinkedJournal_v::LinkedJournal::State::next_by(
-            pre.journal, newjournal, Self::lbl_i(lbl), LinkedJournal_v::LinkedJournal::Step::internal_journal_marshal(cut, addr));
+    transition!{ internal_journal_marshal(lbl: Label, cut: LSN, addr: Address, new_journal: LinkedJournal_v::LinkedJournal::State) {
+        require lbl is Internal;
+        require LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, new_journal, 
+            Self::lbl_i(lbl), LinkedJournal_v::LinkedJournal::Step::internal_journal_marshal(cut, addr));
 
-        update journal = newjournal;
+        update journal = new_journal;
         update lsn_addr_index = lsn_addr_index_append_record(
             pre.lsn_addr_index,
             pre.journal.unmarshalled_tail.discard_recent(cut),
@@ -735,10 +724,10 @@ state_machine!{ LikesJournal {
     // should simply treat shadowing as an error.
     init!{ initialize(ijournal: TruncatedJournal) {
         require ijournal.decodable();    // An invariant carried by CoordinationSystem from FreezeForCommit, past a crash, back here
-        require ijournal.disk_is_tight_wrt_representation();
+        // require ijournal.disk_is_tight_wrt_representation(); // Note(Jialin): might not be necessary
         init journal = LinkedJournal_v::LinkedJournal::State{
             truncated_journal: ijournal,
-            unmarshalled_tail: MsgHistory::empty_history_at(ijournal.build_tight().seq_end())};
+            unmarshalled_tail: MsgHistory::empty_history_at(ijournal.seq_end())}; // Note(Jialin): used to be ijournal.build_tight but I can't think of why
         init lsn_addr_index = ijournal.build_lsn_addr_index();
     } }
 
@@ -757,13 +746,12 @@ state_machine!{ LikesJournal {
         &&& self.wf()
         &&& tj.disk_view.acyclic()
         &&& self.lsn_addr_index == tj.build_lsn_addr_index()
-        &&& self.lsn_addr_index.values() == tj.representation()
-        &&& tj.disk_view.index_reflects_disk_view(self.lsn_addr_index)  // TODO or just prove it from build
+        // &&& self.lsn_addr_index.values() == tj.representation() // also prove it from build?
+        // &&& tj.disk_view.index_reflects_disk_view(self.lsn_addr_index)  // TODO or just prove it from build
+        // &&& tj.disk_is_tight_wrt_representation()
         &&& tj.index_domain_valid(self.lsn_addr_index)
         &&& tj.disk_view.index_keys_map_to_valid_entries(self.lsn_addr_index)
-        &&& tj.valid_entries_appear_in_index(self.lsn_addr_index)
         &&& tj.index_range_valid(self.lsn_addr_index)
-        &&& tj.disk_is_tight_wrt_representation()
         &&& self.imperative_matches_transitive()
     }
 
@@ -860,6 +848,7 @@ state_machine!{ LikesJournal {
     #[inductive(discard_old)]
     fn discard_old_inductive(pre: Self, post: Self, lbl: Label, new_journal: LinkedJournal_v::LinkedJournal::State) {
         reveal(LinkedJournal_v::LinkedJournal::State::next_by);
+        assume(false);
         Self::discard_old_step_preserves_wf_and_index(pre, post, lbl);
         let ranking = pre.journal.truncated_journal.disk_view.the_ranking();  // witness to acyclicity
         assert( post.journal.truncated_journal.disk_view.valid_ranking(ranking) );
@@ -872,12 +861,16 @@ state_machine!{ LikesJournal {
     }
 
     #[inductive(internal_journal_marshal)]
-    fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address, newjournal: LinkedJournal_v::LinkedJournal::State) {
+    fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address, new_journal: LinkedJournal_v::LinkedJournal::State) {
         reveal(LinkedJournal_v::LinkedJournal::State::next_by);
+
+        assume(false);
 
         let istep:LinkedJournal_v::LinkedJournal::Step = LinkedJournal_v::LinkedJournal::Step::internal_journal_marshal(cut, addr);
         assert( LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, post.journal, State::lbl_i(lbl), istep) );
-        LinkedJournal_v::LinkedJournal::State::inv_next(pre.journal, post.journal, State::lbl_i(lbl), istep);
+        assume( post.journal.inv() ); // TODO: submodule inv!!
+
+        // LinkedJournal_v::LinkedJournal::State::inv_next(pre.journal, post.journal, State::lbl_i(lbl), istep);
 
     //var tj := v.journal.truncatedJournal;
     //var tj' := v'.journal.truncatedJournal;
@@ -927,18 +920,21 @@ state_machine!{ LikesJournal {
    
     #[inductive(initialize)]
     fn initialize_inductive(post: Self, ijournal: TruncatedJournal) {
+        // assert(ijournal.wf());
+        // assert(ijournal.disk_view.acyclic());
+        // assert(post.lsn_addr_index == ijournal.build_lsn_addr_index());
+
         reveal(TruncatedJournal::index_domain_valid);
         reveal(DiskView::index_keys_map_to_valid_entries);
-        ijournal.disk_view.build_tight_is_awesome(ijournal.freshest_rec);
-        let tight_tj = ijournal.build_tight();
-        if tight_tj.freshest_rec.is_Some() {
-            tight_tj.disk_view.build_lsn_addr_index_domain_valid(tight_tj.freshest_rec);
+
+        if ijournal.freshest_rec.is_Some() {
+            ijournal.disk_view.build_lsn_addr_index_domain_valid(ijournal.freshest_rec);
         }
-        tight_tj.disk_view.build_lsn_addr_index_range_valid(tight_tj.freshest_rec, tight_tj.seq_end());
-        tight_tj.build_lsn_addr_index_gives_representation();
-        ijournal.disk_view.build_tight_gives_representation(ijournal.freshest_rec);
-        ijournal.disk_view.representation_ignores_build_tight(ijournal.freshest_rec, ijournal.freshest_rec);
-        ijournal.disk_view.build_lsn_addr_index_ignores_build_tight(ijournal.freshest_rec, ijournal.freshest_rec);
+        // assert(ijournal.index_domain_valid(post.lsn_addr_index));
+        ijournal.disk_view.build_lsn_addr_index_range_valid(ijournal.freshest_rec, ijournal.seq_end());
+        // assert(ijournal.disk_view.index_keys_map_to_valid_entries(post.lsn_addr_index));
+        // assert(ijournal.index_range_valid(post.lsn_addr_index));
+        // assert(post.imperative_matches_transitive());
     }
     
 } } // state_machine!

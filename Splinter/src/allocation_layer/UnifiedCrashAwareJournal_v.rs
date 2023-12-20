@@ -231,6 +231,7 @@ impl DiskView {
     }
 }
 
+// NOTE: should never take a step with the linked journal 
 state_machine!{UnifiedCrashAwareJournal{
     fields {
         pub ephemeral: Ephemeral,
@@ -352,6 +353,7 @@ state_machine!{UnifiedCrashAwareJournal{
             let v = pre.ephemeral.get_Known_v();
             let frozen_tj = frozen_journal.to_tj(frozen_dv);
 
+            // TODO: REMOVE
             require LinkedJournal::State::next(
                 pre.ephemeral.get_Known_v().to_lj(pre.dv),
                 pre.ephemeral.get_Known_v().to_lj(pre.dv),
@@ -401,13 +403,13 @@ state_machine!{UnifiedCrashAwareJournal{
 //     {
 //         // persistent and ephemeral agree on values
 //         &&& self.ephemeral is Known ==> {
-//             let ephemeral_disk = self.ephemeral.get_Known_v().get_tj().disk_view;
+//             let ephemeral_disk = self.ephemeral.get_Known_v().tj().disk_view;
 //             let persistent_disk = self.persistent.tj.disk_view;
 //             &&& Map::agrees(ephemeral_disk.entries, persistent_disk.entries)
 //         }
 //         // inflight is always a subset of ephemeral
 //         &&& self.ephemeral is Known && self.inflight is Some ==> {
-//             let ephemeral_disk = self.ephemeral.get_Known_v().get_tj().disk_view;
+//             let ephemeral_disk = self.ephemeral.get_Known_v().tj().disk_view;
 //             let inflight_disk = self.inflight.get_Some_0().tj.disk_view;
 //             &&& inflight_disk.is_sub_disk_with_newer_lsn(ephemeral_disk)
 //         }

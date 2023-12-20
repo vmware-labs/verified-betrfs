@@ -203,13 +203,13 @@ state_machine!{AllocationCrashAwareJournal{
     {
         // persistent and ephemeral agree on values
         &&& self.ephemeral is Known ==> {
-            let ephemeral_disk = self.ephemeral.get_Known_v().get_tj().disk_view;
+            let ephemeral_disk = self.ephemeral.get_Known_v().tj().disk_view;
             let persistent_disk = self.persistent.tj.disk_view;
             &&& Map::agrees(ephemeral_disk.entries, persistent_disk.entries)
         }
         // inflight is always a subset of ephemeral
         &&& self.ephemeral is Known && self.inflight is Some ==> {
-            let ephemeral_disk = self.ephemeral.get_Known_v().get_tj().disk_view;
+            let ephemeral_disk = self.ephemeral.get_Known_v().tj().disk_view;
             let inflight_disk = self.inflight.get_Some_0().tj.disk_view;
             &&& inflight_disk.is_sub_disk_with_newer_lsn(ephemeral_disk)
         }
@@ -293,20 +293,25 @@ state_machine!{AllocationCrashAwareJournal{
         reveal(AllocationJournal::State::next);
         reveal(AllocationJournal::State::next_by);
 
+        assert(post.journal_pages_not_free());
+
         let aj_lbl = AllocationJournal::Label::InternalAllocations{ allocs: lbl.get_Internal_allocs(), deallocs: lbl.get_Internal_deallocs() };
 
         match choose |step| AllocationJournal::State::next_by(pre.ephemeral.get_Known_v(), post.ephemeral.get_Known_v(), aj_lbl, step)
         {
-            AllocationJournal::Step::internal_journal_marshal(cut, addr, post_linked_journal) => {}
-            AllocationJournal::Step::internal_mini_allocator_fill() => {
-                assert(post.journal_pages_not_free());
+            AllocationJournal::Step::internal_journal_marshal(cut, addr, post_linked_journal) => {
+                if post.inflight is Some {
+                    let ephemeral_disk = post.ephemeral.get_Known_v().tj().disk_view;
+                    let inflight_disk = post.inflight.unwrap().tj.disk_view;
+                    assert(inflight_disk.is_sub_disk_with_newer_lsn(ephemeral_disk));
+                }
             }
+            AllocationJournal::Step::internal_mini_allocator_fill() => {}
             AllocationJournal::Step::internal_mini_allocator_prune() => {}
-            AllocationJournal::Step::internal_journal_no_op() => {}
+            AllocationJournal::Step::internal_no_op() => {}
             _ => { assert(false); } 
         }
 
-        assert(post.journal_pages_not_free());
         assert(post.state_relations());
     }
    
@@ -331,7 +336,7 @@ state_machine!{AllocationCrashAwareJournal{
         assert(post.inflight is Some ==> post.inflight.get_Some_0().tj.decodable()); // should reveal inflight
 
         let aj = pre.ephemeral.get_Known_v();
-        let ephemeral_disk = aj.get_tj().disk_view;
+        let ephemeral_disk = aj.tj().disk_view;
         let ephemeral_discarded_disk = ephemeral_disk.discard_old(frozen_journal.tj.disk_view.boundary_lsn);
 
         ephemeral_disk.build_tight_auto();
