@@ -276,51 +276,51 @@ impl DiskView {
 //         }
 //     }
 
-    pub open spec(checked) fn representation(self, root: Pointer) -> (out: Set<Address>)
-    recommends
-        self.decodable(root),
-        self.acyclic(),
-    decreases self.the_rank_of(root) when self.decodable(root) && self.acyclic()
-    {
-        // TODO(chris): debugging these failures sucks, unlike inline asserts.
-        match root {
-            None => set!{},
-            Some(addr) => self.representation(self.entries[addr].cropped_prior(self.boundary_lsn)).insert(addr)
-        }
-    }
+    // pub open spec(checked) fn representation(self, root: Pointer) -> (out: Set<Address>)
+    // recommends
+    //     self.decodable(root),
+    //     self.acyclic(),
+    // decreases self.the_rank_of(root) when self.decodable(root) && self.acyclic()
+    // {
+    //     // TODO(chris): debugging these failures sucks, unlike inline asserts.
+    //     match root {
+    //         None => set!{},
+    //         Some(addr) => self.representation(self.entries[addr].cropped_prior(self.boundary_lsn)).insert(addr)
+    //     }
+    // }
 
-    pub proof fn representation_ensures(self, root: Pointer)
-    requires
-        self.decodable(root),
-        self.acyclic(),
-    ensures
-        forall |addr| self.representation(root).contains(addr) ==> self.entries.contains_key(addr)
-    decreases
-        self.the_rank_of(root),
-    {
-        match root {
-            None => {},
-            Some(addr) => {
-                self.representation_ensures(self.entries[addr].cropped_prior(self.boundary_lsn));
-            },
-        }
-    }
+    // pub proof fn representation_ensures(self, root: Pointer)
+    // requires
+    //     self.decodable(root),
+    //     self.acyclic(),
+    // ensures
+    //     forall |addr| self.representation(root).contains(addr) ==> self.entries.contains_key(addr)
+    // decreases
+    //     self.the_rank_of(root),
+    // {
+    //     match root {
+    //         None => {},
+    //         Some(addr) => {
+    //             self.representation_ensures(self.entries[addr].cropped_prior(self.boundary_lsn));
+    //         },
+    //     }
+    // }
 
-    pub proof fn representation_auto(self)
-    ensures
-        forall |root|
-            self.decodable(root) && self.acyclic()
-            ==>
-            forall |addr| self.representation(root).contains(addr) ==> self.entries.contains_key(addr)
-    {
-        assert forall |root|
-            self.decodable(root) && self.acyclic()
-            implies
-            forall |addr| self.representation(root).contains(addr) ==> self.entries.contains_key(addr) by
-        {
-            self.representation_ensures(root);
-        }
-    }
+    // pub proof fn representation_auto(self)
+    // ensures
+    //     forall |root|
+    //         self.decodable(root) && self.acyclic()
+    //         ==>
+    //         forall |addr| self.representation(root).contains(addr) ==> self.entries.contains_key(addr)
+    // {
+    //     assert forall |root|
+    //         self.decodable(root) && self.acyclic()
+    //         implies
+    //         forall |addr| self.representation(root).contains(addr) ==> self.entries.contains_key(addr) by
+    //     {
+    //         self.representation_ensures(root);
+    //     }
+    // }
 
     pub open spec(checked) fn can_crop(self, root: Pointer, depth: nat) -> bool
     recommends
@@ -789,13 +789,13 @@ impl TruncatedJournal {
         }
     }
 
-    pub open spec(checked) fn representation(self) -> (out: Set<Address>)
-    recommends
-        self.disk_view.decodable(self.freshest_rec),
-        self.disk_view.acyclic(),
-    {
-        self.disk_view.representation(self.freshest_rec)
-    }
+    // pub open spec(checked) fn representation(self) -> (out: Set<Address>)
+    // recommends
+    //     self.disk_view.decodable(self.freshest_rec),
+    //     self.disk_view.acyclic(),
+    // {
+    //     self.disk_view.representation(self.freshest_rec)
+    // }
 
     // Yeah re-exporting this is annoying. Gonna just ask others to call 
     // self.disk_view.representation_auto();
@@ -810,13 +810,13 @@ impl TruncatedJournal {
 //         self.disk_view.representation_auto();
 //     }
 
-    pub open spec(checked) fn disk_is_tight_wrt_representation(self) -> bool
-    recommends
-        self.disk_view.decodable(self.freshest_rec),
-        self.disk_view.acyclic(),
-    {
-        self.disk_view.entries.dom() == self.representation()
-    }
+    // pub open spec(checked) fn disk_is_tight_wrt_representation(self) -> bool
+    // recommends
+    //     self.disk_view.decodable(self.freshest_rec),
+    //     self.disk_view.acyclic(),
+    // {
+    //     self.disk_view.entries.dom() == self.representation()
+    // }
 
     pub open spec(checked) fn mkfs() -> (out: Self)
     {
