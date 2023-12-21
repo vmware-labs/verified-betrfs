@@ -39,8 +39,52 @@ impl LikesJournal::Label {
 }
 
 impl DiskView {
+    pub proof fn sub_disk_crop_implies(self, big: DiskView, root: Pointer, depth: nat)
+    requires
+        self.decodable(root),
+        self.block_in_bounds(root),
+        self.can_crop(root, depth),
+        big.decodable(root),
+        self.is_sub_disk(big),
+    ensures 
+        big.can_crop(root, depth),
+        big.pointer_after_crop(root, depth) == self.pointer_after_crop(root, depth),
+    decreases depth
+    {
+        if 0 < depth {
+            self.sub_disk_crop_implies(big, self.next(root), (depth-1) as nat);
+        }
+    }
 
+    pub proof fn build_tight_preserves_crop(self, root: Pointer, depth: nat)
+    requires 
+        self.buildable(root),
+        self.block_in_bounds(root),
+        self.can_crop(root, depth),
+    ensures
+        self.build_tight(root).can_crop(root, depth),
+        self.build_tight(root).pointer_after_crop(root, depth) == self.pointer_after_crop(root, depth)
+    decreases
+        depth
+    {
+        if 0 < depth {
+            let tight_dv = self.build_tight(root);
+            let tight_dv_tail = self.build_tight(self.next(root));
+    
+            self.build_tight_builds_sub_disks(root);
+            self.build_tight_preserves_crop(self.next(root), (depth-1) as nat);
 
+            self.build_tight_shape(root);
+            if self.next(root) is Some {
+                self.tight_sub_disk(self.next(root), tight_dv_tail);
+                tight_dv_tail.sub_disk_crop_implies(tight_dv, self.next(root), (depth-1) as nat);
+            }
+
+            assert(tight_dv.can_crop(self.next(root), (depth-1) as nat));
+            assert(tight_dv.can_crop(root, depth));
+            assert(tight_dv.pointer_after_crop(root, depth) == self.pointer_after_crop(root, depth));
+        }
+    }
 }
 
 // The thrilling climax, the actual proof goal we want to use in lower
@@ -77,22 +121,12 @@ impl LikesJournal::State {
         reveal(LinkedJournal::State::next_by);
 
         self.i_preserves_decodable();
-
-        // assert(self.i().wf());
-        // assert(LinkedJournal::State::lbl_wf(lbl.i()));
-        // assert(self.i().truncated_journal.decodable());
+        let tj = self.journal.truncated_journal;
         let dv = self.i().truncated_journal.disk_view;
 
-        // need to show can_crop on a non tight disk is also true on a tight disk
-        assert(self.journal.truncated_journal.disk_view.can_crop(self.journal.truncated_journal.freshest_rec, depth));
-
-        // assert(dv.can_crop(self.journal.truncated_journal.freshest_rec, depth);
-        // let ptr = dv.pointer_after_crop(pre.truncated_journal.freshest_rec, depth);
-        // require ptr.is_Some();
-        // require dv.entries[ptr.unwrap()].message_seq.maybe_discard_old(dv.boundary_lsn) == lbl.get_ReadForRecovery_messages();
-
-
-        assume(false);
+        tj.disk_view.build_tight_preserves_crop(tj.freshest_rec, depth);
+        tj.disk_view.pointer_after_crop_ensures(tj.freshest_rec, depth);
+        dv.pointer_after_crop_ensures(tj.freshest_rec, depth);
     }
 
     pub proof fn next_refines(self, post: Self, lbl: LikesJournal::Label)
