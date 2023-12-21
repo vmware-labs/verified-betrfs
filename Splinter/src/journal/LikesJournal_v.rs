@@ -690,14 +690,16 @@ state_machine!{ LikesJournal {
         Multiset::from_set(self.lsn_addr_index.values())
     }
 
-    transition!{ read_for_recovery(lbl: Label) {
+    transition!{ read_for_recovery(lbl: Label, depth: nat) {
         require lbl is ReadForRecovery;
-        require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
+        require LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, pre.journal, Self::lbl_i(lbl), 
+                LinkedJournal_v::LinkedJournal::Step::read_for_recovery(depth));
     } }
 
-    transition!{ freeze_for_commit(lbl: Label) {
+    transition!{ freeze_for_commit(lbl: Label, depth: nat) {
         require lbl is FreezeForCommit;
-        require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
+        require LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, pre.journal, Self::lbl_i(lbl),
+                LinkedJournal_v::LinkedJournal::Step::freeze_for_commit(depth));
     } }
 
     transition!{ query_end_lsn(lbl: Label) {
@@ -784,14 +786,12 @@ state_machine!{ LikesJournal {
     }
 
     #[inductive(read_for_recovery)]
-    fn read_for_recovery_inductive(pre: Self, post: Self, lbl: Label) {
-        reveal(LinkedJournal_v::LinkedJournal::State::next);
+    fn read_for_recovery_inductive(pre: Self, post: Self, lbl: Label, depth: nat) {
         reveal(LinkedJournal_v::LinkedJournal::State::next_by);
     }
    
     #[inductive(freeze_for_commit)]
-    fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label) {
-        reveal(LinkedJournal_v::LinkedJournal::State::next);
+    fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label, depth: nat) {
         reveal(LinkedJournal_v::LinkedJournal::State::next_by);
     }
 
