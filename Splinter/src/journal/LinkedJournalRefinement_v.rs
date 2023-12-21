@@ -596,44 +596,45 @@ impl LinkedJournal::State {
         assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::freeze_for_commit(depth)) );  // trigger
     }
 
-//     pub proof fn inv_next(self, post: Self, lbl: LinkedJournal::Label, step: LinkedJournal::Step)
-//     requires
-//         self.inv(),
-//         LinkedJournal::State::next_by(self, post, lbl, step),
-//     ensures
-//         post.inv(),
-//     {
-//         reveal(PagedJournal::State::next_by);    // unfortunate defaults
-//         reveal(PagedJournal::State::next);       // unfortunate defaults
-//         reveal(LinkedJournal::State::next_by);   // unfortunate defaults
-//                                                  //
-//         match step {
-// //             LinkedJournal::Step::read_for_recovery(depth) =>  {
-// //             }
-// //             LinkedJournal::Step::freeze_for_commit(depth) =>  {
-// //             }
-// //             LinkedJournal::Step::query_end_lsn() =>  {
-// //             }
-// //             LinkedJournal::Step::put() =>  {
-// //             }
-//             LinkedJournal::Step::discard_old() =>  {
-//                 let lsn = lbl.get_DiscardOld_start_lsn();
-//                 self.truncated_journal.discard_old_decodable(lsn);
-//                 let discarded = self.truncated_journal.discard_old(lsn);
-//                 discarded.disk_view.build_tight_is_awesome(discarded.freshest_rec);
+    /// NOTE(Jialin): temp creation just to expose submodule inv
+    pub proof fn inv_next(self, post: Self, lbl: LinkedJournal::Label, step: LinkedJournal::Step)
+    requires
+        self.inv(),
+        LinkedJournal::State::next_by(self, post, lbl, step),
+    ensures
+        post.inv(),
+    {
+        reveal(PagedJournal::State::next_by);    // unfortunate defaults
+        reveal(PagedJournal::State::next);       // unfortunate defaults
+        reveal(LinkedJournal::State::next_by);   // unfortunate defaults
+                                                 //
+        match step {
+//             LinkedJournal::Step::read_for_recovery(depth) =>  {
 //             }
-//             LinkedJournal::Step::internal_journal_marshal(cut, addr) =>  {
-//                 let rank = self.truncated_journal.disk_view.the_ranking();
-//                 let post_rank = rank.insert(step.get_internal_journal_marshal_1(),  // TODO(travis): ewww
-//                     if self.truncated_journal.freshest_rec.is_None() { 0 }
-//                     else { rank[self.truncated_journal.freshest_rec.unwrap()] + 1 });
-//                 assert( post.truncated_journal.disk_view.valid_ranking(post_rank) );
+//             LinkedJournal::Step::freeze_for_commit(depth) =>  {
 //             }
-// //             LinkedJournal::Step::internal_no_op() =>  {
-// //             }
-//             _ => { }
-//         }
-//     }
+//             LinkedJournal::Step::query_end_lsn() =>  {
+//             }
+//             LinkedJournal::Step::put() =>  {
+//             }
+            LinkedJournal::Step::discard_old() =>  {
+                let lsn = lbl.get_DiscardOld_start_lsn();
+                self.truncated_journal.discard_old_decodable(lsn);
+                let discarded = self.truncated_journal.discard_old(lsn);
+                discarded.disk_view.build_tight_is_awesome(discarded.freshest_rec);
+            }
+            LinkedJournal::Step::internal_journal_marshal(cut, addr) =>  {
+                let rank = self.truncated_journal.disk_view.the_ranking();
+                let post_rank = rank.insert(step.get_internal_journal_marshal_1(),  // TODO(travis): ewww
+                    if self.truncated_journal.freshest_rec.is_None() { 0 }
+                    else { rank[self.truncated_journal.freshest_rec.unwrap()] + 1 });
+                assert( post.truncated_journal.disk_view.valid_ranking(post_rank) );
+            }
+//             LinkedJournal::Step::internal_no_op() =>  {
+//             }
+            _ => { }
+        }
+    }
 
     pub proof fn discard_old_refines(self, post: Self, lbl: LinkedJournal::Label, step: LinkedJournal::Step)
     requires

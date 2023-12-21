@@ -910,64 +910,32 @@ state_machine!{ LikesJournal {
     #[inductive(internal_journal_marshal)]
     fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address, new_journal: LinkedJournal_v::LinkedJournal::State) {
         reveal(LinkedJournal_v::LinkedJournal::State::next_by);
+        assert( post.wf() );
 
+        let istep:LinkedJournal_v::LinkedJournal::Step = LinkedJournal_v::LinkedJournal::Step::internal_journal_marshal(cut, addr);
+        assert(LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, post.journal, State::lbl_i(lbl), istep));
 
-        // &&& self.wf()
-        // &&& tj.disk_view.acyclic()
-        // &&& self.lsn_addr_index == tj.build_lsn_addr_index() // equivalent to imperative_matches_transitive
-        // &&& tj.index_domain_valid(self.lsn_addr_index)
-        // &&& tj.disk_view.index_keys_map_to_valid_entries(self.lsn_addr_index)
-        // &&& tj.index_range_valid(self.lsn_addr_index)
+        // NOTE(Jialin): inv_next duplicates what should be exported by submodule inv
+        LinkedJournal_v::LinkedJournal::State::inv_next(pre.journal, post.journal, State::lbl_i(lbl), istep);
+        assert(post.journal.inv());
 
+        let tj_pre = pre.journal.truncated_journal;
+        let tj_post = post.journal.truncated_journal;
+        assert( tj_post.disk_view.acyclic() ); // linked journal inv
 
-        assume(false);
+        tj_pre.disk_view.sub_disk_repr_index(tj_post.disk_view, tj_pre.freshest_rec);
+        assert( post.lsn_addr_index == tj_post.build_lsn_addr_index() );
 
-    //     let istep:LinkedJournal_v::LinkedJournal::Step = LinkedJournal_v::LinkedJournal::Step::internal_journal_marshal(cut, addr);
-    //     assert( LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, post.journal, State::lbl_i(lbl), istep) );
-    //     assume( post.journal.inv() ); // TODO: submodule inv!!
+        reveal(TruncatedJournal::index_domain_valid);
+        reveal(DiskView::index_keys_map_to_valid_entries);
+        assert( tj_post.index_domain_valid(post.lsn_addr_index) );
+        assert( tj_post.disk_view.index_keys_map_to_valid_entries(post.lsn_addr_index) );
 
-    //     // LinkedJournal_v::LinkedJournal::State::inv_next(pre.journal, post.journal, State::lbl_i(lbl), istep);
+        let msgs = pre.journal.unmarshalled_tail.discard_recent(cut);
+        lsn_addr_index_append_record_ensures(pre.lsn_addr_index, msgs, addr);
+        assert( tj_post.index_range_valid(post.lsn_addr_index) );
 
-    // //var tj := v.journal.truncatedJournal;
-    // //var tj' := v'.journal.truncatedJournal;
-    //     let tj_pre = pre.journal.truncated_journal;
-    //     let tj_post = post.journal.truncated_journal;
-    //     assert( tj_post.disk_view.acyclic() );
-    //     tj_pre.disk_view.sub_disk_repr_index(tj_post.disk_view, tj_pre.freshest_rec);
-    //     tj_post.build_lsn_addr_index_gives_representation();
-
-    //     reveal(TruncatedJournal::index_domain_valid);
-    //     reveal(DiskView::index_keys_map_to_valid_entries);
-    //     assert( tj_post.index_domain_valid(post.lsn_addr_index) );
-    //     assert( tj_post.disk_view.index_keys_map_to_valid_entries(post.lsn_addr_index) );
-    //     assert( tj_post.index_range_valid(post.lsn_addr_index) );
-    //     assert( post.lsn_addr_index =~= tj_post.build_lsn_addr_index() ); // used to be free :v(
-
-    //     tj_post.disk_view.representation_ensures(tj_post.freshest_rec); // not helpful; delete
-
-    //     assert forall |addr| #[trigger] tj_post.disk_view.entries.dom().contains(addr)
-    //         implies tj_post.representation().contains(addr) by {
-    //         if tj_pre.disk_view.entries.dom().contains(addr) {
-    //             assert( tj_pre.representation().contains(addr) );
-    //             let newaddr = tj_post.freshest_rec.unwrap();
-    //             assert( tj_post.freshest_rec.is_Some() );
-    //             assume( tj_pre.disk_view.representation(tj_pre.freshest_rec) == tj_post.disk_view.representation(tj_post.disk_view.entries[newaddr].cropped_prior(tj_post.disk_view.boundary_lsn)) );   // TODO(jonh): left off battling this silly corner
-    //             assert( tj_post.representation() == tj_pre.representation().insert(newaddr) );
-    //             assert( tj_post.representation().contains(addr) );
-    //         } else {
-    //             assert( tj_post.representation().contains(addr) );
-    //         }
-    //     }
-    //     assert forall |addr|
-    //         #[trigger] tj_post.representation().contains(addr)
-    //         implies
-    //         tj_post.disk_view.entries.dom().contains(addr)
-    //         by {
-    //     }
-    //     assert( tj_post.disk_view.entries.dom() =~= tj_post.representation() );
-    //     assert( tj_post.disk_is_tight_wrt_representation() ) by {
-    //     }
-    //     assert( post.inv() );
+        assert( post.inv() );
     }
    
     #[inductive(internal_no_op)]
