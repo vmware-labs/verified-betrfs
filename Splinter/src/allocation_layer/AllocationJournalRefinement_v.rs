@@ -247,7 +247,7 @@ impl AllocationJournal::State {
 
         // require post_journal.wf();
         // require deallocs == discarded_aus;
-        // require pre.tj().disacrd_old_cond(
+        // require pre.tj().discard_old_cond(
         //     start_lsn, require_end, keep_addrs, post_journal.ktruncated_journal);
         // require post_journal.unmarshalled_tail ==  
         //     pre.journal.unmarshalled_tail.bounded_discard(start_lsn);

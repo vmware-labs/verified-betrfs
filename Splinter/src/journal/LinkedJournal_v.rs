@@ -969,7 +969,9 @@ state_machine!{ LinkedJournal {
         let new_bdy = label_fj.seq_start();
         require dv.boundary_lsn <= new_bdy;
         require cropped_tj.can_discard_to(new_bdy);
-        require label_fj == cropped_tj.discard_old(new_bdy).build_tight();
+        // NOTE(Jialin): relaxing requirement for layers below
+        require label_fj == cropped_tj.discard_old(new_bdy);
+        // require label_fj == cropped_tj.discard_old(new_bdy).build_tight(); 
     }}
 
     transition!{ query_end_lsn(lbl: Label) {

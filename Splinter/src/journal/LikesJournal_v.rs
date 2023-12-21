@@ -500,14 +500,14 @@ impl TruncatedJournal {
         else { Multiset::from_set(self.build_lsn_addr_index().values()) }
     }
 
-    pub open spec(checked) fn disacrd_old_cond(self, start_lsn: LSN, require_end: LSN, 
+    pub open spec(checked) fn discard_old_cond(self, start_lsn: LSN, require_end: LSN, 
         keep_addrs: Set<Address>, new: Self) -> bool
         recommends self.wf()
     {
         &&& require_end == self.seq_end()
         &&& self.can_discard_to(start_lsn)
-        &&& new.disk_view.boundary_lsn == start_lsn
         // new disk_view must be a subdisk contain all kept addrs 
+        &&& new.disk_view.boundary_lsn == start_lsn
         &&& new.disk_view.entries <= self.disk_view.entries
         &&& forall |addr| #[trigger] keep_addrs.contains(addr) ==> new.disk_view.entries.dom().contains(addr)
         &&& new.freshest_rec == if self.seq_end() == start_lsn { None } else { self.freshest_rec }
@@ -560,7 +560,7 @@ impl TruncatedJournal {
     {
         let msgs = self.disk_view.entries[addr].message_seq;
         let boundary_lsn = self.disk_view.boundary_lsn;
-        forall |lsn| #![auto] DiskView::cropped_msg_seq_contains_lsn(boundary_lsn, msgs, lsn) ==> {
+        forall |lsn| #[trigger] DiskView::cropped_msg_seq_contains_lsn(boundary_lsn, msgs, lsn) ==> {
             &&& lsn_addr_index.contains_key(lsn)
             &&& lsn_addr_index[lsn] == addr
         }
@@ -693,7 +693,7 @@ state_machine!{ LikesJournal {
         let keep_addrs = lsn_addr_index_post.values();
 
         require new_journal.wf();
-        require pre.journal.truncated_journal.disacrd_old_cond(
+        require pre.journal.truncated_journal.discard_old_cond(
             start_lsn, require_end, keep_addrs, new_journal.truncated_journal);
         require new_journal.unmarshalled_tail == 
             pre.journal.unmarshalled_tail.bounded_discard(start_lsn);
@@ -735,24 +735,26 @@ state_machine!{ LikesJournal {
 // Definitions moved from Refinement file to integrate with invariant machinery.
     // The thrilling climax, the actual proof goal we want to use in lower
     // refinement layers.
-    pub open spec(checked) fn imperative_matches_transitive(self) -> bool
-    {
-        self.transitive_likes() == self.imperative_likes()
-    }
+    // pub open spec(checked) fn imperative_matches_transitive(self) -> bool
+    // {
+    //     self.transitive_likes() == self.imperative_likes()
+    // }
 
     #[invariant]
     pub open spec(checked) fn inv(self) -> bool {
         let tj = self.journal.truncated_journal;
         &&& self.wf()
         &&& tj.disk_view.acyclic()
-        &&& self.lsn_addr_index == tj.build_lsn_addr_index()
-        // &&& self.lsn_addr_index.values() == tj.representation() // also prove it from build?
-        // &&& tj.disk_view.index_reflects_disk_view(self.lsn_addr_index)  // TODO or just prove it from build
-        // &&& tj.disk_is_tight_wrt_representation()
+        &&& self.lsn_addr_index == tj.build_lsn_addr_index() // equivalent to imperative_matches_transitive
         &&& tj.index_domain_valid(self.lsn_addr_index)
         &&& tj.disk_view.index_keys_map_to_valid_entries(self.lsn_addr_index)
         &&& tj.index_range_valid(self.lsn_addr_index)
-        &&& self.imperative_matches_transitive()
+
+        //////////////////////////////////////////////////////////////
+        // &&& self.lsn_addr_index.values() == tj.representation() // also prove it from build?
+        // &&& tj.disk_view.index_reflects_disk_view(self.lsn_addr_index)  // TODO or just prove it from build
+        // &&& tj.disk_is_tight_wrt_representation()
+        // &&& self.imperative_matches_transitive() // this is shown through the build
     }
 
     #[inductive(read_for_recovery)]
@@ -781,34 +783,30 @@ state_machine!{ LikesJournal {
 
     /* `pub` is only being added to avoid a confusing fake error message, originally we didn't intend for this
        proof function to be `pub` */
-    pub proof fn discard_old_step_preserves_wf_disk_view(pre: Self, post: Self, lbl: Label)
+    pub proof fn discard_old_step_preserves_acyclicity(pre: Self, post: Self, lbl: Label)
     requires
-        pre.wf(),
-        pre.journal.truncated_journal.index_domain_valid(pre.lsn_addr_index),
-        pre.journal.truncated_journal.disk_view.index_keys_map_to_valid_entries(pre.lsn_addr_index),
-        pre.journal.truncated_journal.index_range_valid(pre.lsn_addr_index),
-        pre.journal.truncated_journal.disk_view.acyclic(),
-        pre.lsn_addr_index == pre.journal.truncated_journal.build_lsn_addr_index(),
-        pre.lsn_addr_index.values() == pre.journal.truncated_journal.representation(),
+        pre.inv(),
         Self::discard_old(pre, post, lbl, post.journal),
     ensures
-        post.journal.truncated_journal.wf(),
+        post.journal.truncated_journal.disk_view.acyclic(),
     {
-        assume(false); // TODO port this proof
+        let dv = pre.journal.truncated_journal.disk_view;
+        let post_dv = post.journal.truncated_journal.disk_view;
+        let ranking = dv.the_ranking();
+
+        assert forall |addr| #[trigger] post_dv.entries.contains_key(addr) && post_dv.entries[addr].cropped_prior(post_dv.boundary_lsn).is_Some()
+        implies ranking[post_dv.entries[addr].cropped_prior(post_dv.boundary_lsn).unwrap()] < ranking[addr]
+        by {
+            assert(dv.entries.contains_key(addr)); // trigger
+        }
+        assert(post_dv.valid_ranking(ranking)); // witness
     }
    
-    pub proof fn discard_old_step_preserves_wf_and_index(pre: Self, post: Self, lbl: Label)
+    pub proof fn discard_old_step_preserves_index(pre: Self, post: Self, lbl: Label)
     requires
-        pre.wf(),
-        pre.journal.truncated_journal.index_domain_valid(pre.lsn_addr_index),
-        pre.journal.truncated_journal.disk_view.index_keys_map_to_valid_entries(pre.lsn_addr_index),
-        pre.journal.truncated_journal.index_range_valid(pre.lsn_addr_index),
-        pre.journal.truncated_journal.disk_view.acyclic(),
-        pre.lsn_addr_index == pre.journal.truncated_journal.build_lsn_addr_index(),
-        pre.lsn_addr_index.values() == pre.journal.truncated_journal.representation(),
+        pre.inv(),
         Self::discard_old(pre, post, lbl, post.journal),
     ensures
-        post.wf(),
         post.journal.truncated_journal.index_domain_valid(post.lsn_addr_index),
         post.journal.truncated_journal.disk_view.index_keys_map_to_valid_entries(post.lsn_addr_index),
         post.journal.truncated_journal.index_range_valid(post.lsn_addr_index),
@@ -818,46 +816,52 @@ state_machine!{ LikesJournal {
 
         let tj_pre = pre.journal.truncated_journal;
         let tj_post = post.journal.truncated_journal;
-        let pre_bdy = tj_pre.disk_view.boundary_lsn;
-        let new_bdy = lbl.get_DiscardOld_start_lsn();
 
-        Self::discard_old_step_preserves_wf_disk_view(pre, post, lbl);
-    
-        // prove tj'.diskView.IsNondanglingPointer(tj'.freshestRec);
-        if tj_post.freshest_rec.is_Some() {
-          let msgs = tj_pre.disk_view.entries[tj_pre.freshest_rec.unwrap()].message_seq;
-          let lsn = max(new_bdy as int, msgs.seq_start as int) as nat; // witness
-          assume( post.lsn_addr_index.contains_key(lsn) && post.lsn_addr_index[lsn] == tj_pre.freshest_rec.unwrap() );  // TODO left off
+        assert forall |lsn| #[trigger] post.lsn_addr_index.contains_key(lsn)
+        implies tj_post.disk_view.addr_supports_lsn(post.lsn_addr_index[lsn], lsn)
+        by {
+            let addr = post.lsn_addr_index[lsn];
+            assert(post.lsn_addr_index.values().contains(addr)); // trigger
         }
-        
-        assume(false); // TODO complete this proof
+
+        let bdy_pre = tj_pre.disk_view.boundary_lsn;
+        let bdy_post = tj_post.disk_view.boundary_lsn;
+
+        assert forall |addr| post.lsn_addr_index.values().contains(addr)
+        implies tj_post.every_lsn_at_addr_indexed_to_addr(post.lsn_addr_index, addr)
+        by {
+            assert(pre.lsn_addr_index.values().contains(addr));
+            assert(tj_pre.every_lsn_at_addr_indexed_to_addr(pre.lsn_addr_index, addr));
+
+            let msgs = tj_post.disk_view.entries[addr].message_seq;
+            assert forall |lsn| #[trigger] DiskView::cropped_msg_seq_contains_lsn(bdy_post, msgs, lsn) 
+            implies {
+                &&& post.lsn_addr_index.contains_key(lsn)
+                &&& post.lsn_addr_index[lsn] == addr
+            } by {
+                assert(DiskView::cropped_msg_seq_contains_lsn(bdy_pre, msgs, lsn));
+            }
+        }
     }
 
     pub proof fn discard_old_maintains_repr_index(pre: Self, post: Self, lbl: Label)
     requires
         pre.inv(),
-        post.wf(),
         Self::discard_old(pre, post, lbl, post.journal),
-        pre.journal.truncated_journal.disk_view.acyclic(),
+        post.journal.truncated_journal.disk_view.acyclic(),
     ensures
         post.lsn_addr_index == post.journal.truncated_journal.build_lsn_addr_index(),
     {
+        
+
         assume(false);  // TODO more proof porting
     }
 
     #[inductive(discard_old)]
     fn discard_old_inductive(pre: Self, post: Self, lbl: Label, new_journal: LinkedJournal_v::LinkedJournal::State) {
-        reveal(LinkedJournal_v::LinkedJournal::State::next_by);
-        assume(false);
-        Self::discard_old_step_preserves_wf_and_index(pre, post, lbl);
-        let ranking = pre.journal.truncated_journal.disk_view.the_ranking();  // witness to acyclicity
-        assert( post.journal.truncated_journal.disk_view.valid_ranking(ranking) );
+        Self::discard_old_step_preserves_acyclicity(pre, post, lbl);
+        Self::discard_old_step_preserves_index(pre, post, lbl);
         Self::discard_old_maintains_repr_index(pre, post, lbl);
-        post.journal.truncated_journal.build_lsn_addr_index_gives_representation();
-        assert( post.journal.truncated_journal.index_range_valid(post.lsn_addr_index) );
-        assume(post.journal.truncated_journal.disk_is_tight_wrt_representation()); // TODO something didn't prove for free
-        assume( post.journal.truncated_journal.valid_entries_appear_in_index(post.lsn_addr_index) );    // unstable. Works under --verify-module. :v(
-        assert( post.inv() );
     }
 
     #[inductive(internal_journal_marshal)]
