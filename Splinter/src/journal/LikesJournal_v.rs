@@ -657,7 +657,7 @@ state_machine!{ LikesJournal {
     // above. There's a lot of useless boilerplate in this layer; perhaps
     // there's a prettier way to decorate an existing state machine with
     // extra ghost state.
-    pub open spec fn lbl_i(lbl: Label) -> LinkedJournal_v::LinkedJournal::Label {
+    pub open spec fn lbl_linked(lbl: Label) -> LinkedJournal_v::LinkedJournal::Label {
         match lbl {
             Label::ReadForRecovery{messages}
                 => LinkedJournal_v::LinkedJournal::Label::ReadForRecovery{messages},
@@ -692,24 +692,24 @@ state_machine!{ LikesJournal {
 
     transition!{ read_for_recovery(lbl: Label, depth: nat) {
         require lbl is ReadForRecovery;
-        require LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, pre.journal, Self::lbl_i(lbl), 
+        require LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, pre.journal, Self::lbl_linked(lbl), 
                 LinkedJournal_v::LinkedJournal::Step::read_for_recovery(depth));
     } }
 
     transition!{ freeze_for_commit(lbl: Label, depth: nat) {
         require lbl is FreezeForCommit;
-        require LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, pre.journal, Self::lbl_i(lbl),
+        require LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, pre.journal, Self::lbl_linked(lbl),
                 LinkedJournal_v::LinkedJournal::Step::freeze_for_commit(depth));
     } }
 
     transition!{ query_end_lsn(lbl: Label) {
         require lbl is QueryEndLsn;
-        require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
+        require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::lbl_linked(lbl));
     } }
     
     transition!{ put(lbl: Label, new_journal: LinkedJournal_v::LinkedJournal::State) {
         require lbl is Put;
-        require LinkedJournal_v::LinkedJournal::State::next(pre.journal, new_journal, Self::lbl_i(lbl));
+        require LinkedJournal_v::LinkedJournal::State::next(pre.journal, new_journal, Self::lbl_linked(lbl));
     } }
 
     transition!{ discard_old(lbl: Label, new_journal: LinkedJournal_v::LinkedJournal::State) {
@@ -733,7 +733,7 @@ state_machine!{ LikesJournal {
     transition!{ internal_journal_marshal(lbl: Label, cut: LSN, addr: Address, new_journal: LinkedJournal_v::LinkedJournal::State) {
         require lbl is Internal;
         require LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, new_journal, 
-            Self::lbl_i(lbl), LinkedJournal_v::LinkedJournal::Step::internal_journal_marshal(cut, addr));
+            Self::lbl_linked(lbl), LinkedJournal_v::LinkedJournal::Step::internal_journal_marshal(cut, addr));
 
         update journal = new_journal;
         update lsn_addr_index = lsn_addr_index_append_record(
@@ -913,10 +913,10 @@ state_machine!{ LikesJournal {
         assert( post.wf() );
 
         let istep:LinkedJournal_v::LinkedJournal::Step = LinkedJournal_v::LinkedJournal::Step::internal_journal_marshal(cut, addr);
-        assert(LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, post.journal, State::lbl_i(lbl), istep));
+        assert(LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, post.journal, State::lbl_linked(lbl), istep));
 
         // NOTE(Jialin): inv_next duplicates what should be exported by submodule inv
-        LinkedJournal_v::LinkedJournal::State::inv_next(pre.journal, post.journal, State::lbl_i(lbl), istep);
+        LinkedJournal_v::LinkedJournal::State::inv_next(pre.journal, post.journal, State::lbl_linked(lbl), istep);
         assert(post.journal.inv());
 
         let tj_pre = pre.journal.truncated_journal;

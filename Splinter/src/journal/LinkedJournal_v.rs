@@ -129,6 +129,19 @@ impl DiskView {
             )
     }
 
+    pub proof fn sub_disk_acyclic(self, big: Self)
+    requires 
+        self.wf(),
+        self.is_sub_disk(big),
+        big.wf(),
+        big.acyclic()
+    ensures
+        self.acyclic()
+    {
+        assert forall |addr| self.entries.contains_key(addr) ==> big.entries.contains_key(addr) by {}
+        assert(self.valid_ranking(big.the_ranking()));
+    }
+
     pub open spec(checked) fn acyclic(self) -> bool
     recommends
         self.wf(),
@@ -719,6 +732,20 @@ impl TruncatedJournal {
        }
     }
 
+    pub open spec(checked) fn valid_discard_old(self, lsn: LSN, new: Self) -> bool
+    recommends
+        self.wf(),
+        self.can_discard_to(lsn)
+    {
+        let post_discard = self.discard_old(lsn);
+        let post_tight = post_discard.build_tight();
+
+        &&& new.wf()
+        &&& new.freshest_rec == post_discard.freshest_rec
+        &&& new.disk_view.is_sub_disk(post_discard.disk_view) // new must be a subset of original
+        &&& post_tight.disk_view.is_sub_disk(new.disk_view)   // tight must be fully contained by new
+    }
+
     pub open spec(checked) fn decodable(self) -> bool
     {
         &&& self.wf()
@@ -969,9 +996,8 @@ state_machine!{ LinkedJournal {
         let new_bdy = label_fj.seq_start();
         require dv.boundary_lsn <= new_bdy;
         require cropped_tj.can_discard_to(new_bdy);
-        // NOTE(Jialin): relaxing requirement for layers below
+        // NOTE(Jialin): remove build tight requirement for layers below
         require label_fj == cropped_tj.discard_old(new_bdy);
-        // require label_fj == cropped_tj.discard_old(new_bdy).build_tight(); 
     }}
 
     transition!{ query_end_lsn(lbl: Label) {
@@ -990,7 +1016,7 @@ state_machine!{ LinkedJournal {
         update unmarshalled_tail = pre.unmarshalled_tail.concat(lbl.get_Put_messages());
     }}
 
-    transition!{ discard_old(lbl: Label) {
+    transition!{ discard_old(lbl: Label, new_tj: TruncatedJournal) {
         require pre.wf();
         require Self::lbl_wf(lbl);
         require lbl.is_DiscardOld();
@@ -1000,7 +1026,12 @@ state_machine!{ LinkedJournal {
 
         require require_end == pre.seq_end();
         require pre.truncated_journal.can_discard_to(start_lsn);
-        update truncated_journal = pre.truncated_journal.discard_old(start_lsn).build_tight();
+
+        // leaving the amount of garbage collection to new_tj.disk_view
+        // as long as all reachable pages are still in scope
+        require pre.truncated_journal.valid_discard_old(start_lsn, new_tj);
+
+        update truncated_journal = new_tj;
         update unmarshalled_tail = pre.unmarshalled_tail.bounded_discard(start_lsn);
     }}
 
@@ -1039,7 +1070,7 @@ state_machine!{ LinkedJournal {
     pub open spec(checked) fn inv(self) -> bool {
         &&& self.wf()
         &&& self.truncated_journal.decodable()
-        &&& self.truncated_journal.disk_view.acyclic()
+        // &&& self.truncated_journal.disk_view.acyclic() // covered by tj.decodable
     }
 
     #[inductive(read_for_recovery)]
@@ -1056,13 +1087,12 @@ state_machine!{ LinkedJournal {
     }
 
     #[inductive(discard_old)]
-    fn discard_old_inductive(pre: Self, post: Self, lbl: Label) {
+    fn discard_old_inductive(pre: Self, post: Self, lbl: Label, new_tj: TruncatedJournal) {
         let lsn = lbl.get_DiscardOld_start_lsn();
-        let cropped_tj = pre.truncated_journal.discard_old(lsn);
-        let tight_tj = cropped_tj.build_tight();
-        assert( cropped_tj.disk_view.valid_ranking(
-                pre.truncated_journal.disk_view.the_ranking()) ); // witness to acyclic
-        DiskView::tight_interp(cropped_tj.disk_view, cropped_tj.freshest_rec, tight_tj.disk_view);
+        let post_discard = pre.truncated_journal.discard_old(lsn);
+
+        pre.truncated_journal.discard_old_decodable(lsn);
+        new_tj.disk_view.sub_disk_acyclic(post_discard.disk_view); // lemma that triggers
     }
 
     #[inductive(internal_journal_marshal)]

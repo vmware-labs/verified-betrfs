@@ -19,11 +19,6 @@ use crate::journal::LinkedJournal_v::*;
 
 verus!{
 
-// impl JournalRecord {
-//     pub open spec(checked) fn i(self) -> PagedJournal_v::JournalRecord {
-//     }
-// }
-
 impl DiskView {
     pub proof fn iptr_output_valid(self, ptr: Pointer)
     requires
@@ -39,6 +34,7 @@ impl DiskView {
         }
     }
 
+    #[verifier::spinoff_prover]
     pub proof fn discard_interp(self, lsn: LSN, post: Self, ptr: Pointer)
     requires
         self.wf(),
@@ -65,18 +61,6 @@ impl DiskView {
         }
         assert( post.iptr(ptr) =~= PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn) );
     }
-
-// Tenzin: LOL (idk the context but love the lemma name here)
-//      pub proof fn sigh<K, V>(small: Map<K, V>, big: Map<K, V>)
-//      requires
-//          small <= big,
-//      ensures
-//          //small.dom().subset_of(big.dom()),
-//          small.dom().subset_of(big.dom()),
-//      {
-//      }
-
-
 
     // In Dafny, this entire lemma was unneeded; call sites could be replaced by this single line:
     //   assert( self.valid_ranking(big.the_ranking()) ); // witness
@@ -119,12 +103,12 @@ impl DiskView {
         }
     }
 
-    pub proof fn she_nat_igans(depth: nat)
-    {
-        if 0 < depth {
-            assert( ((depth-1) as nat) < depth );
-        }
-    }
+    // pub proof fn she_nat_igans(depth: nat)
+    // {
+    //     if 0 < depth {
+    //         assert( ((depth-1) as nat) < depth );
+    //     }
+    // }
 
     pub proof fn pointer_after_crop_commutes_with_interpretation(self, ptr: Pointer, bdy: LSN, depth: nat)
     requires
@@ -386,31 +370,6 @@ impl TruncatedJournal {
         }
     }
 
-//     pub proof fn crop_commutes_with_interpretation(self, depth: nat)
-//     requires
-//         self.decodable(),
-//         self.disk_view.acyclic(),
-//         self.can_crop(depth),
-//     ensures
-//         self.crop(depth).i() == self.i().crop_head_records(depth)
-//     {
-//         assume(false);
-//     }
-
-//     pub proof fn can_crop_increment(self, depth: nat)
-//     requires
-//         0 < depth,
-//         self.wf(),
-//         self.freshest_rec.is_Some(),
-//         self.can_crop(1),
-//         self.crop(1).can_crop((depth-1) as nat),
-//     ensures
-//         self.can_crop(depth),
-//     decreases depth
-//     {
-//         assume( false );
-//     }
-
     pub proof fn linked_tj_can_crop_implies_paged_tj_can_crop(self, depth: nat)
     requires
         self.decodable(),
@@ -588,7 +547,7 @@ impl LinkedJournal::State {
         let cropped_tj = LinkedJournal_v::TruncatedJournal{freshest_rec: cropped_ptr, disk_view: tjd};
         tjd.pointer_after_crop_ensures(tj.freshest_rec, depth); // another lost spec-ensures that wasted time digging up
 
-        cropped_tj.discard_old(new_bdy).disk_view.build_tight_maintains_interpretation(cropped_tj.discard_old(new_bdy).freshest_rec);
+        // cropped_tj.discard_old(new_bdy).disk_view.build_tight_maintains_interpretation(cropped_tj.discard_old(new_bdy).freshest_rec);
 
          lbl.get_FreezeForCommit_frozen_journal().iwf();  // another lost spec-ensures that wasted time digging up
         self.i().truncated_journal.crop_head_records_wf_lemma(depth); // another lost spec-ensures that wasted time digging up
@@ -617,11 +576,12 @@ impl LinkedJournal::State {
 //             }
 //             LinkedJournal::Step::put() =>  {
 //             }
-            LinkedJournal::Step::discard_old() =>  {
+            LinkedJournal::Step::discard_old(new_tj) =>  {
                 let lsn = lbl.get_DiscardOld_start_lsn();
+                let post_discard = self.truncated_journal.discard_old(lsn);
+
                 self.truncated_journal.discard_old_decodable(lsn);
-                let discarded = self.truncated_journal.discard_old(lsn);
-                discarded.disk_view.build_tight_is_awesome(discarded.freshest_rec);
+                new_tj.disk_view.sub_disk_acyclic(post_discard.disk_view);
             }
             LinkedJournal::Step::internal_journal_marshal(cut, addr) =>  {
                 let rank = self.truncated_journal.disk_view.the_ranking();
@@ -655,7 +615,7 @@ impl LinkedJournal::State {
         if !(self.unmarshalled_tail.seq_start <= lsn) {
             let cropped_tj = self.truncated_journal.discard_old(lsn);
             self.truncated_journal.disk_view.discard_interp(lsn, cropped_tj.disk_view, self.truncated_journal.freshest_rec);
-            DiskView::tight_interp(cropped_tj.disk_view, cropped_tj.freshest_rec, post.truncated_journal.disk_view);
+            // DiskView::tight_interp(cropped_tj.disk_view, cropped_tj.freshest_rec, post.truncated_journal.disk_view);
             post.truncated_journal.disk_view.sub_disk_interp(cropped_tj.disk_view, cropped_tj.freshest_rec);
         }
         assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::discard_old()) );  // trigger
@@ -696,7 +656,7 @@ impl LinkedJournal::State {
             LinkedJournal::Step::put() =>  {
                 assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::put()) );
             }
-            LinkedJournal::Step::discard_old() =>  {
+            LinkedJournal::Step::discard_old(_) =>  {
                 self.discard_old_refines(post, lbl, step);
             }
             LinkedJournal::Step::internal_journal_marshal(cut, addr) =>  {
