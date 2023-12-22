@@ -33,7 +33,7 @@ impl LikesJournal::State {
     pub proof fn discard_old_refines(self, post: Self, lbl: LikesJournal::Label, new_journal: LinkedJournal_v::LinkedJournal::State)
     requires 
         self.inv(), 
-        post.inv(), 
+        post.inv(),
         Self::discard_old(self, post, lbl, new_journal)
     ensures 
         LinkedJournal::State::next_by(self.i(), post.i(), Self::lbl_i(lbl), 
@@ -107,7 +107,8 @@ impl LikesJournal::State {
                 self.discard_old_refines(post, lbl, new_journal);
             },
             LikesJournal::Step::internal_journal_marshal(cut, addr, new_journal) => {
-                assume( LinkedJournal::State::next_by(self.i(), post.i(), Self::lbl_i(lbl), LinkedJournal::Step::internal_journal_marshal(cut, addr)) );
+                assert(LinkedJournal::State::next_by(self.i(), post.i(), Self::lbl_i(lbl), 
+                    LinkedJournal::Step::internal_journal_marshal(cut, addr)));
             },
             _ => {
                 assert( LinkedJournal::State::next_by(self.i(), post.i(), Self::lbl_i(lbl), LinkedJournal::Step::internal_no_op()) );
