@@ -363,6 +363,21 @@ state_machine!{AllocationCrashAwareJournal{
         reveal(AllocationJournal::State::next_by);
         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
         assert(post.journal_pages_not_free());
+
+        // persistent and ephemeral agree on values
+
+        let pre_ephemeral_disk = pre.ephemeral.get_Known_v().tj().disk_view;
+        let pre_inflight_disk = pre.inflight.unwrap().tj.disk_view;
+        assert(pre_inflight_disk.is_sub_disk_with_newer_lsn(pre_ephemeral_disk));
+
+        let post_ephemeral_disk = post.ephemeral.get_Known_v().tj().disk_view;
+        assert(post_ephemeral_disk.is_sub_disk_with_newer_lsn(pre_ephemeral_disk));
+
+        assert forall |addr| pre_inflight_disk.entries.dom().contains(addr) 
+            && post_ephemeral_disk.entries.dom().contains(addr) 
+            ==> pre_ephemeral_disk.entries.dom().contains(addr) by {}
+
+        assert(Map::agrees(pre_inflight_disk.entries, post_ephemeral_disk.entries));
         assert(post.state_relations());
     }
    

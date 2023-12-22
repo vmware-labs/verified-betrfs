@@ -146,16 +146,18 @@ state_machine!{ AllocationJournal {
         let require_end = lbl.get_DiscardOld_require_end();
         let deallocs = lbl.get_DiscardOld_deallocs();
 
+        require require_end == pre.journal.seq_end();
+        require pre.tj().can_discard_to(start_lsn);
+
         let new_first = Self::new_first(pre.tj(), pre.lsn_au_index, pre.first, start_lsn);
         let new_lsn_au_index = Self::lsn_au_index_discarding_up_to(pre.lsn_au_index, start_lsn);
         let discarded_aus = pre.lsn_au_index.values().difference(new_lsn_au_index.values());
-        
         let keep_addrs = Set::new(|addr: Address| addr.wf() && new_lsn_au_index.values().contains(addr.au));
 
-        require post_journal.wf();
+        // require post_journal.wf();
         require deallocs == discarded_aus;
-        require pre.tj().discard_old_cond(
-            start_lsn, require_end, keep_addrs, post_journal.truncated_journal);
+
+        require pre.tj().discard_old_cond(start_lsn, keep_addrs, post_journal.truncated_journal);
         require post_journal.unmarshalled_tail ==  
             pre.journal.unmarshalled_tail.bounded_discard(start_lsn);
 

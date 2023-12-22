@@ -129,19 +129,6 @@ impl DiskView {
             )
     }
 
-    pub proof fn sub_disk_acyclic(self, big: Self)
-    requires 
-        self.wf(),
-        self.is_sub_disk(big),
-        big.wf(),
-        big.acyclic()
-    ensures
-        self.acyclic()
-    {
-        assert forall |addr| self.entries.contains_key(addr) ==> big.entries.contains_key(addr) by {}
-        assert(self.valid_ranking(big.the_ranking()));
-    }
-
     pub open spec(checked) fn acyclic(self) -> bool
     recommends
         self.wf(),
@@ -824,18 +811,18 @@ impl TruncatedJournal {
     //     self.disk_view.representation(self.freshest_rec)
     // }
 
-    // Yeah re-exporting this is annoying. Gonna just ask others to call 
-    // self.disk_view.representation_auto();
-//     pub proof fn representation_ensures(self)
-//     requires
-//         self.disk_view.decodable(self.freshest_rec),
-//         self.disk_view.acyclic(),
-//     ensures
-//         forall |addr| self.representation().contains(addr)
-//             ==> self.disk_view.entries.contains_key(addr)
-//     {
-//         self.disk_view.representation_auto();
-//     }
+    // // Yeah re-exporting this is annoying. Gonna just ask others to call 
+    // // self.disk_view.representation_auto();
+    // pub proof fn representation_ensures(self)
+    // requires
+    //     self.disk_view.decodable(self.freshest_rec),
+    //     self.disk_view.acyclic(),
+    // ensures
+    //     forall |addr| self.representation().contains(addr)
+    //         ==> self.disk_view.entries.contains_key(addr)
+    // {
+    //     self.disk_view.representation_auto();
+    // }
 
     // pub open spec(checked) fn disk_is_tight_wrt_representation(self) -> bool
     // recommends
@@ -1092,7 +1079,7 @@ state_machine!{ LinkedJournal {
         let post_discard = pre.truncated_journal.discard_old(lsn);
 
         pre.truncated_journal.discard_old_decodable(lsn);
-        new_tj.disk_view.sub_disk_acyclic(post_discard.disk_view); // lemma that triggers
+        new_tj.disk_view.sub_disk_ranking(post_discard.disk_view); // lemma that triggers
     }
 
     #[inductive(internal_journal_marshal)]

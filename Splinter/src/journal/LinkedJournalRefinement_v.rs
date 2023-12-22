@@ -581,7 +581,7 @@ impl LinkedJournal::State {
                 let post_discard = self.truncated_journal.discard_old(lsn);
 
                 self.truncated_journal.discard_old_decodable(lsn);
-                new_tj.disk_view.sub_disk_acyclic(post_discard.disk_view);
+                new_tj.disk_view.sub_disk_ranking(post_discard.disk_view);
             }
             LinkedJournal::Step::internal_journal_marshal(cut, addr) =>  {
                 let rank = self.truncated_journal.disk_view.the_ranking();

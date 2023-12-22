@@ -1,213 +1,120 @@
-// // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
-// // SPDX-License-Identifier: BSD-2-Clause
-// //
-// #![allow(unused_imports)]
-// use builtin::*;
+// Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
+// SPDX-License-Identifier: BSD-2-Clause
+//
+#![allow(unused_imports)]
+use builtin::*;
 
-// use builtin_macros::*;
-// use state_machines_macros::state_machine;
+use builtin_macros::*;
+use state_machines_macros::state_machine;
 
-// use vstd::prelude::*;
-// use crate::abstract_system::StampedMap_v::LSN;
-// use crate::abstract_system::MsgHistory_v::*;
-// use crate::disk::GenericDisk_v::*;
-// use crate::journal::LinkedJournal_v;
-// use crate::journal::LinkedJournal_v::{LinkedJournal, DiskView, TruncatedJournal};
-// use crate::journal::LikesJournal_v;
-// use crate::journal::LikesJournal_v::*;
+use vstd::prelude::*;
+use crate::abstract_system::StampedMap_v::LSN;
+use crate::abstract_system::MsgHistory_v::*;
+use crate::disk::GenericDisk_v::*;
+use crate::journal::LinkedJournal_v;
+use crate::journal::LinkedJournal_v::{LinkedJournal, DiskView, TruncatedJournal};
+use crate::journal::LikesJournal_v;
+use crate::journal::LikesJournal_v::*;
 
-// verus!{
+verus!{
 
-// impl LikesJournal::Label {
-//     pub open spec /*(checked)*/ fn i(self) -> LinkedJournal::Label
-//     {
-//         if self is FreezeForCommit {
-//             let frozen_journal = self.get_FreezeForCommit_frozen_journal();
-//             LinkedJournal::Label::FreezeForCommit{frozen_journal: frozen_journal.build_tight()}
-//         } else {
-//             LikesJournal::State::lbl_linked(self)
-//         }
-//     }
-// }
+impl DiskView {
+}
 
-// impl DiskView {
-//     pub proof fn sub_disk_crop_implies(self, big: DiskView, root: Pointer, depth: nat)
-//     requires
-//         self.decodable(root),
-//         self.block_in_bounds(root),
-//         self.can_crop(root, depth),
-//         big.decodable(root),
-//         self.is_sub_disk(big),
-//     ensures 
-//         big.can_crop(root, depth),
-//         big.pointer_after_crop(root, depth) == self.pointer_after_crop(root, depth),
-//     decreases depth
-//     {
-//         if 0 < depth {
-//             self.sub_disk_crop_implies(big, self.next(root), (depth-1) as nat);
-//         }
-//     }
+// The thrilling climax, the actual proof goal we want to use in lower
+// refinement layers.
+impl LikesJournal::State {
+    pub open spec(checked) fn i(self) -> LinkedJournal::State
+    recommends self.journal.truncated_journal.decodable()
+    {
+        self.journal
+    }
 
-//     pub proof fn build_tight_preserves_crop(self, root: Pointer, depth: nat)
-//     requires 
-//         self.buildable(root),
-//         self.block_in_bounds(root),
-//         self.can_crop(root, depth),
-//     ensures
-//         self.build_tight(root).can_crop(root, depth),
-//         self.build_tight(root).pointer_after_crop(root, depth) == self.pointer_after_crop(root, depth)
-//     decreases
-//         depth
-//     {
-//         if 0 < depth {
-//             let tight_dv = self.build_tight(root);
-//             let tight_dv_tail = self.build_tight(self.next(root));
-    
-//             self.build_tight_builds_sub_disks(root);
-//             self.build_tight_preserves_crop(self.next(root), (depth-1) as nat);
+    pub proof fn discard_old_refines(self, post: Self, lbl: LikesJournal::Label, new_journal: LinkedJournal_v::LinkedJournal::State)
+    requires 
+        self.inv(), 
+        post.inv(), 
+        Self::discard_old(self, post, lbl, new_journal)
+    ensures 
+        LinkedJournal::State::next_by(self.i(), post.i(), Self::lbl_i(lbl), 
+            LinkedJournal::Step::discard_old(new_journal.truncated_journal))
+    {
+        reveal(LinkedJournal::State::next_by);
 
-//             self.build_tight_shape(root);
-//             if self.next(root) is Some {
-//                 self.tight_sub_disk(self.next(root), tight_dv_tail);
-//                 tight_dv_tail.sub_disk_crop_implies(tight_dv, self.next(root), (depth-1) as nat);
-//             }
-//             assert(tight_dv.can_crop(self.next(root), (depth-1) as nat));
-//             assert(tight_dv.can_crop(root, depth));
+        let tj_pre = self.journal.truncated_journal;
+        let tj_post = post.journal.truncated_journal;
 
-//             tight_dv.sub_disk_crop_implies(self, root, depth);
-//             assert(tight_dv.pointer_after_crop(root, depth) == self.pointer_after_crop(root, depth));
-//         }
-//     }
-// }
+        let start_lsn = lbl.get_DiscardOld_start_lsn();
+        let require_end = lbl.get_DiscardOld_require_end();
 
-// // The thrilling climax, the actual proof goal we want to use in lower
-// // refinement layers.
-// impl LikesJournal::State {
-//     pub open spec(checked) fn i(self) -> LinkedJournal::State
-//     recommends self.journal.truncated_journal.decodable()
-//     {
-//         LinkedJournal::State{ 
-//             truncated_journal: self.journal.truncated_journal.build_tight(), 
-//             unmarshalled_tail: self.journal.unmarshalled_tail 
-//         }
-//     }
+        let post_discard = tj_pre.discard_old(start_lsn);
+        let post_tight = post_discard.build_tight();
 
-//     pub proof fn i_preserves_decodable(self)
-//     requires 
-//         self.journal.truncated_journal.decodable()
-//     ensures
-//         self.i().truncated_journal.decodable(),
-//         self.i().truncated_journal.disk_view.is_sub_disk(self.journal.truncated_journal.disk_view)
-//     {
-//         let tj = self.journal.truncated_journal;
-//         tj.disk_view.build_tight_is_awesome(tj.freshest_rec);
-//     }
+        assert(tj_post.wf());
+        assert(tj_post.freshest_rec == post_discard.freshest_rec);
+        assert(tj_post.disk_view.is_sub_disk(post_discard.disk_view)); // new must be a subset of original
 
-//     pub proof fn read_for_recovery_refines(self, post: Self, lbl: LikesJournal::Label, depth: nat)
-//     requires 
-//         self.inv(), 
-//         post.inv(), 
-//         Self::read_for_recovery(self, post, lbl, depth)
-//     ensures 
-//         LinkedJournal::State::next_by(self.i(), post.i(), lbl.i(), LinkedJournal::Step::read_for_recovery(depth))
-//     {
-//         reveal(LinkedJournal::State::next_by);
+        tj_pre.discard_old_decodable(start_lsn);
+        assert(post_discard.disk_view.acyclic()); 
 
-//         self.i_preserves_decodable();
-//         let tj = self.journal.truncated_journal;
-//         let dv = self.i().truncated_journal.disk_view;
+        post_discard.disk_view.build_tight_ensures(post_discard.freshest_rec);
+        post_discard.disk_view.tight_sub_disk(post_discard.freshest_rec, post_tight.disk_view);
+        assert(post_tight.disk_view.acyclic()); 
 
-//         tj.disk_view.build_tight_preserves_crop(tj.freshest_rec, depth);
-//         tj.disk_view.pointer_after_crop_ensures(tj.freshest_rec, depth);
-//         dv.pointer_after_crop_ensures(tj.freshest_rec, depth);
-//     }
+        // post_tight has the same build_lsn_addr_index as post_discard and as tj_post
+        post_tight.disk_view.sub_disk_repr_index(post_discard.disk_view, post_discard.freshest_rec);
+        tj_post.disk_view.sub_disk_repr_index(post_discard.disk_view, post_discard.freshest_rec);
+        assert(post_tight.disk_view.build_lsn_addr_index(post_discard.freshest_rec) == post.lsn_addr_index);
+        assert(post.lsn_addr_index.values() <= tj_post.disk_view.entries.dom());
 
-//     pub proof fn put_refines(self, post: Self, lbl: LikesJournal::Label, new_journal: LinkedJournal_v::LinkedJournal::State)
-//     requires 
-//         self.inv(), 
-//         post.inv(), 
-//         Self::put(self, post, lbl, new_journal)
-//     ensures 
-//         LinkedJournal::State::next_by(self.i(), post.i(), lbl.i(), LinkedJournal::Step::put())
-//     {
-//         reveal(LinkedJournal::State::next);
-//         reveal(LinkedJournal::State::next_by);
+        post_discard.disk_view.build_tight_domain_is_build_lsn_addr_index_range(post_discard.freshest_rec);
+        assert(post_tight.disk_view.entries.dom() <= tj_post.disk_view.entries.dom());
+        assert(post_tight.disk_view.entries <= tj_post.disk_view.entries);
+        assert(post_discard.freshest_rec == tj_post.freshest_rec);
 
-//         self.i_preserves_decodable();
+        assert(post_tight.disk_view.is_sub_disk(tj_post.disk_view));   // tight must be fully contained by new
+    }
 
-//         assert(self.i().wf());
+    pub proof fn next_refines(self, post: Self, lbl: LikesJournal::Label)
+    requires
+        self.inv(),
+        post.inv(),
+        LikesJournal::State::next(self, post, lbl),
+    ensures
+        LinkedJournal::State::next(self.i(), post.i(), Self::lbl_i(lbl)),
+    {
+        // unfortunate defaults
+        reveal(LinkedJournal::State::next);
+        reveal(LinkedJournal::State::next_by);
+        reveal(LikesJournal::State::next);
+        reveal(LikesJournal::State::next_by);  
 
-//         // assert(new_journal.truncated_journal == self.journal.truncated_journal);
-//         // assert(new_journal.unmarshalled_tail == self.journal.unmarshalled_tail);
+        let step = choose |step| LikesJournal::State::next_by(self, post, lbl, step);
+        match step {
+            LikesJournal::Step::read_for_recovery(depth) => {
+                assert(LinkedJournal::State::next_by(self.i(), post.i(), Self::lbl_i(lbl), LinkedJournal::Step::read_for_recovery(depth)));
+            },
+            LikesJournal::Step::freeze_for_commit(depth) => {
+                assert( LinkedJournal::State::next_by(self.i(), post.i(), Self::lbl_i(lbl), LinkedJournal::Step::freeze_for_commit(depth)) );
+            },
+            LikesJournal::Step::query_end_lsn() => {
+                assert( LinkedJournal::State::next_by(self.i(), post.i(), Self::lbl_i(lbl), LinkedJournal::Step::query_end_lsn()) );
+            },
+            LikesJournal::Step::put(new_journal) => {
+                assert(LinkedJournal::State::next_by(self.i(), post.i(), Self::lbl_i(lbl), LinkedJournal::Step::put()));
+            },
+            LikesJournal::Step::discard_old(new_journal) => {
+                self.discard_old_refines(post, lbl, new_journal);
+            },
+            LikesJournal::Step::internal_journal_marshal(cut, addr, new_journal) => {
+                assume( LinkedJournal::State::next_by(self.i(), post.i(), Self::lbl_i(lbl), LinkedJournal::Step::internal_journal_marshal(cut, addr)) );
+            },
+            _ => {
+                assert( LinkedJournal::State::next_by(self.i(), post.i(), Self::lbl_i(lbl), LinkedJournal::Step::internal_no_op()) );
+            },
+        }
+    }
+}
 
 
-//         // require pre.wf();
-//         // //require Self::lbl_wf(lbl);
-//         // require lbl.get_Put_messages().wf();    // direct translation. TODO fold into lbl_wf
-//         // require lbl.is_Put();
-//         // require lbl.get_Put_messages().seq_start == pre.seq_end();
-//         // update unmarshalled_tail = pre.unmarshalled_tail.concat(lbl.get_Put_messages())
-
-
-//         // assert(self.i() == new_journal.i());
-
-//         // assume(self.journal.truncated_journal.seq_end() == self.i().seq_end());
-//         // assume(new_journal.seq_end() == new_journal.i().seq_end());
-
-
-//         assume(false);
-
-//         // let tj = self.journal.truncated_journal;
-//         // let dv = self.i().truncated_journal.disk_view;
-
-//         // tj.disk_view.build_tight_preserves_crop(tj.freshest_rec, depth);
-//         // tj.disk_view.pointer_after_crop_ensures(tj.freshest_rec, depth);
-//         // dv.pointer_after_crop_ensures(tj.freshest_rec, depth);
-//     }
-
-//     pub proof fn next_refines(self, post: Self, lbl: LikesJournal::Label)
-//     requires
-//         self.inv(),
-//         post.inv(),
-//         LikesJournal::State::next(self, post, lbl),
-//     ensures
-//         LinkedJournal::State::next(self.i(), post.i(), lbl.i()),
-//     {
-//         // unfortunate defaults
-//         reveal(LinkedJournal::State::next);
-//         reveal(LinkedJournal::State::next_by);
-//         reveal(LikesJournal::State::next);
-//         reveal(LikesJournal::State::next_by);  
-
-//         self.i_preserves_decodable();
-//         // post.i_preserves_decodable();
-
-//         let step = choose |step| LikesJournal::State::next_by(self, post, lbl, step);
-//         match step {
-//             LikesJournal::Step::read_for_recovery(depth) => {
-//                 self.read_for_recovery_refines(post, lbl, depth);
-//             },
-//             LikesJournal::Step::freeze_for_commit(depth) => {
-//                 assume( LinkedJournal::State::next_by(self.i(), post.i(), lbl.i(), LinkedJournal::Step::freeze_for_commit(depth)) );
-//             },
-//             LikesJournal::Step::query_end_lsn() => {
-//                 assert( LinkedJournal::State::next_by(self.i(), post.i(), lbl.i(), LinkedJournal::Step::query_end_lsn()) );
-//             },
-//             LikesJournal::Step::put(new_journal) => {
-//                 self.put_refines(post, lbl, new_journal);
-//             },
-//             LikesJournal::Step::discard_old(new_journal) => {
-//                 assume( LinkedJournal::State::next_by(self.i(), post.i(), lbl.i(), LinkedJournal::Step::discard_old()) );
-//             },
-//             LikesJournal::Step::internal_journal_marshal(cut, addr, new_journal) => {
-//                 assume( LinkedJournal::State::next_by(self.i(), post.i(), lbl.i(), LinkedJournal::Step::internal_journal_marshal(cut, addr)) );
-//             },
-//             _ => {
-//                 assert( LinkedJournal::State::next_by(self.i(), post.i(), lbl.i(), LinkedJournal::Step::internal_no_op()) );
-//             },
-//         }
-//     }
-// }
-
-
-// } // verus!
+} // verus!

@@ -101,21 +101,6 @@ impl DiskView {
         &&& root.is_Some() ==> self.boundary_lsn < self.entries[root.unwrap()].message_seq.seq_end
     }
 
-    // too small to be interesting; delete
-//     pub proof fn buildable_recursive(self, root: Pointer)
-//     requires
-//         self.buildable(root),
-//         root.is_Some(),
-//         self.next(root).is_Some(),
-//     ensures
-//         self.buildable(self.next(root)),
-//     {
-//         let next = self.next(root);
-//         
-//         assert( self.entries.contains_key(root.unwrap()) );
-//         assert( self.is_nondangling_pointer(next) );
-//     }
-
     pub open spec(checked) fn build_lsn_addr_index(self, root: Pointer) -> LsnAddrIndex
     recommends
         self.buildable(root),
@@ -269,6 +254,53 @@ impl DiskView {
         }
     }
 
+    // oh nice, this really shows the representation is just a duplicate of build_tight
+    // replacing all reference of representation to build_tight 
+    pub proof fn build_tight_domain_is_build_lsn_addr_index_range(self, root: Pointer) 
+    requires
+        self.buildable(root),
+    ensures
+        // This conclusion is used inside the recursion
+        root.is_Some() ==>
+            forall |lsn| self.build_lsn_addr_index(root).contains_key(lsn) ==>
+                self.boundary_lsn <= lsn < self.entries[root.unwrap()].message_seq.seq_end,
+        // This conclusion is the one we're trying to actually export
+        self.build_lsn_addr_index(root).values() =~= self.build_tight(root).entries.dom(),
+        // TODO(chris): I find it kind of disturbing that the ~ between the == in the line above
+        // is a functional part of the proof strategy. --jonh
+    decreases self.the_rank_of(root)
+    {
+        reveal(TruncatedJournal::index_domain_valid);
+        reveal(DiskView::index_keys_map_to_valid_entries);
+
+        if root.is_Some() {
+            self.build_tight_domain_is_build_lsn_addr_index_range(self.next(root));
+            let curr_msgs = self.entries[root.unwrap()].message_seq;
+            let begin = max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
+            let update = singleton_index(begin, curr_msgs.seq_end, root.unwrap());
+            assert(update.contains_key(begin));
+            assert forall |k| #![auto] self.build_lsn_addr_index(root).values().contains(k) 
+            implies self.build_tight(root).entries.dom().contains(k) by {
+            }
+            self.build_tight_ensures(root);
+            assert forall |addr| #![auto]
+                self.build_tight(root).entries.dom().contains(addr) implies
+                self.build_lsn_addr_index(root).values().contains(addr) by {
+
+                let left_index = self.build_lsn_addr_index(self.entries[root.unwrap()].cropped_prior(self.boundary_lsn));
+                if update.values().contains(addr) {
+                    assert( self.build_lsn_addr_index(root).contains_key(begin) );   // witness
+//                     assert( self.build_lsn_addr_index(root).values().contains(addr) );
+                } else {
+                    let lsn = choose |lsn| #![auto] left_index.contains_key(lsn) && left_index[lsn]==addr;
+                    assert( self.build_lsn_addr_index(root).contains_key(lsn) );    // witness
+//                     assert( self.build_lsn_addr_index(root).values().contains(addr) );
+                }
+            }
+        }
+//         assert( self.build_lsn_addr_index(root).values() =~= self.representation(root) );    // TODO remove
+    }
+
 //     pub proof fn build_lsn_addr_index_gives_representation(self, root: Pointer) 
 //     requires
 //         self.buildable(root),
@@ -341,7 +373,7 @@ impl DiskView {
         }
     }
 
-    proof fn sub_disk_repr_index(self, big: Self, ptr: Pointer)
+    pub proof fn sub_disk_repr_index(self, big: Self, ptr: Pointer)
     requires
         self.wf(),
         big.wf(),
@@ -526,13 +558,12 @@ impl TruncatedJournal {
         else { Multiset::from_set(self.build_lsn_addr_index().values()) }
     }
 
-    pub open spec(checked) fn discard_old_cond(self, start_lsn: LSN, require_end: LSN, 
+    pub open spec(checked) fn discard_old_cond(self, start_lsn: LSN, 
         keep_addrs: Set<Address>, new: Self) -> bool
         recommends self.wf()
     {
-        &&& require_end == self.seq_end()
-        &&& self.can_discard_to(start_lsn)
         // new disk_view must be a subdisk contain all kept addrs 
+        &&& new.wf()
         &&& new.disk_view.boundary_lsn == start_lsn
         &&& new.disk_view.entries <= self.disk_view.entries
         &&& forall |addr| #[trigger] keep_addrs.contains(addr) ==> new.disk_view.entries.dom().contains(addr)
@@ -592,12 +623,6 @@ impl TruncatedJournal {
         }
     }
 
-// deleteme
-//     pub closed spec fn any_lsn(lsn_addr_index: LsnAddrIndex, addr: Address) -> LSN
-//     {
-//         choose |lsn| (#[trigger] lsn_addr_index.contains_key(lsn)) && lsn_addr_index[lsn] == addr
-//     }
-
     pub closed spec /*XXX (checked)*/ fn index_range_valid(self, lsn_addr_index: LsnAddrIndex) -> bool
     recommends
         self.wf(),
@@ -608,17 +633,6 @@ impl TruncatedJournal {
             self.every_lsn_at_addr_indexed_to_addr(lsn_addr_index, addr)
         }
     }
-
-    // pub proof fn build_lsn_addr_index_gives_representation(self) 
-    // requires
-    //     self.wf(),
-    //     self.disk_view.decodable(self.freshest_rec),
-    //     self.disk_view.acyclic(),
-    // ensures
-    //     self.build_lsn_addr_index().values() == self.representation(),
-    // {
-    //     self.disk_view.build_lsn_addr_index_gives_representation(self.freshest_rec)
-    // }
 
     pub proof fn build_lsn_addr_honors_rank(self, lsn_addr_index: Map<LSN, Address>)
     requires
@@ -657,7 +671,7 @@ state_machine!{ LikesJournal {
     // above. There's a lot of useless boilerplate in this layer; perhaps
     // there's a prettier way to decorate an existing state machine with
     // extra ghost state.
-    pub open spec fn lbl_linked(lbl: Label) -> LinkedJournal_v::LinkedJournal::Label {
+    pub open spec fn lbl_i(lbl: Label) -> LinkedJournal_v::LinkedJournal::Label {
         match lbl {
             Label::ReadForRecovery{messages}
                 => LinkedJournal_v::LinkedJournal::Label::ReadForRecovery{messages},
@@ -692,24 +706,25 @@ state_machine!{ LikesJournal {
 
     transition!{ read_for_recovery(lbl: Label, depth: nat) {
         require lbl is ReadForRecovery;
-        require LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, pre.journal, Self::lbl_linked(lbl), 
+        require LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, pre.journal, Self::lbl_i(lbl), 
                 LinkedJournal_v::LinkedJournal::Step::read_for_recovery(depth));
     } }
 
     transition!{ freeze_for_commit(lbl: Label, depth: nat) {
         require lbl is FreezeForCommit;
-        require LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, pre.journal, Self::lbl_linked(lbl),
+        require LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, pre.journal, Self::lbl_i(lbl),
                 LinkedJournal_v::LinkedJournal::Step::freeze_for_commit(depth));
     } }
 
     transition!{ query_end_lsn(lbl: Label) {
         require lbl is QueryEndLsn;
-        require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::lbl_linked(lbl));
+        require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
     } }
     
     transition!{ put(lbl: Label, new_journal: LinkedJournal_v::LinkedJournal::State) {
         require lbl is Put;
-        require LinkedJournal_v::LinkedJournal::State::next(pre.journal, new_journal, Self::lbl_linked(lbl));
+        require LinkedJournal_v::LinkedJournal::State::next(pre.journal, new_journal, Self::lbl_i(lbl));
+        update journal = new_journal;
     } }
 
     transition!{ discard_old(lbl: Label, new_journal: LinkedJournal_v::LinkedJournal::State) {
@@ -717,12 +732,16 @@ state_machine!{ LikesJournal {
 
         let start_lsn = lbl.get_DiscardOld_start_lsn();
         let require_end = lbl.get_DiscardOld_require_end();
+
+        require require_end == pre.journal.seq_end();
+        require pre.journal.truncated_journal.can_discard_to(start_lsn);
+
         let lsn_addr_index_post = lsn_addr_index_discard_up_to(pre.lsn_addr_index, start_lsn);
         let keep_addrs = lsn_addr_index_post.values();
 
-        require new_journal.wf();
+        // require new_journal.wf();
         require pre.journal.truncated_journal.discard_old_cond(
-            start_lsn, require_end, keep_addrs, new_journal.truncated_journal);
+            start_lsn, keep_addrs, new_journal.truncated_journal);
         require new_journal.unmarshalled_tail == 
             pre.journal.unmarshalled_tail.bounded_discard(start_lsn);
 
@@ -733,7 +752,7 @@ state_machine!{ LikesJournal {
     transition!{ internal_journal_marshal(lbl: Label, cut: LSN, addr: Address, new_journal: LinkedJournal_v::LinkedJournal::State) {
         require lbl is Internal;
         require LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, new_journal, 
-            Self::lbl_linked(lbl), LinkedJournal_v::LinkedJournal::Step::internal_journal_marshal(cut, addr));
+            Self::lbl_i(lbl), LinkedJournal_v::LinkedJournal::Step::internal_journal_marshal(cut, addr));
 
         update journal = new_journal;
         update lsn_addr_index = lsn_addr_index_append_record(
@@ -913,10 +932,10 @@ state_machine!{ LikesJournal {
         assert( post.wf() );
 
         let istep:LinkedJournal_v::LinkedJournal::Step = LinkedJournal_v::LinkedJournal::Step::internal_journal_marshal(cut, addr);
-        assert(LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, post.journal, State::lbl_linked(lbl), istep));
+        assert(LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, post.journal, State::lbl_i(lbl), istep));
 
         // NOTE(Jialin): inv_next duplicates what should be exported by submodule inv
-        LinkedJournal_v::LinkedJournal::State::inv_next(pre.journal, post.journal, State::lbl_linked(lbl), istep);
+        LinkedJournal_v::LinkedJournal::State::inv_next(pre.journal, post.journal, State::lbl_i(lbl), istep);
         assert(post.journal.inv());
 
         let tj_pre = pre.journal.truncated_journal;
