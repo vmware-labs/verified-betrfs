@@ -276,51 +276,51 @@ impl DiskView {
 //         }
 //     }
 
-    pub open spec(checked) fn representation(self, root: Pointer) -> (out: Set<Address>)
-    recommends
-        self.decodable(root),
-        self.acyclic(),
-    decreases self.the_rank_of(root) when self.decodable(root) && self.acyclic()
-    {
-        // TODO(chris): debugging these failures sucks, unlike inline asserts.
-        match root {
-            None => set!{},
-            Some(addr) => self.representation(self.entries[addr].cropped_prior(self.boundary_lsn)).insert(addr)
-        }
-    }
+    // pub open spec(checked) fn representation(self, root: Pointer) -> (out: Set<Address>)
+    // recommends
+    //     self.decodable(root),
+    //     self.acyclic(),
+    // decreases self.the_rank_of(root) when self.decodable(root) && self.acyclic()
+    // {
+    //     // TODO(chris): debugging these failures sucks, unlike inline asserts.
+    //     match root {
+    //         None => set!{},
+    //         Some(addr) => self.representation(self.entries[addr].cropped_prior(self.boundary_lsn)).insert(addr)
+    //     }
+    // }
 
-    pub proof fn representation_ensures(self, root: Pointer)
-    requires
-        self.decodable(root),
-        self.acyclic(),
-    ensures
-        forall |addr| self.representation(root).contains(addr) ==> self.entries.contains_key(addr)
-    decreases
-        self.the_rank_of(root),
-    {
-        match root {
-            None => {},
-            Some(addr) => {
-                self.representation_ensures(self.entries[addr].cropped_prior(self.boundary_lsn));
-            },
-        }
-    }
+    // pub proof fn representation_ensures(self, root: Pointer)
+    // requires
+    //     self.decodable(root),
+    //     self.acyclic(),
+    // ensures
+    //     forall |addr| self.representation(root).contains(addr) ==> self.entries.contains_key(addr)
+    // decreases
+    //     self.the_rank_of(root),
+    // {
+    //     match root {
+    //         None => {},
+    //         Some(addr) => {
+    //             self.representation_ensures(self.entries[addr].cropped_prior(self.boundary_lsn));
+    //         },
+    //     }
+    // }
 
-    pub proof fn representation_auto(self)
-    ensures
-        forall |root|
-            self.decodable(root) && self.acyclic()
-            ==>
-            forall |addr| self.representation(root).contains(addr) ==> self.entries.contains_key(addr)
-    {
-        assert forall |root|
-            self.decodable(root) && self.acyclic()
-            implies
-            forall |addr| self.representation(root).contains(addr) ==> self.entries.contains_key(addr) by
-        {
-            self.representation_ensures(root);
-        }
-    }
+    // pub proof fn representation_auto(self)
+    // ensures
+    //     forall |root|
+    //         self.decodable(root) && self.acyclic()
+    //         ==>
+    //         forall |addr| self.representation(root).contains(addr) ==> self.entries.contains_key(addr)
+    // {
+    //     assert forall |root|
+    //         self.decodable(root) && self.acyclic()
+    //         implies
+    //         forall |addr| self.representation(root).contains(addr) ==> self.entries.contains_key(addr) by
+    //     {
+    //         self.representation_ensures(root);
+    //     }
+    // }
 
     pub open spec(checked) fn can_crop(self, root: Pointer, depth: nat) -> bool
     recommends
@@ -719,6 +719,20 @@ impl TruncatedJournal {
        }
     }
 
+    pub open spec(checked) fn valid_discard_old(self, lsn: LSN, new: Self) -> bool
+    recommends
+        self.wf(),
+        self.can_discard_to(lsn)
+    {
+        let post_discard = self.discard_old(lsn);
+        let post_tight = post_discard.build_tight();
+
+        &&& new.wf()
+        &&& new.freshest_rec == post_discard.freshest_rec
+        &&& new.disk_view.is_sub_disk(post_discard.disk_view) // new must be a subset of original
+        &&& post_tight.disk_view.is_sub_disk(new.disk_view)   // tight must be fully contained by new
+    }
+
     pub open spec(checked) fn decodable(self) -> bool
     {
         &&& self.wf()
@@ -789,34 +803,34 @@ impl TruncatedJournal {
         }
     }
 
-    pub open spec(checked) fn representation(self) -> (out: Set<Address>)
-    recommends
-        self.disk_view.decodable(self.freshest_rec),
-        self.disk_view.acyclic(),
-    {
-        self.disk_view.representation(self.freshest_rec)
-    }
+    // pub open spec(checked) fn representation(self) -> (out: Set<Address>)
+    // recommends
+    //     self.disk_view.decodable(self.freshest_rec),
+    //     self.disk_view.acyclic(),
+    // {
+    //     self.disk_view.representation(self.freshest_rec)
+    // }
 
-    // Yeah re-exporting this is annoying. Gonna just ask others to call 
-    // self.disk_view.representation_auto();
-//     pub proof fn representation_ensures(self)
-//     requires
-//         self.disk_view.decodable(self.freshest_rec),
-//         self.disk_view.acyclic(),
-//     ensures
-//         forall |addr| self.representation().contains(addr)
-//             ==> self.disk_view.entries.contains_key(addr)
-//     {
-//         self.disk_view.representation_auto();
-//     }
+    // // Yeah re-exporting this is annoying. Gonna just ask others to call 
+    // // self.disk_view.representation_auto();
+    // pub proof fn representation_ensures(self)
+    // requires
+    //     self.disk_view.decodable(self.freshest_rec),
+    //     self.disk_view.acyclic(),
+    // ensures
+    //     forall |addr| self.representation().contains(addr)
+    //         ==> self.disk_view.entries.contains_key(addr)
+    // {
+    //     self.disk_view.representation_auto();
+    // }
 
-    pub open spec(checked) fn disk_is_tight_wrt_representation(self) -> bool
-    recommends
-        self.disk_view.decodable(self.freshest_rec),
-        self.disk_view.acyclic(),
-    {
-        self.disk_view.entries.dom() == self.representation()
-    }
+    // pub open spec(checked) fn disk_is_tight_wrt_representation(self) -> bool
+    // recommends
+    //     self.disk_view.decodable(self.freshest_rec),
+    //     self.disk_view.acyclic(),
+    // {
+    //     self.disk_view.entries.dom() == self.representation()
+    // }
 
     pub open spec(checked) fn mkfs() -> (out: Self)
     {
@@ -869,6 +883,17 @@ impl TruncatedJournal {
 //             assert( pre_rank.contains_key(self.freshest_rec.unwrap()) );
 //         }
 //     }
+}
+
+impl MsgHistory {
+    pub open spec(checked) fn bounded_discard(self, new_bdy: LSN) -> Self
+    {
+        if self.seq_start <= new_bdy { 
+            self.discard_old(new_bdy) 
+        } else { 
+            self
+        }
+    }
 }
 
 state_machine!{ LinkedJournal {
@@ -958,7 +983,8 @@ state_machine!{ LinkedJournal {
         let new_bdy = label_fj.seq_start();
         require dv.boundary_lsn <= new_bdy;
         require cropped_tj.can_discard_to(new_bdy);
-        require label_fj == cropped_tj.discard_old(new_bdy).build_tight();
+        // NOTE(Jialin): remove build tight requirement for layers below
+        require label_fj == cropped_tj.discard_old(new_bdy);
     }}
 
     transition!{ query_end_lsn(lbl: Label) {
@@ -977,20 +1003,23 @@ state_machine!{ LinkedJournal {
         update unmarshalled_tail = pre.unmarshalled_tail.concat(lbl.get_Put_messages());
     }}
 
-    transition!{ discard_old(lbl: Label) {
+    transition!{ discard_old(lbl: Label, new_tj: TruncatedJournal) {
         require pre.wf();
         require Self::lbl_wf(lbl);
         require lbl.is_DiscardOld();
-        require pre.seq_start() <= lbl.get_DiscardOld_start_lsn() <= pre.seq_end();
 
-        require lbl.get_DiscardOld_require_end() == pre.seq_end();
-        require pre.truncated_journal.can_discard_to(lbl.get_DiscardOld_start_lsn());
-        update truncated_journal = pre.truncated_journal.discard_old(lbl.get_DiscardOld_start_lsn()).build_tight();
-        update unmarshalled_tail =
-            if pre.unmarshalled_tail.seq_start <= lbl.get_DiscardOld_start_lsn()
-                { pre.unmarshalled_tail.discard_old(lbl.get_DiscardOld_start_lsn()) }
-            else
-                { pre.unmarshalled_tail };
+        let start_lsn = lbl.get_DiscardOld_start_lsn();
+        let require_end = lbl.get_DiscardOld_require_end();
+
+        require require_end == pre.seq_end();
+        require pre.truncated_journal.can_discard_to(start_lsn);
+
+        // leaving the amount of garbage collection to new_tj.disk_view
+        // as long as all reachable pages are still in scope
+        require pre.truncated_journal.valid_discard_old(start_lsn, new_tj);
+
+        update truncated_journal = new_tj;
+        update unmarshalled_tail = pre.unmarshalled_tail.bounded_discard(start_lsn);
     }}
 
     // TODO: Hmm, in dfy the transition is split into partial actions
@@ -1013,7 +1042,7 @@ state_machine!{ LinkedJournal {
         update unmarshalled_tail = pre.unmarshalled_tail.discard_old(cut);
     }}
 
-    transition!{ internal_journal_no_op(lbl: Label) {
+    transition!{ internal_no_op(lbl: Label) {
         require pre.wf();
         require lbl.is_Internal();
     }}
@@ -1028,7 +1057,7 @@ state_machine!{ LinkedJournal {
     pub open spec(checked) fn inv(self) -> bool {
         &&& self.wf()
         &&& self.truncated_journal.decodable()
-        &&& self.truncated_journal.disk_view.acyclic()
+        // &&& self.truncated_journal.disk_view.acyclic() // covered by tj.decodable
     }
 
     #[inductive(read_for_recovery)]
@@ -1045,13 +1074,12 @@ state_machine!{ LinkedJournal {
     }
 
     #[inductive(discard_old)]
-    fn discard_old_inductive(pre: Self, post: Self, lbl: Label) {
+    fn discard_old_inductive(pre: Self, post: Self, lbl: Label, new_tj: TruncatedJournal) {
         let lsn = lbl.get_DiscardOld_start_lsn();
-        let cropped_tj = pre.truncated_journal.discard_old(lsn);
-        let tight_tj = cropped_tj.build_tight();
-        assert( cropped_tj.disk_view.valid_ranking(
-                pre.truncated_journal.disk_view.the_ranking()) ); // witness to acyclic
-        DiskView::tight_interp(cropped_tj.disk_view, cropped_tj.freshest_rec, tight_tj.disk_view);
+        let post_discard = pre.truncated_journal.discard_old(lsn);
+
+        pre.truncated_journal.discard_old_decodable(lsn);
+        new_tj.disk_view.sub_disk_ranking(post_discard.disk_view); // lemma that triggers
     }
 
     #[inductive(internal_journal_marshal)]
@@ -1059,8 +1087,8 @@ state_machine!{ LinkedJournal {
         assert( post.truncated_journal.disk_view.valid_ranking(pre.truncated_journal.marshal_ranking(addr)) );    // witness
     }
 
-    #[inductive(internal_journal_no_op)]
-    fn internal_journal_no_op_inductive(pre: Self, post: Self, lbl: Label) { }
+    #[inductive(internal_no_op)]
+    fn internal_no_op_inductive(pre: Self, post: Self, lbl: Label) { }
 
     #[inductive(initialize)]
     fn initialize_inductive(post: Self, truncated_journal: TruncatedJournal) { }

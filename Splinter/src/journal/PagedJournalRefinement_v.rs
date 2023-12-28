@@ -519,7 +519,7 @@ impl PagedJournal::State {
             PagedJournal::Step::internal_journal_marshal(cut) => {
                 self.marshall_refines(post, lbl, cut);
             }
-            PagedJournal::Step::internal_journal_no_op() => {
+            PagedJournal::Step::internal_no_op() => {
                 //assert_maps_equal!( post.i().journal.msgs, self.i().journal.msgs );    // newly required extensionality; this branch used to be a freebie.
                 assert(AbstractJournal::State::next_by(self.i(), post.i(), lbl.i(), AbstractJournal::Step::internal())); // new witness
             }

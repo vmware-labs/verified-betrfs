@@ -19,11 +19,6 @@ use crate::journal::LinkedJournal_v::*;
 
 verus!{
 
-// impl JournalRecord {
-//     pub open spec(checked) fn i(self) -> PagedJournal_v::JournalRecord {
-//     }
-// }
-
 impl DiskView {
     pub proof fn iptr_output_valid(self, ptr: Pointer)
     requires
@@ -39,6 +34,7 @@ impl DiskView {
         }
     }
 
+    #[verifier::spinoff_prover]
     pub proof fn discard_interp(self, lsn: LSN, post: Self, ptr: Pointer)
     requires
         self.wf(),
@@ -58,32 +54,13 @@ impl DiskView {
         if ptr.is_Some() && lsn < self.entries[ptr.unwrap()].message_seq.seq_start {
             self.discard_interp(lsn, post, post.next(ptr));
         }
-        // TODO(chris): adding this assert completes the proof, even though the identical string
-        // appears in the ensures.
-        // Well actually, sometimes with == it completes the proof, but (AAAARGH) it's super flaky.
-        // trying =~=...
-        //assume(false); // Goodness this is hella flaky.
         if post.iptr(ptr).is_None() {
             assert( PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn).is_None() );
         } else {
             assert( PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn).is_Some() );
-//             assert( post.iptr(ptr).unwrap().message_seq =~= PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn).unwrap().message_seq );
-//             assert( post.iptr(ptr).unwrap().prior_rec =~= PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn).unwrap().prior_rec );
         }
         assert( post.iptr(ptr) =~= PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn) );
     }
-
-// Tenzin: LOL (idk the context but love the lemma name here)
-//      pub proof fn sigh<K, V>(small: Map<K, V>, big: Map<K, V>)
-//      requires
-//          small <= big,
-//      ensures
-//          //small.dom().subset_of(big.dom()),
-//          small.dom().subset_of(big.dom()),
-//      {
-//      }
-
-
 
     // In Dafny, this entire lemma was unneeded; call sites could be replaced by this single line:
     //   assert( self.valid_ranking(big.the_ranking()) ); // witness
@@ -126,12 +103,12 @@ impl DiskView {
         }
     }
 
-    pub proof fn she_nat_igans(depth: nat)
-    {
-        if 0 < depth {
-            assert( ((depth-1) as nat) < depth );
-        }
-    }
+    // pub proof fn she_nat_igans(depth: nat)
+    // {
+    //     if 0 < depth {
+    //         assert( ((depth-1) as nat) < depth );
+    //     }
+    // }
 
     pub proof fn pointer_after_crop_commutes_with_interpretation(self, ptr: Pointer, bdy: LSN, depth: nat)
     requires
@@ -205,6 +182,7 @@ impl DiskView {
         }
     }
 
+    #[verifier::spinoff_prover]
     pub proof fn iptr_framing(self, dv2: Self, ptr: Pointer)
     requires
         self.wf() && self.acyclic(),
@@ -219,7 +197,6 @@ impl DiskView {
         if ptr.is_Some() {
             self.iptr_framing(dv2, self.next(ptr));
         }
-        //assume(false); // and now this thing is flaky
     }
         
     pub proof fn build_tight_is_awesome(self, root: Pointer)
@@ -393,31 +370,6 @@ impl TruncatedJournal {
         }
     }
 
-//     pub proof fn crop_commutes_with_interpretation(self, depth: nat)
-//     requires
-//         self.decodable(),
-//         self.disk_view.acyclic(),
-//         self.can_crop(depth),
-//     ensures
-//         self.crop(depth).i() == self.i().crop_head_records(depth)
-//     {
-//         assume(false);
-//     }
-
-//     pub proof fn can_crop_increment(self, depth: nat)
-//     requires
-//         0 < depth,
-//         self.wf(),
-//         self.freshest_rec.is_Some(),
-//         self.can_crop(1),
-//         self.crop(1).can_crop((depth-1) as nat),
-//     ensures
-//         self.can_crop(depth),
-//     decreases depth
-//     {
-//         assume( false );
-//     }
-
     pub proof fn linked_tj_can_crop_implies_paged_tj_can_crop(self, depth: nat)
     requires
         self.decodable(),
@@ -555,7 +507,8 @@ impl LinkedJournal::State {
                 unmarshalled_tail: self.unmarshalled_tail,
             }
         } else {
-            choose |v| PagedJournal::State::init(v)
+            //choose |v| PagedJournal::State::init(v)
+            arbitrary()
         }
     }
 
@@ -594,7 +547,7 @@ impl LinkedJournal::State {
         let cropped_tj = LinkedJournal_v::TruncatedJournal{freshest_rec: cropped_ptr, disk_view: tjd};
         tjd.pointer_after_crop_ensures(tj.freshest_rec, depth); // another lost spec-ensures that wasted time digging up
 
-        cropped_tj.discard_old(new_bdy).disk_view.build_tight_maintains_interpretation(cropped_tj.discard_old(new_bdy).freshest_rec);
+        // cropped_tj.discard_old(new_bdy).disk_view.build_tight_maintains_interpretation(cropped_tj.discard_old(new_bdy).freshest_rec);
 
          lbl.get_FreezeForCommit_frozen_journal().iwf();  // another lost spec-ensures that wasted time digging up
         self.i().truncated_journal.crop_head_records_wf_lemma(depth); // another lost spec-ensures that wasted time digging up
@@ -602,6 +555,7 @@ impl LinkedJournal::State {
         assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::freeze_for_commit(depth)) );  // trigger
     }
 
+    /// NOTE(Jialin): temp creation just to expose submodule inv
     pub proof fn inv_next(self, post: Self, lbl: LinkedJournal::Label, step: LinkedJournal::Step)
     requires
         self.inv(),
@@ -622,11 +576,12 @@ impl LinkedJournal::State {
 //             }
 //             LinkedJournal::Step::put() =>  {
 //             }
-            LinkedJournal::Step::discard_old() =>  {
+            LinkedJournal::Step::discard_old(new_tj) =>  {
                 let lsn = lbl.get_DiscardOld_start_lsn();
+                let post_discard = self.truncated_journal.discard_old(lsn);
+
                 self.truncated_journal.discard_old_decodable(lsn);
-                let discarded = self.truncated_journal.discard_old(lsn);
-                discarded.disk_view.build_tight_is_awesome(discarded.freshest_rec);
+                new_tj.disk_view.sub_disk_ranking(post_discard.disk_view);
             }
             LinkedJournal::Step::internal_journal_marshal(cut, addr) =>  {
                 let rank = self.truncated_journal.disk_view.the_ranking();
@@ -635,7 +590,7 @@ impl LinkedJournal::State {
                     else { rank[self.truncated_journal.freshest_rec.unwrap()] + 1 });
                 assert( post.truncated_journal.disk_view.valid_ranking(post_rank) );
             }
-//             LinkedJournal::Step::internal_journal_no_op() =>  {
+//             LinkedJournal::Step::internal_no_op() =>  {
 //             }
             _ => { }
         }
@@ -644,6 +599,7 @@ impl LinkedJournal::State {
     pub proof fn discard_old_refines(self, post: Self, lbl: LinkedJournal::Label, step: LinkedJournal::Step)
     requires
         self.inv(),
+        post.inv(),
         LinkedJournal::State::next_by(self, post, lbl, step),
         step.is_discard_old(),
     ensures
@@ -653,13 +609,13 @@ impl LinkedJournal::State {
         reveal(PagedJournal::State::next);       // unfortunate defaults
         reveal(LinkedJournal::State::next_by);   // unfortunate defaults
 
-        self.inv_next(post, lbl, step);
+        // self.inv_next(post, lbl, step);
         let lsn = lbl.get_DiscardOld_start_lsn();
 
         if !(self.unmarshalled_tail.seq_start <= lsn) {
             let cropped_tj = self.truncated_journal.discard_old(lsn);
             self.truncated_journal.disk_view.discard_interp(lsn, cropped_tj.disk_view, self.truncated_journal.freshest_rec);
-            DiskView::tight_interp(cropped_tj.disk_view, cropped_tj.freshest_rec, post.truncated_journal.disk_view);
+            // DiskView::tight_interp(cropped_tj.disk_view, cropped_tj.freshest_rec, post.truncated_journal.disk_view);
             post.truncated_journal.disk_view.sub_disk_interp(cropped_tj.disk_view, cropped_tj.freshest_rec);
         }
         assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::discard_old()) );  // trigger
@@ -668,6 +624,7 @@ impl LinkedJournal::State {
     pub proof fn next_refines(self, post: Self, lbl: LinkedJournal::Label)
     requires
         self.inv(),
+        post.inv(),
         LinkedJournal::State::next(self, post, lbl),
     ensures
         PagedJournal::State::next(self.i(), post.i(), lbl.i()),
@@ -679,7 +636,7 @@ impl LinkedJournal::State {
 
         let step = choose |step| LinkedJournal::State::next_by(self, post, lbl, step);
 //         assert( LinkedJournal::State::next_by(self, post, lbl, step) );
-        self.inv_next(post, lbl, step);
+        // self.inv_next(post, lbl, step);
         match step {
             LinkedJournal::Step::read_for_recovery(depth) =>  {
                 let tj = self.truncated_journal;
@@ -699,15 +656,15 @@ impl LinkedJournal::State {
             LinkedJournal::Step::put() =>  {
                 assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::put()) );
             }
-            LinkedJournal::Step::discard_old() =>  {
+            LinkedJournal::Step::discard_old(_) =>  {
                 self.discard_old_refines(post, lbl, step);
             }
             LinkedJournal::Step::internal_journal_marshal(cut, addr) =>  {
                 self.truncated_journal.disk_view.iptr_framing(post.truncated_journal.disk_view, self.truncated_journal.freshest_rec);
                 assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::internal_journal_marshal(cut)) ); // trigger
             }
-            LinkedJournal::Step::internal_journal_no_op() =>  {
-                assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::internal_journal_no_op()) );
+            LinkedJournal::Step::internal_no_op() =>  {
+                assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::internal_no_op()) );
             }
             _ => { assert(false); }
         }

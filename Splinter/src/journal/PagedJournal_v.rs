@@ -507,7 +507,7 @@ state_machine!{ PagedJournal {
         update unmarshalled_tail = pre.unmarshalled_tail.discard_old(cut);
     }}
 
-    transition!{ internal_journal_no_op(lbl: Label) {
+    transition!{ internal_no_op(lbl: Label) {
         require lbl.is_Internal();
     }}
 

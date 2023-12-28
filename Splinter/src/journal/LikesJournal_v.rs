@@ -101,21 +101,6 @@ impl DiskView {
         &&& root.is_Some() ==> self.boundary_lsn < self.entries[root.unwrap()].message_seq.seq_end
     }
 
-    // too small to be interesting; delete
-//     pub proof fn buildable_recursive(self, root: Pointer)
-//     requires
-//         self.buildable(root),
-//         root.is_Some(),
-//         self.next(root).is_Some(),
-//     ensures
-//         self.buildable(self.next(root)),
-//     {
-//         let next = self.next(root);
-//         
-//         assert( self.entries.contains_key(root.unwrap()) );
-//         assert( self.is_nondangling_pointer(next) );
-//     }
-
     pub open spec(checked) fn build_lsn_addr_index(self, root: Pointer) -> LsnAddrIndex
     recommends
         self.buildable(root),
@@ -163,38 +148,38 @@ impl DiskView {
         }
     }
 
-    proof fn representation_ignores_build_tight(self, bt_root: Pointer, repr_root: Pointer)
-    requires
-        self.decodable(bt_root),
-        self.decodable(repr_root),
-        self.acyclic(),
-        self.build_tight(bt_root).decodable(repr_root),
-    ensures
-        self.build_tight(bt_root).wf(),
-        self.build_tight(bt_root).acyclic(),
-        self.build_tight(bt_root).representation(repr_root) == self.representation(repr_root)
-    decreases self.the_rank_of(repr_root)
-    {
-        self.build_tight_is_awesome(bt_root);
-        if repr_root.is_Some() {
-            self.representation_ignores_build_tight(bt_root, self.next(repr_root));
-        }
-    }
+    // proof fn representation_ignores_build_tight(self, bt_root: Pointer, repr_root: Pointer)
+    // requires
+    //     self.decodable(bt_root),
+    //     self.decodable(repr_root),
+    //     self.acyclic(),
+    //     self.build_tight(bt_root).decodable(repr_root),
+    // ensures
+    //     self.build_tight(bt_root).wf(),
+    //     self.build_tight(bt_root).acyclic(),
+    //     self.build_tight(bt_root).representation(repr_root) == self.representation(repr_root)
+    // decreases self.the_rank_of(repr_root)
+    // {
+    //     self.build_tight_is_awesome(bt_root);
+    //     if repr_root.is_Some() {
+    //         self.representation_ignores_build_tight(bt_root, self.next(repr_root));
+    //     }
+    // }
 
-    proof fn build_tight_gives_representation(self, root: Pointer)
-    requires
-        self.decodable(root),
-        self.acyclic(),
-    ensures
-        self.build_tight(root).entries.dom() == self.representation(root),
-    decreases self.the_rank_of(root)
-    {
-        if root.is_Some() {
-            self.build_tight_gives_representation(self.next(root));
-        }
-    }
+    // proof fn build_tight_gives_representation(self, root: Pointer)
+    // requires
+    //     self.decodable(root),
+    //     self.acyclic(),
+    // ensures
+    //     self.build_tight(root).entries.dom() == self.representation(root),
+    // decreases self.the_rank_of(root)
+    // {
+    //     if root.is_Some() {
+    //         self.build_tight_gives_representation(self.next(root));
+    //     }
+    // }
 
-    spec(checked) fn cropped_lsn(boundary: LSN, message_seq: MsgHistory, lsn: LSN) -> bool
+    spec(checked) fn cropped_msg_seq_contains_lsn(boundary: LSN, message_seq: MsgHistory, lsn: LSN) -> bool
     {
         max(boundary as int, message_seq.seq_start as int) <= lsn < message_seq.seq_end
     }
@@ -217,8 +202,7 @@ impl DiskView {
     {
         reveal(TruncatedJournal::index_domain_valid);
         reveal(DiskView::index_keys_map_to_valid_entries);
-        if root.is_None() {
-        } else if self.next(root).is_None() {
+        if self.next(root).is_None() {
             // TODO(chris) These lets are trigger something... not sure why, since we have the same
             // defn (build_lsn_addr_index) available in scope. ?
             let curr_msgs = self.entries[root.unwrap()].message_seq;
@@ -230,34 +214,49 @@ impl DiskView {
         }
     }
 
-    proof fn build_lsn_addr_index_range_valid(self, root: Pointer, tj_end: LSN)
+    proof fn build_lsn_addr_index_range_valid(self, root: Pointer)
     requires
         self.buildable(root),
-        root.is_Some() ==> self.entries[root.unwrap()].message_seq.seq_end == tj_end,
-        root.is_None() ==> tj_end <= self.boundary_lsn,
         self.tj_at(root).index_domain_valid(self.build_lsn_addr_index(root)),
         self.index_keys_map_to_valid_entries(self.build_lsn_addr_index(root)),
     ensures
         self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)),
+    decreases
+        self.the_rank_of(root)
     {
         reveal(TruncatedJournal::index_domain_valid);
         reveal(DiskView::index_keys_map_to_valid_entries);
+
         if root.is_None() {
             assert( self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)) );
         } else if self.next(root).is_None() {
-            let curr_msgs = self.entries[root.unwrap()].message_seq;
-            let start_lsn = math::max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
-            let update = singleton_index(start_lsn, curr_msgs.seq_end, root.unwrap());
-            let output = self.build_lsn_addr_index(self.next(root)).union_prefer_right(update);
+            // let curr_msgs = self.entries[root.unwrap()].message_seq;
+            // let start_lsn = math::max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
+            // let update = singleton_index(start_lsn, curr_msgs.seq_end, root.unwrap());
+            // let output = self.build_lsn_addr_index(self.next(root)).union_prefer_right(update);
             assert( self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)) );
         } else {
             self.build_lsn_addr_index_domain_valid(self.next(root));
-            assume( false );    // do we ever actually use index_range_valid? That's one ugly definition
+            self.build_lsn_addr_index_range_valid(self.next(root));
+
+            let tj = self.tj_at(root);
+            let sub_index = self.build_lsn_addr_index(self.next(root));
+            let index = self.build_lsn_addr_index(root);
+
+            assert forall |addr| index.values().contains(addr)
+            implies tj.every_lsn_at_addr_indexed_to_addr(index, addr)
+            by {
+                if addr != root.unwrap() {
+                    assert(sub_index.values().contains(addr));
+                }
+            }
             assert( self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)) );
         }
     }
 
-    pub proof fn build_lsn_addr_index_gives_representation(self, root: Pointer) 
+    // oh nice, this really shows the representation is just a duplicate of build_tight
+    // replacing all reference of representation to build_tight 
+    pub proof fn build_tight_domain_is_build_lsn_addr_index_range(self, root: Pointer) 
     requires
         self.buildable(root),
     ensures
@@ -266,7 +265,7 @@ impl DiskView {
             forall |lsn| self.build_lsn_addr_index(root).contains_key(lsn) ==>
                 self.boundary_lsn <= lsn < self.entries[root.unwrap()].message_seq.seq_end,
         // This conclusion is the one we're trying to actually export
-        self.build_lsn_addr_index(root).values() =~= self.representation(root),
+        self.build_lsn_addr_index(root).values() =~= self.build_tight(root).entries.dom(),
         // TODO(chris): I find it kind of disturbing that the ~ between the == in the line above
         // is a functional part of the proof strategy. --jonh
     decreases self.the_rank_of(root)
@@ -275,16 +274,17 @@ impl DiskView {
         reveal(DiskView::index_keys_map_to_valid_entries);
 
         if root.is_Some() {
-            self.build_lsn_addr_index_gives_representation(self.next(root));
+            self.build_tight_domain_is_build_lsn_addr_index_range(self.next(root));
             let curr_msgs = self.entries[root.unwrap()].message_seq;
             let begin = max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
             let update = singleton_index(begin, curr_msgs.seq_end, root.unwrap());
             assert(update.contains_key(begin));
-            assert forall |k| #![auto] self.build_lsn_addr_index(root).values().contains(k) implies self.representation(root).contains(k) by {
+            assert forall |k| #![auto] self.build_lsn_addr_index(root).values().contains(k) 
+            implies self.build_tight(root).entries.dom().contains(k) by {
             }
-            self.representation_ensures(root);
+            self.build_tight_ensures(root);
             assert forall |addr| #![auto]
-                self.representation(root).contains(addr) implies
+                self.build_tight(root).entries.dom().contains(addr) implies
                 self.build_lsn_addr_index(root).values().contains(addr) by {
 
                 let left_index = self.build_lsn_addr_index(self.entries[root.unwrap()].cropped_prior(self.boundary_lsn));
@@ -301,15 +301,85 @@ impl DiskView {
 //         assert( self.build_lsn_addr_index(root).values() =~= self.representation(root) );    // TODO remove
     }
 
-    proof fn sub_disk_repr_index(self, big: Self, ptr: Pointer)
+//     pub proof fn build_lsn_addr_index_gives_representation(self, root: Pointer) 
+//     requires
+//         self.buildable(root),
+//     ensures
+//         // This conclusion is used inside the recursion
+//         root.is_Some() ==>
+//             forall |lsn| self.build_lsn_addr_index(root).contains_key(lsn) ==>
+//                 self.boundary_lsn <= lsn < self.entries[root.unwrap()].message_seq.seq_end,
+//         // This conclusion is the one we're trying to actually export
+//         self.build_lsn_addr_index(root).values() =~= self.representation(root),
+//         // TODO(chris): I find it kind of disturbing that the ~ between the == in the line above
+//         // is a functional part of the proof strategy. --jonh
+//     decreases self.the_rank_of(root)
+//     {
+//         reveal(TruncatedJournal::index_domain_valid);
+//         reveal(DiskView::index_keys_map_to_valid_entries);
+
+//         if root.is_Some() {
+//             self.build_lsn_addr_index_gives_representation(self.next(root));
+//             let curr_msgs = self.entries[root.unwrap()].message_seq;
+//             let begin = max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
+//             let update = singleton_index(begin, curr_msgs.seq_end, root.unwrap());
+//             assert(update.contains_key(begin));
+//             assert forall |k| #![auto] self.build_lsn_addr_index(root).values().contains(k) implies self.representation(root).contains(k) by {
+//             }
+//             self.representation_ensures(root);
+//             assert forall |addr| #![auto]
+//                 self.representation(root).contains(addr) implies
+//                 self.build_lsn_addr_index(root).values().contains(addr) by {
+
+//                 let left_index = self.build_lsn_addr_index(self.entries[root.unwrap()].cropped_prior(self.boundary_lsn));
+//                 if update.values().contains(addr) {
+//                     assert( self.build_lsn_addr_index(root).contains_key(begin) );   // witness
+// //                     assert( self.build_lsn_addr_index(root).values().contains(addr) );
+//                 } else {
+//                     let lsn = choose |lsn| #![auto] left_index.contains_key(lsn) && left_index[lsn]==addr;
+//                     assert( self.build_lsn_addr_index(root).contains_key(lsn) );    // witness
+// //                     assert( self.build_lsn_addr_index(root).values().contains(addr) );
+//                 }
+//             }
+//         }
+// //         assert( self.build_lsn_addr_index(root).values() =~= self.representation(root) );    // TODO remove
+//     }
+
+    proof fn sub_disk_with_newer_lsn_repr_index(self, big: DiskView, ptr: Pointer)
+    requires 
+        self.decodable(ptr),
+        self.acyclic(),
+        big.decodable(ptr),
+        big.acyclic(),
+        ptr is Some ==> self.boundary_lsn < self.entries[ptr.unwrap()].message_seq.seq_end,
+        ptr is Some ==> big.boundary_lsn < big.entries[ptr.unwrap()].message_seq.seq_end,
+        self.is_sub_disk_with_newer_lsn(big)
+    ensures 
+        self.build_lsn_addr_index(ptr) <= big.build_lsn_addr_index(ptr)
+    decreases 
+        self.the_rank_of(ptr)
+    {
+        reveal(TruncatedJournal::index_domain_valid);
+        reveal(DiskView::index_keys_map_to_valid_entries);
+
+        if ptr is Some {
+            self.sub_disk_with_newer_lsn_repr_index(big, self.next(ptr));
+            if self.next(ptr) is Some {
+                self.build_lsn_addr_index_domain_valid(self.next(ptr));
+            }
+            if big.next(ptr) is Some {
+                big.build_lsn_addr_index_domain_valid(big.next(ptr));
+            }
+        }
+    }
+
+    pub proof fn sub_disk_repr_index(self, big: Self, ptr: Pointer)
     requires
         self.wf(),
         big.wf(),
         big.acyclic(),
         self.is_sub_disk(big),
-        self.boundary_lsn == big.boundary_lsn,
         self.is_nondangling_pointer(ptr),
-    //ensures self.acyclic()
         ptr.is_Some() ==> self.boundary_lsn < self.entries[ptr.unwrap()].message_seq.seq_end,
     ensures
         self.build_lsn_addr_index(ptr) == big.build_lsn_addr_index(ptr),
@@ -488,16 +558,16 @@ impl TruncatedJournal {
         else { Multiset::from_set(self.build_lsn_addr_index().values()) }
     }
 
-    pub open spec(checked) fn tight_discard_old(self, new: Self, new_bdy: LSN, keep: Set<Address>) -> bool
-    recommends
-        self.wf(),
-        new.wf(),
-        self.disk_view.boundary_lsn <= new_bdy,
+    pub open spec(checked) fn discard_old_cond(self, start_lsn: LSN, 
+        keep_addrs: Set<Address>, new: Self) -> bool
+        recommends self.wf()
     {
-        &&& new.disk_view.boundary_lsn == new_bdy
-        &&& new.disk_view.entries.dom() =~= keep
-        &&& new.disk_view.entries.agrees(self.disk_view.entries)
-        &&& new.freshest_rec == if self.seq_end() == new_bdy { None } else { self.freshest_rec }
+        // new disk_view must be a subdisk contain all kept addrs 
+        &&& new.wf()
+        &&& new.disk_view.boundary_lsn == start_lsn
+        &&& new.disk_view.entries <= self.disk_view.entries
+        &&& forall |addr| #[trigger] keep_addrs.contains(addr) ==> new.disk_view.entries.dom().contains(addr)
+        &&& new.freshest_rec == if self.seq_end() == start_lsn { None } else { self.freshest_rec }
     }
 }
 
@@ -506,6 +576,7 @@ impl MsgHistory {
     recommends
         self.wf(),
         new.wf(),
+        self.can_discard_to(new_bdy),
     {
         let msgs = if self.seq_start <= new_bdy { self.discard_old(new_bdy) } else { self };
         &&& new.ext_equal(msgs)
@@ -525,13 +596,13 @@ impl TruncatedJournal {
     // Why doesn't truncating the first record violate this for lsns between message_seq.start and
     // boundary!?
     // ...oh, the relevant inv proof isn't completed. Hah. It's not okay.
-    pub open spec(checked) fn valid_entries_appear_in_index(self, lsn_addr_index: LsnAddrIndex) -> bool
-    recommends
-        self.wf(),
-    {
-        forall |addr, lsn| self.disk_view.addr_supports_lsn(addr, lsn)
-             ==> lsn_addr_index.contains_key(lsn) && lsn_addr_index[lsn]==addr
-    }
+    // pub open spec(checked) fn valid_entries_appear_in_index(self, lsn_addr_index: LsnAddrIndex) -> bool
+    // recommends
+    //     self.wf(),
+    // {
+    //     forall |addr, lsn| self.disk_view.addr_supports_lsn(addr, lsn)
+    //          ==> lsn_addr_index.contains_key(lsn) && lsn_addr_index[lsn]==addr
+    // }
 
     #[verifier(opaque)]
     pub open spec(checked) fn index_domain_valid(self, lsn_addr_index: LsnAddrIndex) -> bool
@@ -542,6 +613,16 @@ impl TruncatedJournal {
         &&& forall |lsn| lsn_addr_index.contains_key(lsn) <==> (self.seq_start() <= lsn < self.seq_end())
     }
 
+    pub closed spec /*XXX (checked)*/ fn every_lsn_at_addr_indexed_to_addr(self, lsn_addr_index: LsnAddrIndex, addr: Address) -> bool
+    {
+        let msgs = self.disk_view.entries[addr].message_seq;
+        let boundary_lsn = self.disk_view.boundary_lsn;
+        forall |lsn| #[trigger] DiskView::cropped_msg_seq_contains_lsn(boundary_lsn, msgs, lsn) ==> {
+            &&& lsn_addr_index.contains_key(lsn)
+            &&& lsn_addr_index[lsn] == addr
+        }
+    }
+
     pub closed spec /*XXX (checked)*/ fn index_range_valid(self, lsn_addr_index: LsnAddrIndex) -> bool
     recommends
         self.wf(),
@@ -549,29 +630,9 @@ impl TruncatedJournal {
         self.disk_view.index_keys_map_to_valid_entries(lsn_addr_index),
     {
         forall |addr| lsn_addr_index.values().contains(addr) ==> {
-            let lsn = choose |lsn| (#[trigger] lsn_addr_index.contains_key(lsn)) && lsn_addr_index[lsn] == addr;
-            // TODO(jonh): need to invoke instantiate_index_keys_map_to_valid_entries here to
-            // satisfy recommendation check.
-            let msgs = self.disk_view.entries[addr].message_seq;
-            let boundary_lsn = self.disk_view.boundary_lsn;
-            forall |lsn| #![auto] DiskView::cropped_lsn(boundary_lsn, msgs, lsn) ==> {
-                &&& lsn_addr_index.contains_key(lsn)
-                &&& lsn_addr_index[lsn] == addr
-            }
+            self.every_lsn_at_addr_indexed_to_addr(lsn_addr_index, addr)
         }
     }
-
-    pub proof fn build_lsn_addr_index_gives_representation(self) 
-    requires
-        self.wf(),
-        self.disk_view.decodable(self.freshest_rec),
-        self.disk_view.acyclic(),
-    ensures
-        self.build_lsn_addr_index().values() == self.representation(),
-    {
-        self.disk_view.build_lsn_addr_index_gives_representation(self.freshest_rec)
-    }
-    
 
     pub proof fn build_lsn_addr_honors_rank(self, lsn_addr_index: Map<LSN, Address>)
     requires
@@ -585,7 +646,7 @@ impl TruncatedJournal {
         }) ==> self.disk_view.the_rank_of(Some(lsn_addr_index[lsn1])) <= self.disk_view.the_rank_of(Some(lsn_addr_index[lsn2]))
     {
         self.disk_view.build_lsn_addr_honors_rank(self.freshest_rec, lsn_addr_index)
-    }
+    }    
 }
 
 state_machine!{ LikesJournal {
@@ -643,59 +704,57 @@ state_machine!{ LikesJournal {
         Multiset::from_set(self.lsn_addr_index.values())
     }
 
-    transition!{ read_for_recovery(lbl: Label) {
-        require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
+    transition!{ read_for_recovery(lbl: Label, depth: nat) {
+        require lbl is ReadForRecovery;
+        require LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, pre.journal, Self::lbl_i(lbl), 
+                LinkedJournal_v::LinkedJournal::Step::read_for_recovery(depth));
     } }
 
-    transition!{ freeze_for_commit(lbl: Label) {
-        require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
+    transition!{ freeze_for_commit(lbl: Label, depth: nat) {
+        require lbl is FreezeForCommit;
+        require LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, pre.journal, Self::lbl_i(lbl),
+                LinkedJournal_v::LinkedJournal::Step::freeze_for_commit(depth));
     } }
 
     transition!{ query_end_lsn(lbl: Label) {
+        require lbl is QueryEndLsn;
         require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
     } }
     
     transition!{ put(lbl: Label, new_journal: LinkedJournal_v::LinkedJournal::State) {
         require lbl is Put;
         require LinkedJournal_v::LinkedJournal::State::next(pre.journal, new_journal, Self::lbl_i(lbl));
+        update journal = new_journal;
     } }
-    
+
     transition!{ discard_old(lbl: Label, new_journal: LinkedJournal_v::LinkedJournal::State) {
         require lbl is DiscardOld;
 
-        // TODO These verbose accessors are really unpleasant to read.
         let start_lsn = lbl.get_DiscardOld_start_lsn();
+        let require_end = lbl.get_DiscardOld_require_end();
 
-        // require pre.journal.wf();   // TODO delete; it's in inv
-        // require pre.journal.truncated_journal.disk_view.acyclic();   // TODO delete; it's in inv
-        require pre.journal.seq_start() <= start_lsn <= pre.journal.seq_end();
-        require lbl.get_DiscardOld_require_end() == pre.journal.seq_end();
+        require require_end == pre.journal.seq_end();
         require pre.journal.truncated_journal.can_discard_to(start_lsn);
 
-        // Addrs to delete from likes are pages that are between the old LSN and new LSN,
-        // excluding the page containing the new LSN boundary
         let lsn_addr_index_post = lsn_addr_index_discard_up_to(pre.lsn_addr_index, start_lsn);
         let keep_addrs = lsn_addr_index_post.values();
-        let unref_addrs = pre.lsn_addr_index.values().difference(keep_addrs);
 
-        require new_journal.wf();
-        require pre.journal.truncated_journal.tight_discard_old(
-            new_journal.truncated_journal, start_lsn, keep_addrs);
-        require pre.journal.unmarshalled_tail.tight_discard_old(
-            new_journal.unmarshalled_tail, start_lsn);
+        // require new_journal.wf();
+        require pre.journal.truncated_journal.discard_old_cond(
+            start_lsn, keep_addrs, new_journal.truncated_journal);
+        require new_journal.unmarshalled_tail == 
+            pre.journal.unmarshalled_tail.bounded_discard(start_lsn);
 
         update journal = new_journal;
         update lsn_addr_index = lsn_addr_index_post;
     } }
 
-    transition!{ internal_journal_marshal(lbl: Label, cut: LSN, addr: Address, newjournal: LinkedJournal_v::LinkedJournal::State) {
-        require lbl.is_Internal();
-        require !pre.lsn_addr_index.values().contains(addr);
-        
-        require LinkedJournal_v::LinkedJournal::State::next_by(
-            pre.journal, newjournal, Self::lbl_i(lbl), LinkedJournal_v::LinkedJournal::Step::internal_journal_marshal(cut, addr));
+    transition!{ internal_journal_marshal(lbl: Label, cut: LSN, addr: Address, new_journal: LinkedJournal_v::LinkedJournal::State) {
+        require lbl is Internal;
+        require LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, new_journal, 
+            Self::lbl_i(lbl), LinkedJournal_v::LinkedJournal::Step::internal_journal_marshal(cut, addr));
 
-        update journal = newjournal;
+        update journal = new_journal;
         update lsn_addr_index = lsn_addr_index_append_record(
             pre.lsn_addr_index,
             pre.journal.unmarshalled_tail.discard_recent(cut),
@@ -712,10 +771,10 @@ state_machine!{ LikesJournal {
     // should simply treat shadowing as an error.
     init!{ initialize(ijournal: TruncatedJournal) {
         require ijournal.decodable();    // An invariant carried by CoordinationSystem from FreezeForCommit, past a crash, back here
-        require ijournal.disk_is_tight_wrt_representation();
+        // require ijournal.disk_is_tight_wrt_representation(); // Note(Jialin): might not be necessary
         init journal = LinkedJournal_v::LinkedJournal::State{
             truncated_journal: ijournal,
-            unmarshalled_tail: MsgHistory::empty_history_at(ijournal.build_tight().seq_end())};
+            unmarshalled_tail: MsgHistory::empty_history_at(ijournal.seq_end())}; // Note(Jialin): used to be ijournal.build_tight but I can't think of why
         init lsn_addr_index = ijournal.build_lsn_addr_index();
     } }
 
@@ -723,36 +782,35 @@ state_machine!{ LikesJournal {
 // Definitions moved from Refinement file to integrate with invariant machinery.
     // The thrilling climax, the actual proof goal we want to use in lower
     // refinement layers.
-    pub open spec(checked) fn imperative_matches_transitive(self) -> bool
-    {
-        self.transitive_likes() == self.imperative_likes()
-    }
+    // pub open spec(checked) fn imperative_matches_transitive(self) -> bool
+    // {
+    //     self.transitive_likes() == self.imperative_likes()
+    // }
 
     #[invariant]
     pub open spec(checked) fn inv(self) -> bool {
         let tj = self.journal.truncated_journal;
         &&& self.wf()
         &&& tj.disk_view.acyclic()
-        &&& self.lsn_addr_index == tj.build_lsn_addr_index()
-        &&& self.lsn_addr_index.values() == tj.representation()
-        &&& tj.disk_view.index_reflects_disk_view(self.lsn_addr_index)  // TODO or just prove it from build
+        &&& self.lsn_addr_index == tj.build_lsn_addr_index() // equivalent to imperative_matches_transitive
         &&& tj.index_domain_valid(self.lsn_addr_index)
         &&& tj.disk_view.index_keys_map_to_valid_entries(self.lsn_addr_index)
-        &&& tj.valid_entries_appear_in_index(self.lsn_addr_index)
         &&& tj.index_range_valid(self.lsn_addr_index)
-        &&& tj.disk_is_tight_wrt_representation()
-        &&& self.imperative_matches_transitive()
+
+        //////////////////////////////////////////////////////////////
+        // &&& self.lsn_addr_index.values() == tj.representation() // also prove it from build?
+        // &&& tj.disk_view.index_reflects_disk_view(self.lsn_addr_index)  // TODO or just prove it from build
+        // &&& tj.disk_is_tight_wrt_representation()
+        // &&& self.imperative_matches_transitive() // this is shown through the build
     }
 
     #[inductive(read_for_recovery)]
-    fn read_for_recovery_inductive(pre: Self, post: Self, lbl: Label) {
-        reveal(LinkedJournal_v::LinkedJournal::State::next);
+    fn read_for_recovery_inductive(pre: Self, post: Self, lbl: Label, depth: nat) {
         reveal(LinkedJournal_v::LinkedJournal::State::next_by);
     }
    
     #[inductive(freeze_for_commit)]
-    fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label) {
-        reveal(LinkedJournal_v::LinkedJournal::State::next);
+    fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label, depth: nat) {
         reveal(LinkedJournal_v::LinkedJournal::State::next_by);
     }
 
@@ -770,34 +828,30 @@ state_machine!{ LikesJournal {
 
     /* `pub` is only being added to avoid a confusing fake error message, originally we didn't intend for this
        proof function to be `pub` */
-    pub proof fn discard_old_step_preserves_wf_disk_view(pre: Self, post: Self, lbl: Label)
+    pub proof fn discard_old_step_preserves_acyclicity(pre: Self, post: Self, lbl: Label)
     requires
-        pre.wf(),
-        pre.journal.truncated_journal.index_domain_valid(pre.lsn_addr_index),
-        pre.journal.truncated_journal.disk_view.index_keys_map_to_valid_entries(pre.lsn_addr_index),
-        pre.journal.truncated_journal.index_range_valid(pre.lsn_addr_index),
-        pre.journal.truncated_journal.disk_view.acyclic(),
-        pre.lsn_addr_index == pre.journal.truncated_journal.build_lsn_addr_index(),
-        pre.lsn_addr_index.values() == pre.journal.truncated_journal.representation(),
+        pre.inv(),
         Self::discard_old(pre, post, lbl, post.journal),
     ensures
-        post.journal.truncated_journal.wf(),
+        post.journal.truncated_journal.disk_view.acyclic(),
     {
-        assume(false); // TODO port this proof
+        let dv = pre.journal.truncated_journal.disk_view;
+        let post_dv = post.journal.truncated_journal.disk_view;
+        let ranking = dv.the_ranking();
+
+        assert forall |addr| #[trigger] post_dv.entries.contains_key(addr) && post_dv.entries[addr].cropped_prior(post_dv.boundary_lsn).is_Some()
+        implies ranking[post_dv.entries[addr].cropped_prior(post_dv.boundary_lsn).unwrap()] < ranking[addr]
+        by {
+            assert(dv.entries.contains_key(addr)); // trigger
+        }
+        assert(post_dv.valid_ranking(ranking)); // witness
     }
    
-    pub proof fn discard_old_step_preserves_wf_and_index(pre: Self, post: Self, lbl: Label)
+    pub proof fn discard_old_step_preserves_index(pre: Self, post: Self, lbl: Label)
     requires
-        pre.wf(),
-        pre.journal.truncated_journal.index_domain_valid(pre.lsn_addr_index),
-        pre.journal.truncated_journal.disk_view.index_keys_map_to_valid_entries(pre.lsn_addr_index),
-        pre.journal.truncated_journal.index_range_valid(pre.lsn_addr_index),
-        pre.journal.truncated_journal.disk_view.acyclic(),
-        pre.lsn_addr_index == pre.journal.truncated_journal.build_lsn_addr_index(),
-        pre.lsn_addr_index.values() == pre.journal.truncated_journal.representation(),
+        pre.inv(),
         Self::discard_old(pre, post, lbl, post.journal),
     ensures
-        post.wf(),
         post.journal.truncated_journal.index_domain_valid(post.lsn_addr_index),
         post.journal.truncated_journal.disk_view.index_keys_map_to_valid_entries(post.lsn_addr_index),
         post.journal.truncated_journal.index_range_valid(post.lsn_addr_index),
@@ -807,93 +861,99 @@ state_machine!{ LikesJournal {
 
         let tj_pre = pre.journal.truncated_journal;
         let tj_post = post.journal.truncated_journal;
-        let pre_bdy = tj_pre.disk_view.boundary_lsn;
-        let new_bdy = lbl.get_DiscardOld_start_lsn();
 
-        Self::discard_old_step_preserves_wf_disk_view(pre, post, lbl);
-    
-        // prove tj'.diskView.IsNondanglingPointer(tj'.freshestRec);
-        if tj_post.freshest_rec.is_Some() {
-          let msgs = tj_pre.disk_view.entries[tj_pre.freshest_rec.unwrap()].message_seq;
-          let lsn = max(new_bdy as int, msgs.seq_start as int) as nat; // witness
-          assume( post.lsn_addr_index.contains_key(lsn) && post.lsn_addr_index[lsn] == tj_pre.freshest_rec.unwrap() );  // TODO left off
+        assert forall |lsn| #[trigger] post.lsn_addr_index.contains_key(lsn)
+        implies tj_post.disk_view.addr_supports_lsn(post.lsn_addr_index[lsn], lsn)
+        by {
+            let addr = post.lsn_addr_index[lsn];
+            assert(post.lsn_addr_index.values().contains(addr)); // trigger
         }
-        
-        assume(false); // TODO complete this proof
+
+        let bdy_pre = tj_pre.disk_view.boundary_lsn;
+        let bdy_post = tj_post.disk_view.boundary_lsn;
+
+        assert forall |addr| post.lsn_addr_index.values().contains(addr)
+        implies tj_post.every_lsn_at_addr_indexed_to_addr(post.lsn_addr_index, addr)
+        by {
+            assert(pre.lsn_addr_index.values().contains(addr));
+            assert(tj_pre.every_lsn_at_addr_indexed_to_addr(pre.lsn_addr_index, addr));
+
+            let msgs = tj_post.disk_view.entries[addr].message_seq;
+            assert forall |lsn| #[trigger] DiskView::cropped_msg_seq_contains_lsn(bdy_post, msgs, lsn) 
+            implies {
+                &&& post.lsn_addr_index.contains_key(lsn)
+                &&& post.lsn_addr_index[lsn] == addr
+            } by {
+                assert(DiskView::cropped_msg_seq_contains_lsn(bdy_pre, msgs, lsn));
+            }
+        }
     }
 
     pub proof fn discard_old_maintains_repr_index(pre: Self, post: Self, lbl: Label)
     requires
         pre.inv(),
-        post.wf(),
         Self::discard_old(pre, post, lbl, post.journal),
-        pre.journal.truncated_journal.disk_view.acyclic(),
+        post.wf(),
+        post.journal.truncated_journal.disk_view.acyclic(),
     ensures
         post.lsn_addr_index == post.journal.truncated_journal.build_lsn_addr_index(),
     {
-        assume(false);  // TODO more proof porting
+        reveal(TruncatedJournal::index_domain_valid);
+        reveal(DiskView::index_keys_map_to_valid_entries);
+
+        let tj_pre = pre.journal.truncated_journal;
+        let tj_post = post.journal.truncated_journal;
+        let bdy_post = tj_post.disk_view.boundary_lsn;
+        let repr = tj_post.build_lsn_addr_index();
+
+        if bdy_post < tj_pre.seq_end() {
+            tj_post.disk_view.build_lsn_addr_index_domain_valid(tj_post.freshest_rec);
+            tj_post.disk_view.sub_disk_with_newer_lsn_repr_index(tj_pre.disk_view, tj_post.freshest_rec);
+            lsn_addr_index_discard_up_to_ensures(pre.lsn_addr_index, bdy_post);
+            // assert(repr <= post.lsn_addr_index);
+            // assert(post.lsn_addr_index <= repr);
+            assert(repr.dom() =~= post.lsn_addr_index.dom());
+            assert(repr =~= post.lsn_addr_index); // (Jialin): needs to =~= dom then the map, why?
+        } else {
+            assert(post.lsn_addr_index =~= repr);
+        }
     }
 
     #[inductive(discard_old)]
     fn discard_old_inductive(pre: Self, post: Self, lbl: Label, new_journal: LinkedJournal_v::LinkedJournal::State) {
-        reveal(LinkedJournal_v::LinkedJournal::State::next_by);
-        Self::discard_old_step_preserves_wf_and_index(pre, post, lbl);
-        let ranking = pre.journal.truncated_journal.disk_view.the_ranking();  // witness to acyclicity
-        assert( post.journal.truncated_journal.disk_view.valid_ranking(ranking) );
+        Self::discard_old_step_preserves_acyclicity(pre, post, lbl);
+        Self::discard_old_step_preserves_index(pre, post, lbl);
         Self::discard_old_maintains_repr_index(pre, post, lbl);
-        post.journal.truncated_journal.build_lsn_addr_index_gives_representation();
-        assert( post.journal.truncated_journal.index_range_valid(post.lsn_addr_index) );
-        assume(post.journal.truncated_journal.disk_is_tight_wrt_representation()); // TODO something didn't prove for free
-        assert( post.inv() );
     }
 
     #[inductive(internal_journal_marshal)]
-    fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address, newjournal: LinkedJournal_v::LinkedJournal::State) {
+    fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address, new_journal: LinkedJournal_v::LinkedJournal::State) {
         reveal(LinkedJournal_v::LinkedJournal::State::next_by);
+        assert( post.wf() );
 
         let istep:LinkedJournal_v::LinkedJournal::Step = LinkedJournal_v::LinkedJournal::Step::internal_journal_marshal(cut, addr);
-        assert( LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, post.journal, State::lbl_i(lbl), istep) );
-        LinkedJournal_v::LinkedJournal::State::inv_next(pre.journal, post.journal, State::lbl_i(lbl), istep);
+        assert(LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, post.journal, State::lbl_i(lbl), istep));
 
-    //var tj := v.journal.truncatedJournal;
-    //var tj' := v'.journal.truncatedJournal;
+        // NOTE(Jialin): inv_next duplicates what should be exported by submodule inv
+        LinkedJournal_v::LinkedJournal::State::inv_next(pre.journal, post.journal, State::lbl_i(lbl), istep);
+        assert(post.journal.inv());
+
         let tj_pre = pre.journal.truncated_journal;
         let tj_post = post.journal.truncated_journal;
-        assert( tj_post.disk_view.acyclic() );
+        assert( tj_post.disk_view.acyclic() ); // linked journal inv
+
         tj_pre.disk_view.sub_disk_repr_index(tj_post.disk_view, tj_pre.freshest_rec);
-        tj_post.build_lsn_addr_index_gives_representation();
+        assert( post.lsn_addr_index == tj_post.build_lsn_addr_index() );
 
         reveal(TruncatedJournal::index_domain_valid);
         reveal(DiskView::index_keys_map_to_valid_entries);
         assert( tj_post.index_domain_valid(post.lsn_addr_index) );
         assert( tj_post.disk_view.index_keys_map_to_valid_entries(post.lsn_addr_index) );
+
+        let msgs = pre.journal.unmarshalled_tail.discard_recent(cut);
+        lsn_addr_index_append_record_ensures(pre.lsn_addr_index, msgs, addr);
         assert( tj_post.index_range_valid(post.lsn_addr_index) );
-        assert( post.lsn_addr_index =~= tj_post.build_lsn_addr_index() ); // used to be free :v(
 
-        tj_post.disk_view.representation_ensures(tj_post.freshest_rec); // not helpful; delete
-
-        assert forall |addr| #![auto] tj_post.disk_view.entries.dom().contains(addr)
-            implies tj_post.representation().contains(addr) by {
-            if tj_pre.disk_view.entries.dom().contains(addr) {
-                assert( tj_pre.representation().contains(addr) );
-                let newaddr = tj_post.freshest_rec.unwrap();
-                assert( tj_post.freshest_rec.is_Some() );
-                assume( tj_pre.disk_view.representation(tj_pre.freshest_rec) == tj_post.disk_view.representation(tj_post.disk_view.entries[newaddr].cropped_prior(tj_post.disk_view.boundary_lsn)) );   // TODO(jonh): left off battling this silly corner
-                assert( tj_post.representation() == tj_pre.representation().insert(newaddr) );
-                assert( tj_post.representation().contains(addr) );
-            } else {
-                assert( tj_post.representation().contains(addr) );
-            }
-        }
-        assert forall |addr|
-            tj_post.representation().contains(addr)
-            implies
-            tj_post.disk_view.entries.dom().contains(addr)
-            by {
-        }
-        assert( tj_post.disk_view.entries.dom() =~= tj_post.representation() );
-        assert( tj_post.disk_is_tight_wrt_representation() ) by {
-        }
         assert( post.inv() );
     }
    
@@ -903,18 +963,21 @@ state_machine!{ LikesJournal {
    
     #[inductive(initialize)]
     fn initialize_inductive(post: Self, ijournal: TruncatedJournal) {
+        // assert(ijournal.wf());
+        // assert(ijournal.disk_view.acyclic());
+        // assert(post.lsn_addr_index == ijournal.build_lsn_addr_index());
+
         reveal(TruncatedJournal::index_domain_valid);
         reveal(DiskView::index_keys_map_to_valid_entries);
-        ijournal.disk_view.build_tight_is_awesome(ijournal.freshest_rec);
-        let tight_tj = ijournal.build_tight();
-        if tight_tj.freshest_rec.is_Some() {
-            tight_tj.disk_view.build_lsn_addr_index_domain_valid(tight_tj.freshest_rec);
+
+        if ijournal.freshest_rec.is_Some() {
+            ijournal.disk_view.build_lsn_addr_index_domain_valid(ijournal.freshest_rec);
         }
-        tight_tj.disk_view.build_lsn_addr_index_range_valid(tight_tj.freshest_rec, tight_tj.seq_end());
-        tight_tj.build_lsn_addr_index_gives_representation();
-        ijournal.disk_view.build_tight_gives_representation(ijournal.freshest_rec);
-        ijournal.disk_view.representation_ignores_build_tight(ijournal.freshest_rec, ijournal.freshest_rec);
-        ijournal.disk_view.build_lsn_addr_index_ignores_build_tight(ijournal.freshest_rec, ijournal.freshest_rec);
+        // assert(ijournal.index_domain_valid(post.lsn_addr_index));
+        ijournal.disk_view.build_lsn_addr_index_range_valid(ijournal.freshest_rec);
+        // assert(ijournal.disk_view.index_keys_map_to_valid_entries(post.lsn_addr_index));
+        // assert(ijournal.index_range_valid(post.lsn_addr_index));
+        // assert(post.imperative_matches_transitive());
     }
     
 } } // state_machine!
