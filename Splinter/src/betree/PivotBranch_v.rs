@@ -26,10 +26,12 @@ impl SplitArg {
         match self {
             Self::SplitLeaf{pivot} => {
                 &&& split_node is Leaf
+                &&& split_node.get_Leaf_keys().len() == split_node.get_Leaf_msgs().len()
                 &&& 0 < Key::largest_lt(split_node.get_Leaf_keys(), pivot) + 1 < split_node.get_Leaf_keys().len()
             }
             Self::SplitIndex{pivot, pivot_index} => {
                 &&& split_node is Index
+                &&& split_node.wf()
                 &&& 0 <= pivot_index < split_node.get_Index_pivots().len()
                 &&& split_node.get_Index_pivots()[pivot_index] == pivot
             }
@@ -129,11 +131,6 @@ impl Node {
         }
     }
 
-    pub open spec(checked) fn grow(self) -> Node
-    {
-        Node::Index{pivots: seq![], children: seq![self]}
-    }
-
     pub open spec/* XXX (checked)*/ fn insert_leaf(self, key: Key, msg: Message) -> Node
         recommends
             self is Leaf,
@@ -154,14 +151,6 @@ impl Node {
         }
     }
 
-    pub open spec(checked) fn append_to_new_leaf(self, new_keys: Seq<Key>, new_msgs: Seq<Message>) -> Node
-        recommends
-            new_keys.len() == new_msgs.len(),
-            Key::is_strictly_sorted(new_keys)
-    {
-        Node::Leaf{ keys: new_keys, msgs: new_msgs }
-    }
-
     pub open spec/* XXX (checked)*/ fn insert(self, key: Key, msg: Message, path: Path) -> Node
         recommends
             self.wf(),
@@ -172,6 +161,20 @@ impl Node {
     {
         // Need target ensures to restore checked
         path.substitute(path.target().insert_leaf(key, msg))
+    }
+
+    pub open spec(checked) fn grow(self) -> Node
+        recommends self.wf()
+    {
+        Node::Index{pivots: seq![], children: seq![self]}
+    }
+
+    pub open spec(checked) fn append_to_new_leaf(self, new_keys: Seq<Key>, new_msgs: Seq<Message>) -> Node
+        recommends
+            new_keys.len() == new_msgs.len(),
+            Key::is_strictly_sorted(new_keys)
+    {
+        Node::Leaf{ keys: new_keys, msgs: new_msgs }
     }
 
     pub open spec(checked) fn append(self, keys: Seq<Key>, msgs: Seq<Message>, path: Path) -> Node
@@ -190,9 +193,7 @@ impl Node {
     }
 
     pub open spec(checked) fn split_leaf(self, split_arg: SplitArg) -> (Node, Node)
-        recommends
-            self is Leaf,
-            split_arg.wf(self)
+        recommends split_arg.wf(self)
     {
         let pivot = split_arg.get_pivot();
         let split_index = Key::largest_lt(self.get_Leaf_keys(), pivot) + 1;
@@ -216,12 +217,12 @@ impl Node {
         Node::Index{ pivots: self.get_Index_pivots().subrange(from, to-1), children: self.get_Index_children().subrange(from, to) }
     }
 
-    pub open spec(checked) fn split_index(self, split_arg: SplitArg) -> (Node, Node)
-        recommends
-            self.wf(),
-            self is Index,
-            split_arg.wf(self)
+    pub open spec/*XXX (checked)*/ fn split_index(self, split_arg: SplitArg) -> (Node, Node)
+        recommends split_arg.wf(self)
     {
+        // Assert split_arg.wf(self) ==> self.wf() ==>
+        // self.get_Index_children().len() == self.get_Index_pivots().len() + 1
+        // to restore checked
         let pivot_index = split_arg.get_SplitIndex_pivot_index();
         let left_index = self.sub_index(0, pivot_index + 1);
         let right_index = self.sub_index(pivot_index + 1, self.get_Index_children().len() as int);
@@ -229,9 +230,7 @@ impl Node {
     }
 
     pub open spec(checked) fn split_node(self, split_arg: SplitArg) -> (Node, Node)
-        recommends
-            self.wf(),
-            split_arg.wf(self)
+        recommends split_arg.wf(self)
     {
         if (self is Leaf) {
             self.split_leaf(split_arg)
@@ -252,8 +251,7 @@ impl Node {
     }
 
     pub open spec/* XXX (checked)*/ fn split_child_of_index(self, split_arg: SplitArg) -> Node
-        recommends
-            self.can_split_child_of_index(split_arg)
+        recommends self.can_split_child_of_index(split_arg)
     {
         // Need route ensures to restore checked
         let pivot = split_arg.get_pivot();
