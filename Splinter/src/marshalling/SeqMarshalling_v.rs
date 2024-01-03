@@ -7,7 +7,7 @@ use vstd::prelude::*;
 use vstd::bytes::*;
 use vstd::slice::*;
 use crate::marshalling::Slice_v::*;
-use crate::marshalling::MarshalledAccessors_v::*;
+use crate::marshalling::Marshalling_v::*;
 use crate::marshalling::IntegerMarshalling_v::*;
 
 verus! {
