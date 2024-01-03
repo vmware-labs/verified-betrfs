@@ -278,6 +278,10 @@ pub trait SeqMarshalling<U, EltMarshalling: Marshalling<U>> : Marshalling<Vec<U>
         &&& Self::elt_parsable_to_len(self, data, len as int)
     }
 
+    open spec fn parse_to_len(&self, data: Seq<u8>, len: u64) -> Seq<U>
+    {
+        Seq::new(len as nat, |i| self.get_elt(data, i))
+    }
 }
 
 ////////////////////////////////////////////////////////////////////
@@ -360,7 +364,7 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> Premarshalling<Vec<C::
         &&& Self::size_of_length_field() as int + value.len() * self.config.spec_uniform_size() as int <= self.total_size
     }
 
-    spec fn spec_size(&self, value: &U) -> u64
+    spec fn spec_size(&self, value: &Vec<C::Elt>) -> u64
     recommends 
         self.valid(),
         self.marshallable(value)
@@ -368,7 +372,7 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> Premarshalling<Vec<C::
         self.total_size
     }
 
-    exec fn exec_size(&self, value: &U) -> (sz: u64)
+    exec fn exec_size(&self, value: &Vec<C::Elt>) -> (sz: u64)
     requires 
         self.valid(),
         self.marshallable(value),
@@ -376,6 +380,65 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> Premarshalling<Vec<C::
         sz == self.spec_size(value)
     {
         self.total_size
+    }
+}
+
+impl<C: ResizableUniformSizedElementSeqMarshallingConfig> Marshalling<Vec<C::Elt>> for ResizableUniformSizedElementSeqMarshalling<C> {
+    // TODO this is common to all implementations of SeqMarshalling; refactor out?
+    spec fn parse(&self, data: Seq<u8>) -> Vec<C::Elt>
+    recommends 
+        self.valid(),
+        self.parsable(data)
+    {
+        self.parse_to_len(data, self.length(data) as u64)
+    }
+
+    // TODO this is common to all implementations of SeqMarshalling; refactor out?
+    exec fn try_parse(&self, slice: Slice, data: &Vec<u8>) -> (ov: Option<Vec<C::Elt>>)
+    requires
+        self.valid(),
+    ensures
+        self.parsable(slice.i(data@)) <==> ov is Some,
+        self.parsable(slice.i(data@)) ==> ov.unwrap() == self.parse(slice.i(data@))
+    {
+        let olen = self.try_length(data);
+        if olen == None {
+            return None;
+        }
+        let len = olen.unwrap();
+
+        let vec = Vec::with_capacity(len);
+        let mut idx: u64 = 0;
+        while idx < len
+        invariant
+                0 <= idx <= len,
+                forall |j| 0 <= j < idx ==> self.gettable(data, j),
+                forall |j| 0 <= j < idx ==> self.elt_parsable(data, j),
+                forall |j| 0 <= j < idx ==> vec@[j] == self.get_elt(data, j),
+        {
+            let oelt = self.try_get_elt(slice, data, idx);
+            if oelt == None {
+                return None;
+            }
+            vec[idx] = oelt.unwrap();
+            idx += 1;
+        }
+    }
+
+    // TODO this is common to all implementations of SeqMarshalling; refactor out?
+    exec fn marshall(&self, value: &Vec<C::Elt>, data: &mut Vec<u8>, start: u64) -> (end: u64)
+    requires 
+        self.valid(),
+        self.marshallable(value),
+        start as int + self.spec_size(value) as int <= old(data).len(),
+    ensures
+        end == start + self.spec_size(value),
+        data.len() == old(data).len(),
+        forall |i| 0 <= i < start ==> data[i] == old(data)[i],
+        forall |i| end <= i < data.len() ==> data[i] == old(data)[i],
+        self.parsable(data@.subrange(start as int, end as int)),
+        self.parse(data@.subrange(start as int, end as int)) == value
+    {
     }
 }
 
@@ -426,9 +489,6 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> SeqMarshalling<C::Elt,
             Some(parsed_len.unwrap().as_u64())
         }
     }
-}
-
-impl<C: ResizableUniformSizedElementSeqMarshallingConfig> Marshalling<Vec<C::Elt>> for ResizableUniformSizedElementSeqMarshalling<C> {
 }
 
 // 

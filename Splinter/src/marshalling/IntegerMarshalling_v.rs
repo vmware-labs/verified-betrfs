@@ -127,17 +127,17 @@ impl<U> Premarshalling<U::IntType> for PackedIntMarshalling<U> where U: NativePa
 impl NativePackedInt for u32 {
     type IntType = u32;
 
-    spec fn spec_size() -> u64 { 4 }
+    open spec fn spec_size() -> u64 { 4 }
 
     proof fn spec_size_ensures() {}
 
     exec fn exec_size() -> (sz: u64) { 4 }
 
-    spec fn fits_in_integer(x: u64) -> bool { x <= u32::MAX }
+    open spec fn fits_in_integer(x: u64) -> bool { x <= u32::MAX }
 
-    spec fn as_int(&self) -> int { *self as int }
+    open spec fn as_int(&self) -> int { *self as int }
 
-    spec fn as_u64(&self) -> u64 { *self as u64 }
+    open spec fn as_u64(&self) -> u64 { *self as u64 }
 }
 
 impl Marshalling<u32> for PackedIntMarshalling<u32> {
@@ -170,17 +170,17 @@ impl Marshalling<u32> for PackedIntMarshalling<u32> {
 impl NativePackedInt for u64 {
     type IntType = u64;
 
-    spec fn spec_size() -> u64 { 8 }
+    open spec fn spec_size() -> u64 { 8 }
 
     proof fn spec_size_ensures() {}
 
     exec fn exec_size() -> (sz: u64) { 8 }
 
-    spec fn fits_in_integer(x: u64) -> bool { true }
+    open spec fn fits_in_integer(x: u64) -> bool { true }
 
-    spec fn as_int(&self) -> int { *self as int }
+    open spec fn as_int(&self) -> int { *self as int }
 
-    spec fn as_u64(&self) -> u64 { *self }
+    open spec fn as_u64(&self) -> u64 { *self }
 }
 
 impl Marshalling<u64> for PackedIntMarshalling<u64> {
