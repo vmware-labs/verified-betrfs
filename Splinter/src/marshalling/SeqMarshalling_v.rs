@@ -288,6 +288,7 @@ pub trait SeqMarshalling<U, EltMarshalling: Marshalling<U>> : Marshalling<Vec<U>
 
 trait ResizableUniformSizedElementSeqMarshallingConfig {
     type LengthInt : NativePackedInt;
+    type LengthMarshalling : Marshalling<Self::LengthInt>;
     type Elt;
     type EltMarshalling : Marshalling<Self::Elt>;
 
@@ -313,7 +314,7 @@ trait ResizableUniformSizedElementSeqMarshallingConfig {
 
 struct ResizableUniformSizedElementSeqMarshalling<C: ResizableUniformSizedElementSeqMarshallingConfig> {
     total_size: u64,
-    length_marshalling: PackedIntMarshalling<C::LengthInt>,
+    length_marshalling: C::LengthMarshalling,
     elt_marshalling: C::EltMarshalling,
     config: C,
 }
@@ -329,55 +330,6 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> ResizableUniformSizedE
         self.valid(),
     {
         (self.total_size - Self::size_of_length_field()) / self.config.exec_uniform_size()
-    }
-}
-
-impl<C: ResizableUniformSizedElementSeqMarshallingConfig> SeqMarshalling<C::Elt, C::EltMarshalling> for ResizableUniformSizedElementSeqMarshalling<C> {
-
-    spec fn spec_elt_marshalling(&self) -> C::EltMarshalling
-    {
-        self.elt_marshalling
-    }
-
-    proof fn spec_elt_marshalling_ensures(&self)
-    {}
-
-    exec fn exec_elt_marshalling(&self) -> (elt: C::EltMarshalling)
-    {
-        self.elt_marshalling
-    }
-
-    spec fn lengthable(&self, data: Seq<u8>) -> bool
-    {
-        self.total_size as int <= data.len()
-    }
-
-    spec fn length(&self, data: Seq<u8>) -> int
-    recommends
-        self.valid(),
-        self.lengthable(data)
-    {
-        self.length_marshalling.parse(data.subrange(0, Self::size_of_length_field() as int))
-    }
-
-    exec fn try_length(&self, data: &Vec<u8>) -> (out: Option<u64>)
-    requires
-        self.valid(),
-    ensures
-        out is Some <==> self.lengthable(data@),
-        out is Some ==> out.unwrap() as int == self.length(data@)
-    {
-        if (data.len() as u64) < self.total_size {
-            None
-        } else {
-            // TODO(jonh): here's a place where we know it's parsable,
-            // but we're calling a try_parse method and wasting a conditional.
-            let parsed_len = self.length_marshalling.try_parse(
-                Slice{start: 0, end: Self::size_of_length_field()},
-                data);
-            assert( parsed_len is Some );
-            Some(parsed_len.unwrap() as u64)
-        }
     }
 }
 
@@ -408,6 +360,55 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> Premarshalling<Vec<C::
         &&& Self::size_of_length_field() as int + value.len() * self.config.spec_uniform_size() as int <= self.total_size
     }
 
+}
+
+impl<C: ResizableUniformSizedElementSeqMarshallingConfig> SeqMarshalling<C::Elt, C::EltMarshalling> for ResizableUniformSizedElementSeqMarshalling<C> {
+
+    spec fn spec_elt_marshalling(&self) -> C::EltMarshalling
+    {
+        self.elt_marshalling
+    }
+
+    proof fn spec_elt_marshalling_ensures(&self)
+    {}
+
+    exec fn exec_elt_marshalling(&self) -> (elt: C::EltMarshalling)
+    {
+        self.elt_marshalling
+    }
+
+    spec fn lengthable(&self, data: Seq<u8>) -> bool
+    {
+        self.total_size as int <= data.len()
+    }
+
+    spec fn length(&self, data: Seq<u8>) -> int
+    recommends
+        self.valid(),
+        self.lengthable(data)
+    {
+        self.length_marshalling.parse(data.subrange(0, Self::size_of_length_field() as int)).as_int()
+    }
+
+    exec fn try_length(&self, data: &Vec<u8>) -> (out: Option<u64>)
+    requires
+        self.valid(),
+    ensures
+        out is Some <==> self.lengthable(data@),
+        out is Some ==> out.unwrap() as int == self.length(data@)
+    {
+        if (data.len() as u64) < self.total_size {
+            None
+        } else {
+            // TODO(jonh): here's a place where we know it's parsable,
+            // but we're calling a try_parse method and wasting a conditional.
+            let parsed_len = self.length_marshalling.try_parse(
+                Slice{start: 0, end: Self::size_of_length_field()},
+                data);
+            assert( parsed_len is Some );
+            Some(parsed_len.unwrap().as_u64())
+        }
+    }
 }
 
 impl<C: ResizableUniformSizedElementSeqMarshallingConfig> Marshalling<Vec<C::Elt>> for ResizableUniformSizedElementSeqMarshalling<C> {

@@ -34,6 +34,11 @@ pub trait NativePackedInt {
     spec fn fits_in_integer(x: u64) -> bool
     ;
 
+    spec fn as_int(&self) -> int
+    ;
+
+    spec fn as_u64(&self) -> u64
+    ;
 //     proof fn fits_in_integer_ensures(x: u64)
 //     ensures
 //         Self::fits_in_integer(x) <==> Self::min_value() <= x as int < Self::UpperBound()
@@ -129,6 +134,10 @@ impl NativePackedInt for u32 {
     exec fn exec_size() -> (sz: u64) { 4 }
 
     spec fn fits_in_integer(x: u64) -> bool { x <= u32::MAX }
+
+    spec fn as_int(&self) -> int { *self as int }
+
+    spec fn as_u64(&self) -> u64 { *self as u64 }
 }
 
 impl Marshalling<u32> for PackedIntMarshalling<u32> {
@@ -168,6 +177,10 @@ impl NativePackedInt for u64 {
     exec fn exec_size() -> (sz: u64) { 8 }
 
     spec fn fits_in_integer(x: u64) -> bool { true }
+
+    spec fn as_int(&self) -> int { *self as int }
+
+    spec fn as_u64(&self) -> u64 { *self }
 }
 
 impl Marshalling<u64> for PackedIntMarshalling<u64> {

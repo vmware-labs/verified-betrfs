@@ -10,6 +10,8 @@ use crate::marshalling::Slice_v::*;
 
 verus! {
 
+// TODO(jonh): Sizes should be usize, not u64.
+
 pub trait Premarshalling<U> {
     spec fn valid(&self) -> bool;
 
