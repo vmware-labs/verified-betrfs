@@ -16,7 +16,7 @@ verus! {
 //////////////////////////////////////////////////////////////////////////////
 
 pub trait NativePackedInt {
-    type IntType;
+    type IntType : View;
 
     spec fn spec_size() -> u64
     ;
@@ -105,13 +105,13 @@ impl<U> Premarshalling<U::IntType> for PackedIntMarshalling<U> where U: NativePa
         U::exec_size() <= data.len() as u64
     }
 
-    open spec fn marshallable(&self, value: &U::IntType) -> bool
+    open spec fn marshallable(&self, value: <<U as NativePackedInt>::IntType as View>::V) -> bool
     {
         true
     }
 
     // TODO(andrea): I want this to be open, but:
-    closed spec fn spec_size(&self, value: &U::IntType) -> u64
+    closed spec fn spec_size(&self, value: <<U as NativePackedInt>::IntType as View>::V) -> u64
     {
 //        assume( false );// TODO mitigate crash #952
         U::spec_size()
