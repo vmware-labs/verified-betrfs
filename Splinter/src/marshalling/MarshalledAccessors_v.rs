@@ -4,8 +4,8 @@ use builtin::*;
 use builtin_macros::*;
 
 use vstd::prelude::*;
-use vstd::bytes::*;
-use vstd::slice::*;
+//use vstd::bytes::*;
+//use vstd::slice::*;
 use crate::marshalling::Slice_v::*;
 
 verus! {
@@ -27,7 +27,7 @@ pub trait Premarshalling<U> {
     spec fn marshallable(&self, value: &U) -> bool
     ;
 
-    spec fn size(&self, value: &U) -> u64
+    spec fn spec_size(&self, value: &U) -> u64
     recommends 
         self.valid(),
         self.marshallable(value)
@@ -38,7 +38,7 @@ pub trait Premarshalling<U> {
         self.valid(),
         self.marshallable(value),
     ensures
-        sz == self.size(value)
+        sz == self.spec_size(value)
     ;
 }
 
@@ -64,9 +64,9 @@ pub trait Marshalling<U> : Premarshalling<U> {
     requires 
         self.valid(),
         self.marshallable(value),
-        start as int + self.size(value) as int <= old(data).len(),
+        start as int + self.spec_size(value) as int <= old(data).len(),
     ensures
-        end == start + self.size(value),
+        end == start + self.spec_size(value),
         data.len() == old(data).len(),
         forall |i| 0 <= i < start ==> data[i] == old(data)[i],
         forall |i| end <= i < data.len() ==> data[i] == old(data)[i],

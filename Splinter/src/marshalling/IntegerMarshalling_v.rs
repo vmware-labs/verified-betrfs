@@ -15,7 +15,7 @@ verus! {
 // Integer marshalling
 //////////////////////////////////////////////////////////////////////////////
 
-trait NativePackedInt {
+pub trait NativePackedInt {
     type IntType;
 
     spec fn spec_size() -> u64
@@ -31,14 +31,21 @@ trait NativePackedInt {
         sz == Self::spec_size()
     ;
 
+    spec fn fits_in_integer(x: u64) -> bool
+    ;
+
+//     proof fn fits_in_integer_ensures(x: u64)
+//     ensures
+//         Self::fits_in_integer(x) <==> Self::min_value() <= x as int < Self::UpperBound()
+//     ;
 }
 
-struct PackedIntPremarshalling<U: NativePackedInt> {
+pub struct PackedIntMarshalling<U: NativePackedInt> {
     _p: std::marker::PhantomData<(U,)>,
 }
 
 
-impl<U> PackedIntPremarshalling<U> where U: NativePackedInt {
+impl<U> PackedIntMarshalling<U> where U: NativePackedInt {
     exec fn install_bytes(&self, source: &Vec<u8>, data: &mut Vec<u8>, start: u64) -> (end: u64)
     requires
         start + source.len() <= old(data).len(),
@@ -72,7 +79,7 @@ impl<U> PackedIntPremarshalling<U> where U: NativePackedInt {
     }
 }
 
-impl<U> Premarshalling<U::IntType> for PackedIntPremarshalling<U> where U: NativePackedInt {
+impl<U> Premarshalling<U::IntType> for PackedIntMarshalling<U> where U: NativePackedInt {
     open spec fn valid(&self) -> bool
     {
         true
@@ -99,7 +106,7 @@ impl<U> Premarshalling<U::IntType> for PackedIntPremarshalling<U> where U: Nativ
     }
 
     // TODO(andrea): I want this to be open, but:
-    closed spec fn size(&self, value: &U::IntType) -> u64
+    closed spec fn spec_size(&self, value: &U::IntType) -> u64
     {
 //        assume( false );// TODO mitigate crash #952
         U::spec_size()
@@ -120,9 +127,11 @@ impl NativePackedInt for u32 {
     proof fn spec_size_ensures() {}
 
     exec fn exec_size() -> (sz: u64) { 4 }
+
+    spec fn fits_in_integer(x: u64) -> bool { x <= u32::MAX }
 }
 
-impl Marshalling<u32> for PackedIntPremarshalling<u32> {
+impl Marshalling<u32> for PackedIntMarshalling<u32> {
     open spec fn parse(&self, data: Seq<u8>) -> u32
     {
         spec_u32_from_le_bytes(data.subrange(0, 4))
@@ -157,9 +166,11 @@ impl NativePackedInt for u64 {
     proof fn spec_size_ensures() {}
 
     exec fn exec_size() -> (sz: u64) { 8 }
+
+    spec fn fits_in_integer(x: u64) -> bool { true }
 }
 
-impl Marshalling<u64> for PackedIntPremarshalling<u64> {
+impl Marshalling<u64> for PackedIntMarshalling<u64> {
     open spec fn parse(&self, data: Seq<u8>) -> u64
     {
         spec_u64_from_le_bytes(data.subrange(0, 8))
