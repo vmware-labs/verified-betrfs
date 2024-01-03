@@ -360,6 +360,23 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> Premarshalling<Vec<C::
         &&& Self::size_of_length_field() as int + value.len() * self.config.spec_uniform_size() as int <= self.total_size
     }
 
+    spec fn spec_size(&self, value: &U) -> u64
+    recommends 
+        self.valid(),
+        self.marshallable(value)
+    {
+        self.total_size
+    }
+
+    exec fn exec_size(&self, value: &U) -> (sz: u64)
+    requires 
+        self.valid(),
+        self.marshallable(value),
+    ensures
+        sz == self.spec_size(value)
+    {
+        self.total_size
+    }
 }
 
 impl<C: ResizableUniformSizedElementSeqMarshallingConfig> SeqMarshalling<C::Elt, C::EltMarshalling> for ResizableUniformSizedElementSeqMarshalling<C> {
