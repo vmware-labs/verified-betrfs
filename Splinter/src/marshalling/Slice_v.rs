@@ -8,8 +8,8 @@ use vstd::prelude::*;
 verus!{
 
 pub struct Slice {
-    pub start: u64,
-    pub end: u64,
+    pub start: usize,
+    pub end: usize,
 }
 
 impl Slice {
@@ -28,7 +28,7 @@ impl Slice {
 
     pub open spec fn all<T>(data: Seq<T>) -> Slice
     {
-        Slice{start: 0, end: data.len() as u64}
+        Slice{start: 0, end: data.len() as usize}
     }
 
     pub open spec fn agree_beyond_slice<T>(&self, data: Seq<T>, new_data: Seq<T>) -> bool

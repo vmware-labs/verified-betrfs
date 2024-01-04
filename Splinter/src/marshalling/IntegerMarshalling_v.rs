@@ -18,7 +18,7 @@ verus! {
 pub trait NativePackedInt {
     type IntType : Deepview;
 
-    spec fn spec_size() -> u64
+    spec fn spec_size() -> usize
     ;
 
     proof fn spec_size_ensures()
@@ -26,18 +26,18 @@ pub trait NativePackedInt {
         0 < Self::spec_size() <= 8
     ;
 
-    exec fn exec_size() -> (sz: u64)
+    exec fn exec_size() -> (sz: usize)
     ensures
         sz == Self::spec_size()
     ;
 
-    spec fn fits_in_integer(x: u64) -> bool
+    spec fn fits_in_integer(x: usize) -> bool
     ;
 
-    spec fn as_int(&self) -> int
+    spec fn as_int(v: Self::IntType) -> int
     ;
 
-    spec fn as_u64(&self) -> u64
+    spec fn as_usize(v: Self::IntType) -> usize
     ;
 //     proof fn fits_in_integer_ensures(x: u64)
 //     ensures
@@ -51,7 +51,7 @@ pub struct PackedIntMarshalling<U: NativePackedInt> {
 
 
 impl<U> PackedIntMarshalling<U> where U: NativePackedInt {
-    exec fn install_bytes(&self, source: &Vec<u8>, data: &mut Vec<u8>, start: u64) -> (end: u64)
+    exec fn install_bytes(&self, source: &Vec<u8>, data: &mut Vec<u8>, start: usize) -> (end: usize)
     requires
         start + source.len() <= old(data).len(),
     ensures
@@ -61,8 +61,8 @@ impl<U> PackedIntMarshalling<U> where U: NativePackedInt {
         forall |i| end <= i < data.len() ==> data[i] == old(data)[i],
     {
         // Copy the vector byte-by-byte into place
-        let count = source.len() as usize;
-        let end = start as usize + count;
+        let count = source.len();
+        let end = start + count;
         let mut k:usize = 0;
         while k < count
         invariant
@@ -76,11 +76,11 @@ impl<U> PackedIntMarshalling<U> where U: NativePackedInt {
         {
             //data[k] = s[k];
             // Do we want some sort of intrinsic so we don't have to copy u32s a byte at a time!?
-            data.set(start as usize + k, source[k]);
+            data.set(start + k, source[k]);
             k += 1;
         }
         assert( data@.subrange(start as int, end as int) =~= source@ );  // extensionality: it's what's for ~.
-        end as u64
+        end
     }
 }
 
@@ -102,7 +102,7 @@ impl<U> Premarshalling<U::IntType> for PackedIntMarshalling<U> where U: NativePa
     fn exec_parsable(&self, slice: Slice, data: &Vec<u8>) -> (p: bool)
     {
         assume( false );// TODO mitigate crash #952
-        U::exec_size() <= data.len() as u64
+        U::exec_size() <= data.len()
     }
 
     open spec fn marshallable(&self, value: <U::IntType as Deepview>::DV) -> bool
@@ -111,13 +111,13 @@ impl<U> Premarshalling<U::IntType> for PackedIntMarshalling<U> where U: NativePa
     }
 
     // TODO(andrea): I want this to be open, but:
-    closed spec fn spec_size(&self, value: <U::IntType as Deepview>::DV) -> u64
+    closed spec fn spec_size(&self, value: <U::IntType as Deepview>::DV) -> usize
     {
 //        assume( false );// TODO mitigate crash #952
         U::spec_size()
     }
 
-    fn exec_size(&self, value: &U::IntType) -> (sz: u64)
+    fn exec_size(&self, value: &U::IntType) -> (sz: usize)
     {
         assume( false );// TODO mitigate crash #952
         U::exec_size()
@@ -127,17 +127,17 @@ impl<U> Premarshalling<U::IntType> for PackedIntMarshalling<U> where U: NativePa
 impl NativePackedInt for u32 {
     type IntType = u32;
 
-    open spec fn spec_size() -> u64 { 4 }
+    open spec fn spec_size() -> usize { 4 }
 
     proof fn spec_size_ensures() {}
 
-    exec fn exec_size() -> (sz: u64) { 4 }
+    exec fn exec_size() -> (sz: usize) { 4 }
 
-    open spec fn fits_in_integer(x: u64) -> bool { x <= u32::MAX }
+    open spec fn fits_in_integer(x: usize) -> bool { x <= u32::MAX }
 
-    open spec fn as_int(&self) -> int { *self as int }
+    open spec fn as_int(v: u32) -> int { v as int }
 
-    open spec fn as_u64(&self) -> u64 { *self as u64 }
+    open spec fn as_usize(v: u32) -> usize { v as usize }
 }
 
 impl Deepview for u32 {
@@ -160,7 +160,7 @@ impl Marshalling<u32> for PackedIntMarshalling<u32> {
         }
     }
 
-    exec fn marshall(&self, value: &u32, data: &mut Vec<u8>, start: u64) -> (end: u64)
+    exec fn marshall(&self, value: &u32, data: &mut Vec<u8>, start: usize) -> (end: usize)
     {
         // TODO this interface from verus pervasive bytes.rs can't be fast...
         // Marshal the int into a local vector
@@ -175,17 +175,17 @@ impl Marshalling<u32> for PackedIntMarshalling<u32> {
 impl NativePackedInt for u64 {
     type IntType = u64;
 
-    open spec fn spec_size() -> u64 { 8 }
+    open spec fn spec_size() -> usize { 8 }
 
     proof fn spec_size_ensures() {}
 
-    exec fn exec_size() -> (sz: u64) { 8 }
+    exec fn exec_size() -> (sz: usize) { 8 }
 
-    open spec fn fits_in_integer(x: u64) -> bool { true }
+    open spec fn fits_in_integer(x: usize) -> bool { true }
 
-    open spec fn as_int(&self) -> int { *self as int }
+    open spec fn as_int(v: u64) -> int { v as int }
 
-    open spec fn as_u64(&self) -> u64 { *self }
+    open spec fn as_usize(v: u64) -> usize { v as usize }
 }
 
 impl Deepview for u64 {
@@ -208,7 +208,7 @@ impl Marshalling<u64> for PackedIntMarshalling<u64> {
         }
     }
 
-    exec fn marshall(&self, value: &u64, data: &mut Vec<u8>, start: u64) -> (end: u64)
+    exec fn marshall(&self, value: &u64, data: &mut Vec<u8>, start: usize) -> (end: usize)
     {
         // TODO this interface from verus pervasive bytes.rs can't be fast...
         // Marshal the int into a local vector

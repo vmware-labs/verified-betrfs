@@ -10,8 +10,6 @@ use crate::marshalling::Slice_v::*;
 
 verus! {
 
-// TODO(jonh): Sizes should be usize, not u64.
-
 pub trait Deepview {
     type DV;
 
@@ -50,13 +48,13 @@ pub trait Premarshalling<U: Deepview> {
     spec fn marshallable(&self, value: U::DV) -> bool
     ;
 
-    spec fn spec_size(&self, value: U::DV) -> u64
+    spec fn spec_size(&self, value: U::DV) -> usize
     recommends 
         self.valid(),
         self.marshallable(value)
     ;
 
-    exec fn exec_size(&self, value: &U) -> (sz: u64)
+    exec fn exec_size(&self, value: &U) -> (sz: usize)
     requires 
         self.valid(),
         self.marshallable(value.deepv()),
@@ -83,7 +81,7 @@ pub trait Marshalling<U: Deepview> : Premarshalling<U> {
     // jonh skipping translation of Parse -- does it ever save more than
     // a cheap if condition?
 
-    exec fn marshall(&self, value: &U, data: &mut Vec<u8>, start: u64) -> (end: u64)
+    exec fn marshall(&self, value: &U, data: &mut Vec<u8>, start: usize) -> (end: usize)
     requires 
         self.valid(),
         self.marshallable(value.deepv()),
