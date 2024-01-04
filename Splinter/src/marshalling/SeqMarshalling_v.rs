@@ -291,7 +291,7 @@ pub trait SeqMarshalling<U: Deepview, EltMarshalling: Marshalling<U>> : Marshall
 ////////////////////////////////////////////////////////////////////
 
 trait ResizableUniformSizedElementSeqMarshallingConfig {
-    type LengthInt : NativePackedInt;
+    type LengthInt : NativePackedInt /*where NativePackedInt::IntType is int*/;
     type LengthMarshalling : Marshalling<<<Self as ResizableUniformSizedElementSeqMarshallingConfig>::LengthInt as NativePackedInt>::IntType>;
     type Elt : Deepview;
     type EltMarshalling : Marshalling<Self::Elt>;
