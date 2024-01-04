@@ -12,7 +12,28 @@ verus! {
 
 // TODO(jonh): Sizes should be usize, not u64.
 
-pub trait Premarshalling<U: View> {
+pub trait Deepview {
+    type DV;
+
+    spec fn deepv(&self) -> Self::DV;
+}
+
+impl<T: Deepview> Deepview for Vec<T> {
+    type DV = Seq<<T as Deepview>::DV>;
+
+    open spec fn deepv(&self) -> Self::DV {
+        Seq::new(self.len() as nat, |i: int| self[i].deepv())
+    }
+}
+
+// Only want this to apply to types that are not already DeepView. :v/
+// impl<T: View> Deepview for T {
+//     type DV = <T as View>::V;
+// 
+//     fn deepv(&self) -> Self::DV;
+// }
+
+pub trait Premarshalling<U: Deepview> {
     spec fn valid(&self) -> bool;
 
     spec fn parsable(&self, data: Seq<u8>) -> bool
@@ -26,10 +47,10 @@ pub trait Premarshalling<U: View> {
         p == self.parsable(slice.i(data@))
     ;
 
-    spec fn marshallable(&self, value: U::V) -> bool
+    spec fn marshallable(&self, value: U::DV) -> bool
     ;
 
-    spec fn spec_size(&self, value: U::V) -> u64
+    spec fn spec_size(&self, value: U::DV) -> u64
     recommends 
         self.valid(),
         self.marshallable(value)
@@ -38,14 +59,14 @@ pub trait Premarshalling<U: View> {
     exec fn exec_size(&self, value: &U) -> (sz: u64)
     requires 
         self.valid(),
-        self.marshallable(value@),
+        self.marshallable(value.deepv()),
     ensures
-        sz == self.spec_size(value@)
+        sz == self.spec_size(value.deepv())
     ;
 }
 
-pub trait Marshalling<U: View> : Premarshalling<U> {
-    spec fn parse(&self, data: Seq<u8>) -> U::V
+pub trait Marshalling<U: Deepview> : Premarshalling<U> {
+    spec fn parse(&self, data: Seq<u8>) -> U::DV
     recommends 
         self.valid(),
         self.parsable(data)
@@ -56,7 +77,7 @@ pub trait Marshalling<U: View> : Premarshalling<U> {
         self.valid(),
     ensures
         self.parsable(slice.i(data@)) <==> ov is Some,
-        self.parsable(slice.i(data@)) ==> ov.unwrap()@ == self.parse(slice.i(data@))
+        self.parsable(slice.i(data@)) ==> ov.unwrap().deepv() == self.parse(slice.i(data@))
     ;
 
     // jonh skipping translation of Parse -- does it ever save more than
@@ -65,15 +86,15 @@ pub trait Marshalling<U: View> : Premarshalling<U> {
     exec fn marshall(&self, value: &U, data: &mut Vec<u8>, start: u64) -> (end: u64)
     requires 
         self.valid(),
-        self.marshallable(value@),
-        start as int + self.spec_size(value@) as int <= old(data).len(),
+        self.marshallable(value.deepv()),
+        start as int + self.spec_size(value.deepv()) as int <= old(data).len(),
     ensures
-        end == start + self.spec_size(value@),
+        end == start + self.spec_size(value.deepv()),
         data.len() == old(data).len(),
         forall |i| 0 <= i < start ==> data[i] == old(data)[i],
         forall |i| end <= i < data.len() ==> data[i] == old(data)[i],
         self.parsable(data@.subrange(start as int, end as int)),
-        self.parse(data@.subrange(start as int, end as int)) == value@
+        self.parse(data@.subrange(start as int, end as int)) == value.deepv()
     ;
 }
 

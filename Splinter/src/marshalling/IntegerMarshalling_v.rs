@@ -16,7 +16,7 @@ verus! {
 //////////////////////////////////////////////////////////////////////////////
 
 pub trait NativePackedInt {
-    type IntType : View;
+    type IntType : Deepview;
 
     spec fn spec_size() -> u64
     ;
@@ -105,13 +105,13 @@ impl<U> Premarshalling<U::IntType> for PackedIntMarshalling<U> where U: NativePa
         U::exec_size() <= data.len() as u64
     }
 
-    open spec fn marshallable(&self, value: <<U as NativePackedInt>::IntType as View>::V) -> bool
+    open spec fn marshallable(&self, value: <U::IntType as Deepview>::DV) -> bool
     {
         true
     }
 
     // TODO(andrea): I want this to be open, but:
-    closed spec fn spec_size(&self, value: <<U as NativePackedInt>::IntType as View>::V) -> u64
+    closed spec fn spec_size(&self, value: <U::IntType as Deepview>::DV) -> u64
     {
 //        assume( false );// TODO mitigate crash #952
         U::spec_size()
@@ -140,10 +140,15 @@ impl NativePackedInt for u32 {
     open spec fn as_u64(&self) -> u64 { *self as u64 }
 }
 
+impl Deepview for u32 {
+    type DV = int;
+    open spec fn deepv(&self) -> Self::DV { *self as int }
+}
+
 impl Marshalling<u32> for PackedIntMarshalling<u32> {
-    open spec fn parse(&self, data: Seq<u8>) -> u32
+    open spec fn parse(&self, data: Seq<u8>) -> int
     {
-        spec_u32_from_le_bytes(data.subrange(0, 4))
+        spec_u32_from_le_bytes(data.subrange(0, 4)) as int
     }
 
     exec fn try_parse(&self, slice: Slice, data: &Vec<u8>) -> (ov: Option<u32>)
@@ -183,10 +188,15 @@ impl NativePackedInt for u64 {
     open spec fn as_u64(&self) -> u64 { *self }
 }
 
+impl Deepview for u64 {
+    type DV = int;
+    open spec fn deepv(&self) -> Self::DV { *self as int }
+}
+
 impl Marshalling<u64> for PackedIntMarshalling<u64> {
-    open spec fn parse(&self, data: Seq<u8>) -> u64
+    open spec fn parse(&self, data: Seq<u8>) -> int
     {
-        spec_u64_from_le_bytes(data.subrange(0, 8))
+        spec_u64_from_le_bytes(data.subrange(0, 8)) as int
     }
 
     exec fn try_parse(&self, slice: Slice, data: &Vec<u8>) -> (ov: Option<u64>)
