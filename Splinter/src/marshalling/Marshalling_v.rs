@@ -10,16 +10,19 @@ use crate::marshalling::Slice_v::*;
 
 verus! {
 
-pub trait Deepview {
-    type DV;
+pub trait Deepview<DV> {
+    //type DV = DV;
 
-    spec fn deepv(&self) -> Self::DV;
+    spec fn deepv(&self) -> DV;
 }
 
-impl<T: Deepview> Deepview for Vec<T> {
-    type DV = Seq<<T as Deepview>::DV>;
+// VSE == ViewSeqElt
+// If you have an Elt type that implements Deepview<DVE>,
+// you may have a Vec<Elt> that implements Deepview<Seq<DVE>>.
+impl<DVE, Elt: Deepview<DVE>> Deepview<Seq<DVE>> for Vec<Elt> {
+    //type DV = Seq<<T as Deepview>::DV>;
 
-    open spec fn deepv(&self) -> Self::DV {
+    open spec fn deepv(&self) -> Seq<DVE> {
         Seq::new(self.len() as nat, |i: int| self[i].deepv())
     }
 }
@@ -31,7 +34,7 @@ impl<T: Deepview> Deepview for Vec<T> {
 //     fn deepv(&self) -> Self::DV;
 // }
 
-pub trait Premarshalling<U: Deepview> {
+pub trait Premarshalling<DV, U: Deepview<DV>> {
     spec fn valid(&self) -> bool;
 
     spec fn parsable(&self, data: Seq<u8>) -> bool
@@ -45,10 +48,10 @@ pub trait Premarshalling<U: Deepview> {
         p == self.parsable(slice.i(data@))
     ;
 
-    spec fn marshallable(&self, value: U::DV) -> bool
+    spec fn marshallable(&self, value: DV) -> bool
     ;
 
-    spec fn spec_size(&self, value: U::DV) -> usize
+    spec fn spec_size(&self, value: DV) -> usize
     recommends 
         self.valid(),
         self.marshallable(value)
@@ -63,8 +66,8 @@ pub trait Premarshalling<U: Deepview> {
     ;
 }
 
-pub trait Marshalling<U: Deepview> : Premarshalling<U> {
-    spec fn parse(&self, data: Seq<u8>) -> U::DV
+pub trait Marshalling<DV, U: Deepview<DV>> : Premarshalling<DV, U> {
+    spec fn parse(&self, data: Seq<u8>) -> DV
     recommends 
         self.valid(),
         self.parsable(data)

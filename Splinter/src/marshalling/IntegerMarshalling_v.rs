@@ -15,8 +15,8 @@ verus! {
 // Integer marshalling
 //////////////////////////////////////////////////////////////////////////////
 
-pub trait NativePackedInt {
-    type IntType : Deepview<DV = int>;
+pub trait NativePackedInt<DV=int> {
+    type IntType : Deepview<DV>;
 
     spec fn spec_size() -> usize
     ;
@@ -34,6 +34,7 @@ pub trait NativePackedInt {
     spec fn fits_in_integer(x: usize) -> bool
     ;
 
+    // Not clear we need these transformers now we've got Deepview stuff
     spec fn as_int(v: Self::IntType) -> int
     ;
 
@@ -45,12 +46,12 @@ pub trait NativePackedInt {
 //     ;
 }
 
-pub struct PackedIntMarshalling<U: NativePackedInt> {
-    _p: std::marker::PhantomData<(U,)>,
+pub struct PackedIntMarshalling<DV, U: NativePackedInt<DV>> {
+    _p: std::marker::PhantomData<(U,DV,)>,
 }
 
 
-impl<U> PackedIntMarshalling<U> where U: NativePackedInt {
+impl<DV, U> PackedIntMarshalling<DV, U> where U: NativePackedInt<DV> {
     exec fn install_bytes(&self, source: &Vec<u8>, data: &mut Vec<u8>, start: usize) -> (end: usize)
     requires
         start + source.len() <= old(data).len(),
@@ -84,7 +85,7 @@ impl<U> PackedIntMarshalling<U> where U: NativePackedInt {
     }
 }
 
-impl<U> Premarshalling<U::IntType> for PackedIntMarshalling<U> where U: NativePackedInt {
+impl<U> Premarshalling<int, U::IntType> for PackedIntMarshalling<int, U> where U: NativePackedInt<int> {
     open spec fn valid(&self) -> bool
     {
         true
@@ -105,13 +106,13 @@ impl<U> Premarshalling<U::IntType> for PackedIntMarshalling<U> where U: NativePa
         U::exec_size() <= data.len()
     }
 
-    open spec fn marshallable(&self, value: <U::IntType as Deepview>::DV) -> bool
+    open spec fn marshallable(&self, value: int) -> bool
     {
         true
     }
 
     // TODO(andrea): I want this to be open, but:
-    closed spec fn spec_size(&self, value: <U::IntType as Deepview>::DV) -> usize
+    closed spec fn spec_size(&self, value: int) -> usize
     {
 //        assume( false );// TODO mitigate crash #952
         U::spec_size()
@@ -140,12 +141,12 @@ impl NativePackedInt for u32 {
     open spec fn as_usize(v: u32) -> usize { v as usize }
 }
 
-impl Deepview for u32 {
-    type DV = int;
-    open spec fn deepv(&self) -> Self::DV { *self as int }
+impl Deepview<int> for u32 {
+    //type DV = int;
+    open spec fn deepv(&self) -> int { *self as int }
 }
 
-impl Marshalling<u32> for PackedIntMarshalling<u32> {
+impl Marshalling<int, u32> for PackedIntMarshalling<int, u32> {
     open spec fn parse(&self, data: Seq<u8>) -> int
     {
         spec_u32_from_le_bytes(data.subrange(0, 4)) as int
@@ -188,12 +189,12 @@ impl NativePackedInt for u64 {
     open spec fn as_usize(v: u64) -> usize { v as usize }
 }
 
-impl Deepview for u64 {
-    type DV = int;
-    open spec fn deepv(&self) -> Self::DV { *self as int }
+impl Deepview<int> for u64 {
+    //type DV = int;
+    open spec fn deepv(&self) -> int { *self as int }
 }
 
-impl Marshalling<u64> for PackedIntMarshalling<u64> {
+impl Marshalling<int, u64> for PackedIntMarshalling<int, u64> {
     open spec fn parse(&self, data: Seq<u8>) -> int
     {
         spec_u64_from_le_bytes(data.subrange(0, 8)) as int
