@@ -16,7 +16,7 @@ verus! {
 //////////////////////////////////////////////////////////////////////////////
 
 pub trait NativePackedInt {
-    type IntType : Deepview;
+    type IntType : Deepview<DV = int>;
 
     spec fn spec_size() -> usize
     ;
