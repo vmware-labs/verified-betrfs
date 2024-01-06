@@ -26,6 +26,16 @@ impl Slice {
         data.subrange(self.start as int, self.end as int)
     }
 
+    pub open spec fn spec_len(&self) -> int
+    {
+        self.end - self.start
+    }
+
+    pub exec fn exec_len(&self) -> usize
+    {
+        self.end - self.start
+    }
+
     pub open spec fn all<T>(data: Seq<T>) -> Slice
     {
         Slice{start: 0, end: data.len() as usize}
@@ -36,6 +46,19 @@ impl Slice {
         &&& data.len() == new_data.len()
         &&& forall |i| 0<=i<self.start ==> data[i] == new_data[i]
         &&& forall |i| self.end<=i<data.len() ==> data[i] == new_data[i]
+    }
+
+    // TODO(verus): Another nice place for a function-method-like affordance
+    pub open spec fn spec_sub(&self, a: usize, b: usize) -> (result: Slice)
+    {
+        Slice{start: (self.start + a) as usize, end: (self.start + b) as usize}
+    }
+
+    pub exec fn exec_sub(&self, a: usize, b: usize) -> (result: Slice)
+    ensures
+        result == self.spec_sub(a, b),
+    {
+        Slice{start: self.start + a, end: self.start + b}
     }
 }
 
