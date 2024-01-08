@@ -15,7 +15,7 @@ verus! {
 // Integer marshalling
 //////////////////////////////////////////////////////////////////////////////
 
-pub trait NativePackedInt<DV=int> {
+pub trait NativePackedInt<DV> {
     type IntType : Deepview<DV>;
 
     spec fn spec_size() -> usize
@@ -130,7 +130,7 @@ impl<U> Premarshalling<int, U::IntType> for PackedIntMarshalling<int, U> where U
     }
 }
 
-impl NativePackedInt for u32 {
+impl NativePackedInt<int> for u32 {
     type IntType = u32;
 
     open spec fn spec_size() -> usize { 4 }
@@ -181,7 +181,7 @@ impl Marshalling<int, u32> for PackedIntMarshalling<int, u32> {
     }
 }
 
-impl NativePackedInt for u64 {
+impl NativePackedInt<int> for u64 {
     type IntType = u64;
 
     open spec fn spec_size() -> usize { 8 }
