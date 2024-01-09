@@ -191,7 +191,9 @@ impl Node {
     }
 
     pub open spec(checked) fn split_leaf(self, split_arg: SplitArg) -> (Node, Node)
-        recommends split_arg.wf(self)
+        recommends
+            self is Leaf,
+            split_arg.wf(self)
     {
         let pivot = split_arg.get_pivot();
         let split_index = Key::largest_lt(self.get_Leaf_keys(), pivot) + 1;
@@ -216,7 +218,9 @@ impl Node {
     }
 
     pub open spec/*XXX (checked)*/ fn split_index(self, split_arg: SplitArg) -> (Node, Node)
-        recommends split_arg.wf(self)
+        recommends
+            self is Index,
+            split_arg.wf(self)
     {
         // Assert split_arg.wf(self) ==> self.wf() ==>
         // self.get_Index_children().len() == self.get_Index_pivots().len() + 1

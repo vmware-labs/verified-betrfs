@@ -16,4 +16,5 @@ pub mod LinkedBetree_v;
 pub mod LinkedBufferSeq_v;
 pub mod LinkedBetreeRefinement_v;
 pub mod PivotBranch_v;
+pub mod PivotBranchRefinement_v;
 pub mod LinkedBranch_v;
