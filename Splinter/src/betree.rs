@@ -18,3 +18,5 @@ pub mod LinkedBetreeRefinement_v;
 pub mod PivotBranch_v;
 pub mod PivotBranchRefinement_v;
 pub mod LinkedBranch_v;
+pub mod BranchedBetree_v;
+pub mod BranchSeq_v;

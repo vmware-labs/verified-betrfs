@@ -498,6 +498,13 @@ impl LinkedJournal::Label {
 
 }
 
+// pub proof fn exists_paged_journal_init()
+// ensures exists |v| PagedJournal::State::init(v),
+// {
+//     reveal(PagedJournal::State::init);
+//     reveal(PagedJournal::State::init_by);
+// }
+
 impl LinkedJournal::State {
     pub open spec(checked) fn i(self) -> PagedJournal::State
     {
