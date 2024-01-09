@@ -43,7 +43,7 @@ pub trait NativePackedInt<DV> {
     spec fn as_int(v: Self::IntType) -> int
     ;
 
-    spec fn as_usize(v: Self::IntType) -> usize
+    exec fn as_usize(v: Self::IntType) -> usize
     ;
 //     proof fn fits_in_integer_ensures(x: u64)
 //     ensures
@@ -105,7 +105,7 @@ impl<U> Premarshalling<int, U::IntType> for PackedIntMarshalling<int, U> where U
         U::spec_size() <= data.len()
     }
 
-    fn exec_parsable(&self, slice: Slice, data: &Vec<u8>) -> (p: bool)
+    fn exec_parsable(&self, slice: &Slice, data: &Vec<u8>) -> (p: bool)
     {
         assume( false );// TODO mitigate crash #952
         U::exec_size() <= data.len()
@@ -146,7 +146,7 @@ impl NativePackedInt<int> for u32 {
 
     open spec fn as_int(v: u32) -> int { v as int }
 
-    open spec fn as_usize(v: u32) -> usize { v as usize }
+    exec fn as_usize(v: u32) -> usize { v as usize }
 }
 
 impl Deepview<int> for u32 {
@@ -160,7 +160,7 @@ impl Marshalling<int, u32> for PackedIntMarshalling<int, u32> {
         spec_u32_from_le_bytes(data.subrange(0, 4)) as int
     }
 
-    exec fn try_parse(&self, slice: Slice, data: &Vec<u8>) -> (ov: Option<u32>)
+    exec fn try_parse(&self, slice: &Slice, data: &Vec<u8>) -> (ov: Option<u32>)
     {
         if 4 <= data.len() {
             Some(u32_from_le_bytes(slice_subrange(data.as_slice(), 0, 4)))
@@ -196,7 +196,7 @@ impl NativePackedInt<int> for u64 {
 
     open spec fn as_int(v: u64) -> int { v as int }
 
-    open spec fn as_usize(v: u64) -> usize { v as usize }
+    exec fn as_usize(v: u64) -> usize { v as usize }
 }
 
 impl Deepview<int> for u64 {
@@ -210,7 +210,7 @@ impl Marshalling<int, u64> for PackedIntMarshalling<int, u64> {
         spec_u64_from_le_bytes(data.subrange(0, 8)) as int
     }
 
-    exec fn try_parse(&self, slice: Slice, data: &Vec<u8>) -> (ov: Option<u64>)
+    exec fn try_parse(&self, slice: &Slice, data: &Vec<u8>) -> (ov: Option<u64>)
     {
         if 8 <= data.len() {
             Some(u64_from_le_bytes(slice_subrange(data.as_slice(), 0, 8)))

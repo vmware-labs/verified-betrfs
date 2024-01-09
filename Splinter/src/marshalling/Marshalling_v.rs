@@ -41,7 +41,7 @@ pub trait Premarshalling<DV, U: Deepview<DV>> {
     recommends self.valid()
     ;
 
-    exec fn exec_parsable(&self, slice: Slice, data: &Vec<u8>) -> (p: bool)
+    exec fn exec_parsable(&self, slice: &Slice, data: &Vec<u8>) -> (p: bool)
     requires
         self.valid(),
     ensures
@@ -73,7 +73,7 @@ pub trait Marshalling<DV, U: Deepview<DV>> : Premarshalling<DV, U> {
         self.parsable(data)
     ;
 
-    exec fn try_parse(&self, slice: Slice, data: &Vec<u8>) -> (ov: Option<U>)
+    exec fn try_parse(&self, slice: &Slice, data: &Vec<u8>) -> (ov: Option<U>)
     requires
         self.valid(),
     ensures
