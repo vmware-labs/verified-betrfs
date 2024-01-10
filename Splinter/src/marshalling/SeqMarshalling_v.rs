@@ -336,10 +336,10 @@ pub trait ResizableUniformSizedElementSeqMarshallingConfig {
 //type RUSESMC = ResizableUniformSizedElementSeqMarshallingConfig;
 
 pub struct ResizableUniformSizedElementSeqMarshalling<C: ResizableUniformSizedElementSeqMarshallingConfig> {
-    total_size: usize,
-    length_marshalling: C::LengthMarshalling,
-    elt_marshalling: C::EltMarshalling,
-    config: C,
+    pub total_size: usize,
+    pub length_marshalling: C::LengthMarshalling,
+    pub elt_marshalling: C::EltMarshalling,
+    pub config: C,
 }
 
 impl<C: ResizableUniformSizedElementSeqMarshallingConfig> ResizableUniformSizedElementSeqMarshalling<C> {
@@ -353,7 +353,7 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> ResizableUniformSizedE
         C::LengthInt::exec_size()
     }
 
-    pub closed /*XXX*/ spec fn spec_max_length(self) -> usize
+    pub open spec fn spec_max_length(self) -> usize
     {
         ((self.total_size - Self::spec_size_of_length_field()) / (self.config.spec_uniform_size() as int)) as usize
     }
@@ -373,7 +373,7 @@ impl<VSE> Deepview<Seq<VSE>> for Vec<VSE> {
 */
 
 impl<C: ResizableUniformSizedElementSeqMarshallingConfig> Premarshalling<Seq<C::EltDV>, Vec<C::Elt>> for ResizableUniformSizedElementSeqMarshalling<C> {
-    closed /*XXX*/ spec fn valid(&self) -> bool {
+    open spec fn valid(&self) -> bool {
         &&& Self::spec_size_of_length_field() <= self.total_size
         &&& self.length_marshalling.valid()
         &&& self.elt_marshalling.valid()
@@ -391,7 +391,7 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> Premarshalling<Seq<C::
         return olen.is_some() && olen.unwrap() <= self.exec_max_length()
     }
 
-    closed /*XXX*/ spec fn marshallable(&self, value: Seq<C::EltDV>) -> bool
+    open spec fn marshallable(&self, value: Seq<C::EltDV>) -> bool
     {
         &&& forall |i| 0 <= i < value.len() ==> self.elt_marshalling.marshallable(value[i])
         &&& forall |i| 0 <= i < value.len() ==> self.elt_marshalling.spec_size(value[i]) == self.config.spec_uniform_size()
@@ -399,7 +399,7 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> Premarshalling<Seq<C::
         &&& Self::spec_size_of_length_field() as int + value.len() * self.config.spec_uniform_size() as int <= self.total_size
     }
 
-    closed /*XXX*/ spec fn spec_size(&self, value: Seq<C::EltDV>) -> usize
+    open spec fn spec_size(&self, value: Seq<C::EltDV>) -> usize
     {
         self.total_size
     }
@@ -412,7 +412,7 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> Premarshalling<Seq<C::
 
 impl<C: ResizableUniformSizedElementSeqMarshallingConfig> Marshalling<Seq<C::EltDV>, Vec<C::Elt>> for ResizableUniformSizedElementSeqMarshalling<C> {
     // TODO this is common to all implementations of SeqMarshalling; refactor out?
-    closed /*XXX*/ spec fn parse(&self, data: Seq<u8>) -> Seq<C::EltDV>
+    open spec fn parse(&self, data: Seq<u8>) -> Seq<C::EltDV>
     {
         self.parse_to_len(data, self.length(data))
     }
@@ -487,7 +487,7 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> Marshalling<Seq<C::Elt
 
 impl<C: ResizableUniformSizedElementSeqMarshallingConfig> SeqMarshalling<C::EltDV, C::Elt, C::EltMarshalling> for ResizableUniformSizedElementSeqMarshalling<C> {
 
-    closed /*XXX*/ spec fn spec_elt_marshalling(&self) -> C::EltMarshalling
+    open spec fn spec_elt_marshalling(&self) -> C::EltMarshalling
     {
         self.elt_marshalling
     }
@@ -500,12 +500,12 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> SeqMarshalling<C::EltD
         &self.elt_marshalling
     }
 
-    closed /*XXX*/ spec fn lengthable(&self, data: Seq<u8>) -> bool
+    open spec fn lengthable(&self, data: Seq<u8>) -> bool
     {
         self.total_size as int <= data.len()
     }
 
-    closed /*XXX*/ spec fn length(&self, data: Seq<u8>) -> int
+    open spec fn length(&self, data: Seq<u8>) -> int
     {
         self.length_marshalling.parse(data.subrange(0, Self::spec_size_of_length_field() as int))
     }
@@ -525,13 +525,13 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> SeqMarshalling<C::EltD
         }
     }
 
-    closed /*XXX*/ spec fn gettable(&self, data: Seq<u8>, idx: int) -> bool
+    open spec fn gettable(&self, data: Seq<u8>, idx: int) -> bool
     {
         &&& self.lengthable(data)
         &&& idx < self.spec_max_length()
     }
 
-    closed /*XXX*/ spec fn get(&self, slice: &Slice, data: Seq<u8>, idx: int) -> (eslice: Slice)
+    open spec fn get(&self, slice: &Slice, data: Seq<u8>, idx: int) -> (eslice: Slice)
     {
         slice.spec_sub(
             (Self::spec_size_of_length_field() + idx * self.config.spec_uniform_size()) as usize,
@@ -556,7 +556,7 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> SeqMarshalling<C::EltD
         }
     }
 
-    closed /*XXX*/ spec fn settable(&self, data: Seq<u8>, idx: int, value: C::EltDV) -> bool
+    open spec fn settable(&self, data: Seq<u8>, idx: int, value: C::EltDV) -> bool
     {
         &&& self.lengthable(data)
         &&& idx < self.spec_max_length() as int
@@ -577,7 +577,7 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> SeqMarshalling<C::EltD
     {
     }
 
-    closed /*XXX*/ spec fn resizable(&self, data: Seq<u8>, newlen: int) -> bool
+    open spec fn resizable(&self, data: Seq<u8>, newlen: int) -> bool
     {
         &&& self.lengthable(data)
         &&& newlen <= self.spec_max_length() as int
