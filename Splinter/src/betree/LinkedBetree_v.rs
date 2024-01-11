@@ -336,20 +336,23 @@ pub open spec(checked) fn empty_disk() -> DiskView
 }
 
 
-// maybe name this a none flush addrs
+pub trait Addrs {
+    spec fn no_duplicates(&self) -> bool;
+    spec fn repr(&self) -> Set<Address>;
+}
+
 pub struct TwoAddrs {
     pub addr1: Address,
     pub addr2: Address,
 }
 
-impl TwoAddrs {
-    pub open spec(checked) fn no_duplicates(self) -> bool
+impl Addrs for TwoAddrs {
+    open spec(checked) fn no_duplicates(&self) -> bool
     {
         &&& self.addr1 != self.addr2
     }
 
-    pub open spec(checked) fn repr(self) -> Set<Address>
-        recommends self.no_duplicates()
+    open spec(checked) fn repr(&self) -> Set<Address>
     {
         set!{self.addr1, self.addr2}
     }
@@ -361,16 +364,15 @@ pub struct SplitAddrs {
     pub parent: Address
 }
 
-impl SplitAddrs {
-    pub open spec(checked) fn no_duplicates(self) -> bool
+impl Addrs for SplitAddrs {
+    open spec(checked) fn no_duplicates(&self) -> bool
     {
         &&& self.left != self.right
         &&& self.right != self.parent
         &&& self.parent != self.left
     }
 
-    pub open spec(checked) fn repr(self) -> Set<Address>
-        recommends self.no_duplicates()
+    open spec(checked) fn repr(&self) -> Set<Address>
     {
         set!{self.left, self.right, self.parent}
     }
@@ -899,35 +901,39 @@ state_machine!{ LinkedBetreeVars {
 
     transition!{ freeze_as(lbl: Label) {
         require let Label::FreezeAs{stamped_betree} = lbl;
-        // require pre.wf();
         require pre.memtable.is_empty();
         require stamped_betree == Stamped{value: pre.linked, seq_end: pre.memtable.seq_end};
     }}
 
     transition!{ internal_flush_memtable(lbl: Label, new_addrs: TwoAddrs) {
         require let Label::Internal{} = lbl;
-        // require pre.wf();
         require new_addrs.no_duplicates();
         require pre.linked.is_fresh(new_addrs.repr());
         update memtable = pre.memtable.drain();
+        // TODO(Jialin): we might want to relax all the build_tight_tree conditions
+        // to be new_tj is a subset of this disk that includes all the build_tight_tree dom
         update linked = pre.linked.push_memtable(pre.memtable, new_addrs).build_tight_tree();
     }}
 
     transition!{ internal_grow(lbl: Label, new_root_addr: Address) {
         require let Label::Internal{} = lbl;
-        // require pre.wf();
         require pre.linked.is_fresh(Set::empty().insert(new_root_addr));
         update linked = pre.linked.grow(new_root_addr);
     }}
 
+    pub open spec(checked) fn new_path_wf(path: Path, new_addrs: &impl Addrs, path_addrs: PathAddrs) -> bool
+    {
+        &&& path.valid()
+        &&& path_addrs.no_duplicates()
+        &&& path.depth == path_addrs.len()
+        &&& new_addrs.no_duplicates()
+        &&& new_addrs.repr().disjoint(path_addrs.to_set())
+    }
+
     transition!{ internal_split(lbl: Label, path: Path, request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs) {
         require let Label::Internal{} = lbl;
-        require path.valid();
-        require path_addrs.no_duplicates();
-        require path.depth == path_addrs.len();
+        require Self::new_path_wf(path, &new_addrs, path_addrs);
         require path.target().can_split_parent(request);
-        require new_addrs.no_duplicates();
-        require new_addrs.repr().disjoint(path_addrs.to_set());
         require path.linked == pre.linked;
         require pre.linked.is_fresh(new_addrs.repr());
         require pre.linked.is_fresh(path_addrs.to_set());
@@ -936,12 +942,8 @@ state_machine!{ LinkedBetreeVars {
 
     transition!{ internal_flush(lbl: Label, path: Path, child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, path_addrs: PathAddrs) {
         require let Label::Internal{} = lbl;
-        require path.valid();
-        require path_addrs.no_duplicates();
-        require path.depth == path_addrs.len();
+        require Self::new_path_wf(path, &new_addrs, path_addrs);
         require path.target().can_flush(child_idx, buffer_gc);
-        require new_addrs.no_duplicates();
-        require new_addrs.repr().disjoint(path_addrs.to_set());
         require path.linked == pre.linked;
         require pre.linked.is_fresh(new_addrs.repr());
         require pre.linked.is_fresh(path_addrs.to_set());
@@ -950,12 +952,8 @@ state_machine!{ LinkedBetreeVars {
 
     transition!{ internal_compact(lbl: Label, path: Path, start: nat, end: nat, compacted_buffer: Buffer, new_addrs: TwoAddrs, path_addrs: PathAddrs) {
         require let Label::Internal{} = lbl;
-        require path.valid();
-        require path_addrs.no_duplicates();
-        require path.depth == path_addrs.len();
+        require Self::new_path_wf(path, &new_addrs, path_addrs);
         require path.target().can_compact(start, end, compacted_buffer);
-        require new_addrs.no_duplicates();
-        require new_addrs.repr().disjoint(path_addrs.to_set());
         require path.linked == pre.linked;
         require pre.linked.is_fresh(new_addrs.repr());
         require pre.linked.is_fresh(path_addrs.to_set());
