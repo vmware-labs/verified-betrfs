@@ -222,12 +222,12 @@ state_machine!{AllocationCrashAwareJournal{
         &&& self.ephemeral is Known ==> {
             let v = self.ephemeral.get_Known_v();
             let persistent_disk = self.persistent.tj.disk_view;
-            &&& AllocationJournal::State::journal_pages_not_free(persistent_disk.entries.dom(), v.mini_allocator)
+            &&& AllocationJournal::State::disk_dom_not_free(persistent_disk, v.mini_allocator)
         }
         &&& self.ephemeral is Known && self.inflight is Some ==> {
             let v = self.ephemeral.get_Known_v();
             let inflight_disk = self.inflight.get_Some_0().tj.disk_view;
-            &&& AllocationJournal::State::journal_pages_not_free(inflight_disk.entries.dom(), v.mini_allocator)
+            &&& AllocationJournal::State::disk_dom_not_free(inflight_disk, v.mini_allocator)
         }
     }
 

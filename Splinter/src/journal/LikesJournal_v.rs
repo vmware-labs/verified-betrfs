@@ -534,7 +534,7 @@ impl DiskView {
 } // DiskView proof bits
 
 pub open spec(checked) fn map_to_likes(lsn_addr_map: LsnAddrIndex) -> Likes
-    decreases lsn_addr_map.dom().len() when lsn_addr_map.dom().finite()
+decreases lsn_addr_map.dom().len() when lsn_addr_map.dom().finite()
 {
     if lsn_addr_map.dom().len() == 0 {
         no_likes()
@@ -547,7 +547,7 @@ pub open spec(checked) fn map_to_likes(lsn_addr_map: LsnAddrIndex) -> Likes
 
 impl TruncatedJournal {
     pub open spec(checked) fn build_lsn_addr_index(self) ->  LsnAddrIndex
-        recommends self.decodable()
+    recommends self.decodable()
     {
         self.disk_view.build_lsn_addr_index(self.freshest_rec)
     }
@@ -560,7 +560,7 @@ impl TruncatedJournal {
 
     pub open spec(checked) fn discard_old_cond(self, start_lsn: LSN, 
         keep_addrs: Set<Address>, new: Self) -> bool
-        recommends self.wf()
+    recommends self.wf()
     {
         // new disk_view must be a subdisk contain all kept addrs 
         &&& new.wf()
@@ -568,6 +568,27 @@ impl TruncatedJournal {
         &&& new.disk_view.entries <= self.disk_view.entries
         &&& forall |addr| #[trigger] keep_addrs.contains(addr) ==> new.disk_view.entries.dom().contains(addr)
         &&& new.freshest_rec == if self.seq_end() == start_lsn { None } else { self.freshest_rec }
+    }
+
+    pub proof fn discard_old_preserves_acyclicity(self, start_lsn: LSN, keep_addrs: Set<Address>, new: Self)
+    requires
+        self.wf(),
+        self.disk_view.acyclic(),
+        self.can_discard_to(start_lsn),
+        self.discard_old_cond(start_lsn, keep_addrs, new)
+    ensures 
+        new.disk_view.acyclic()
+    {
+        let dv = self.disk_view;
+        let post_dv = new.disk_view;
+        let ranking = dv.the_ranking();
+   
+        assert forall |addr| #[trigger] post_dv.entries.contains_key(addr) && post_dv.entries[addr].cropped_prior(post_dv.boundary_lsn).is_Some()
+        implies ranking[post_dv.entries[addr].cropped_prior(post_dv.boundary_lsn).unwrap()] < ranking[addr]
+        by {
+            assert(dv.entries.contains_key(addr)); // trigger
+        }
+        assert(post_dv.valid_ranking(ranking)); // witness
     }
 }
 
@@ -899,7 +920,6 @@ state_machine!{ LikesJournal {
         post.lsn_addr_index == post.journal.truncated_journal.build_lsn_addr_index(),
     {
         reveal(TruncatedJournal::index_domain_valid);
-        reveal(DiskView::index_keys_map_to_valid_entries);
 
         let tj_pre = pre.journal.truncated_journal;
         let tj_post = post.journal.truncated_journal;
@@ -921,7 +941,11 @@ state_machine!{ LikesJournal {
 
     #[inductive(discard_old)]
     fn discard_old_inductive(pre: Self, post: Self, lbl: Label, new_journal: LinkedJournal_v::LinkedJournal::State) {
-        Self::discard_old_step_preserves_acyclicity(pre, post, lbl);
+        let tj = pre.journal.truncated_journal;
+        let post_tj = post.journal.truncated_journal;
+        let start_lsn = lbl.get_DiscardOld_start_lsn();
+        tj.discard_old_preserves_acyclicity(start_lsn, post.lsn_addr_index.values(), post_tj);
+
         Self::discard_old_step_preserves_index(pre, post, lbl);
         Self::discard_old_maintains_repr_index(pre, post, lbl);
     }
