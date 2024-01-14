@@ -18,6 +18,7 @@ pub struct Buffer {
     pub map: Map<Key, Message>
 }
 
+// A Buffer is a map from keys to messages.
 impl Buffer {
     pub open spec(checked) fn query(self, key: Key) -> Message {
         if self.map.contains_key(key) {

@@ -70,6 +70,46 @@ impl Key {
         let restricted_right = right.restrict(Set::new(|key| Self::lte(pivot, key)));
         restricted_left.union_prefer_right(restricted_right)
     }
+
+    pub open spec(checked) fn is_sorted(run: Seq<Key>) -> bool
+    {
+        forall |i: int, j: int| 0 <= i <= j < run.len() ==> Key::lte(run[i], run[j])
+    }
+
+    pub proof fn strictly_sorted_implies_sorted(run: Seq<Key>)
+        requires Self::is_strictly_sorted(run)
+        ensures Self::is_sorted(run)
+    {
+        assert forall |i: int, j: int| 0 <= i <= j < run.len()
+        implies Key::lte(run[i], run[j]) by {
+            if i < j {
+                assert(Key::lt(run[i], run[j]));
+            }
+        }
+    }
+
+    pub proof fn lte_transitive_forall()
+        ensures forall |a: Key, b: Key, c: Key|
+            Self::lte(a, b) && Self::lte(b, c) ==> Self::lte(a, c)
+    {}
+
+    pub proof fn largest_lte_ensures(run: Seq<Key>, needle: Key, out: int)
+        requires
+            Key::is_sorted(run),
+            out == Key::largest_lte(run, needle)
+        ensures
+            -1 <= out < run.len(),
+            forall |i| 0 <= i <= out ==> Key::lte(#[trigger] run[i], needle),
+            forall |i| out < i < run.len() ==> Key::lt(needle, #[trigger] run[i]),
+            run.contains(needle) ==> 0 <= out && run[out] == needle
+        decreases run.len()
+    {
+        assume(false);
+        Self::lte_transitive_forall();
+        if run.len() != 0 && !Key::lt(needle, run[0]) {
+            Self::largest_lte_ensures(run.subrange(1, run.len() as int), needle, out - 1);
+        }
+    }
 }
 
 impl Element {

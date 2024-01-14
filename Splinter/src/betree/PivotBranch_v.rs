@@ -12,6 +12,8 @@ use crate::spec::Messages_t::*;
 
 verus! {
 
+// TODO: comment which functions are actually transitions that need refinement proofs!
+
 #[is_variant]
 pub enum SplitArg {
     SplitIndex{pivot: Key, pivot_index: int},
@@ -46,6 +48,28 @@ impl SplitArg {
     }
 }
 
+/*
+Node in a B+ tree. There are two types of B+ tree nodes: index nodes and leaf nodes.
+The B+ tree is a map from keys to messages.
+
+Index nodes have n - 1 pivots and n child nodes.
+The pivots are strictly sorted and partition the key space into n key ranges:
+(-infinity, pivots[0]), [pivots[0], pivots[1]), ..., [pivots[n-3], pivots[n-2]), [pivots[n-2], infinity).
+Each child node owns one key range, in order:
+children[i] owns range [pivots[i-1], pivots[i]) where pivots[-1] = -infinity, pivots[n] = infinity.
+
+    Example:
+    pivots =      p0  p1  p2
+    children =  c0  c1  c2  c3
+
+    c0 range = (-infinity, p0)
+    c1 range = [p0, p1)
+    c2 range = [p1, p2)
+    c3 range = [p2, infinity)
+
+Leaf nodes store a map from keys to messages.
+keys[i] maps to msgs[i].
+*/
 #[is_variant]
 pub enum Node {
     Index{pivots: Seq<Key>, children: Seq<Node>},
@@ -106,6 +130,7 @@ impl Node {
         }
     }
 
+    // If self is Index, returns child index which owns the given key.
     pub open spec(checked) fn route(self, key: Key) -> int
         recommends self.wf()
     {
@@ -115,7 +140,8 @@ impl Node {
 
     pub open spec/*XXX (checked)*/ fn query(self, key: Key) -> Message
         recommends self.wf()
-        decreases self when self is Index && 0 <= self.route(key)+1 < self.get_Index_children().len()
+        decreases self
+        when self is Index ==> 0 <= self.route(key)+1 < self.get_Index_children().len()
     {
         // Need ensures from route to restore checked
         let r = self.route(key);
