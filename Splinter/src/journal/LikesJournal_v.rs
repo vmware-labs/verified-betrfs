@@ -558,8 +558,7 @@ impl TruncatedJournal {
         else { Multiset::from_set(self.build_lsn_addr_index().values()) }
     }
 
-    pub open spec(checked) fn discard_old_cond(self, start_lsn: LSN, 
-        keep_addrs: Set<Address>, new: Self) -> bool
+    pub open spec(checked) fn discard_old_cond(self, start_lsn: LSN, keep_addrs: Set<Address>, new: Self) -> bool
     recommends self.wf()
     {
         // new disk_view must be a subdisk contain all kept addrs 
