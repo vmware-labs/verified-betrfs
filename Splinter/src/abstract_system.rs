@@ -1,3 +1,5 @@
+// Copyright 2018-2023 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, University of Washington
+// SPDX-License-Identifier: BSD-2-Clause
 pub mod StampedMap_v;
 pub mod MsgHistory_v;
 pub mod AbstractJournal_v;

@@ -1,3 +1,5 @@
+// Copyright 2018-2023 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, University of Washington
+// SPDX-License-Identifier: BSD-2-Clause
 // TODO _t and _s enforcement in the build system? Gasp, don't know how to thing about
 // approaching/modifying/enhancing crate build...?
 
