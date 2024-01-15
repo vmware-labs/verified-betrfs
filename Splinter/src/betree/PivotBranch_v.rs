@@ -111,23 +111,59 @@ impl Node {
         forall |key| self.get_Index_children()[i].all_keys().contains(key)
             ==> #[trigger] Key::lte(self.get_Index_pivots()[i-1], key)
     }
+    
+    // pub open spec(checked) fn wf_index_children(self, pivots: Seq<Key>, children: Seq<Node>, i: int) -> bool
+    //     recommends
+    //         self is Index,
+    //         pivots == self.get_Index_pivots(),
+    //         children == self.get_Index_children(),
+    //         0 <= i < children.len(),
+    //     decreases self, 
+    // {
+    //     children[i].wf()
+    // }
+
+    pub open spec(checked) fn wf_index(self, pivots: Seq<Key>, children: Seq<Node>) -> bool
+        recommends
+            // self is Index,
+            self == (Node::Index{pivots: pivots, children: children})
+            // pivots == self.get_Index_pivots(),
+            // children == self.get_Index_children()
+        decreases self, 0int
+    {
+        &&& pivots.len() == children.len() - 1
+        &&& Key::is_strictly_sorted(pivots)
+        &&& (forall |i| 0 <= i < children.len() ==> #[trigger] self.get_Index_children()[i].wf())
+        &&& (forall |i| 0 <= i < children.len() - 1 ==> self.all_keys_below_bound(i))
+        &&& (forall |i| 0 < i < children.len() ==> self.all_keys_above_bound(i))
+    }
 
     pub open spec(checked) fn wf(self) -> bool
-        decreases self
+        decreases self, 1int
     {
-        match self {
-            Node::Leaf{keys, msgs} => {
-                &&& keys.len() == msgs.len()
-                &&& Key::is_strictly_sorted(keys)
-            },
-            Node::Index{pivots, children} => {
-                &&& pivots.len() == children.len() - 1
-                &&& Key::is_strictly_sorted(pivots)
-                &&& forall |i| 0 <= i < children.len() ==> #[trigger] children[i].wf()
-                &&& forall |i| 0 <= i < children.len() - 1 ==> self.all_keys_below_bound(i)
-                &&& forall |i| 0 < i < children.len() ==> self.all_keys_above_bound(i)
-            }
+        if self is Leaf {
+            let keys = self.get_Leaf_keys();
+            let msgs = self.get_Leaf_msgs();
+            &&& keys.len() == msgs.len()
+            &&& Key::is_strictly_sorted(keys)
+        } else {
+            let pivots = self.get_Index_pivots();
+            let children = self.get_Index_children();
+            self.wf_index(pivots, children)
         }
+        // match self {
+        //     Node::Leaf{keys, msgs} => {
+        //         &&& keys.len() == msgs.len()
+        //         &&& Key::is_strictly_sorted(keys)
+        //     },
+        //     Node::Index{pivots, children} => {
+        //         &&& pivots.len() == children.len() - 1
+        //         &&& Key::is_strictly_sorted(pivots)
+        //         &&& forall |i| 0 <= i < children.len() ==> #[trigger] children[i].wf()
+        //         &&& forall |i| 0 <= i < children.len() - 1 ==> self.all_keys_below_bound(i)
+        //         &&& forall |i| 0 < i < children.len() ==> self.all_keys_above_bound(i)
+        //     }
+        // }
     }
 
     // If self is Index, returns child index which owns the given key.
