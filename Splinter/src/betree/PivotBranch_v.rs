@@ -123,7 +123,7 @@ impl Node {
             Node::Index{pivots, children} => {
                 &&& pivots.len() == children.len() - 1
                 &&& Key::is_strictly_sorted(pivots)
-                &&& forall |i| 0 <= i < children.len() ==> #[trigger] children[i].wf()
+                &&& forall |i| 0 <= i < children.len() ==> (#[trigger] children[i]).wf()
                 &&& forall |i| 0 <= i < children.len() - 1 ==> self.all_keys_below_bound(i)
                 &&& forall |i| 0 < i < children.len() ==> self.all_keys_above_bound(i)
             }

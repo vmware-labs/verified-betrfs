@@ -41,6 +41,7 @@ impl Node {
 pub proof fn route_ensures(node: Node, key: Key)
     requires node.wf()
     ensures ({
+        // TODO: this causes WARNING 'if' cannot be used in patterns
         let s = if node is Leaf { node.get_Leaf_keys() } else { node.get_Index_pivots() };
         &&& -1 <= #[trigger] node.route(key) < s.len()
         &&& forall |i| 0 <= i <= node.route(key) ==> Key::lte(#[trigger] s[i], key)
@@ -297,12 +298,13 @@ pub proof fn query_refines(pre: Node, lbl: QueryLabel)
     decreases pre
 {
     let r = pre.route(lbl.key);
+    // TODO: do something like PivotTable::route_lemma_auto
     route_ensures(pre, lbl.key);
     if pre is Index {
         let pivots = pre.get_Index_pivots();
         let children = pre.get_Index_children();
         assert(0 <= r+1 < children.len());
-        assert(children[r+1].wf()); // fail by should be true by pre.wf()
+        assert(children[r+1].wf());
         route_ensures(children[r+1], lbl.key);
         assert(lbl.msg == children[r+1].query(lbl.key));
 
