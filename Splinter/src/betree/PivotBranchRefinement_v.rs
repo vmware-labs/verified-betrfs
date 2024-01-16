@@ -30,6 +30,7 @@ impl Node {
                     // children[self.route(key) + 1].i().map.contains_key(key)
                     // ==> self.i().map.contains_key(lbl.key) by lemma_interpretation_delegation
                     // ==> self.all_keys().contains(key) by lemma_interpretation
+                    // TODO: adding triggers in here causes ungraceful dump
                     |key| /*self.all_keys().contains(key) &&*/ children[self.route(key) + 1].i().map.contains_key(key),
                     |key| children[self.route(key) + 1].i().map[key]
                 )}
@@ -38,20 +39,59 @@ impl Node {
     }
 }
 
-pub proof fn route_ensures(node: Node, key: Key)
+pub open spec(checked) fn get_keys_or_pivots(node: Node) -> Seq<Key>
+    recommends node.wf()
+{
+    if node is Leaf { node.get_Leaf_keys() } else { node.get_Index_pivots() }
+}
+
+pub open spec(checked) fn le_route(node: Node, key: Key, i: int) -> bool
+    recommends node.wf()
+{
+    0 <= i <= node.route(key)
+}
+
+pub open spec(checked) fn gt_route(node: Node, key: Key, i: int) -> bool
+    recommends node.wf()
+{
+    let s = get_keys_or_pivots(node);
+    node.route(key) < i < s.len()
+}
+
+pub proof fn lemma_route_ensures(node: Node, key: Key)
     requires node.wf()
     ensures ({
         // TODO: this causes WARNING 'if' cannot be used in patterns
-        let s = if node is Leaf { node.get_Leaf_keys() } else { node.get_Index_pivots() };
+        let s = get_keys_or_pivots(node);
         &&& -1 <= #[trigger] node.route(key) < s.len()
-        &&& forall |i| 0 <= i <= node.route(key) ==> Key::lte(#[trigger] s[i], key)
-        &&& forall |i| node.route(key) < i < s.len() ==> Key::lt(key, #[trigger] s[i])
+        &&& forall |i| #[trigger] le_route(node, key, i) ==> Key::lte(s[i], key)
+        &&& forall |i| #[trigger] gt_route(node, key, i) ==> Key::lt(key, s[i])
         &&& s.contains(key) ==> 0 <= node.route(key) && s[node.route(key)] == key
     })
 {
     let s = if node is Leaf { node.get_Leaf_keys() } else { node.get_Index_pivots() };
     Key::strictly_sorted_implies_sorted(s);
     Key::largest_lte_ensures(s, key, Key::largest_lte(s, key));
+}
+
+pub proof fn lemma_route_auto()
+    ensures forall |node: Node, key: Key| node.wf() ==> {
+        let s = get_keys_or_pivots(node);
+        &&& -1 <= #[trigger] node.route(key) < s.len()
+        &&& forall |i| #[trigger] le_route(node, key, i) ==> Key::lte(s[i], key)
+        &&& forall |i| #[trigger] gt_route(node, key, i) ==> Key::lt(key, s[i])
+        &&& s.contains(key) ==> 0 <= node.route(key) && s[node.route(key)] == key
+    }
+{
+    assert forall |node: Node, key: Key| node.wf() implies {
+        let s = get_keys_or_pivots(node);
+        &&& -1 <= #[trigger] node.route(key) < s.len()
+        &&& forall |i| #[trigger] le_route(node, key, i) ==> Key::lte(s[i], key)
+        &&& forall |i| #[trigger] gt_route(node, key, i) ==> Key::lt(key, s[i])
+        &&& s.contains(key) ==> 0 <= node.route(key) && s[node.route(key)] == key
+    } by {
+        lemma_route_ensures(node, key);
+    }
 }
 
 pub proof fn lemma_grow_preserves_wf(node: Node)
@@ -298,14 +338,15 @@ pub proof fn query_refines(pre: Node, lbl: QueryLabel)
     decreases pre
 {
     let r = pre.route(lbl.key);
+    lemma_route_auto();
     // TODO: do something like PivotTable::route_lemma_auto
-    route_ensures(pre, lbl.key);
+    // lemma_route_ensures(pre, lbl.key);
     if pre is Index {
         let pivots = pre.get_Index_pivots();
         let children = pre.get_Index_children();
         assert(0 <= r+1 < children.len());
         assert(children[r+1].wf());
-        route_ensures(children[r+1], lbl.key);
+        // lemma_route_ensures(children[r+1], lbl.key);
         assert(lbl.msg == children[r+1].query(lbl.key));
 
         query_refines(children[r+1], lbl);
