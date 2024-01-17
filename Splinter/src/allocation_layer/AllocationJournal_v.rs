@@ -1303,7 +1303,7 @@ state_machine!{ AllocationJournal {
                 }
             }
         }
-        assert( Self::inv(post) );
+        assert( post.inv() );
     }
 
     #[inductive(internal_no_op)]
@@ -1311,18 +1311,28 @@ state_machine!{ AllocationJournal {
 
     #[inductive(initialize)]
     fn initialize_inductive(post: Self, journal: LinkedJournal::State, image: JournalImage) {
-        //assert( post.journal.lsn_au_index = Linked::build_lsn_au_index(image.tj, image.first);
-        assume( LinkedJournal::State::inv(post.journal) );   // TODO(travis): help!
+        assert( post.wf() );
+        assert( post.lsn_au_index == post.tj().build_lsn_au_index(post.first) );
 
-        assert(post.wf());
+        post.tj().disk_view.lemma_aus_hold_contiguous_lsns(post.tj().freshest_rec, post.first);
+        assert( aus_hold_contiguous_lsns(post.lsn_au_index) );
+        assert( post.tj().au_domain_valid(post.lsn_au_index) );
+        assert( post.tj().disk_view.pointer_is_upstream(post.tj().freshest_rec, post.first) );
 
-        let TruncatedJournal{disk_view: dv, freshest_rec: root} = image.tj;
-        // Self::build_lsn_au_index_au_walk_consistency(dv, root, image.first);
+        assert( post.tj().disk_view.index_keys_exist_valid_entries(post.lsn_au_index) ) by {
+            reveal(DiskView::index_keys_exist_valid_entries);
+            assume(false); // TODO(JL)
+        }
 
+        assert( Self::disk_domain_valid(post.tj().disk_view, post.lsn_au_index, 
+            post.mini_allocator, post.tj().seq_end()) ) by {
+            // this is likely faulting on the inv on the disk domain range
+            // that seems like a valid thing to ask for?
+            assume(false);
+        }
 
-        image.tj.disk_view.lemma_aus_hold_contiguous_lsns(image.tj.freshest_rec, image.first);
-
-        assume(false);
+        assert( Self::mini_allocator_follows_freshest_rec(post.tj().freshest_rec, post.mini_allocator) );
+        assert( post.inv() );
     }
 
     // lemmas used by other refinements
