@@ -785,14 +785,6 @@ impl TruncatedJournal {
         }
     }
 
-// Proof is trivial, so probably never needed this ensures in Dafny.
-//     pub proof fn append_record_ensures(self, addr: Address, msgs: MsgHistory)
-//     ensures
-//         !self.disk_view.entries.contains_key(addr)
-//             ==> self.disk_view.is_sub_disk(self.append_record(addr, msgs).disk_view),
-//     {
-//     }
-
     pub open spec(checked) fn build_tight(self) -> (out: Self)
     recommends
         self.disk_view.decodable(self.freshest_rec),

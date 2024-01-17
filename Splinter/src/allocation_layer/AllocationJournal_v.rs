@@ -943,51 +943,6 @@ state_machine!{ AllocationJournal {
         require lbl is InternalAllocations;
     } }
 
-    // pub proof fn build_commutes_over_discard_page_walk(dv: DiskView, root: Pointer, new_bdy: LSN)
-    // requires
-    //     dv.tj_at(root).decodable(),
-    //     dv.tj_at(root).can_discard_to(new_bdy),
-    // ensures ({
-    //     let old_au_idx = dv.build_lsn_au_index_page_walk(root); // super-let, please
-    //     let new_tj = dv.tj_at(root).discard_old(new_bdy);
-    //     new_tj.disk_view.build_lsn_au_index_page_walk(new_tj.freshest_rec)
-    //         =~= lsn_au_index_discard_up_to(old_au_idx, new_bdy)    // remember, kids, the tilde is a proof strategy!
-    //     }),
-    // decreases dv.the_rank_of(root)
-    // {
-    //     dv.build_lsn_au_index_page_walk_domain(root);
-    //     let discarded_tj = dv.tj_at(root).discard_old(new_bdy);
-    //     assert( discarded_tj.disk_view.valid_ranking(dv.the_ranking()) );   // witness to acyclic
-    //     discarded_tj.disk_view.build_lsn_au_index_page_walk_domain(root);
-    //     if root is Some && new_bdy < dv.entries[root.unwrap()].message_seq.seq_start {
-    //         Self::build_commutes_over_discard_page_walk(dv, dv.next(root), new_bdy);    // recurse
-    //     }
-    // }
-
-// I am surprised this proves for free.
-
-    // pub proof fn build_commutes_over_discard(dv: DiskView, root: Pointer, old_first: AU, new_bdy: LSN)
-    // requires
-    //     dv.tj_at(root).decodable(),
-    //     dv.tj_at(root).can_discard_to(new_bdy),
-    //     root is Some ==> Self::valid_first_au(dv, old_first),
-    //     Self::internal_au_pages_fully_linked(dv),
-    // ensures ({
-    //     let old_lsn_au_index = Self::build_lsn_au_index(dv.tj_at(root), old_first); // super-let, please
-    //     Self::build_lsn_au_index(dv.tj_at(root).discard_old(new_bdy), Self::new_first(dv.tj_at(root), old_lsn_au_index, old_first, new_bdy))
-    //         == lsn_au_index_discard_up_to(old_lsn_au_index, new_bdy) 
-    //     }),
-    // {
-    //     let old_lsn_au_index = Self::build_lsn_au_index(dv.tj_at(root), old_first); // super-let, please
-    //     Self::build_commutes_over_discard_page_walk(dv, root, new_bdy);
-    //     //Self::build_lsn_au_index_equiv_page_walk(dv, root, old_first);
-    //     let discarded_tj = dv.tj_at(root).discard_old(new_bdy);
-    //     let new_first = Self::new_first(dv.tj_at(root), old_lsn_au_index, old_first, new_bdy);
-    //     assert( discarded_tj.disk_view.valid_ranking(dv.the_ranking()) );   // trigger witness to acyclic
-    //     //Self::build_lsn_au_index_equiv_page_walk(discarded_tj.disk_view, discarded_tj.freshest_rec, new_first);
-    //     assume(false);    // proof incomplete; pick up here
-    // }
-
     init!{ initialize(journal: LinkedJournal::State, image: JournalImage) {
         require image.valid_image();
         require LinkedJournal::State::initialize(journal, image.tj);
@@ -1021,12 +976,13 @@ state_machine!{ AllocationJournal {
         forall |addr| #[trigger] dv.entries.dom().contains(addr) ==> addr.wf() && !allocator.can_allocate(addr)
     }
 
-    pub open spec(checked) fn disk_domain_valid(dv: DiskView, lsn_au_index: LsnAUIndex, allocator: MiniAllocator) -> bool
+    pub open spec(checked) fn disk_domain_valid(dv: DiskView, lsn_au_index: LsnAUIndex, allocator: MiniAllocator, end_lsn: LSN) -> bool
     {
         forall |addr| #[trigger] dv.entries.dom().contains(addr) ==> ({
-            &&& addr.wf() 
+            &&& addr.wf()
             &&& lsn_au_index.values().contains(addr.au)
             &&& !allocator.can_allocate(addr)
+            &&& dv.entries[addr].message_seq.seq_end <= end_lsn
         })
     }
 
@@ -1040,7 +996,9 @@ state_machine!{ AllocationJournal {
         &&& self.tj().disk_view.pointer_is_upstream(self.tj().freshest_rec, self.first)
         &&& self.tj().disk_view.index_keys_exist_valid_entries(self.lsn_au_index)
 
-        &&& Self::disk_domain_valid(self.tj().disk_view, self.lsn_au_index, self.mini_allocator)
+        // any left over disk states can't possibly have larger lsns
+
+        &&& Self::disk_domain_valid(self.tj().disk_view, self.lsn_au_index, self.mini_allocator, self.tj().seq_end())
         &&& Self::mini_allocator_follows_freshest_rec(self.tj().freshest_rec, self.mini_allocator)
     }
 
@@ -1112,7 +1070,7 @@ state_machine!{ AllocationJournal {
             reveal(DiskView::pages_allocated_in_lsn_order);
         }
 
-        assert( Self::disk_domain_valid(post_dv, post.lsn_au_index, post.mini_allocator) );
+        assert( Self::disk_domain_valid(post_dv, post.lsn_au_index, post.mini_allocator, post.tj().seq_end()) );
         assert( Self::mini_allocator_follows_freshest_rec(post.tj().freshest_rec, post.mini_allocator) );
 
         if post.tj().freshest_rec is Some {
@@ -1250,12 +1208,7 @@ state_machine!{ AllocationJournal {
 
     #[inductive(internal_journal_marshal)]
     fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal::State) {
-        // Self::invoke_submodule_inv(pre, post);
-        assume(false);
-        let discard_msgs = pre.journal.unmarshalled_tail.discard_recent(cut);
-        assert( LikesJournal_v::lsn_disjoint(pre.lsn_au_index.dom(), discard_msgs) ) by {
-            reveal(TruncatedJournal::index_domain_valid);
-        }
+        assert(post.wf());
 
         let msgs = pre.journal.unmarshalled_tail.discard_recent(cut);
         let pre_dv = pre.tj().disk_view;
@@ -1263,86 +1216,93 @@ state_machine!{ AllocationJournal {
         let post_dv = post.tj().disk_view;
         let post_root = post.tj().freshest_rec;
 
-        assert( pre.lsn_au_index == pre.tj().build_lsn_au_index(pre.first) );
-        if pre_root is Some {
-            pre_dv.build_lsn_au_index_equiv_page_walk(pre_root, pre.first);
-            assert( pre.lsn_au_index == pre_dv.build_lsn_au_index_page_walk(pre_root) );
-        } else {
-            assert( pre.tj().build_lsn_au_index(pre.first) =~= Map::empty() );
-            assert( pre_dv.build_lsn_au_index_page_walk(pre_root) =~= Map::empty() );
-            assert( pre.lsn_au_index == pre_dv.build_lsn_au_index_page_walk(pre_root) );
-        }
+        assert( LikesJournal_v::lsn_disjoint(pre.lsn_au_index.dom(), msgs) );
+        assert( post.tj().au_domain_valid(post.lsn_au_index) );
 
-        let curr_msgs = post_dv.entries[post_root.unwrap()].message_seq;
-        let update = singleton_index(
-            math::max(post_dv.boundary_lsn as int, curr_msgs.seq_start as int) as nat, curr_msgs.seq_end, post_root.unwrap().au);
-        
-        assert( post_dv.next(post_root) == pre_root );
-        pre_dv.build_lsn_au_index_page_walk_sub_disk(post_dv, pre_root);
-        assert( post_dv.build_lsn_au_index_page_walk(pre_root)
-                == pre_dv.build_lsn_au_index_page_walk(pre_root) );
-        assert( post_dv.build_lsn_au_index_page_walk(post_root) ==
-            post_dv.build_lsn_au_index_page_walk(pre_root).union_prefer_right(update) );
-        let au_update = singleton_index(msgs.seq_start, msgs.seq_end, addr.au);
-        assert( au_update == update );
-                
-        assert( post.lsn_au_index == post_dv.build_lsn_au_index_page_walk(post_root) );
-        pre_dv.build_commutes_over_append_record(pre_root, msgs, addr);
-        assume(false);
+        let update = singleton_index(msgs.seq_start, msgs.seq_end, addr.au);
+        assert( update.contains_key(msgs.seq_start) );
+        assert( update[msgs.seq_start] == addr.au );
+        assert( post.lsn_au_index.contains_key(msgs.seq_start) );
 
-        assert( post_dv.pages_allocated_in_lsn_order() ) by {
-            //reveal(State::pages_allocated_in_lsn_order);
-            assume( false );
-
-            let dv = post_dv;
-            assert forall |alo: Address, ahi: Address| #![auto] ({
-                &&& alo.au == ahi.au
-                &&& alo.page < ahi.page
-                &&& #[trigger] dv.entries.contains_key(alo)
-                &&& #[trigger] dv.entries.contains_key(ahi)
-            }) implies
-                dv.entries[alo].message_seq.seq_end <= dv.entries[ahi].message_seq.seq_start
+        assert(Self::disk_domain_valid(post_dv, post.lsn_au_index, post.mini_allocator, post.tj().seq_end())) by {
+            assert forall |addr| #[trigger] post_dv.entries.dom().contains(addr)
+            implies post.lsn_au_index.values().contains(addr.au)
             by {
-                if ahi.au != addr.au || ahi.page < addr.page {
-                    assert( dv.entries[alo].message_seq.seq_end <= dv.entries[ahi].message_seq.seq_start );
-                } else {
-                    assert( ahi == addr );
-                    if pre.mini_allocator.curr is None {
-                        assert( ahi.page == 0 );
-                        assert( dv.entries[alo].message_seq.seq_end <= dv.entries[ahi].message_seq.seq_start );
-                    } else {
-                        assert( addr == pre_root.unwrap().next() );
-                        assert( dv.entries[alo].message_seq.seq_end <= dv.entries[ahi].message_seq.seq_start );
-                    }
+                if pre_dv.entries.dom().contains(addr) {
+                    let lsn = choose |lsn| #[trigger] pre.lsn_au_index.contains_key(lsn) && pre.lsn_au_index[lsn] == addr.au;
+                    assert( !update.contains_key(lsn) );
+                    assert( post.lsn_au_index.contains_key(lsn)); // trigger
                 }
             }
         }
-        if post_root is Some {
-            assert( post_dv.internal_au_pages_fully_linked() );
-            assert( post_dv.valid_first_au(post.first) );
-        }
-        post_dv.build_lsn_au_index_equiv_page_walk(post_root, post.first);
-        // assert( post.lsn_au_index == Self::build_lsn_au_index(post.tj(), post.first) );
-        // assert( Self::pointer_is_upstream(post.tj().disk_view, post_root, post.first) );
-        // Self::build_lsn_au_index_au_walk_consistency(post.tj().disk_view, post_root, post.first);
-        // assert( Self::addr_index_consistent_with_au_index(post.journal.lsn_addr_index, post.lsn_au_index) );
+        assert( Self::mini_allocator_follows_freshest_rec(post.tj().freshest_rec, post.mini_allocator) );
 
-        assert( post.journal.wf() );
-        assert( post.mini_allocator.wf() );
-        
-        assert( post.wf() );
-//         assert( LinkedJournal_v::LinkedJournal::State::inv(post.journal) );
-//         assert( post.lsn_au_index == Self::build_lsn_au_index(post.tj(), post.first) );
-//         assert( Self::addr_index_consistent_with_au_index(post.journal.lsn_addr_index, post.lsn_au_index) );
-        
-//         assert( Self::disk_dom_not_free(post.journal.lsn_addr_index.values(), post.mini_allocator) );
-//         assert( Self::mini_allocator_follows_freshest_rec(post.tj().freshest_rec, post.mini_allocator) );
+        assert( post_dv.decodable(post_root) );
+        assert( post_dv.valid_ranking(pre.tj().marshal_ranking(addr)) ); // witness, duped from linked journal
+        assert( post.tj().disk_view.acyclic() );
+
+        assert( post_dv.has_unique_lsns() ) by {
+            assert forall |lsn, addr1, addr2| post_dv.addr_supports_lsn(addr1, lsn) && post_dv.addr_supports_lsn(addr2, lsn)
+            implies addr1 == addr2 by {
+                if lsn < msgs.seq_start {
+                    assert(pre_dv.addr_supports_lsn(addr1, lsn) && pre_dv.addr_supports_lsn(addr2, lsn));
+                } 
+            }
+        }
+
+        assert( post_dv.valid_first_au(post.first) ) by {
+            if pre_root is Some {
+                let first_addr = choose |first_addr: Address| #![auto] first_addr.au == pre.first && pre_dv.addr_supports_lsn(first_addr, pre_dv.boundary_lsn);
+                assert(post_dv.addr_supports_lsn(first_addr, post_dv.boundary_lsn));
+            } else {
+                assert(post_dv.addr_supports_lsn(addr, post_dv.boundary_lsn));
+            }
+        }
+
+        assert( post_dv.upstream(post_root.unwrap()) );
+
+        assert( post_dv.internal_au_pages_fully_linked() ) by {
+            assert( post_dv.nonzero_pages_point_backward() );
+            reveal(DiskView::pages_allocated_in_lsn_order);
+        }
+    
+        assert( post_dv.pointer_is_upstream(post_root, post.first) );
+
+        assert( post.lsn_au_index == post.tj().build_lsn_au_index(post.first) ) by {
+            pre_dv.build_lsn_au_index_equiv_page_walk(pre_root, pre.first);
+            assert( pre.lsn_au_index == pre_dv.build_lsn_au_index_page_walk(pre_root) );
+
+            pre_dv.build_lsn_au_index_page_walk_sub_disk(post_dv, pre_root);
+            assert( post_dv.build_lsn_au_index_page_walk(pre_root)
+                    == pre_dv.build_lsn_au_index_page_walk(pre_root) );
+
+            assert( post_dv.build_lsn_au_index_page_walk(post_root) ==
+                post_dv.build_lsn_au_index_page_walk(pre_root).union_prefer_right(update) );
+            let au_update = singleton_index(msgs.seq_start, msgs.seq_end, addr.au);
+            assert( au_update == update );
+                    
+            assert( post.lsn_au_index == post_dv.build_lsn_au_index_page_walk(post_root) );
+            pre_dv.build_commutes_over_append_record(pre_root, msgs, addr);
+            post_dv.build_lsn_au_index_equiv_page_walk(post_root, post.first);
+        }
+
+        post_dv.lemma_aus_hold_contiguous_lsns(post_root, post.first);
         assert( aus_hold_contiguous_lsns(post.lsn_au_index) );
-//         assert( (post.tj().freshest_rec.is_Some()
-//             ==> Self::valid_first_au(post.tj().disk_view, post.first)) );
-//         assert( (post.tj().freshest_rec.is_Some()
-//             ==> Self::internal_au_pages_fully_linked(post.tj().disk_view)) );
-        
+
+        assert( post_dv.index_keys_exist_valid_entries(post.lsn_au_index) ) by {
+            reveal(DiskView::index_keys_exist_valid_entries);
+            assert forall |lsn| #[trigger] post.lsn_au_index.contains_key(lsn)
+            implies exists |addr: Address| addr.wf() && addr.au == post.lsn_au_index[lsn] && #[trigger] post_dv.addr_supports_lsn(addr, lsn)
+            by {
+                if lsn < msgs.seq_start {
+                    let pre_addr = choose |pre_addr: Address| addr.wf() && pre_addr.au == pre.lsn_au_index[lsn] 
+                                    &&  #[trigger] pre_dv.addr_supports_lsn(pre_addr, lsn);
+                    assert(post_dv.addr_supports_lsn(pre_addr, lsn)); // trigger
+                } else {
+                    assert(post_dv.addr_supports_lsn(addr, lsn)); // trigger
+                }
+            }
+        }
         assert( Self::inv(post) );
     }
 
