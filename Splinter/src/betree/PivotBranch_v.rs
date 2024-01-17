@@ -1,5 +1,14 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
+
+/// This file defines the PivotBranch data structure. Under the `betree/` folder, all "Branch" data structures are
+/// just B+-trees. They are called "Branches" to distinguish them from the Be-tree data structures, and because
+/// Be-tree nodes can point to B+-trees (thus making B+-trees "branches" of a Be-tree).
+/// 
+/// A PivotBranch is a B+-tree defined in its most natural form, where the pivots are Keys, and Index nodes directly
+/// contain sequences of their children (i.e.: in a concrete implementation its one massive nested data structure, instead
+/// of using pointers). AKA it's a "functional" tree (immutable, defined).
+
 use builtin::*;
 
 use builtin_macros::*;
@@ -14,6 +23,9 @@ verus! {
 
 // TODO: comment which functions are actually transitions that need refinement proofs!
 
+/// (x9du): A SplitArg is a value used for determining a pivot value at which to split
+/// a B+tree node into two nodes. Its an enum to handle the cases for splitting an index
+/// node vs. a Leaf node separately.
 #[is_variant]
 pub enum SplitArg {
     SplitIndex{pivot: Key, pivot_index: int},
@@ -77,6 +89,16 @@ pub enum Node {
 }
 
 impl Node {
+    /// Returns a newly constructed empty leaf node.
+    pub open spec(checked) fn empty_leaf() -> Node
+    {
+        Node::Leaf{ keys: seq![], msgs: seq![] }
+    }
+
+    /// Returns the set of all keys contained under this node.
+    /// - For leaf nodes this is just all keys the leaf node contains.
+    /// - For index nodes, this is the set union of all pivot keys + keys contained
+    ///   under all leaf nodes under this index node.
     pub open spec(checked) fn all_keys(self) -> Set<Key>
         decreases self
     {
@@ -92,6 +114,9 @@ impl Node {
         }
     }
 
+    /// Pre: self must be an Index node
+    ///
+    /// Returns true iff all keys under node child[i] are less than pivots[i] 
     pub open spec(checked) fn all_keys_below_bound(self, i: int) -> bool
         recommends
             self is Index,
@@ -102,6 +127,9 @@ impl Node {
             ==> #[trigger] Key::lt(key, self.get_Index_pivots()[i])
     }
 
+    /// Pre: self must be an Index node
+    /// 
+    /// Returns true iff all keys under node child[i] are >= pivots[i-1].
     pub open spec(checked) fn all_keys_above_bound(self, i: int) -> bool
         recommends
             self is Index,
@@ -112,32 +140,48 @@ impl Node {
             ==> #[trigger] Key::lte(self.get_Index_pivots()[i-1], key)
     }
 
+    /// Returns true iff self is a well-formed B+ tree node.
     pub open spec(checked) fn wf(self) -> bool
         decreases self
     {
         match self {
+            // Leaf nodes store key-value pairs sorted by key.
             Node::Leaf{keys, msgs} => {
                 &&& keys.len() == msgs.len()
                 &&& Key::is_strictly_sorted(keys)
             },
             Node::Index{pivots, children} => {
+                // The pivots go between the children, thus |pivots| == |children| - 1.
                 &&& pivots.len() == children.len() - 1
                 &&& Key::is_strictly_sorted(pivots)
                 &&& forall |i| 0 <= i < children.len() ==> (#[trigger] children[i]).wf()
+                // For children[0:-1], all keys they contain should be < their upper pivot.
                 &&& forall |i| 0 <= i < children.len() - 1 ==> self.all_keys_below_bound(i)
+                // For children[1:], all keys they contain should be >= their lower pivot.
                 &&& forall |i| 0 < i < children.len() ==> self.all_keys_above_bound(i)
             }
         }
     }
 
-    // If self is Index, returns child index which owns the given key.
+    /// Returns the index before where the key would be inserted into the given node.
+    /// Let `r` be the return value.
+    /// If self is Index, then `r + 1` is the index of the child node that `key` belongs
+    /// to.
+    /// If self is Node, then `r + 1` is the index `key` would be inserted into. (Note that
+    /// in practice we don't allow duplicate keys, so if `key` is already in the sequence,
+    /// we'd just update the value at `r`).
     pub open spec(checked) fn route(self, key: Key) -> int
         recommends self.wf()
     {
+        // (tenzinhl): this notion of `route` returning values in the range [-1, |pivots| - 1) is
+        // very strange, would be much more natural to have it return [0, |pivots|) (then that means
+        // it returns the actual child index you would expect to find key under). Currently we keep having
+        // to add 1 everywhere.
         let s = if self is Leaf { self.get_Leaf_keys() } else { self.get_Index_pivots() };
         Key::largest_lte(s, key)
     }
 
+    /// Returns the Message mapped to the given key.
     pub open spec/*XXX (checked)*/ fn query(self, key: Key) -> Message
         recommends self.wf()
         decreases self
@@ -155,6 +199,9 @@ impl Node {
         }
     }
 
+    /// Pre: self is a Leaf node.
+    /// Returns a new Leaf node where the key-message pair {key, msg} is inserted into
+    /// self.
     pub open spec/* XXX (checked)*/ fn insert_leaf(self, key: Key, msg: Message) -> Node
         recommends
             self is Leaf,
@@ -175,6 +222,10 @@ impl Node {
         }
     }
 
+    /// Pre: path.node == self && path.target is Leaf
+    /// 
+    /// Returns a new tree rooted at self where {key, msg} is inserted at the Leaf node
+    /// targeted by `path`.
     pub open spec/* XXX (checked)*/ fn insert(self, key: Key, msg: Message, path: Path) -> Node
         recommends
             self.wf(),
@@ -187,35 +238,37 @@ impl Node {
         path.substitute(path.target().insert_leaf(key, msg))
     }
 
+    /// Returns a new tree formed by creating a new Index node who's only child is self.
     pub open spec(checked) fn grow(self) -> Node
         recommends self.wf()
     {
         Node::Index{pivots: seq![], children: seq![self]}
     }
 
-    pub open spec(checked) fn append_to_new_leaf(self, new_keys: Seq<Key>, new_msgs: Seq<Message>) -> Node
-        recommends
-            new_keys.len() == new_msgs.len(),
-            Key::is_strictly_sorted(new_keys)
-    {
-        Node::Leaf{ keys: new_keys, msgs: new_msgs }
-    }
-
+    /// Update the empty Leaf node targeted by the `path` (which starts at self) to have the key-value pairs
+    /// specified by `keys` and `msgs`.
     pub open spec(checked) fn append(self, keys: Seq<Key>, msgs: Seq<Message>, path: Path) -> Node
         recommends
             self.wf(),
             path.valid(),
             path.node == self,
-            path.target() == self.empty(),
+            // Assert that the target of the path is an empty node, so that when we replace it we aren't
+            // "losing" anything per se. (tenzinhl) but why is the empty leaf node in the tree in the first place?
+            path.target() == Node::empty_leaf(),
             keys.len() > 0,
             keys.len() == msgs.len(),
             Key::is_strictly_sorted(keys),
             path.key == keys[0],
             path.path_equiv(keys.last()) // all new keys must route to the same location
     {
-        path.substitute(path.target().append_to_new_leaf(keys, msgs))
+        path.substitute(Node::Leaf{ keys: keys, msgs: msgs })
     }
 
+    /// Pre: self is Leaf
+    /// 
+    /// Returns two leaf nodes formed by splitting `self` into two Leaf nodes, where
+    /// the left node contains all keys < `split_arg`, and right node contains all keys
+    /// >= `split_arg`.
     pub open spec(checked) fn split_leaf(self, split_arg: SplitArg) -> (Node, Node)
         recommends
             self is Leaf,
@@ -234,6 +287,10 @@ impl Node {
         (left_leaf, right_leaf)
     }
 
+    /// Pre: self is Index
+    /// 
+    /// Returns a new Index node formed by taking self.children[from:to] and all pivots that divide
+    /// those children.
     pub open spec(checked) fn sub_index(self, from: int, to: int) -> Node
         recommends
             self is Index,
@@ -243,6 +300,10 @@ impl Node {
         Node::Index{ pivots: self.get_Index_pivots().subrange(from, to-1), children: self.get_Index_children().subrange(from, to) }
     }
 
+    /// Pre: self is Index
+    /// 
+    /// Returns two new index nodes that partition `self.children` such that the left node only contains
+    /// children with keys < split_arg.key, and right node only contains children with keys >= split_arg.key.
     pub open spec/*XXX (checked)*/ fn split_index(self, split_arg: SplitArg) -> (Node, Node)
         recommends
             self is Index,
@@ -257,6 +318,7 @@ impl Node {
         (left_index, right_index)
     }
 
+    /// Return two nodes created by splitting self based on the `split_arg`.
     pub open spec(checked) fn split_node(self, split_arg: SplitArg) -> (Node, Node)
         recommends split_arg.wf(self)
     {
@@ -267,6 +329,7 @@ impl Node {
         }
     }
 
+    /// 
     pub open spec/* XXX (checked)*/ fn can_split_child_of_index(self, split_arg: SplitArg) -> bool
     {
         &&& self.wf()
@@ -278,11 +341,17 @@ impl Node {
             }
     }
 
+    /// Pre: self is Index
+    /// 
+    /// Returns a new Index node where the child containing `split_arg.pivot` is split on said pivot.
+    /// The pivot arg can NOT be an existing pivot in the Index (because duh, otherwise you'd have two
+    /// pivots with the same value, the bucket between them would be empty which is dumb).
     pub open spec/* XXX (checked)*/ fn split_child_of_index(self, split_arg: SplitArg) -> Node
         recommends self.can_split_child_of_index(split_arg)
     {
         // Need route ensures to restore checked
         let pivot = split_arg.get_pivot();
+        //
         let child_idx = self.route(pivot) + 1;
         let (left_node, right_node) = self.get_Index_children()[child_idx].split_node(split_arg);
         Node::Index{
@@ -293,6 +362,7 @@ impl Node {
         }
     }
 
+    /// Returns a new tree formed by splitting the children of `path.target()` on split_arg.
     pub open spec(checked) fn split(self, path: Path, split_arg: SplitArg) -> Node
         recommends
             self.wf(),
@@ -303,28 +373,29 @@ impl Node {
     {
         path.substitute(path.target().split_child_of_index(split_arg))
     }
-
-    pub open spec(checked) fn empty(self) -> Node
-    {
-        Node::Leaf{ keys: seq![], msgs: seq![] }
-    }
 }
 
+/// A `Path` describes a target node from a given starting node (using a key to target as well
+/// as a number of steps to take).
 #[verifier::ext_equal]
 pub struct Path {
+    /// The current node.
     pub node: Node,
+    /// The target key of the path (does change across subpaths).
     pub key: Key,
-    pub depth: nat
+    /// How many steps remain. If 0, then `node` is the target node of the path.
+    pub depth: nat,
 }
 
 impl Path {
+    /// Returns the next `Path`.
     pub open spec/* XXX (checked)*/ fn subpath(self) -> Path
         recommends
             0 < self.depth,
             self.node.wf(),
             self.node is Index
     {
-        // Need route ensures to restore checked
+        // (x9du) Need route ensures to restore `(checked)` annotation on function.
         Path{
             node: self.node.get_Index_children()[self.node.route(self.key) + 1],
             key: self.key,
@@ -332,6 +403,7 @@ impl Path {
         }
     }
 
+    /// Returns `true` iff self is a valid Path.
     pub open spec(checked) fn valid(self) -> bool
         decreases self.depth
     {
@@ -340,6 +412,7 @@ impl Path {
         &&& 0 < self.depth ==> self.subpath().valid()
     }
 
+    /// Returns Node targeted by a path (i.e.: the last path element).
     pub open spec(checked) fn target(self) -> Node
         recommends self.valid()
         decreases self.depth
@@ -351,17 +424,19 @@ impl Path {
         }
     }
 
+    /// Returns the Seq of children for self.node when `self.target` is replaced with `replacement`.
     pub open spec/* XXX (checked)*/ fn replaced_children(self, replacement: Node) -> Seq<Node>
         recommends
             self.valid(),
             0 < self.depth
         decreases self.subpath().depth
     {
-        // Need route ensures to restore checked
+        // (x9du) Need route ensures to restore (checked) annotation on function.
         let new_child = self.subpath().substitute(replacement);
         self.node.get_Index_children().update(self.node.route(self.key) + 1, new_child)
     }
 
+    /// Returns the tree rooted at self.node, where self.target() is replaced with `replacement`.
     pub open spec(checked) fn substitute(self, replacement: Node) -> Node
         recommends self.valid()
         decreases self.depth, 1nat
@@ -373,6 +448,7 @@ impl Path {
         }
     }
 
+    /// Returns true iff `other_key` leads to the same target node as `self.key`.
     pub open spec(checked) fn path_equiv(self, other_key: Key) -> bool
         recommends self.valid()
         decreases self.depth, 1nat

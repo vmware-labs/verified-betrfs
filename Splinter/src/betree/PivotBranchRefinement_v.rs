@@ -299,9 +299,10 @@ pub proof fn lemma_split_leaf_all_keys(old_leaf: Node, split_arg: SplitArg)
     assume(false);
 }
 
+/// (x9du)
 pub proof fn lemma_interpretation(node: Node)
     requires node.wf()
-    ensures node.all_keys() == node.i().map.dom()
+    ensures node.i().map.dom().subset_of(node.all_keys()) 
     // maybe a hassle to prove
     // forall |key| node.all_keys().contains(key) ==> node.query(lbl.key) == node.i().map[key]
 {

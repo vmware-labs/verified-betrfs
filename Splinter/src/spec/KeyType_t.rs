@@ -7,25 +7,49 @@ use vstd::set_lib::*;
 
 verus!{
 
-pub struct Key(pub nat); // TODO: this is a placeholder for the Key type
+/// A Key is a key in a B+-tree. Tuple style type makes it typecheck as its
+/// own type in Rust.
+/// Keys in the real implementation are meant to be strings.
+// TODO: this is a placeholder for the Key type, eventually should be a byte string
+// struct.
+pub struct Key(pub nat);
 
+
+/// An Element is a Be-tree pivot value. It is an enum type because we need a special
+/// value `Max` for representing a value larger than the largest key. `Max` is only used
+/// in the special case where the last bucket of a node has an unbounded upper bound.
+/// 
+/// We don't need a `Min` value, as the empty bytestring will represent the lowest possible
+/// value (and bucket lower bounds are inclusive). So we can use the empty bytestring as
+/// our lowest pivot if we want to represent all lower keys.
+/// 
+/// Elements are essentially just Keys with a special `Max` value, and thus the two types
+/// can be converted between each other.
 #[is_variant]
 pub enum Element {
+    /// Max is the max key in the domain. Only the last pivot of a Be-tree can
+    /// be Max (in which case the last bucket has an unbounded upper bound).
     Max,
     Elem{e: nat}, // TODO: place holder
 }
 
+/// Pre: elem is Element::Elem (and not `Max`).
+/// Returns the key corresponding to an Element::Elem.
 pub open spec(checked) fn to_key(elem: Element) -> Key
     recommends elem.is_Elem()
 {
     Key(elem.get_Elem_e())
 }
 
+// Returns an Element corresponding to the provided Key.
 pub open spec(checked) fn to_element(key: Key) -> Element
 {
     Element::Elem{e: key.0}
 }
 
+// Currently Key impl has large chunks copied over from Element, these ideally
+// should be refactored to take advantage of traits and reduce code duplication
+// in the future.
 impl Key {
     // TODO: place holder for seq comparison of bytes
     pub open spec(checked) fn lte(a: Key, b: Key) -> bool
@@ -44,6 +68,13 @@ impl Key {
         forall |i: int, j: int| 0 <= i < j < run.len() ==> Key::lt(run[i], run[j])
     }
 
+    /// Returns the index of the largest element in `run` that's <= to the provided
+    /// needle.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `run`: the sequence to search within.
+    /// * `needle`: the needle to search for.
     pub open spec(checked) fn largest_lte(run: Seq<Key>, needle: Key) -> int
         decreases run.len()
     {
