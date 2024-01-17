@@ -91,17 +91,17 @@ impl LikesJournal::State {
 
         let step = choose |step| LikesJournal::State::next_by(self, post, lbl, step);
         match step {
-            LikesJournal::Step::read_for_recovery(depth) => {
-                assert(LinkedJournal::State::next_by(self.i(), post.i(), Self::lbl_i(lbl), LinkedJournal::Step::read_for_recovery(depth)));
+            LikesJournal::Step::read_for_recovery() => {
+                assert(LinkedJournal::State::next(self.i(), post.i(), Self::lbl_i(lbl)));
             },
-            LikesJournal::Step::freeze_for_commit(depth) => {
-                assert( LinkedJournal::State::next_by(self.i(), post.i(), Self::lbl_i(lbl), LinkedJournal::Step::freeze_for_commit(depth)) );
+            LikesJournal::Step::freeze_for_commit() => {
+                assert( LinkedJournal::State::next(self.i(), post.i(), Self::lbl_i(lbl)) );
             },
             LikesJournal::Step::query_end_lsn() => {
-                assert( LinkedJournal::State::next_by(self.i(), post.i(), Self::lbl_i(lbl), LinkedJournal::Step::query_end_lsn()) );
+                assert( LinkedJournal::State::next(self.i(), post.i(), Self::lbl_i(lbl)) );
             },
             LikesJournal::Step::put(new_journal) => {
-                assert(LinkedJournal::State::next_by(self.i(), post.i(), Self::lbl_i(lbl), LinkedJournal::Step::put()));
+                assert(LinkedJournal::State::next(self.i(), post.i(), Self::lbl_i(lbl)));
             },
             LikesJournal::Step::discard_old(new_journal) => {
                 self.discard_old_refines(post, lbl, new_journal);

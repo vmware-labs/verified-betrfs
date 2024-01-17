@@ -214,7 +214,7 @@ impl DiskView {
         }
     }
 
-    proof fn build_lsn_addr_index_range_valid(self, root: Pointer)
+    pub proof fn build_lsn_addr_index_range_valid(self, root: Pointer)
     requires
         self.buildable(root),
         self.tj_at(root).index_domain_valid(self.build_lsn_addr_index(root)),
@@ -345,7 +345,7 @@ impl DiskView {
 // //         assert( self.build_lsn_addr_index(root).values() =~= self.representation(root) );    // TODO remove
 //     }
 
-    proof fn sub_disk_with_newer_lsn_repr_index(self, big: DiskView, ptr: Pointer)
+    pub proof fn sub_disk_with_newer_lsn_repr_index(self, big: DiskView, ptr: Pointer)
     requires 
         self.decodable(ptr),
         self.acyclic(),
@@ -724,16 +724,14 @@ state_machine!{ LikesJournal {
         Multiset::from_set(self.lsn_addr_index.values())
     }
 
-    transition!{ read_for_recovery(lbl: Label, depth: nat) {
+    transition!{ read_for_recovery(lbl: Label) {
         require lbl is ReadForRecovery;
-        require LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, pre.journal, Self::lbl_i(lbl), 
-                LinkedJournal_v::LinkedJournal::Step::read_for_recovery(depth));
+        require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
     } }
 
-    transition!{ freeze_for_commit(lbl: Label, depth: nat) {
+    transition!{ freeze_for_commit(lbl: Label) {
         require lbl is FreezeForCommit;
-        require LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, pre.journal, Self::lbl_i(lbl),
-                LinkedJournal_v::LinkedJournal::Step::freeze_for_commit(depth));
+        require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
     } }
 
     transition!{ query_end_lsn(lbl: Label) {
@@ -825,12 +823,14 @@ state_machine!{ LikesJournal {
     }
 
     #[inductive(read_for_recovery)]
-    fn read_for_recovery_inductive(pre: Self, post: Self, lbl: Label, depth: nat) {
+    fn read_for_recovery_inductive(pre: Self, post: Self, lbl: Label) {
+        reveal(LinkedJournal_v::LinkedJournal::State::next);
         reveal(LinkedJournal_v::LinkedJournal::State::next_by);
     }
    
     #[inductive(freeze_for_commit)]
-    fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label, depth: nat) {
+    fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label) {
+        reveal(LinkedJournal_v::LinkedJournal::State::next);
         reveal(LinkedJournal_v::LinkedJournal::State::next_by);
     }
 

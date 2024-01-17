@@ -304,20 +304,20 @@ impl DiskView{
     }
 
     // TODO(jonh): this lemma should just be an ensures on build_lsn_au_index_page_walk.
-    // pub proof fn build_lsn_au_index_page_walk_consistency(dv: DiskView, root: Pointer)
-    // requires
-    //     dv.decodable(root),
-    //     dv.acyclic(),
-    // ensures
-    //     Self::addr_index_consistent_with_au_index(
-    //         dv.build_lsn_addr_index(root),
-    //         Self::build_lsn_au_index_page_walk(dv, root)),
-    // decreases dv.the_rank_of(root)
-    // {
-    //     if root.is_Some() {
-    //         Self::build_lsn_au_index_page_walk_consistency(dv, dv.next(root));
-    //     }
-    // }
+    pub proof fn build_lsn_au_index_page_walk_consistency(self, root: Pointer)
+    requires
+        self.decodable(root),
+        self.acyclic(),
+    ensures
+        self.build_lsn_addr_index(root).dom() =~= self.build_lsn_au_index_page_walk(root).dom(),
+        forall |lsn| self.build_lsn_addr_index(root).contains_key(lsn) ==>
+            #[trigger] self.build_lsn_addr_index(root)[lsn].au == self.build_lsn_au_index_page_walk(root)[lsn]
+    decreases self.the_rank_of(root)
+    {
+        if root.is_Some() {
+            self.build_lsn_au_index_page_walk_consistency(self.next(root));
+        }
+    }
 
     // pub proof fn build_lsn_au_index_au_walk_consistency(dv: DiskView, root: Pointer, first: AU)
     // requires
@@ -464,10 +464,9 @@ impl DiskView{
         &&& self.decodable(root)
         &&& self.acyclic()
         &&& self.internal_au_pages_fully_linked()
-        &&& self.valid_first_au(first)
         &&& self.has_unique_lsns()
+        &&& root is Some ==> self.valid_first_au(first)
         &&& root is Some ==> self.upstream(root.unwrap())
-//        &&& root.is_Some() ==> self.boundary_lsn < self.entries[root.unwrap()].message_seq.seq_end
     }
 
     pub open spec(checked) fn wf_addrs(self) -> bool
@@ -842,10 +841,9 @@ state_machine!{ AllocationJournal {
         require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::linked_lbl(lbl));
     } }
 
-    transition!{ freeze_for_commit(lbl: Label, depth: nat) {
+    transition!{ freeze_for_commit(lbl: Label) {
         require lbl is FreezeForCommit;
-        require LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, pre.journal, Self::linked_lbl(lbl),
-            LinkedJournal_v::LinkedJournal::Step::freeze_for_commit(depth));
+        require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::linked_lbl(lbl));
 
         let frozen_journal = lbl.get_FreezeForCommit_frozen_journal();
         let frozen_first = Self::new_first(frozen_journal.tj, pre.lsn_au_index, pre.first, frozen_journal.tj.seq_start());
@@ -1035,26 +1033,19 @@ state_machine!{ AllocationJournal {
     #[invariant]
     pub open spec(checked) fn inv(self) -> bool {
         &&& self.wf()
-        &&& self.tj().disk_view.acyclic()
-
-        &&& aus_hold_contiguous_lsns(self.lsn_au_index)
         &&& self.lsn_au_index == self.tj().build_lsn_au_index(self.first)
-
+        &&& aus_hold_contiguous_lsns(self.lsn_au_index)
         &&& self.tj().au_domain_valid(self.lsn_au_index)
+
+        &&& self.tj().disk_view.pointer_is_upstream(self.tj().freshest_rec, self.first)
         &&& self.tj().disk_view.index_keys_exist_valid_entries(self.lsn_au_index)
-        &&& self.tj().disk_view.internal_au_pages_fully_linked()
-        &&& self.tj().disk_view.has_unique_lsns()
 
         &&& Self::disk_domain_valid(self.tj().disk_view, self.lsn_au_index, self.mini_allocator)
         &&& Self::mini_allocator_follows_freshest_rec(self.tj().freshest_rec, self.mini_allocator)
-
-        &&& (self.tj().freshest_rec.is_Some()
-            ==> self.tj().disk_view.valid_first_au(self.first))
-        // TODO: miniAllocator can remove means that it's not in lsnauindex.values
     }
 
     #[inductive(freeze_for_commit)]
-    fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label, depth: nat) {
+    fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label) {
         reveal(LinkedJournal::State::next);
         reveal(LinkedJournal::State::next_by );
     }
@@ -1138,7 +1129,6 @@ state_machine!{ AllocationJournal {
             }
 
             let repr = post.tj().build_lsn_au_index(post.first);  
-            // assert(post_dv.pointer_is_upstream(post.tj().freshest_rec, post.first));        
             post_dv.build_lsn_au_index_equiv_page_walk(post.tj().freshest_rec, post.first);
             post_dv.build_lsn_au_index_page_walk_domain(post.tj().freshest_rec);
             assert(repr.dom() =~= post.lsn_au_index.dom());
