@@ -203,6 +203,10 @@ impl Element {
         forall |i: int, j: int| 0 <= i < j < run.len() ==> Element::lt(run[i], run[j])
     }
 
+    // (tenzinhl): This is insane. Do we just need a `Element::lt ==> Element::lte`
+    // lemma instead?
+    // Also this is another example of when having broadcastable lemmas (that are always
+    // on) would be great.
     pub proof fn strictly_sorted_implies_sorted(run: Seq<Element>)
         requires Self::is_strictly_sorted(run)
         ensures Self::is_sorted(run)

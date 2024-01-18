@@ -60,5 +60,9 @@ impl Buffer {
     pub open spec(checked) fn empty() -> Buffer {
         Buffer{ map: Map::empty() }
     }
+
+    pub open spec(checked) fn insert(self, key: Key, msg: Message) -> Buffer {
+        Buffer { map: self.map.insert(key, msg) }
+    }
 } // end impl Buffer
 }  // end verus!

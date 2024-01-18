@@ -120,6 +120,7 @@ pub proof fn lemma_interpretation_delegation(node: Node, key: Key)
     assume(false);
 }
 
+// (tenzinhl): We think this is the `grow_refines` lemma.
 pub proof fn lemma_grow_preserves_i(node: Node)
     requires
         node.wf(),
@@ -302,7 +303,7 @@ pub proof fn lemma_split_leaf_all_keys(old_leaf: Node, split_arg: SplitArg)
 /// (x9du)
 pub proof fn lemma_interpretation(node: Node)
     requires node.wf()
-    ensures node.i().map.dom().subset_of(node.all_keys()) 
+    ensures node.i().map.dom().subset_of(node.all_keys())
     // maybe a hassle to prove
     // forall |key| node.all_keys().contains(key) ==> node.query(lbl.key) == node.i().map[key]
 {
@@ -312,23 +313,28 @@ pub proof fn lemma_interpretation(node: Node)
 #[verifier::ext_equal]
 pub struct QueryLabel {
     pub key: Key,
-    pub msg: Message
+    pub msg: Message,
 }
 
 #[verifier::ext_equal]
 pub struct InsertLabel {
     pub key: Key,
-    pub msg: Message
+    pub msg: Message,
+    pub path: Path,
 }
 
 #[verifier::ext_equal]
 pub struct AppendLabel {
     pub keys: Seq<Key>,
-    pub msgs: Seq<Message>
+    pub msgs: Seq<Message>,
 }
 
 #[verifier::ext_equal]
 pub struct InternalLabel {}
+
+// ============ ============
+// ============ TRANSITION REFINEMENTS ============
+// ============ ============
 
 pub proof fn query_refines(pre: Node, lbl: QueryLabel)
     requires
@@ -372,5 +378,91 @@ pub proof fn query_refines(pre: Node, lbl: QueryLabel)
         // )}
     }
 }
+
+pub proof fn lemma_insert_leaf_preserves_wf(node: Node, key: Key, msg: Message)
+    requires
+        node.wf(),
+        node is Leaf,
+    ensures
+        node.insert_leaf(key, msg).wf(),
+{
+    let post = node.insert_leaf(key, msg);
+    let keys = post.get_Leaf_keys();
+    let msgs = post.get_Leaf_msgs();
+
+    // Proving Goal 1
+    Key::strictly_sorted_implies_sorted(node.get_Leaf_keys());
+    Key::largest_lte_ensures(node.get_Leaf_keys(), key, Key::largest_lte(node.get_Leaf_keys(), key));
+
+    // Goal 1
+    assert(keys.len() == msgs.len());
+
+    // Goal 2
+    assert(Key::is_strictly_sorted(keys));
+}
+
+pub proof fn lemma_insert_preserves_wf(node: Node, key: Key, msg: Message, path: Path)
+    requires
+        node.wf(),
+        path.valid(),
+        // path.target().wf(), // maybe remove this, should come from valid
+        path.node == node,
+        path.key == key,
+        path.target() is Leaf,
+    ensures
+        node.insert(key, msg, path).wf(),
+{
+    // TODO(remove).
+    assume(false);
+    match node {
+        // Leaf nodes store key-value pairs sorted by key.
+        Node::Leaf{keys, msgs} => {
+            lemma_insert_leaf_is_correct(node, key, msg);
+            assert(node.insert(key, msg, path).wf());
+        },
+        Node::Index{pivots, children} => {
+            // TODO(tenzinhl): remove.
+            assume(false);
+            // assert(node.insert(key, msg, path).wf());
+        },
+    }
+
+    assert(node.insert(key, msg, path).wf());
+}
+
+pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
+    requires
+        pre.wf(),
+        lbl.path.valid(),
+        lbl.path.target().wf(), // maybe remove this, should come from valid
+        lbl.path.node == pre,
+        lbl.path.key == lbl.key,
+        lbl.path.target() is Leaf,
+    ensures
+        pre.insert(lbl.key, lbl.msg, lbl.path).wf(),
+        pre.insert(lbl.key, lbl.msg, lbl.path).i() == pre.i().insert(lbl.key, lbl.msg),
+{
+    // TODO(tenzinhl): fixy.
+    assume(false);
+    lemma_insert_leaf_is_correct(lbl.path.target(), lbl.key, lbl.msg);
+
+    // Goal 1
+    assert( pre.insert(lbl.key, lbl.msg, lbl.path).wf() );
+    
+    // Goal 2, will prove later (x9du)
+    assume(pre.insert(lbl.key, lbl.msg, lbl.path).i() == pre.i().insert(lbl.key, lbl.msg));
+}
+
+// use `lemma_grow_preserves_i` instead
+// pub proof fn grow_refines(pre: Node, lbl: QueryLabel)
+//     requires
+//         pre.wf(),
+//         pre.query(lbl.key) == lbl.msg
+//     ensures
+//         pre.i().query(lbl.key) == lbl.msg
+//     decreases pre
+// {
+// }
+
 
 }
