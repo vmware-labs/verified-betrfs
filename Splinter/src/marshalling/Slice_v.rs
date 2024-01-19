@@ -31,7 +31,8 @@ impl Slice {
         self.end - self.start
     }
 
-    pub exec fn exec_len(&self) -> usize
+    pub exec fn exec_len(&self) -> (out: usize)
+    ensures out as int == self.spec_len(),
     {
         self.end - self.start
     }

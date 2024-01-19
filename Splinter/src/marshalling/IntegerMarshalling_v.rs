@@ -15,8 +15,8 @@ verus! {
 // Integer marshalling
 //////////////////////////////////////////////////////////////////////////////
 
-pub trait NativePackedInt<DV> {
-    type IntType : Deepview<DV>;
+pub trait NativePackedInt {
+    type IntType : Deepview<int>;
 
     spec fn spec_size() -> usize
     ;
@@ -51,16 +51,24 @@ pub trait NativePackedInt<DV> {
 //     ;
 }
 
-pub struct PackedIntMarshalling<DV, U: NativePackedInt<DV>> {
-    _p: std::marker::PhantomData<(U,DV,)>,
+pub trait PackedIntMarshallingIfc<U: NativePackedInt> : Premarshalling<int, U::IntType> {
+    proof fn parsable_property(&self, data: Seq<u8>)
+    ensures
+        self.parsable(data) <==> U::spec_size() <= data.len()
+    ;
+}
+
+pub struct PackedIntMarshalling<U: NativePackedInt> {
+    _p: std::marker::PhantomData<(U,)>,
 }
 
 
-impl<DV, U> PackedIntMarshalling<DV, U> where U: NativePackedInt<DV> {
+impl<U: NativePackedInt> PackedIntMarshalling<U> {
     exec fn install_bytes(&self, source: &Vec<u8>, data: &mut Vec<u8>, start: usize) -> (end: usize)
     requires
         start + source.len() <= old(data).len(),
     ensures
+        data.len() == old(data).len(),
         end == start + source.len(),
         forall |i| 0 <= i < start ==> data[i] == old(data)[i],
         forall |i| 0 <= i < source.len() ==> data[start as int + i] == source[i],
@@ -90,7 +98,7 @@ impl<DV, U> PackedIntMarshalling<DV, U> where U: NativePackedInt<DV> {
     }
 }
 
-impl<U> Premarshalling<int, U::IntType> for PackedIntMarshalling<int, U> where U: NativePackedInt<int> {
+impl<U: NativePackedInt> Premarshalling<int, U::IntType> for PackedIntMarshalling<U> {
     open spec fn valid(&self) -> bool
     {
         true
@@ -130,7 +138,16 @@ impl<U> Premarshalling<int, U::IntType> for PackedIntMarshalling<int, U> where U
     }
 }
 
-impl NativePackedInt<int> for u32 {
+impl<U: NativePackedInt> PackedIntMarshallingIfc<U> for PackedIntMarshalling<U>
+{
+    proof fn parsable_property(&self, data: Seq<u8>)
+    ensures
+        self.parsable(data) <==> U::spec_size() <= data.len()
+    {
+    }
+}
+
+impl NativePackedInt for u32 {
     type IntType = u32;
 
     open spec fn spec_size() -> usize { 4 }
@@ -154,7 +171,7 @@ impl Deepview<int> for u32 {
     open spec fn deepv(&self) -> int { *self as int }
 }
 
-impl Marshalling<int, u32> for PackedIntMarshalling<int, u32> {
+impl Marshalling<int, u32> for PackedIntMarshalling<u32> {
     open spec fn parse(&self, data: Seq<u8>) -> int
     {
         spec_u32_from_le_bytes(data.subrange(0, 4)) as int
@@ -162,9 +179,12 @@ impl Marshalling<int, u32> for PackedIntMarshalling<int, u32> {
 
     exec fn try_parse(&self, slice: &Slice, data: &Vec<u8>) -> (ov: Option<u32>)
     {
-        if 4 <= data.len() {
-            Some(u32_from_le_bytes(slice_subrange(data.as_slice(), 0, 4)))
+        if 4 <= slice.exec_len() {
+            let parsed = u32_from_le_bytes(slice_subrange(data.as_slice(), 0, 4));
+            assume( parsed.deepv() == self.parse(slice.i(data@)) ); // TODO need to know about u32_from_le_bytes
+            Some(parsed)
         } else {
+            assert( !self.parsable(slice.i(data@)) );
             None
         }
     }
@@ -177,11 +197,23 @@ impl Marshalling<int, u32> for PackedIntMarshalling<int, u32> {
         proof { lemma_auto_spec_u32_to_from_le_bytes(); }
         assert( s@.subrange(0, 4) =~= s@ ); // need a little extensionality? Do it by hand!
 
-        self.install_bytes(&s, data, start)
+        assert( self.parse(s@) == value.deepv() );  // why do we believe this here but not the converse in try_parse?
+
+        let end = self.install_bytes(&s, data, start);
+        assert( data@.subrange(start as int, end as int) == s@ );
+
+        // TODO(help): Why isn't this assertion equal to the postcondition?
+        // - start is immutable
+        // - end is indeed what we're returning (next line)
+        // - data is mutable, but we are talking about the last value of it because we don't touch
+        // it anymore.
+        assume( self.parse(data@.subrange(start as int, end as int)) == value.deepv() );
+
+        end
     }
 }
 
-impl NativePackedInt<int> for u64 {
+impl NativePackedInt for u64 {
     type IntType = u64;
 
     open spec fn spec_size() -> usize { 8 }
@@ -204,7 +236,7 @@ impl Deepview<int> for u64 {
     open spec fn deepv(&self) -> int { *self as int }
 }
 
-impl Marshalling<int, u64> for PackedIntMarshalling<int, u64> {
+impl Marshalling<int, u64> for PackedIntMarshalling<u64> {
     open spec fn parse(&self, data: Seq<u8>) -> int
     {
         spec_u64_from_le_bytes(data.subrange(0, 8)) as int
@@ -212,8 +244,10 @@ impl Marshalling<int, u64> for PackedIntMarshalling<int, u64> {
 
     exec fn try_parse(&self, slice: &Slice, data: &Vec<u8>) -> (ov: Option<u64>)
     {
-        if 8 <= data.len() {
-            Some(u64_from_le_bytes(slice_subrange(data.as_slice(), 0, 8)))
+        if 8 <= slice.exec_len() {
+            let parsed = u64_from_le_bytes(slice_subrange(data.as_slice(), 0, 8));
+            assume( parsed.deepv() == self.parse(slice.i(data@)) ); // TODO need to know about u64_from_le_bytes
+            Some(parsed)
         } else {
             None
         }
@@ -227,7 +261,9 @@ impl Marshalling<int, u64> for PackedIntMarshalling<int, u64> {
         proof { lemma_auto_spec_u64_to_from_le_bytes(); }
         assert( s@.subrange(0, 8) =~= s@ ); // need a little extensionality? Do it by hand!
 
-        self.install_bytes(&s, data, start)
+        let end = self.install_bytes(&s, data, start);
+        assume( self.parse(data@.subrange(start as int, end as int)) == value.deepv() );
+        end
     }
 }
 

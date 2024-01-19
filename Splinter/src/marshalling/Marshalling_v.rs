@@ -76,6 +76,7 @@ pub trait Marshalling<DV, U: Deepview<DV>> : Premarshalling<DV, U> {
     exec fn try_parse(&self, slice: &Slice, data: &Vec<u8>) -> (ov: Option<U>)
     requires
         self.valid(),
+        slice.valid(data@),
     ensures
         self.parsable(slice.i(data@)) <==> ov is Some,
         self.parsable(slice.i(data@)) ==> ov.unwrap().deepv() == self.parse(slice.i(data@))
