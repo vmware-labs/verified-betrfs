@@ -365,6 +365,7 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> ResizableUniformSizedE
     requires
         self.valid(),
     {
+        proof { self.spec_uniform_size_ensures() };
         (self.total_size - Self::exec_size_of_length_field()) / self.config.exec_uniform_size()
     }
 }
