@@ -365,7 +365,7 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> ResizableUniformSizedE
     requires
         self.valid(),
     {
-        proof { self.spec_uniform_size_ensures() };
+        proof { self.config.spec_uniform_size_ensures() };
         (self.total_size - Self::exec_size_of_length_field()) / self.config.exec_uniform_size()
     }
 }
@@ -535,17 +535,22 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> SeqMarshalling<C::EltD
             // but we're calling a try_parse method and wasting a conditional.
             assert( self.length_marshalling.valid() );
             let len_slice = slice.exec_sub(0, Self::exec_size_of_length_field());
-//            let pim: PackedIntMarshalling<int, <C::LengthInt as NativePackedInt<int>>::IntType> = self.length_marshalling;
-//            assert( pim.parsable(len_slice.i(data@)) );
-//          We want to know that length_marshalling is always parsable if there's any length.
-//          C::LengthMarshalling doesn't tell us that, it's just Marshalling.
-            assert( self.length_marshalling.parsable(len_slice.i(data@)) );
+            proof {
+                self.length_marshalling.parsable_property(slice.i(data@));
+                // TODO(verus): line above should have been sufficient. https://github.com/verus-lang/verus/issues/964
+                let lm = self.length_marshalling;
+                let ld = len_slice.i(data@);
+                lm.parsable_property(ld);
+                assert( self.length_marshalling.parsable(len_slice.i(data@)) );
+            }
             let parsed_len = self.length_marshalling.try_parse(&len_slice, data);
-            assert( parsed_len is Some );
-            assume( false );
             let out = Some(C::LengthInt::as_usize(parsed_len.unwrap()));
-            assert( self.lengthable(slice.i(data@)) );
-            assert( out.unwrap() as int == self.length(slice.i(data@)) );
+
+            // not sure why this trigger is necessary. subrange forall?
+            assert( len_slice.i(data@) ==
+                slice.i(data@).subrange(0, Self::spec_size_of_length_field() as int));
+
+            assert( out.unwrap() as int == self.length(slice.i(data@)) );   // trigger
             out
         }
     }
@@ -565,6 +570,54 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> SeqMarshalling<C::EltD
 
     proof fn get_ensures(&self, slice: &Slice, data: Seq<u8>, idx: int)
     {
+        assert( self.valid() );
+        assert( slice.valid(data) );
+        assert( self.gettable(slice.i(data), idx) );
+        let i_start = (Self::spec_size_of_length_field() + idx * self.config.spec_uniform_size());
+        let i_end = (Self::spec_size_of_length_field() + idx * self.config.spec_uniform_size() + self.config.spec_uniform_size());
+        assert( i_start <= i_end );
+
+        assert( self.gettable(slice.i(data), idx) );
+        
+        assert(
+            self.spec_max_length()
+            <=
+            ((self.total_size - Self::spec_size_of_length_field()) / (self.config.spec_uniform_size() as int)) as usize
+            );
+        assert(
+            ((self.total_size - Self::spec_size_of_length_field()) / (self.config.spec_uniform_size() as int)) as usize as int
+            ==
+            ((self.total_size - Self::spec_size_of_length_field()) / (self.config.spec_uniform_size() as int))
+        );
+        assert( i_end <= self.spec_max_length() );
+        assert( idx < self.spec_max_length() );
+
+        assert( slice.start + i_end <= slice.end );
+        assume(false);
+
+        let sub_start = (Self::spec_size_of_length_field() + idx * self.config.spec_uniform_size()) as usize;
+        let sub_end = (Self::spec_size_of_length_field() + idx * self.config.spec_uniform_size() + self.config.spec_uniform_size()) as usize;
+        assert( i_end <= slice.end );
+        assert( C::LengthInt::spec_fits_in_integer(slice.end as int) ); // key
+        assert( C::LengthInt::spec_fits_in_integer(i_end) );
+        assert( sub_start as int == i_start );
+        assert( sub_start <= sub_end );
+        assert( slice.start + sub_end <= slice.end );
+
+        let a = sub_start;
+        let b = sub_end;
+        let sub = slice.spec_sub(a, b);
+        assert( sub == Slice{start: (slice.start + a) as usize, end: (slice.start + b) as usize} );
+        assert( sub.start == (slice.start + a) as usize );
+        assert( (slice.start + sub_start) as usize == slice.start + sub_start );
+        assert( (slice.start + a) as usize == slice.start + sub_start );
+        assert( sub.start == slice.start + sub_start );
+        assert( 0 <= sub_start );
+        assert( slice.start <= sub.start );
+        assert( sub.start <= sub.end );
+        assert( sub.end <= slice.end );
+        assert( slice.spec_sub(sub_start, sub_end).valid(data) );
+        assert( self.get(slice, data, idx).valid(data) );
     }
 
     exec fn try_get(&self, slice: &Slice, data: &Vec<u8>, idx: usize) -> (oeslice: Option<Slice>)

@@ -39,11 +39,8 @@ pub trait NativePackedInt {
         rc == Self::spec_fits_in_integer(x as int)
     ;
 
-    // Not clear we need these transformers now we've got Deepview stuff
-    spec fn as_int(v: Self::IntType) -> int
-    ;
-
-    exec fn as_usize(v: Self::IntType) -> usize
+    exec fn as_usize(v: Self::IntType) -> (out: usize)
+    ensures out as int == v.deepv()
     ;
 //     proof fn fits_in_integer_ensures(x: u64)
 //     ensures
@@ -161,8 +158,6 @@ impl NativePackedInt for u32 {
 
     exec fn exec_fits_in_integer(x: usize) -> bool { x <= u32::MAX as usize }
 
-    open spec fn as_int(v: u32) -> int { v as int }
-
     exec fn as_usize(v: u32) -> usize { v as usize }
 }
 
@@ -225,8 +220,6 @@ impl NativePackedInt for u64 {
     open spec fn spec_fits_in_integer(x: int) -> bool { true }
 
     exec fn exec_fits_in_integer(x: usize) -> bool { true }
-
-    open spec fn as_int(v: u64) -> int { v as int }
 
     exec fn as_usize(v: u64) -> usize { v as usize }
 }
