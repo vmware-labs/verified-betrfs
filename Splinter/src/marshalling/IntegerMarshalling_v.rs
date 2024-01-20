@@ -31,21 +31,42 @@ pub trait NativePackedInt {
         sz == Self::spec_size()
     ;
 
-    spec fn spec_fits_in_integer(x: int) -> bool
-    ;
-
-    exec fn exec_fits_in_integer(x: usize) -> (rc: bool)
-    ensures
-        rc == Self::spec_fits_in_integer(x as int)
-    ;
-
-    exec fn as_usize(v: Self::IntType) -> (out: usize)
-    ensures out as int == v.deepv()
-    ;
-//     proof fn fits_in_integer_ensures(x: u64)
-//     ensures
-//         Self::spec_fits_in_integer(x) <==> Self::min_value() <= x as int < Self::UpperBound()
+//     spec fn spec_max() -> int;
+// 
+//     exec fn exec_max() -> (out: usize)
+//     ensures out as int <= Self::spec_max()    // <= because usize might be smaller than IntType
 //     ;
+
+    // A lot of pain in these conversions because we can't assume whether
+    // usize is bigger or smaller than IntType
+
+    spec fn spec_this_fits_in_usize(v: int) -> bool { v <= usize::MAX as int }
+
+    exec fn exec_this_fits_in_usize(v: &Self::IntType) -> (out: bool)
+    ensures out == Self::spec_this_fits_in_usize(v.deepv())
+    ;
+
+    exec fn to_usize(v: Self::IntType) -> (out: usize)
+    requires
+        Self::spec_this_fits_in_usize(v.deepv()),
+    ensures
+        out as int == v.deepv()
+    ;
+
+    spec fn spec_usize_fits_in_this(u: usize) -> bool
+    ;
+
+    exec fn exec_usize_fits_in_this(u: &usize) -> (out: bool)
+    ensures out == Self::spec_usize_fits_in_this(*u)
+    ;
+
+    exec fn from_usize(u: usize) -> (out: Self::IntType)
+    requires
+        Self::spec_usize_fits_in_this(u),
+    ensures
+        out.deepv() == u as int
+    ;
+
 }
 
 pub trait PackedIntMarshallingIfc<U: NativePackedInt> : Premarshalling<int, U::IntType> {
@@ -153,12 +174,21 @@ impl NativePackedInt for u32 {
 
     exec fn exec_size() -> (sz: usize) { 4 }
 
-    // TODO(verus): sure would like a `function method`
-    open spec fn spec_fits_in_integer(x: int) -> bool { x <= u32::MAX }
+    exec fn exec_this_fits_in_usize(v: &Self::IntType) -> (out: bool)
+    {
+        if u32::BITS <= usize::BITS { true } else { *v <= usize::MAX as u32 }
+    }
 
-    exec fn exec_fits_in_integer(x: usize) -> bool { x <= u32::MAX as usize }
+    exec fn to_usize(v: Self::IntType) -> (out: usize) { v as usize }
 
-    exec fn as_usize(v: u32) -> usize { v as usize }
+    open spec fn spec_usize_fits_in_this(u: usize) -> bool { u <= u32::MAX }
+
+    exec fn exec_usize_fits_in_this(u: &usize) -> (out: bool)
+    {
+        if usize::BITS <= u32::BITS { true } else { *u <= u32::MAX as usize }
+    }
+
+    exec fn from_usize(u: usize) -> (out: Self::IntType) { u as u32 }
 }
 
 impl Deepview<int> for u32 {
@@ -217,11 +247,21 @@ impl NativePackedInt for u64 {
 
     exec fn exec_size() -> (sz: usize) { 8 }
 
-    open spec fn spec_fits_in_integer(x: int) -> bool { true }
+    exec fn exec_this_fits_in_usize(v: &Self::IntType) -> (out: bool)
+    {
+        if u64::BITS <= usize::BITS { true } else { *v <= usize::MAX as u64 }
+    }
 
-    exec fn exec_fits_in_integer(x: usize) -> bool { true }
+    exec fn to_usize(v: Self::IntType) -> (out: usize) { v as usize }
 
-    exec fn as_usize(v: u64) -> usize { v as usize }
+    open spec fn spec_usize_fits_in_this(u: usize) -> bool { u <= u64::MAX }
+
+    exec fn exec_usize_fits_in_this(u: &usize) -> (out: bool)
+    {
+        if usize::BITS <= u64::BITS { true } else { *u <= u64::MAX as usize }
+    }
+
+    exec fn from_usize(u: usize) -> (out: Self::IntType) { u as u64 }
 }
 
 impl Deepview<int> for u64 {

@@ -338,7 +338,7 @@ pub trait ResizableUniformSizedElementSeqMarshallingConfig {
 //type RUSESMC = ResizableUniformSizedElementSeqMarshallingConfig;
 
 pub struct ResizableUniformSizedElementSeqMarshalling<C: ResizableUniformSizedElementSeqMarshallingConfig> {
-    pub total_size: usize,
+    pub total_size: usize,  // capacity in bytes
     pub length_marshalling: C::LengthMarshalling,
     pub elt_marshalling: C::EltMarshalling,
     pub config: C,
@@ -401,7 +401,7 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> Premarshalling<Seq<C::
     {
         &&& forall |i| #![auto] 0 <= i < value.len() ==> self.elt_marshalling.marshallable(value[i])
         &&& forall |i| #![auto] 0 <= i < value.len() ==> self.elt_marshalling.spec_size(value[i]) == self.config.spec_uniform_size()
-        &&& C::LengthInt::spec_fits_in_integer(value.len() as int)
+        &&& C::LengthInt::spec_this_fits_in_usize(value.len() as int)
         &&& Self::spec_size_of_length_field() as int + value.len() * self.config.spec_uniform_size() as int <= self.total_size
     }
 
@@ -474,7 +474,7 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> Marshalling<Seq<C::Elt
         let mut i: usize = 0;
         while i < len
         invariant
-            0 <= i < value.len(),
+            0 <= i <= value.len(),
             //value.deepv().len() == old(value).deepv().len(),
             //forall |j| 0 <= j < start ==> data@[j] == old(data@)[j],
             //forall |j| end <= j < old(data@).len() ==> data@[j] == old(data@)[j],
@@ -512,9 +512,29 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> SeqMarshalling<C::EltD
         &self.elt_marshalling
     }
 
+    // Okay we have a new design challenge that Rob's Dafny code doesn't address.
+    // We have try_length returning a usize, since the result is used to describe
+    // exec mode Vec indices. If LengthInt is a u64 and usize is a u32,
+    // lengthable is true (because somehow the seq has 5G entries),
+    // try_length won't be able to meet its spec: lengthable requires it to return Some(v: usize),
+    // and (v as int) must be equal to the length field's value. But the length field's
+    // value could exceed the capacity of the usize.
+    // Possible solutions:
+    // * constrain usize=u64 at compile time
+    //      Feels lazy.
+    // * have try_length return u64
+    //      Will cause manipulation trouble later when we try to stuff them into vec indices
+    // * change try_length spec to allow None when it's in the mood
+    //      That kind of sloppy spec will bite us later
+    // * change lengthable to confirm that the value in the length field is smaller than usize::MAX
+    //      But then lengthable includes a parsing step. Maybe that's okay!
+    //      I'll try that first.
     open spec fn lengthable(&self, data: Seq<u8>) -> bool
     {
-        self.total_size as int <= data.len()
+        &&& self.total_size as int <= data.len()
+        &&& self.length_marshalling.parsable(data.subrange(0, Self::spec_size_of_length_field() as int))
+        &&& C::LengthInt::spec_this_fits_in_usize(
+            self.length_marshalling.parse(data.subrange(0, Self::spec_size_of_length_field() as int)))
     }
 
     open spec fn length(&self, data: Seq<u8>) -> int
@@ -543,15 +563,22 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> SeqMarshalling<C::EltD
                 lm.parsable_property(ld);
                 assert( self.length_marshalling.parsable(len_slice.i(data@)) );
             }
-            let parsed_len = self.length_marshalling.try_parse(&len_slice, data);
-            let out = Some(C::LengthInt::as_usize(parsed_len.unwrap()));
-
-            // not sure why this trigger is necessary. subrange forall?
-            assert( len_slice.i(data@) ==
-                slice.i(data@).subrange(0, Self::spec_size_of_length_field() as int));
-
-            assert( out.unwrap() as int == self.length(slice.i(data@)) );   // trigger
-            out
+            let o_parsed_len = self.length_marshalling.try_parse(&len_slice, data);
+            if o_parsed_len.is_none() {
+                assert( !self.lengthable(slice.i(data@)) );
+                None
+            } else {
+                assert( slice.i(data@).subrange(0, Self::spec_size_of_length_field() as int) == len_slice.i(data@) );   //subrange trigger
+                let parsed_len: <C::LengthInt as NativePackedInt>::IntType = o_parsed_len.unwrap();
+                if !C::LengthInt::exec_this_fits_in_usize(&parsed_len) {
+                    //assert( !self.lengthable(slice.i(data@)) );
+                    None
+                } else {
+                    let out = Some(C::LengthInt::to_usize(parsed_len));
+                    assert( out.unwrap() as int == self.length(slice.i(data@)) );   // trigger
+                    out
+                }
+            }
         }
     }
 
@@ -598,8 +625,8 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> SeqMarshalling<C::EltD
         let sub_start = (Self::spec_size_of_length_field() + idx * self.config.spec_uniform_size()) as usize;
         let sub_end = (Self::spec_size_of_length_field() + idx * self.config.spec_uniform_size() + self.config.spec_uniform_size()) as usize;
         assert( i_end <= slice.end );
-        assert( C::LengthInt::spec_fits_in_integer(slice.end as int) ); // key
-        assert( C::LengthInt::spec_fits_in_integer(i_end) );
+//        assert( C::LengthInt::spec_fits_in_int_type(slice.end as int) ); // key
+//        assert( C::LengthInt::spec_fits_in_int_type(i_end) );
         assert( sub_start as int == i_start );
         assert( sub_start <= sub_end );
         assert( slice.start + sub_end <= slice.end );
@@ -662,7 +689,7 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> SeqMarshalling<C::EltD
         true
 //x        &&& self.lengthable(data)
 //x        &&& newlen <= self.spec_max_length() as int
-//x        &&& C::LengthInt::spec_fits_in_integer(newlen)
+//x        &&& C::LengthInt::spec_fits_in_int_type(newlen)
     }
     
     exec fn is_resizable(&self, slice: &Slice, data: &Vec<u8>, newlen: usize) -> (r: bool)
@@ -671,7 +698,7 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> SeqMarshalling<C::EltD
 //x        let olen = self.try_length(slice, data);
 //x        &&& olen.is_some()
 //x        &&& newlen <= self.exec_max_length()
-//x        &&& C::LengthInt::exec_fits_in_integer(newlen)
+//x        &&& C::LengthInt::exec_fits_in_int_type(newlen)
     }
 
     exec fn exec_resize(&self, slice: &Slice, data: &mut Vec<u8>, newlen: int)
