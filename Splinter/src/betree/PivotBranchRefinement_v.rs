@@ -45,7 +45,7 @@ pub open spec(checked) fn get_keys_or_pivots(node: Node) -> Seq<Key>
     if node is Leaf { node.get_Leaf_keys() } else { node.get_Index_pivots() }
 }
 
-pub open spec(checked) fn le_route(node: Node, key: Key, i: int) -> bool
+pub open spec(checked) fn lte_route(node: Node, key: Key, i: int) -> bool
     recommends node.wf()
 {
     0 <= i <= node.route(key)
@@ -64,7 +64,7 @@ pub proof fn lemma_route_ensures(node: Node, key: Key)
         // TODO: this causes WARNING 'if' cannot be used in patterns
         let s = get_keys_or_pivots(node);
         &&& -1 <= #[trigger] node.route(key) < s.len()
-        &&& forall |i| #[trigger] le_route(node, key, i) ==> Key::lte(s[i], key)
+        &&& forall |i| #[trigger] lte_route(node, key, i) ==> Key::lte(s[i], key)
         &&& forall |i| #[trigger] gt_route(node, key, i) ==> Key::lt(key, s[i])
         &&& s.contains(key) ==> 0 <= node.route(key) && s[node.route(key)] == key
     })
@@ -78,7 +78,7 @@ pub proof fn lemma_route_auto()
     ensures forall |node: Node, key: Key| node.wf() ==> {
         let s = get_keys_or_pivots(node);
         &&& -1 <= #[trigger] node.route(key) < s.len()
-        &&& forall |i| #[trigger] le_route(node, key, i) ==> Key::lte(s[i], key)
+        &&& forall |i| #[trigger] lte_route(node, key, i) ==> Key::lte(s[i], key)
         &&& forall |i| #[trigger] gt_route(node, key, i) ==> Key::lt(key, s[i])
         &&& s.contains(key) ==> 0 <= node.route(key) && s[node.route(key)] == key
     }
@@ -86,7 +86,7 @@ pub proof fn lemma_route_auto()
     assert forall |node: Node, key: Key| node.wf() implies {
         let s = get_keys_or_pivots(node);
         &&& -1 <= #[trigger] node.route(key) < s.len()
-        &&& forall |i| #[trigger] le_route(node, key, i) ==> Key::lte(s[i], key)
+        &&& forall |i| #[trigger] lte_route(node, key, i) ==> Key::lte(s[i], key)
         &&& forall |i| #[trigger] gt_route(node, key, i) ==> Key::lt(key, s[i])
         &&& s.contains(key) ==> 0 <= node.route(key) && s[node.route(key)] == key
     } by {
@@ -407,69 +407,40 @@ pub proof fn lemma_insert_preserves_wf(node: Node, key: Key, msg: Message, path:
             let r = node.route(key);
             lemma_route_auto();
             assert(0 <= r+1 < children.len());
-            // dont need this
-            // lemma_insert_preserves_wf(children[r+1], key, msg, path.subpath());
-            // assert(path.subpath().node == children[r+1]);
-            // assert(children[r+1].insert(key, msg, path.subpath()).wf());
+
+            lemma_insert_preserves_wf(children[r+1], key, msg, path.subpath());
 
             // automatically proven, but keeping to get rid of recommendation not met
-            assert(post_pivots.len() == post_children.len() - 1);
-
-            assert(forall |i| 0 <= i < children.len() && i != r+1 ==> children[i] == post_children[i]);
             // change everything to pivots since they are the same
-            assert(pivots == post_pivots);
-            assert(forall |i| 0 <= i < children.len() - 1 ==> node.all_keys_below_bound(i));
-            assert(forall |i| 0 < i < children.len() ==> node.all_keys_above_bound(i));
 
+            // LAST GOAL!!!
             assume(post_children[r+1].all_keys() == children[r+1].all_keys().insert(key));
 
             if (r+1 < children.len() - 1) {
-                assert forall |k| post_children[r+1].all_keys().contains(k)
-                    implies #[trigger] Key::lt(k, post_pivots[r+1])
-                    by {
-                        if (k == key) {
-                            assert(gt_route(node, key, r+1));
-                            assert(Key::lt(key, pivots[r+1]));
-                        } else {
-                            // assert(children[r+1].all_keys().contains(k));
-                            assert(node.all_keys_below_bound(r+1));
-                            // assert(Key::lt(k, pivots[r+1]));
-                            // assert(Key::lt(k, post_pivots[r+1]));
-                        }
-                    }
+                assert(node.all_keys_below_bound(r+1));
+                assert(gt_route(node, key, r+1));
+                assert(Key::lt(key, pivots[r+1]));
                 assert(post.all_keys_below_bound(r+1));
             }
-            assume(false);
+
             if (0 <= r) {
+                assert(node.all_keys_above_bound(r+1));
+                assert(lte_route(node, key, r));
+                assert(Key::lte(pivots[r], key));
                 assert(post.all_keys_above_bound(r+1));
             }
-            
-            // TODO: Everything below should be super obvious. Shorten?
-            
 
             assert forall |i| 0 <= i < post_children.len() - 1 && i != r+1
-                implies post.all_keys_below_bound(i)
-                by {
-                    assert forall |key| children[i].all_keys().contains(key)
-                        implies #[trigger] Key::lt(key, pivots[i])
-                        by {
-                            assert(node.all_keys_below_bound(i));
-                        }
-                    assert(forall |key| post_children[i].all_keys().contains(key)
-                        ==> #[trigger] Key::lt(key, post_pivots[i]));
-                }
+                implies post.all_keys_below_bound(i) by
+            {
+                assert(node.all_keys_below_bound(i));
+            }
 
             assert forall |i| 0 < i < post_children.len() && i != r+1
-                implies post.all_keys_above_bound(i)
-                by {
-                    assert forall |key| children[i].all_keys().contains(key)
-                        implies #[trigger] Key::lte(pivots[i-1], key)
-                        by {
-                            assert(node.all_keys_above_bound(i));
-                        }
-                        assert(forall |key| post_children[i].all_keys().contains(key)
-                            ==> #[trigger] Key::lte(post_pivots[i-1], key))
-                }
+                implies post.all_keys_above_bound(i) by
+            {
+                assert(node.all_keys_above_bound(i));
+            }
         },
     }
 }
