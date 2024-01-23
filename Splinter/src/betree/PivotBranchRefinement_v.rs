@@ -300,7 +300,7 @@ pub proof fn lemma_split_leaf_all_keys(old_leaf: Node, split_arg: SplitArg)
     assume(false);
 }
 
-/// (x9du)
+/// (x9du): not sure if this is correct or useful
 pub proof fn lemma_interpretation(node: Node)
     requires node.wf()
     ensures node.i().map.dom().subset_of(node.all_keys())
@@ -346,20 +346,18 @@ pub proof fn query_refines(pre: Node, lbl: QueryLabel)
 {
     let r = pre.route(lbl.key);
     lemma_route_auto();
-    // TODO: do something like PivotTable::route_lemma_auto
-    // lemma_route_ensures(pre, lbl.key);
     if pre is Index {
         let pivots = pre.get_Index_pivots();
         let children = pre.get_Index_children();
-        assert(0 <= r+1 < children.len());
+
         assert(children[r+1].wf());
-        // lemma_route_ensures(children[r+1], lbl.key);
-        assert(lbl.msg == children[r+1].query(lbl.key));
+        assert(lbl.msg == children[r+1].query(lbl.key)); // subgoal 1
 
         query_refines(children[r+1], lbl);
-        assert(children[r+1].i().query(lbl.key) == lbl.msg);
+        assert(children[r+1].i().query(lbl.key) == lbl.msg); // subgoal 2
+
         if pre.i().map.contains_key(lbl.key) {
-            assert(children[r+1].i().map.contains_key(lbl.key)); //fail but should be true by i()
+            assert(children[r+1].i().map.contains_key(lbl.key));
             lemma_interpretation_delegation(pre, lbl.key);
             assert(pre.i().map[lbl.key] == children[r+1].i().map[lbl.key]);
         } else {
@@ -369,13 +367,7 @@ pub proof fn query_refines(pre: Node, lbl: QueryLabel)
             }
             assert(!children[r+1].i().map.contains_key(lbl.key));
         }
-        assert(pre.i().query(lbl.key) == children[r+1].i().query(lbl.key));
-
-        // i() def copied here for convenience
-        // Buffer{map: Map::new(
-        //     |key| children[self.route(key) + 1].i().map.contains_key(key),
-        //     |key| children[self.route(key) + 1].i().map[key]
-        // )}
+        assert(pre.i().query(lbl.key) == children[r+1].i().query(lbl.key)); // subgoal 3
     }
 }
 
@@ -386,19 +378,8 @@ pub proof fn lemma_insert_leaf_preserves_wf(node: Node, key: Key, msg: Message)
     ensures
         node.insert_leaf(key, msg).wf(),
 {
-    let post = node.insert_leaf(key, msg);
-    let keys = post.get_Leaf_keys();
-    let msgs = post.get_Leaf_msgs();
-
-    // Proving Goal 1
     Key::strictly_sorted_implies_sorted(node.get_Leaf_keys());
     Key::largest_lte_ensures(node.get_Leaf_keys(), key, Key::largest_lte(node.get_Leaf_keys(), key));
-
-    // Goal 1
-    assert(keys.len() == msgs.len());
-
-    // Goal 2
-    assert(Key::is_strictly_sorted(keys));
 }
 
 pub proof fn lemma_insert_preserves_wf(node: Node, key: Key, msg: Message, path: Path)
@@ -411,30 +392,78 @@ pub proof fn lemma_insert_preserves_wf(node: Node, key: Key, msg: Message, path:
         path.target() is Leaf,
     ensures
         node.insert(key, msg, path).wf(),
+    decreases node
 {
-    // TODO(remove).
-    assume(false);
     match node {
-        // Leaf nodes store key-value pairs sorted by key.
         Node::Leaf{keys, msgs} => {
-            lemma_insert_leaf_is_correct(node, key, msg);
-            assert(node.insert(key, msg, path).wf());
+            lemma_insert_leaf_preserves_wf(node, key, msg);
         },
         Node::Index{pivots, children} => {
-            // TODO(tenzinhl): remove.
-            assume(false);
-            // assert(node.insert(key, msg, path).wf());
+            let post = node.insert(key, msg, path);
+            assert(post is Index);
+            let post_pivots = post.get_Index_pivots();
+            let post_children = post.get_Index_children();
+
+            let r = node.route(key);
+            lemma_route_auto();
+            assert(0 <= r+1 < children.len());
+            lemma_insert_preserves_wf(children[r+1], key, msg, path.subpath());
+            assert(path.subpath().node == children[r+1]);
+            assert(children[r+1].insert(key, msg, path.subpath()).wf());
+
+            // automatically proven, but keeping to get rid of recommendation not met
+            assert(post_pivots.len() == post_children.len() - 1);
+
+            if (r+1 < children.len() - 1) {
+                assert(post.all_keys_below_bound(r+1));
+            }
+            assert(post.all_keys_above_bound(r+1));
+
+            // TODO: Everything below should be super obvious. Shorten?
+            assert(forall |i| 0 <= i < children.len() && i != r+1 ==> children[i] == post_children[i]);
+            assert(pivots == post_pivots);
+            assert(forall |i| 0 <= i < children.len() - 1 ==> node.all_keys_below_bound(i));
+            assert(forall |i| 0 < i < children.len() ==> node.all_keys_above_bound(i));
+
+            assert forall |i| 0 <= i < post_children.len() - 1 && i != r+1
+                implies post.all_keys_below_bound(i)
+                by {
+                    assert forall |key| children[i].all_keys().contains(key)
+                        implies #[trigger] Key::lt(key, pivots[i])
+                        by {
+                            assert(node.all_keys_below_bound(i));
+                        }
+                    assert(forall |key| post_children[i].all_keys().contains(key)
+                        ==> #[trigger] Key::lt(key, post_pivots[i]));
+                }
+
+            assert forall |i| 0 < i < post_children.len() && i != r+1
+                implies post.all_keys_above_bound(i)
+                by {
+                    assert forall |key| children[i].all_keys().contains(key)
+                        implies #[trigger] Key::lte(pivots[i-1], key)
+                        by {
+                            assert(node.all_keys_above_bound(i));
+                        }
+                        assert(forall |key| post_children[i].all_keys().contains(key)
+                            ==> #[trigger] Key::lte(post_pivots[i-1], key))
+                }
+            
+            assert(children.len() == post_children.len());
+            assert(forall |i| (0 <= i < post_children.len() && i != r + 1) ==> post_children[i].wf());
+
+            // Remaining goal: show that the modified child node still only has keys
+            // for the pivots it falls between.
+            // assert(children[r+1].all_keys() == );
         },
     }
-
-    assert(node.insert(key, msg, path).wf());
 }
 
 pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
     requires
         pre.wf(),
         lbl.path.valid(),
-        lbl.path.target().wf(), // maybe remove this, should come from valid
+        // lbl.path.target().wf(), // maybe remove this, should come from valid
         lbl.path.node == pre,
         lbl.path.key == lbl.key,
         lbl.path.target() is Leaf,
@@ -447,7 +476,7 @@ pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
     lemma_insert_leaf_is_correct(lbl.path.target(), lbl.key, lbl.msg);
 
     // Goal 1
-    assert( pre.insert(lbl.key, lbl.msg, lbl.path).wf() );
+    assert(pre.insert(lbl.key, lbl.msg, lbl.path).wf());
     
     // Goal 2, will prove later (x9du)
     assume(pre.insert(lbl.key, lbl.msg, lbl.path).i() == pre.i().insert(lbl.key, lbl.msg));
