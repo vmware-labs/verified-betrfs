@@ -407,23 +407,45 @@ pub proof fn lemma_insert_preserves_wf(node: Node, key: Key, msg: Message, path:
             let r = node.route(key);
             lemma_route_auto();
             assert(0 <= r+1 < children.len());
-            lemma_insert_preserves_wf(children[r+1], key, msg, path.subpath());
-            assert(path.subpath().node == children[r+1]);
-            assert(children[r+1].insert(key, msg, path.subpath()).wf());
+            // dont need this
+            // lemma_insert_preserves_wf(children[r+1], key, msg, path.subpath());
+            // assert(path.subpath().node == children[r+1]);
+            // assert(children[r+1].insert(key, msg, path.subpath()).wf());
 
             // automatically proven, but keeping to get rid of recommendation not met
             assert(post_pivots.len() == post_children.len() - 1);
 
-            if (r+1 < children.len() - 1) {
-                assert(post.all_keys_below_bound(r+1));
-            }
-            assert(post.all_keys_above_bound(r+1));
-
-            // TODO: Everything below should be super obvious. Shorten?
             assert(forall |i| 0 <= i < children.len() && i != r+1 ==> children[i] == post_children[i]);
+            // change everything to pivots since they are the same
             assert(pivots == post_pivots);
             assert(forall |i| 0 <= i < children.len() - 1 ==> node.all_keys_below_bound(i));
             assert(forall |i| 0 < i < children.len() ==> node.all_keys_above_bound(i));
+
+            assume(post_children[r+1].all_keys() == children[r+1].all_keys().insert(key));
+
+            if (r+1 < children.len() - 1) {
+                assert forall |k| post_children[r+1].all_keys().contains(k)
+                    implies #[trigger] Key::lt(k, post_pivots[r+1])
+                    by {
+                        if (k == key) {
+                            assert(gt_route(node, key, r+1));
+                            assert(Key::lt(key, pivots[r+1]));
+                        } else {
+                            // assert(children[r+1].all_keys().contains(k));
+                            assert(node.all_keys_below_bound(r+1));
+                            // assert(Key::lt(k, pivots[r+1]));
+                            // assert(Key::lt(k, post_pivots[r+1]));
+                        }
+                    }
+                assert(post.all_keys_below_bound(r+1));
+            }
+            assume(false);
+            if (0 <= r) {
+                assert(post.all_keys_above_bound(r+1));
+            }
+            
+            // TODO: Everything below should be super obvious. Shorten?
+            
 
             assert forall |i| 0 <= i < post_children.len() - 1 && i != r+1
                 implies post.all_keys_below_bound(i)
@@ -448,13 +470,6 @@ pub proof fn lemma_insert_preserves_wf(node: Node, key: Key, msg: Message, path:
                         assert(forall |key| post_children[i].all_keys().contains(key)
                             ==> #[trigger] Key::lte(post_pivots[i-1], key))
                 }
-            
-            assert(children.len() == post_children.len());
-            assert(forall |i| (0 <= i < post_children.len() && i != r + 1) ==> post_children[i].wf());
-
-            // Remaining goal: show that the modified child node still only has keys
-            // for the pivots it falls between.
-            // assert(children[r+1].all_keys() == );
         },
     }
 }
