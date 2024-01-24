@@ -66,8 +66,22 @@ impl AllocationJournal::Label {
     }
 }
 
-// impl DiskView{
-
+impl DiskView{
+    // TODO(jonh): this lemma should just be an ensures on build_lsn_au_index_page_walk.
+    pub proof fn build_lsn_au_index_page_walk_consistency(self, root: Pointer)
+    requires
+        self.decodable(root),
+        self.acyclic(),
+    ensures
+        self.build_lsn_addr_index(root).dom() =~= self.build_lsn_au_index_page_walk(root).dom(),
+        forall |lsn| self.build_lsn_addr_index(root).contains_key(lsn) ==>
+            #[trigger] self.build_lsn_addr_index(root)[lsn].au == self.build_lsn_au_index_page_walk(root)[lsn]
+    decreases self.the_rank_of(root)
+    {
+        if root.is_Some() {
+            self.build_lsn_au_index_page_walk_consistency(self.next(root));
+        }
+    }
 //     // can crop
 //     // if next is present, then next is the same
 
@@ -126,7 +140,7 @@ impl AllocationJournal::Label {
 //     //         } 
 //     //     }
 //     // }
-// }
+}
 
 // The thrilling climax, the actual proof goal we want to use in lower
 // refinement layers.
@@ -169,9 +183,9 @@ impl AllocationJournal::State {
         if post.tj().freshest_rec is Some {
             post.tj().disk_view.build_lsn_addr_index_domain_valid(self.tj().freshest_rec);
         }
+
         assert(post.i().lsn_addr_index =~= lsn_addr_index_post);
         assert(self.lsn_au_index == self.tj().build_lsn_au_index(self.first));
-        assert(lsn_addr_index_post.dom() =~= post.lsn_au_index.dom());
 
         self.tj().disk_view.build_lsn_au_index_equiv_page_walk(self.tj().freshest_rec, self.first);
         self.tj().disk_view.build_lsn_au_index_page_walk_consistency(self.tj().freshest_rec);
