@@ -144,18 +144,7 @@ impl AllocationJournal::State {
     {
         reveal(LikesJournal::State::next_by);
         reveal(LinkedJournal::State::next_by);
-
-        assert( LinkedJournal_v::LinkedJournal::State::next_by(self.journal, new_journal, 
-            Self::linked_lbl(lbl), LinkedJournal_v::LinkedJournal::Step::internal_journal_marshal(cut, addr)) );
-
-        let post_addr_index = LikesJournal_v::lsn_addr_index_append_record(
-            self.i().lsn_addr_index,
-            self.journal.unmarshalled_tail.discard_recent(cut),
-            addr
-        );
-
         self.tj().disk_view.sub_disk_repr_index(post.tj().disk_view, self.tj().freshest_rec);
-        assert(post_addr_index == post.i().lsn_addr_index);
     }
 
     pub proof fn next_refines(self, post: Self, lbl: AllocationJournal::Label)
