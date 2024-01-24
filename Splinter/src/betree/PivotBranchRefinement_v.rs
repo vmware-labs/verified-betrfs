@@ -393,16 +393,12 @@ pub proof fn lemma_insert_inserts_to_all_keys(node: Node, key: Key, msg: Message
         node.insert(key, msg, path).all_keys() == node.all_keys().insert(key)
 {
     // TODO: finish!
-    assume(false);
     match node {
         Node::Leaf{keys, msgs} => {
             lemma_insert_leaf_is_correct(node, key, msg);
-
-            // Works!
-            assert(node.insert(key, msg, path).all_keys() =~~= node.all_keys().insert(key));
         },
         Node::Index{pivots, children} => {
-            
+            assert(node.insert(key, msg, path).all_keys() == node.all_keys().insert(key));
         },
     }
     // let pre = node.all_keys();
