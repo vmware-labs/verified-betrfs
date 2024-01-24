@@ -14,7 +14,7 @@ use crate::spec::FloatingSeq_t::*;
 use crate::spec::MapSpec_t;
 use crate::spec::MapSpec_t::*;
 use crate::spec::Messages_t::*;
-use crate::spec::Option_t;
+// use crate::spec::Option_t;
 use crate::spec::TotalKMMap_t;
 
 use crate::abstract_system::AbstractCrashAwareJournal_v;
@@ -64,7 +64,7 @@ verus! {
                     _ => true,
                 }
             &&& match self.in_flight {
-                    Option_t::Option::Some(v) => v.value.wf(),
+                    Some(v) => v.value.wf(),
                     _ => true
                 }
         }

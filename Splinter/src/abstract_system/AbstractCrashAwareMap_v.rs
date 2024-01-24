@@ -12,7 +12,7 @@ use state_machines_macros::state_machine;
 #[allow(unused_imports)]
 use vstd::{map::*};
 
-use crate::spec::Option_t::*;
+// use crate::spec::Option_t::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 
@@ -129,7 +129,7 @@ state_machine!{ CrashTolerantMap {
         freeze_map_internal(lbl: Label, frozen_map: StampedMap, new_map: AbstractMap::State) {
             require lbl.is_InternalLabel();
             require pre.ephemeral.is_Known();
-            require pre.in_flight.is_None();
+            require pre.in_flight is None;
             require AbstractMap::State::next(
                 pre.ephemeral.get_Known_v(), 
                 new_map,
@@ -157,17 +157,17 @@ state_machine!{ CrashTolerantMap {
         commit_start(lbl: Label) {
             require lbl.is_CommitStartLabel();
             require pre.ephemeral.is_Known();
-            require pre.in_flight.is_Some();
+            require pre.in_flight is Some;
             require pre.persistent.seq_end <= lbl.get_CommitStartLabel_new_boundary_lsn();
-            require lbl.get_CommitStartLabel_new_boundary_lsn() == pre.in_flight.get_Some_0().seq_end;
+            require lbl.get_CommitStartLabel_new_boundary_lsn() == pre.in_flight.unwrap().seq_end;
         }
     }
 
     transition!{
         commit_complete(lbl: Label) {
             require lbl.is_CommitCompleteLabel();
-            require pre.in_flight.is_Some();
-            update persistent = pre.in_flight.get_Some_0();
+            require pre.in_flight is Some;
+            update persistent = pre.in_flight.unwrap();
             update in_flight = Option::None;
         }
     }
