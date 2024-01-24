@@ -1028,7 +1028,7 @@ state_machine!{ AllocationJournal {
        
     #[inductive(query_end_lsn)]
     fn query_end_lsn_inductive(pre: Self, post: Self, lbl: Label) { }
-       
+
     #[inductive(put)]
     fn put_inductive(pre: Self, post: Self, lbl: Label, new_journal: LinkedJournal_v::LinkedJournal::State) { 
         reveal(LinkedJournal::State::next);
@@ -1044,7 +1044,7 @@ state_machine!{ AllocationJournal {
     }
 
     #[inductive(discard_old)]
-    fn discard_old_inductive(pre: Self, post: Self, lbl: Label, new_journal: LinkedJournal::State) {
+    pub fn discard_old_inductive(pre: Self, post: Self, lbl: Label, new_journal: LinkedJournal::State) {
         assert( post.wf() );
 
         let start_lsn = lbl.get_DiscardOld_start_lsn();
@@ -1095,7 +1095,7 @@ state_machine!{ AllocationJournal {
     }
 
     #[inductive(internal_journal_marshal)]
-    fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal::State) {
+    pub fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal::State) {
         let msgs = pre.journal.unmarshalled_tail.discard_recent(cut);
         let pre_dv = pre.tj().disk_view;
         let pre_root = pre.tj().freshest_rec;
