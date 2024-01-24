@@ -8,7 +8,7 @@ use vstd::prelude::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 use crate::betree::Buffer_v::*;
-use crate::betree::Domain_v::*;
+// use crate::betree::Domain_v::*;
 use crate::betree::PivotBranch_v::*;
 
 verus! {
