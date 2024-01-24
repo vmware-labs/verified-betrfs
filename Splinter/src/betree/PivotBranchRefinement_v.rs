@@ -386,13 +386,14 @@ pub proof fn lemma_insert_inserts_to_all_keys(node: Node, key: Key, msg: Message
     requires
         node.wf(),
         path.valid(),
-        // path.target().wf(), // maybe remove this, should come from valid
         path.node == node,
         path.key == key,
         path.target() is Leaf,
     ensures
-        node.insert(key, msg, path).all_keys() =~~= node.all_keys().insert(key)
+        node.insert(key, msg, path).all_keys() == node.all_keys().insert(key)
 {
+    // TODO: finish!
+    assume(false);
     match node {
         Node::Leaf{keys, msgs} => {
             lemma_insert_leaf_is_correct(node, key, msg);
@@ -419,7 +420,6 @@ pub proof fn lemma_insert_preserves_wf(node: Node, key: Key, msg: Message, path:
     requires
         node.wf(),
         path.valid(),
-        // path.target().wf(), // maybe remove this, should come from valid
         path.node == node,
         path.key == key,
         path.target() is Leaf,
@@ -433,45 +433,25 @@ pub proof fn lemma_insert_preserves_wf(node: Node, key: Key, msg: Message, path:
         },
         Node::Index{pivots, children} => {
             let post = node.insert(key, msg, path);
-            assert(post is Index);
+            assert(post is Index); // For recommends
             let post_pivots = post.get_Index_pivots();
             let post_children = post.get_Index_children();
 
             let r = node.route(key);
             lemma_route_auto();
-            assert(0 <= r+1 < children.len());
+            assert(0 <= r+1 < children.len()); // For recommends
 
             lemma_insert_preserves_wf(children[r+1], key, msg, path.subpath());
 
-            // Lengths of new pivots and children match pre state. (Using this
-            // to suppress a bunch of recommendation warnings).
+            // For recommends
             assert(pivots.len() == post_pivots.len());
             assert(children.len() == post_children.len());
 
-            // LAST GOAL!!! BEGIN
-            let new_child = post_children[r+1];
-            let keys_post = post_children[r+1].all_keys();
-            let keys_pre = children[r+1].all_keys();
+            // Subgoal 1, needed for asserting that unchanged keys in children[r+1].all_keys() still satisfy bounds
+            lemma_insert_inserts_to_all_keys(children[r+1], key, msg, path.subpath());
+            assert(post_children[r+1].all_keys() == children[r+1].all_keys().insert(key));
 
-            // Does not believe this
-            // assert(keys_post.contains(key));
-
-            // TODO: REMOVE
-            assume(false);
-            assert forall |k| keys_post.contains(k) && k != key implies keys_pre.contains(k) by
-            {
-                match new_child {
-                    Node::Leaf{keys, msgs} => {
-
-                    },
-                    Node::Index{pivots, children} => {
-
-                    }
-                }
-            }
-            // ===> LAST GOAL!!! END (Trying to show that the changed child's keys still
-            // fall within the pivots its bounded by)
-            assert(keys_post.subset_of(keys_pre.insert(key)));
+            // Subgoal 2: the only changed child, r+1, satisfies all keys bounds
 
             if (r+1 < children.len() - 1) {
                 assert(node.all_keys_below_bound(r+1));
@@ -487,10 +467,11 @@ pub proof fn lemma_insert_preserves_wf(node: Node, key: Key, msg: Message, path:
                 assert(post.all_keys_above_bound(r+1));
             }
 
+            // Subgoal 3: the unchanged children still satisfy all keys bounds
+
             assert forall |i| 0 <= i < post_children.len() - 1 && i != r+1
                 implies post.all_keys_below_bound(i) by
             {
-
                 assert(node.all_keys_below_bound(i));
             }
 

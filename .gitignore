@@ -19,3 +19,5 @@
 
 # Ignore Verus' usage statistics directory
 **/.record-history/
+
+**/.verus-log/
