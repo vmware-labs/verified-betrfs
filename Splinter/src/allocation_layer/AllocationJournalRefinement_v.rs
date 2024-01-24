@@ -82,64 +82,6 @@ impl DiskView{
             self.build_lsn_au_index_page_walk_consistency(self.next(root));
         }
     }
-//     // can crop
-//     // if next is present, then next is the same
-
-//     // representation
-
-
-//     // pub proof fn build_tight_preserves_crop(self, root: Pointer, depth: nat)
-//     // requires 
-//     //     self.decodable(root),
-//     //     self.acyclic(),
-//     //     self.block_in_bounds(root),
-//     // ensures 
-//     //     self.build_tight(root).decodable(root),
-//     //     self.build_tight(root).block_in_bounds(root),
-//     //     self.build_tight(root).can_crop(root, depth) == self.can_crop(root, depth),
-//     //     // self.build_tight(root).pointer_after_crop(root, depth) == self.pointer_after_crop(root, depth)
-//     // decreases depth
-//     // {
-//     //     DiskView::tight_interp(self, root, self.build_tight(root));
-//     //     if depth > 0 {
-//     //         if root is Some {
-//     //             self.build_tight_preserves_crop(self.next(root), (depth-1) as nat);
-
-//     //             assert(self.build_tight(self.next(root)).can_crop(self.next(root), (depth-1) as nat) 
-//     //                 == self.can_crop(self.next(root), (depth-1) as nat));
-
-//     //             self.build_tight_shape(root);
-
-//     //             if self.can_crop(root, depth) {
-//     //                 assume(false);
-//     //             } else if self.build_tight(root).can_crop(root, depth) {
-//     //                 assert(root.is_Some());
-//     //                 assert(self.build_tight(root).can_crop(self.next(root), (depth-1) as nat));
-//     //                 assert(self.next(root) != root);
-
-
-//     //                 // self.build_tight(self.next(root)) == Self{entries: self.build_tight(root).entries.remove(root.unwrap()), ..self})
-
-//     //                 // self.build_tight(self.next(root)).can_crop(self.next(root), (depth-1) as nat) is false
-
-
-//     //                 // assert(self.build_tight(root).next(root) == self.next(root));
-
-//     //                 // assert(self.build_tight(self.next(root)).can_crop(self.next(root), (depth-1) as nat));
-
-//     //                 // assert(self.build_tight(root).can_crop(self.next(root), (depth-1) as nat) == 
-//     //                 //     self.can_crop(self.next(root), (depth-1) as nat)
-//     //                 // );
-//     //                 assert(false);
-//     //             }
-//     //     //         self.build_tight_shape(root);
-//     //     //     }
-//     //     //     // if self.next(root) is Some {
-//     //     //     //     // we are saying this isn't decodable
-//     //     //     //     self.build_tight_ranks(self.next(root));
-//     //         } 
-//     //     }
-//     // }
 }
 
 // The thrilling climax, the actual proof goal we want to use in lower
@@ -195,45 +137,67 @@ impl AllocationJournal::State {
         assert(self.tj().discard_old_cond(start_lsn, i_keep_addrs, new_journal.truncated_journal));
     }
 
-//     pub proof fn next_refines(self, post: Self, lbl: AllocationJournal::Label)
-//     requires
-//         self.inv(),
-//         post.inv(),
-//         AllocationJournal::State::next(self, post, lbl),
-//     ensures
-//         LikesJournal::State::next(self.i(), post.i(), lbl.i()),
-//     {
-//         reveal(LikesJournal::State::next_by);  // unfortunate defaults
-//         reveal(LikesJournal::State::next);
-//         reveal(AllocationJournal::State::next_by);
-//         reveal(AllocationJournal::State::next);
+    pub proof fn internal_journal_marshal_refines(self, post: Self, lbl: AllocationJournal::Label, 
+        cut: LSN, addr: Address, new_journal: LinkedJournal::State)
+        requires self.inv(), post.inv(), Self::internal_journal_marshal(self, post, lbl, cut, addr, new_journal)
+        ensures LikesJournal::State::next_by(self.i(), post.i(), lbl.i(), LikesJournal::Step::internal_journal_marshal(cut, addr, new_journal))
+    {
+        reveal(LikesJournal::State::next_by);
+        reveal(LinkedJournal::State::next_by);
 
-//         let step = choose |step| AllocationJournal::State::next_by(self, post, lbl, step);
-//         match step {
-//             AllocationJournal::Step::read_for_recovery() => {
-//                 self.read_for_recovery_refines(post, lbl);
-//             },
-//             AllocationJournal::Step::freeze_for_commit() => {
-//                 assume( LikesJournal::State::next_by(self.i(), post.i(), lbl.i(), LikesJournal::Step::freeze_for_commit()) );
-//             },
-//             AllocationJournal::Step::query_end_lsn() => {
-//                 assume( LikesJournal::State::next_by(self.i(), post.i(), lbl.i(), LikesJournal::Step::query_end_lsn()) );
-//             },
-//             AllocationJournal::Step::put(new_journal) => {
-//                 assume( LikesJournal::State::next_by(self.i(), post.i(), lbl.i(), LikesJournal::Step::put(new_journal)) );
-//             },
-//             AllocationJournal::Step::discard_old(new_journal) => {
-//                 self.discard_old_refines(post, lbl, new_journal);
-//             },
-//             AllocationJournal::Step::internal_journal_marshal(cut, addr, new_journal) => {
-//                 assume( LikesJournal::State::next_by(self.i(), post.i(), lbl.i(), LikesJournal::Step::internal_journal_marshal(cut, addr, new_journal)) );
-//             },
-//             _ => {
-//                 assert( LikesJournal::State::next_by(self.i(), post.i(), lbl.i(), LikesJournal::Step::internal_no_op()) );
-//             },
-//         }
-//     }
+        assert( LinkedJournal_v::LinkedJournal::State::next_by(self.journal, new_journal, 
+            Self::linked_lbl(lbl), LinkedJournal_v::LinkedJournal::Step::internal_journal_marshal(cut, addr)) );
 
+        let post_addr_index = LikesJournal_v::lsn_addr_index_append_record(
+            self.i().lsn_addr_index,
+            self.journal.unmarshalled_tail.discard_recent(cut),
+            addr
+        );
+
+        self.tj().disk_view.sub_disk_repr_index(post.tj().disk_view, self.tj().freshest_rec);
+        assert(post_addr_index == post.i().lsn_addr_index);
+    }
+
+    pub proof fn next_refines(self, post: Self, lbl: AllocationJournal::Label)
+    requires
+        self.inv(),
+        post.inv(),
+        AllocationJournal::State::next(self, post, lbl),
+    ensures
+        LikesJournal::State::next(self.i(), post.i(), lbl.i()),
+    {
+        reveal(LikesJournal::State::next_by);  // unfortunate defaults
+        reveal(LikesJournal::State::next);
+        reveal(AllocationJournal::State::next_by);
+        reveal(AllocationJournal::State::next);
+
+        let step = choose |step| AllocationJournal::State::next_by(self, post, lbl, step);
+        match step {
+            AllocationJournal::Step::read_for_recovery() => {
+                assert( LikesJournal::State::next_by(self.i(), post.i(), lbl.i(), LikesJournal::Step::read_for_recovery()) );
+            },
+            AllocationJournal::Step::freeze_for_commit() => {
+                assert( LikesJournal::State::next_by(self.i(), post.i(), lbl.i(), LikesJournal::Step::freeze_for_commit()) );
+            },
+            AllocationJournal::Step::query_end_lsn() => {
+                assert( LikesJournal::State::next_by(self.i(), post.i(), lbl.i(), LikesJournal::Step::query_end_lsn()) );
+            },
+            AllocationJournal::Step::put(new_journal) => {
+                reveal(LinkedJournal::State::next);
+                reveal(LinkedJournal::State::next_by);
+                assert( LikesJournal::State::next_by(self.i(), post.i(), lbl.i(), LikesJournal::Step::put(new_journal)) );
+            },
+            AllocationJournal::Step::discard_old(new_journal) => {
+                self.discard_old_refines(post, lbl, new_journal);
+            },
+            AllocationJournal::Step::internal_journal_marshal(cut, addr, new_journal) => {
+                self.internal_journal_marshal_refines(post, lbl, cut, addr, new_journal);
+            },
+            _ => {
+                assert( LikesJournal::State::next_by(self.i(), post.i(), lbl.i(), LikesJournal::Step::internal_no_op()) );
+            },
+        }
+    }
 }
 
 
