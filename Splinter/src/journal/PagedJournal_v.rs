@@ -512,9 +512,9 @@ state_machine!{ PagedJournal {
     }}
 
     init!{ initialize(truncated_journal: TruncatedJournal) {
-            require truncated_journal.wf();
-            init truncated_journal = truncated_journal;
-            init unmarshalled_tail = MsgHistory::empty_history_at(truncated_journal.seq_end());
+        require truncated_journal.wf();
+        init truncated_journal = truncated_journal;
+        init unmarshalled_tail = MsgHistory::empty_history_at(truncated_journal.seq_end());
     }}
 
 }}   // state_machine

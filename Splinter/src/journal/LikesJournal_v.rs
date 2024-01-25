@@ -552,6 +552,21 @@ impl TruncatedJournal {
         self.disk_view.build_lsn_addr_index(self.freshest_rec)
     }
 
+    pub proof fn build_lsn_addr_index_ensures(self)
+    requires self.decodable()
+    ensures 
+        self.index_domain_valid(self.build_lsn_addr_index()),
+        self.disk_view.index_keys_map_to_valid_entries(self.build_lsn_addr_index()),
+        self.index_range_valid(self.build_lsn_addr_index())
+    {        
+        reveal(TruncatedJournal::index_domain_valid);
+        reveal(DiskView::index_keys_map_to_valid_entries);
+        if self.freshest_rec is Some {
+            self.disk_view.build_lsn_addr_index_domain_valid(self.freshest_rec);
+            self.disk_view.build_lsn_addr_index_range_valid(self.freshest_rec);
+        }
+    }
+
     pub open spec(checked) fn transitive_likes(self) -> Likes
     {
         if !self.decodable() { arbitrary() }
@@ -796,30 +811,12 @@ state_machine!{ LikesJournal {
         init lsn_addr_index = ijournal.build_lsn_addr_index();
     } }
 
-//////////////////////////////////////////////////////////////////////////////
-// Definitions moved from Refinement file to integrate with invariant machinery.
-    // The thrilling climax, the actual proof goal we want to use in lower
-    // refinement layers.
-    // pub open spec(checked) fn imperative_matches_transitive(self) -> bool
-    // {
-    //     self.transitive_likes() == self.imperative_likes()
-    // }
-
     #[invariant]
     pub open spec(checked) fn inv(self) -> bool {
         let tj = self.journal.truncated_journal;
         &&& self.wf()
         &&& tj.disk_view.acyclic()
         &&& self.lsn_addr_index == tj.build_lsn_addr_index() // equivalent to imperative_matches_transitive
-        &&& tj.index_domain_valid(self.lsn_addr_index)
-        &&& tj.disk_view.index_keys_map_to_valid_entries(self.lsn_addr_index)
-        &&& tj.index_range_valid(self.lsn_addr_index)
-
-        //////////////////////////////////////////////////////////////
-        // &&& self.lsn_addr_index.values() == tj.representation() // also prove it from build?
-        // &&& tj.disk_view.index_reflects_disk_view(self.lsn_addr_index)  // TODO or just prove it from build
-        // &&& tj.disk_is_tight_wrt_representation()
-        // &&& self.imperative_matches_transitive() // this is shown through the build
     }
 
     #[inductive(read_for_recovery)]
@@ -866,48 +863,6 @@ state_machine!{ LikesJournal {
         }
         assert(post_dv.valid_ranking(ranking)); // witness
     }
-   
-    pub proof fn discard_old_step_preserves_index(pre: Self, post: Self, lbl: Label)
-    requires
-        pre.inv(),
-        Self::discard_old(pre, post, lbl, post.journal),
-    ensures
-        post.journal.truncated_journal.index_domain_valid(post.lsn_addr_index),
-        post.journal.truncated_journal.disk_view.index_keys_map_to_valid_entries(post.lsn_addr_index),
-        post.journal.truncated_journal.index_range_valid(post.lsn_addr_index),
-    {
-        reveal(TruncatedJournal::index_domain_valid);
-        reveal(DiskView::index_keys_map_to_valid_entries);
-
-        let tj_pre = pre.journal.truncated_journal;
-        let tj_post = post.journal.truncated_journal;
-
-        assert forall |lsn| #[trigger] post.lsn_addr_index.contains_key(lsn)
-        implies tj_post.disk_view.addr_supports_lsn(post.lsn_addr_index[lsn], lsn)
-        by {
-            let addr = post.lsn_addr_index[lsn];
-            assert(post.lsn_addr_index.values().contains(addr)); // trigger
-        }
-
-        let bdy_pre = tj_pre.disk_view.boundary_lsn;
-        let bdy_post = tj_post.disk_view.boundary_lsn;
-
-        assert forall |addr| post.lsn_addr_index.values().contains(addr)
-        implies tj_post.every_lsn_at_addr_indexed_to_addr(post.lsn_addr_index, addr)
-        by {
-            assert(pre.lsn_addr_index.values().contains(addr));
-            assert(tj_pre.every_lsn_at_addr_indexed_to_addr(pre.lsn_addr_index, addr));
-
-            let msgs = tj_post.disk_view.entries[addr].message_seq;
-            assert forall |lsn| #[trigger] DiskView::cropped_msg_seq_contains_lsn(bdy_post, msgs, lsn) 
-            implies {
-                &&& post.lsn_addr_index.contains_key(lsn)
-                &&& post.lsn_addr_index[lsn] == addr
-            } by {
-                assert(DiskView::cropped_msg_seq_contains_lsn(bdy_pre, msgs, lsn));
-            }
-        }
-    }
 
     pub proof fn discard_old_maintains_repr_index(pre: Self, post: Self, lbl: Label)
     requires
@@ -918,13 +873,14 @@ state_machine!{ LikesJournal {
     ensures
         post.lsn_addr_index == post.journal.truncated_journal.build_lsn_addr_index(),
     {
-        reveal(TruncatedJournal::index_domain_valid);
-
         let tj_pre = pre.journal.truncated_journal;
+        tj_pre.build_lsn_addr_index_ensures();
+
         let tj_post = post.journal.truncated_journal;
         let bdy_post = tj_post.disk_view.boundary_lsn;
         let repr = tj_post.build_lsn_addr_index();
 
+        reveal(TruncatedJournal::index_domain_valid);
         if bdy_post < tj_pre.seq_end() {
             tj_post.disk_view.build_lsn_addr_index_domain_valid(tj_post.freshest_rec);
             tj_post.disk_view.sub_disk_with_newer_lsn_repr_index(tj_pre.disk_view, tj_post.freshest_rec);
@@ -944,8 +900,6 @@ state_machine!{ LikesJournal {
         let post_tj = post.journal.truncated_journal;
         let start_lsn = lbl.get_DiscardOld_start_lsn();
         tj.discard_old_preserves_acyclicity(start_lsn, post.lsn_addr_index.values(), post_tj);
-
-        Self::discard_old_step_preserves_index(pre, post, lbl);
         Self::discard_old_maintains_repr_index(pre, post, lbl);
     }
 
@@ -959,7 +913,6 @@ state_machine!{ LikesJournal {
 
         // NOTE(Jialin): inv_next duplicates what should be exported by submodule inv
         LinkedJournal_v::LinkedJournal::State::inv_next(pre.journal, post.journal, State::lbl_i(lbl), istep);
-        assert(post.journal.inv());
 
         let tj_pre = pre.journal.truncated_journal;
         let tj_post = post.journal.truncated_journal;
@@ -967,15 +920,6 @@ state_machine!{ LikesJournal {
 
         tj_pre.disk_view.sub_disk_repr_index(tj_post.disk_view, tj_pre.freshest_rec);
         assert( post.lsn_addr_index == tj_post.build_lsn_addr_index() );
-
-        reveal(TruncatedJournal::index_domain_valid);
-        reveal(DiskView::index_keys_map_to_valid_entries);
-        assert( tj_post.index_domain_valid(post.lsn_addr_index) );
-        assert( tj_post.disk_view.index_keys_map_to_valid_entries(post.lsn_addr_index) );
-
-        let msgs = pre.journal.unmarshalled_tail.discard_recent(cut);
-        lsn_addr_index_append_record_ensures(pre.lsn_addr_index, msgs, addr);
-        assert( tj_post.index_range_valid(post.lsn_addr_index) );
 
         assert( post.inv() );
     }
@@ -986,21 +930,6 @@ state_machine!{ LikesJournal {
    
     #[inductive(initialize)]
     fn initialize_inductive(post: Self, ijournal: TruncatedJournal) {
-        // assert(ijournal.wf());
-        // assert(ijournal.disk_view.acyclic());
-        // assert(post.lsn_addr_index == ijournal.build_lsn_addr_index());
-
-        reveal(TruncatedJournal::index_domain_valid);
-        reveal(DiskView::index_keys_map_to_valid_entries);
-
-        if ijournal.freshest_rec.is_Some() {
-            ijournal.disk_view.build_lsn_addr_index_domain_valid(ijournal.freshest_rec);
-        }
-        // assert(ijournal.index_domain_valid(post.lsn_addr_index));
-        ijournal.disk_view.build_lsn_addr_index_range_valid(ijournal.freshest_rec);
-        // assert(ijournal.disk_view.index_keys_map_to_valid_entries(post.lsn_addr_index));
-        // assert(ijournal.index_range_valid(post.lsn_addr_index));
-        // assert(post.imperative_matches_transitive());
     }
     
 } } // state_machine!

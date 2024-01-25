@@ -669,6 +669,13 @@ impl LinkedJournal::State {
             _ => { assert(false); }
         }
     }
+
+    pub proof fn init_refines(self, truncated_journal: TruncatedJournal) 
+    requires LinkedJournal::State::initialize(self, truncated_journal)
+    ensures PagedJournal::State::initialize(self.i(), truncated_journal.i())
+    {
+        truncated_journal.iwf();
+    }
 }
 
 } // verus!

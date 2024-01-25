@@ -5,4 +5,5 @@ pub mod Likes_v;
 pub mod AllocationJournal_v;
 pub mod AllocationJournalRefinement_v;
 pub mod AllocationCrashAwareJournal_v;
+pub mod AllocationCrashAwareJournalRefinement_v;
 pub mod UnifiedCrashAwareJournal_v;

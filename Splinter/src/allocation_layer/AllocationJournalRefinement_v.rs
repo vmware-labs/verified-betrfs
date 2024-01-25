@@ -179,6 +179,12 @@ impl AllocationJournal::State {
             },
         }
     }
+
+    pub proof fn init_refines(self, journal: LinkedJournal::State, image: JournalImage) 
+    requires AllocationJournal::State::initialize(self, journal, image)
+    ensures LikesJournal::State::initialize(self.i(), image.tj)
+    {
+    }
 }
 
 

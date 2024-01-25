@@ -115,7 +115,12 @@ impl LikesJournal::State {
             },
         }
     }
-}
 
+    pub proof fn init_refines(self, truncated_journal: TruncatedJournal) 
+    requires LikesJournal::State::initialize(self, truncated_journal)
+    ensures LinkedJournal::State::initialize(self.i(), truncated_journal)
+    {
+    }
+}
 
 } // verus!

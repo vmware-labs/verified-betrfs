@@ -68,11 +68,11 @@ state_machine!{AllocationCrashAwareJournal{
     }
 
     transition!{
-        load_ephemeral_from_persistent(lbl: Label, new_journal: AllocationJournal::State, journal_config: AllocationJournal::Config) {
+        load_ephemeral_from_persistent(lbl: Label, new_journal: AllocationJournal::State) {
             require lbl is LoadEphemeralFromPersistent;
             require pre.ephemeral is Unknown;
-            require journal_config === AllocationJournal::Config::initialize(new_journal.journal, pre.persistent);
-            require AllocationJournal::State::init_by(new_journal, journal_config);
+            require AllocationJournal::State::init_by(new_journal, 
+                AllocationJournal::Config::initialize(new_journal.journal, pre.persistent));
             update ephemeral = Ephemeral::Known{ v: new_journal };
         }
     }
@@ -239,8 +239,7 @@ state_machine!{AllocationCrashAwareJournal{
     }
    
     #[inductive(load_ephemeral_from_persistent)]
-    fn load_ephemeral_from_persistent_inductive(pre: Self, post: Self, lbl: Label,
-        new_journal: AllocationJournal::State, journal_config: AllocationJournal::Config) 
+    fn load_ephemeral_from_persistent_inductive(pre: Self, post: Self, lbl: Label, new_journal: AllocationJournal::State) 
     {
         reveal(AllocationJournal::State::init_by);
     }
@@ -288,6 +287,7 @@ state_machine!{AllocationCrashAwareJournal{
                 if post.inflight is Some {
                     let ephemeral_disk = post.ephemeral.get_Known_v().tj().disk_view;
                     let inflight_disk = post.inflight.unwrap().tj.disk_view;
+                    // TODO(JL): flaky, fix this
                     assert(inflight_disk.is_sub_disk_with_newer_lsn(ephemeral_disk));
                 }
             }

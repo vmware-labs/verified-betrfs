@@ -499,8 +499,6 @@ state_machine!{ CoordinationSystem {
     commit_start(
       label: Label,
       new_boundary_lsn: LSN,
-      new_mapadt: CrashTolerantMap::State,
-      new_journal: CrashTolerantJournal::State,
     ) {
       require pre.ephemeral.is_Some();
       let pre_ephemeral = pre.ephemeral.get_Some_0();
@@ -510,7 +508,7 @@ state_machine!{ CoordinationSystem {
 
       require CrashTolerantJournal::State::next(
         pre.journal,
-        new_journal,
+        pre.journal,
         CrashTolerantJournal::Label::CommitStartLabel {
           new_boundary_lsn: new_boundary_lsn,
           max_lsn: pre_ephemeral.map_lsn,
@@ -519,14 +517,12 @@ state_machine!{ CoordinationSystem {
 
       require CrashTolerantMap::State::next(
         pre.mapadt,
-        new_mapadt,
+        pre.mapadt,
         CrashTolerantMap::Label::CommitStartLabel {
           new_boundary_lsn: new_boundary_lsn,
         }
       );
 
-      update journal = new_journal;
-      update mapadt = new_mapadt;
       // ephemeral unchanged
     }
   }

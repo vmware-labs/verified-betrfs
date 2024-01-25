@@ -626,7 +626,7 @@ verus! {
             v.inv(),
             CoordinationSystem::State::next(v, vp, label),
             CoordinationSystem::State::next_by(v, vp, label, step),
-            matches!(step, CoordinationSystem::Step::commit_start(_, _, _)),
+            matches!(step, CoordinationSystem::Step::commit_start(_)),
         ensures
             vp.inv()
     {

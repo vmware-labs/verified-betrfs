@@ -485,20 +485,21 @@ impl PagedJournal::State {
         assert(AbstractJournal::State::next_by(self.i(), post.i(), lbl.i(), AbstractJournal::Step::internal())); // newly required witness
     }
 
-    pub proof fn next_refines(self, post: Self, lbl: PagedJournal::Label, step: PagedJournal::Step)
+    pub proof fn next_refines(self, post: Self, lbl: PagedJournal::Label)
     requires
         self.wf(),  // move to an invariant?
-        PagedJournal::State::next_by(self, post, lbl, step),
+        PagedJournal::State::next(self, post, lbl),
     ensures
         post.wf(),
         AbstractJournal::State::next(self.i(), post.i(), lbl.i()),
     {
+        reveal(PagedJournal::State::next);    // newly required; unfortunate macro defaults
         reveal(PagedJournal::State::next_by);    // newly required; unfortunate macro defaults
-        reveal(PagedJournal::State::next_by);    // newly required; unfortunate macro defaults
-        reveal(AbstractJournal::State::next);       // newly required; unfortunate macro defaults
         reveal(AbstractJournal::State::next);       // newly required; unfortunate macro defaults
         reveal(AbstractJournal::State::next_by);    // newly required; unfortunate macro defaults
         JournalRecord::i_lemma_forall();
+
+        let step = choose |step| PagedJournal::State::next_by(self, post, lbl, step);
         match step {
             PagedJournal::Step::read_for_recovery(depth) => {
                 self.read_for_recovery_refines(post, lbl, depth);
@@ -525,6 +526,13 @@ impl PagedJournal::State {
             }
             _ => { assert(false); } // dummy_to_use_type_params boilerplate
         }
+    }
+
+    pub proof fn init_refines(self, truncated_journal: TruncatedJournal) 
+    requires PagedJournal::State::initialize(self, truncated_journal)
+    ensures AbstractJournal::State::initialize(self.i(), self.i().journal)
+    {
+        JournalRecord::i_lemma_forall();
     }
 }
 
