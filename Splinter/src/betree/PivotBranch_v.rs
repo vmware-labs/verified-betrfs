@@ -108,7 +108,7 @@ impl Node {
                 let pivotKeys = pivots.to_set();
                 let indexKeys = Set::new(|key| 
                     exists |i| 0 <= i < children.len() 
-                    && #[trigger] children[i].all_keys().contains(key));
+                    && (#[trigger] children[i]).all_keys().contains(key));
                 pivotKeys + indexKeys
             }
         }
