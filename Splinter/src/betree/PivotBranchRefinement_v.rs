@@ -132,6 +132,8 @@ pub proof fn lemma_grow_preserves_i(node: Node)
     assume(false);
 }
 
+// Proves that insert() on a leaf node refines (as well as other useful and
+// guaranteed properties).
 pub proof fn lemma_insert_leaf_is_correct(node: Node, key: Key, msg: Message)
     requires
         node is Leaf,
@@ -455,7 +457,6 @@ pub proof fn lemma_insert_inserts_to_all_keys(node: Node, key: Key, msg: Message
     // }
 }
 
-
 pub proof fn lemma_insert_preserves_wf(node: Node, key: Key, msg: Message, path: Path)
     requires
         node.wf(),
@@ -524,6 +525,27 @@ pub proof fn lemma_insert_preserves_wf(node: Node, key: Key, msg: Message, path:
     }
 }
 
+pub proof fn lemma_path_target_is_wf(path: Path)
+    requires
+        path.valid(),
+    ensures
+        path.target().wf(),
+    decreases
+        path.depth
+{
+    if path.depth > 0 {
+        lemma_path_target_is_wf(path.subpath());
+    }
+}
+
+// // Proves
+// pub proof fn insert_refines_helper(pre: Node, lbl: InsertLabel)
+// {
+
+// }
+
+// Proves that inserting into a node and then refining is the same
+// as refining then inserting into the refinement.
 pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
     requires
         pre.wf(),
@@ -535,16 +557,48 @@ pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
     ensures
         pre.insert(lbl.key, lbl.msg, lbl.path).wf(),
         pre.insert(lbl.key, lbl.msg, lbl.path).i() == pre.i().insert(lbl.key, lbl.msg),
+    decreases
+        pre
 {
+    lemma_route_auto();
+
     // TODO(tenzinhl): fixy.
-    assume(false);
+    // assume(false);
+    lemma_path_target_is_wf(lbl.path);
+    assert(lbl.path.target().wf());
     lemma_insert_leaf_is_correct(lbl.path.target(), lbl.key, lbl.msg);
 
-    // Goal 1
+    // Goal 1 - After insertion the node is still well formed.
+    lemma_insert_preserves_wf(pre, lbl.key, lbl.msg, lbl.path);
     assert(pre.insert(lbl.key, lbl.msg, lbl.path).wf());
     
-    // Goal 2, will prove later (x9du)
-    assume(pre.insert(lbl.key, lbl.msg, lbl.path).i() == pre.i().insert(lbl.key, lbl.msg));
+    // Goal 2, will prove later (x9du) - Inserting into node then abstracting to Map,
+    // is the same as abstracting to map, then inserting to map.
+
+    match pre {
+        Node::Leaf{keys, msgs} => {}, // Given by lemma_insert_leaf_is_correct!
+        Node::Index{pivots, children} => {
+            let post = pre.insert(lbl.key, lbl.msg, lbl.path);
+            let r = pre.route(lbl.key);
+            let post_children = post.get_Index_children();
+
+            assert(0 <= r + 1 < children.len());
+
+            // Assert that other children don't change
+            assert(post_children.len() == children.len()); // Suppress recommendation
+            assert(forall |i| 0 <= i < post_children.len() ==> (#[trigger] post_children[i]).wf());
+            assert(forall |i| #![auto] 0 <= i < children.len() && i != (r+1) ==> post_children[i].i() == children[i].i());
+
+            // Assert that the changed child, has original keys but also the new key-value pair.
+            let child_label = InsertLabel{ key: lbl.key, msg: lbl.msg, path: lbl.path.subpath() };
+            insert_refines(children[r+1], child_label);
+
+
+        },
+    }
+
+
+    assert(pre.insert(lbl.key, lbl.msg, lbl.path).i() == pre.i().insert(lbl.key, lbl.msg));
 }
 
 // use `lemma_grow_preserves_i` instead
