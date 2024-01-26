@@ -45,8 +45,8 @@ pub trait SeqMarshalling<DVE, U: Deepview<DVE>, EltMarshalling: Marshalling<DVE,
 
     // True if the sequence length (count of elements) in data can be determined from data.
     spec fn lengthable(&self, data: Seq<u8>) -> bool
-    recommends
-        self.valid()
+//x    recommends
+//x        self.valid()
     ;
 
     spec fn length(&self, data: Seq<u8>) -> int
@@ -384,8 +384,7 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> Premarshalling<Seq<C::
     }
 
     open spec fn parsable(&self, data: Seq<u8>) -> bool {
-        true
-//x        &&& self.lengthable(data)
+        &&& self.lengthable(data)
 //x        &&& self.length(data) <= usize::MAX as int
 //x        &&& Self::parsable_to_len(self, data, self.length(data))
     }
@@ -429,6 +428,7 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> Marshalling<Seq<C::Elt
     {
         let olen = self.try_length(slice, data);
         if olen.is_none() {
+            assert( !self.parsable(slice.i(data@)) );
             return None;
         }
         let len = olen.unwrap() as usize;
@@ -444,12 +444,14 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> Marshalling<Seq<C::Elt
         {
             let oelt = self.try_get_elt(slice, data, idx as usize);
             if oelt.is_none() {
+                assert( !self.parsable(slice.i(data@)) );
                 return None;
             }
             // TODO(verus): I wanted to write: vec[idx] = x;
             vec.set(idx, oelt.unwrap());
             idx += 1;
         }
+        assert( vec.deepv() == self.parse(slice.i(data@)) );
         Some(vec)
     }
 
@@ -531,10 +533,11 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> SeqMarshalling<C::EltD
     //      I'll try that first.
     open spec fn lengthable(&self, data: Seq<u8>) -> bool
     {
-        &&& self.total_size as int <= data.len()
-        &&& self.length_marshalling.parsable(data.subrange(0, Self::spec_size_of_length_field() as int))
-        &&& C::LengthInt::spec_this_fits_in_usize(
-            self.length_marshalling.parse(data.subrange(0, Self::spec_size_of_length_field() as int)))
+        true
+//x        &&& self.total_size as int <= data.len()
+//x        &&& self.length_marshalling.parsable(data.subrange(0, Self::spec_size_of_length_field() as int))
+//x        &&& C::LengthInt::spec_this_fits_in_usize(
+//x            self.length_marshalling.parse(data.subrange(0, Self::spec_size_of_length_field() as int)))
     }
 
     open spec fn length(&self, data: Seq<u8>) -> int
