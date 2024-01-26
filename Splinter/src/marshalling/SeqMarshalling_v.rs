@@ -34,10 +34,10 @@ pub trait SeqMarshalling<DVE, U: Deepview<DVE>, EltMarshalling: Marshalling<DVE,
         self.spec_elt_marshalling().valid()
     ;
 
-    exec fn exec_elt_marshalling(&self) -> (elt: &EltMarshalling)
-    ensures
-        elt == self.spec_elt_marshalling(),
-    ;
+//e    exec fn exec_elt_marshalling(&self) -> (elt: &EltMarshalling)
+//e    ensures
+//e        elt == self.spec_elt_marshalling(),
+//e    ;
 
     /////////////////////////////////////////////////////////////////////////
     // observing sequence length (count of elements, not bytes)
@@ -55,14 +55,14 @@ pub trait SeqMarshalling<DVE, U: Deepview<DVE>, EltMarshalling: Marshalling<DVE,
         self.lengthable(data)
     ;
 
-    exec fn try_length(&self, slice: &Slice, data: &Vec<u8>) -> (out: Option<usize>)
-    requires
-        self.valid(),
-        slice.valid(data@),
-    ensures
-        out is Some <==> self.lengthable(slice.i(data@)),
-        out is Some ==> out.unwrap() as int == self.length(slice.i(data@))
-    ;
+//e    exec fn try_length(&self, slice: &Slice, data: &Vec<u8>) -> (out: Option<usize>)
+//e    requires
+//e        self.valid(),
+//e        slice.valid(data@),
+//e    ensures
+//e        out is Some <==> self.lengthable(slice.i(data@)),
+//e        out is Some ==> out.unwrap() as int == self.length(slice.i(data@))
+//e    ;
 
     /////////////////////////////////////////////////////////////////////////
     // getting individual elements
@@ -132,51 +132,51 @@ pub trait SeqMarshalling<DVE, U: Deepview<DVE>, EltMarshalling: Marshalling<DVE,
         self.spec_elt_marshalling().parse(self.get_data(data, idx))
     }
 
-    exec fn try_get(&self, slice: &Slice, data: &Vec<u8>, idx: usize) -> (oeslice: Option<Slice>)
-    requires
-        self.valid(),
-        slice.valid(data@),
-    ensures
-        oeslice is Some <==> self.gettable(slice.i(data@), idx as int),
-        oeslice is Some ==> oeslice.unwrap() == self.get(slice, data@, idx as int)
-    ;
+//e    exec fn try_get(&self, slice: &Slice, data: &Vec<u8>, idx: usize) -> (oeslice: Option<Slice>)
+//e    requires
+//e        self.valid(),
+//e        slice.valid(data@),
+//e    ensures
+//e        oeslice is Some <==> self.gettable(slice.i(data@), idx as int),
+//e        oeslice is Some ==> oeslice.unwrap() == self.get(slice, data@, idx as int)
+//e    ;
 
     // jonh skipped over the `exec fn get` that requires gettable, perhaps a useful optimization
     // for some other day..
 
-    exec fn try_get_elt(&self, slice: &Slice, data: &Vec<u8>, idx: usize) -> (oelt: Option<U>)
-    requires
-        self.valid(),
-        slice.valid(data@),
-    ensures
-        oelt is Some <==> {
-                &&& self.gettable(slice.i(data@), idx as int)
-                &&& self.elt_parsable(data@, idx as int)
-        },
-        oelt is Some ==> oelt.unwrap().deepv() == self.get_elt(slice.i(data@), idx as int),
-    {
-        assume( false );
-        assert( slice.valid(data@) );
-        proof { self.spec_elt_marshalling(); }
-        assert( slice.valid(data@) );
-        let oelt = 
-            match self.try_get(slice, data, idx) {
-                None => None,
-                Some(slice) => {
-                    //assert( slice == old(slice) );
-                    //assert( data@ == old(data)@ );
-                    assert( slice.valid(data@) );   // Whoah, neither slice nor data is mutable. How could this fail?
-                    assert( self.gettable(slice.i(data@), idx as int) );
-                    self.exec_elt_marshalling().try_parse(&slice, data)
-                }
-            };
-        assert( oelt is Some <==> {
-             &&& self.gettable(slice.i(data@), idx as int)
-             &&& self.elt_parsable(data@, idx as int)
-        } );
-        assert( oelt is Some ==> oelt.unwrap().deepv()== self.get_elt(slice.i(data@), idx as int) );
-        oelt
-    }
+//e    exec fn try_get_elt(&self, slice: &Slice, data: &Vec<u8>, idx: usize) -> (oelt: Option<U>)
+//e    requires
+//e        self.valid(),
+//e        slice.valid(data@),
+//e    ensures
+//e        oelt is Some <==> {
+//e                &&& self.gettable(slice.i(data@), idx as int)
+//e                &&& self.elt_parsable(data@, idx as int)
+//e        },
+//e        oelt is Some ==> oelt.unwrap().deepv() == self.get_elt(slice.i(data@), idx as int),
+//e    {
+//e        assume( false );
+//e        assert( slice.valid(data@) );
+//e        proof { self.spec_elt_marshalling(); }
+//e        assert( slice.valid(data@) );
+//e        let oelt = 
+//e            match self.try_get(slice, data, idx) {
+//e                None => None,
+//e                Some(slice) => {
+//e                    //assert( slice == old(slice) );
+//e                    //assert( data@ == old(data)@ );
+//e                    assert( slice.valid(data@) );   // Whoah, neither slice nor data is mutable. How could this fail?
+//e                    assert( self.gettable(slice.i(data@), idx as int) );
+//e                    self.exec_elt_marshalling().try_parse(&slice, data)
+//e                }
+//e            };
+//e        assert( oelt is Some <==> {
+//e             &&& self.gettable(slice.i(data@), idx as int)
+//e             &&& self.elt_parsable(data@, idx as int)
+//e        } );
+//e        assert( oelt is Some ==> oelt.unwrap().deepv()== self.get_elt(slice.i(data@), idx as int) );
+//e        oelt
+//e    }
 
     /////////////////////////////////////////////////////////////////////////
     // setting individual elements
@@ -218,24 +218,24 @@ pub trait SeqMarshalling<DVE, U: Deepview<DVE>, EltMarshalling: Marshalling<DVE,
         &&& self.get_elt(new_data, idx) == value
     }
     
-    exec fn is_settable(&self, slice: &Slice, data: &Vec<u8>, idx: usize, value: &U) -> (s: bool)
-    requires
-        self.valid(),
-        self.spec_elt_marshalling().marshallable(value.deepv())
-    ensures
-        s == self.settable(slice.i(data@), idx as int, value.deepv())
-    ;
-    
-    exec fn exec_set(&self, slice: &Slice, data: &mut Vec<u8>, idx: usize, value: &U)
-    requires
-        self.valid(),
-        slice.valid(old(data)@),
-        self.spec_elt_marshalling().marshallable(value.deepv()),
-        self.settable(slice.i(old(data)@), idx as int, value.deepv()),
-    ensures
-        slice.agree_beyond_slice(old(data)@, data@),
-        self.sets(slice.i(old(data)@), idx as int, value.deepv(), slice.i(data@))
-    ;
+//e    exec fn is_settable(&self, slice: &Slice, data: &Vec<u8>, idx: usize, value: &U) -> (s: bool)
+//e    requires
+//e        self.valid(),
+//e        self.spec_elt_marshalling().marshallable(value.deepv())
+//e    ensures
+//e        s == self.settable(slice.i(data@), idx as int, value.deepv())
+//e    ;
+//e    
+//e    exec fn exec_set(&self, slice: &Slice, data: &mut Vec<u8>, idx: usize, value: &U)
+//e    requires
+//e        self.valid(),
+//e        slice.valid(old(data)@),
+//e        self.spec_elt_marshalling().marshallable(value.deepv()),
+//e        self.settable(slice.i(old(data)@), idx as int, value.deepv()),
+//e    ensures
+//e        slice.agree_beyond_slice(old(data)@, data@),
+//e        self.sets(slice.i(old(data)@), idx as int, value.deepv(), slice.i(data@))
+//e    ;
 
     /////////////////////////////////////////////////////////////////////////
     // resizing
@@ -256,23 +256,23 @@ pub trait SeqMarshalling<DVE, U: Deepview<DVE>, EltMarshalling: Marshalling<DVE,
         &&& forall |i| self.preserves_entry(data, i, new_data)
     }
     
-    exec fn is_resizable(&self, slice: &Slice, data: &Vec<u8>, newlen: usize) -> (r: bool)
-    requires
-        self.valid(),
-    ensures
-        r == self.resizable(slice.i(data@), newlen as int)
-    ;
-
-    
-    exec fn exec_resize(&self, slice: &Slice, data: &mut Vec<u8>, newlen: int)
-    requires
-        self.valid(),
-        slice.valid(old(data)@),
-        self.resizable(old(data)@, newlen),
-    ensures
-        slice.agree_beyond_slice(old(data)@, data@),
-        self.resizes(slice.i(old(data)@), newlen as int, slice.i(data@))
-    ;
+//e    exec fn is_resizable(&self, slice: &Slice, data: &Vec<u8>, newlen: usize) -> (r: bool)
+//e    requires
+//e        self.valid(),
+//e    ensures
+//e        r == self.resizable(slice.i(data@), newlen as int)
+//e    ;
+//e
+//e    
+//e    exec fn exec_resize(&self, slice: &Slice, data: &mut Vec<u8>, newlen: int)
+//e    requires
+//e        self.valid(),
+//e        slice.valid(old(data)@),
+//e        self.resizable(old(data)@, newlen),
+//e    ensures
+//e        slice.agree_beyond_slice(old(data)@, data@),
+//e        self.resizes(slice.i(old(data)@), newlen as int, slice.i(data@))
+//e    ;
 
     /////////////////////////////////////////////////////////////////////////
     // append
@@ -426,7 +426,9 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> Marshalling<Seq<C::Elt
     // TODO this is common to all implementations of SeqMarshalling; refactor out?
     exec fn try_parse(&self, slice: &Slice, data: &Vec<u8>) -> (ov: Option<Vec<C::Elt>>)
     {
-        let olen = self.try_length(slice, data);
+//e        let olen = self.try_length(slice, data);
+        let olen:Option<usize> = None;
+
         if olen.is_none() {
             assert( !self.parsable(slice.i(data@)) );
             return None;
@@ -442,7 +444,9 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> Marshalling<Seq<C::Elt
                 forall |j| 0 <= j < idx ==> self.elt_parsable(data@, j),
                 forall |j| #![auto] 0 <= j < idx ==> vec.deepv()[j] == self.get_elt(data@, j),
         {
-            let oelt = self.try_get_elt(slice, data, idx as usize);
+//e            let oelt = self.try_get_elt(slice, data, idx as usize);
+            let oelt:Option<C::Elt> = None;
+
             if oelt.is_none() {
                 assert( !self.parsable(slice.i(data@)) );
                 return None;
@@ -487,7 +491,7 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> Marshalling<Seq<C::Elt
             forall |j| #![auto] start <= j < i ==> self.get_elt(data@.subrange(start as int, end as int), j) == value[j].deepv(),
             forall |j| #![auto] start <= j < value.len() ==> self.settable(data@.subrange(start as int, end as int), j, value[j].deepv()),
         {
-            self.exec_set(&slice, data, i, &value[i]);
+//e            self.exec_set(&slice, data, i, &value[i]);
             i += 1;
         }
         end
@@ -509,10 +513,10 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> SeqMarshalling<C::EltD
     proof fn spec_elt_marshalling_ensures(&self)
     {}
 
-    exec fn exec_elt_marshalling(&self) -> (elt: &C::EltMarshalling)
-    {
-        &self.elt_marshalling
-    }
+//e    exec fn exec_elt_marshalling(&self) -> (elt: &C::EltMarshalling)
+//e    {
+//e        &self.elt_marshalling
+//e    }
 
     // Okay we have a new design challenge that Rob's Dafny code doesn't address.
     // We have try_length returning a usize, since the result is used to describe
@@ -545,45 +549,45 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> SeqMarshalling<C::EltD
         self.length_marshalling.parse(data.subrange(0, Self::spec_size_of_length_field() as int))
     }
 
-    exec fn try_length(&self, slice: &Slice, data: &Vec<u8>) -> (out: Option<usize>)
-    {
-        // TODO(verus): Why are these trait requires not auto-triggering, but then asserting them works?
-        assert(slice.valid(data@));
-        assert(self.valid());
-        if slice.exec_len() < self.total_size {
-            assert( !self.lengthable(slice.i(data@)) );
-            None
-        } else {
-            // TODO(jonh): here's a place where we know it's parsable,
-            // but we're calling a try_parse method and wasting a conditional.
-            assert( self.length_marshalling.valid() );
-            let len_slice = slice.exec_sub(0, Self::exec_size_of_length_field());
-            proof {
-                self.length_marshalling.parsable_property(slice.i(data@));
-                // TODO(verus): line above should have been sufficient. https://github.com/verus-lang/verus/issues/964
-                let lm = self.length_marshalling;
-                let ld = len_slice.i(data@);
-                lm.parsable_property(ld);
-                assert( self.length_marshalling.parsable(len_slice.i(data@)) );
-            }
-            let o_parsed_len = self.length_marshalling.try_parse(&len_slice, data);
-            if o_parsed_len.is_none() {
-                assert( !self.lengthable(slice.i(data@)) );
-                None
-            } else {
-                assert( slice.i(data@).subrange(0, Self::spec_size_of_length_field() as int) == len_slice.i(data@) );   //subrange trigger
-                let parsed_len: <C::LengthInt as NativePackedInt>::IntType = o_parsed_len.unwrap();
-                if !C::LengthInt::exec_this_fits_in_usize(&parsed_len) {
-                    //assert( !self.lengthable(slice.i(data@)) );
-                    None
-                } else {
-                    let out = Some(C::LengthInt::to_usize(parsed_len));
-                    assert( out.unwrap() as int == self.length(slice.i(data@)) );   // trigger
-                    out
-                }
-            }
-        }
-    }
+//e    exec fn try_length(&self, slice: &Slice, data: &Vec<u8>) -> (out: Option<usize>)
+//e    {
+//e        // TODO(verus): Why are these trait requires not auto-triggering, but then asserting them works?
+//e        assert(slice.valid(data@));
+//e        assert(self.valid());
+//e        if slice.exec_len() < self.total_size {
+//e            assert( !self.lengthable(slice.i(data@)) );
+//e            None
+//e        } else {
+//e            // TODO(jonh): here's a place where we know it's parsable,
+//e            // but we're calling a try_parse method and wasting a conditional.
+//e            assert( self.length_marshalling.valid() );
+//e            let len_slice = slice.exec_sub(0, Self::exec_size_of_length_field());
+//e            proof {
+//e                self.length_marshalling.parsable_property(slice.i(data@));
+//e                // TODO(verus): line above should have been sufficient. https://github.com/verus-lang/verus/issues/964
+//e                let lm = self.length_marshalling;
+//e                let ld = len_slice.i(data@);
+//e                lm.parsable_property(ld);
+//e                assert( self.length_marshalling.parsable(len_slice.i(data@)) );
+//e            }
+//e            let o_parsed_len = self.length_marshalling.try_parse(&len_slice, data);
+//e            if o_parsed_len.is_none() {
+//e                assert( !self.lengthable(slice.i(data@)) );
+//e                None
+//e            } else {
+//e                assert( slice.i(data@).subrange(0, Self::spec_size_of_length_field() as int) == len_slice.i(data@) );   //subrange trigger
+//e                let parsed_len: <C::LengthInt as NativePackedInt>::IntType = o_parsed_len.unwrap();
+//e                if !C::LengthInt::exec_this_fits_in_usize(&parsed_len) {
+//e                    //assert( !self.lengthable(slice.i(data@)) );
+//e                    None
+//e                } else {
+//e                    let out = Some(C::LengthInt::to_usize(parsed_len));
+//e                    assert( out.unwrap() as int == self.length(slice.i(data@)) );   // trigger
+//e                    out
+//e                }
+//e            }
+//e        }
+//e    }
 
     open spec fn gettable(&self, data: Seq<u8>, idx: int) -> bool
     {
@@ -650,19 +654,19 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> SeqMarshalling<C::EltD
         assert( self.get(slice, data, idx).valid(data) );
     }
 
-    exec fn try_get(&self, slice: &Slice, data: &Vec<u8>, idx: usize) -> (oeslice: Option<Slice>)
-    {
-        let olen = self.try_length(slice, data);
-        if olen.is_none() { return None; }
-        let mlen = self.exec_max_length();
-        if idx < mlen {
-            Some(
-                slice.exec_sub(Self::exec_size_of_length_field() + idx * self.config.exec_uniform_size(),
-                Self::exec_size_of_length_field() + idx * self.config.exec_uniform_size() + self.config.exec_uniform_size()))
-        } else {
-            None
-        }
-    }
+//e    exec fn try_get(&self, slice: &Slice, data: &Vec<u8>, idx: usize) -> (oeslice: Option<Slice>)
+//e    {
+//e        let olen = self.try_length(slice, data);
+//e        if olen.is_none() { return None; }
+//e        let mlen = self.exec_max_length();
+//e        if idx < mlen {
+//e            Some(
+//e                slice.exec_sub(Self::exec_size_of_length_field() + idx * self.config.exec_uniform_size(),
+//e                Self::exec_size_of_length_field() + idx * self.config.exec_uniform_size() + self.config.exec_uniform_size()))
+//e        } else {
+//e            None
+//e        }
+//e    }
 
     open spec fn settable(&self, data: Seq<u8>, idx: int, value: C::EltDV) -> bool
     {
@@ -672,20 +676,20 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> SeqMarshalling<C::EltD
 //x        &&& self.elt_marshalling.spec_size(value) == self.config.spec_uniform_size()
     }
     
-    exec fn is_settable(&self, slice: &Slice, data: &Vec<u8>, idx: usize, value: &C::Elt) -> (s: bool)
-    {
-        true
-//x        let olen = self.try_length(slice, data);
-//x        let sz = self.elt_marshalling.exec_size(value);
-//x
-//x        &&& !olen.is_none()
-//x        &&& idx < self.exec_max_length()
-//x        &&& sz == self.config.exec_uniform_size()
-    }
+//e    exec fn is_settable(&self, slice: &Slice, data: &Vec<u8>, idx: usize, value: &C::Elt) -> (s: bool)
+//e    {
+//e        true
+//e//x        let olen = self.try_length(slice, data);
+//e//x        let sz = self.elt_marshalling.exec_size(value);
+//e//x
+//e//x        &&& !olen.is_none()
+//e//x        &&& idx < self.exec_max_length()
+//e//x        &&& sz == self.config.exec_uniform_size()
+//e    }
     
-    exec fn exec_set(&self, slice: &Slice, data: &mut Vec<u8>, idx: usize, value: &C::Elt)
-    {
-    }
+//e    exec fn exec_set(&self, slice: &Slice, data: &mut Vec<u8>, idx: usize, value: &C::Elt)
+//e    {
+//e    }
 
     open spec fn resizable(&self, data: Seq<u8>, newlen: int) -> bool
     {
@@ -695,18 +699,18 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> SeqMarshalling<C::EltD
 //x        &&& C::LengthInt::spec_fits_in_int_type(newlen)
     }
     
-    exec fn is_resizable(&self, slice: &Slice, data: &Vec<u8>, newlen: usize) -> (r: bool)
-    {
-        true
-//x        let olen = self.try_length(slice, data);
-//x        &&& olen.is_some()
-//x        &&& newlen <= self.exec_max_length()
-//x        &&& C::LengthInt::exec_fits_in_int_type(newlen)
-    }
+//e    exec fn is_resizable(&self, slice: &Slice, data: &Vec<u8>, newlen: usize) -> (r: bool)
+//e    {
+//e        true
+//e//x        let olen = self.try_length(slice, data);
+//e//x        &&& olen.is_some()
+//e//x        &&& newlen <= self.exec_max_length()
+//e//x        &&& C::LengthInt::exec_fits_in_int_type(newlen)
+//e    }
 
-    exec fn exec_resize(&self, slice: &Slice, data: &mut Vec<u8>, newlen: int)
-    {
-    }
+//e    exec fn exec_resize(&self, slice: &Slice, data: &mut Vec<u8>, newlen: int)
+//e    {
+//e    }
 }
 
 // 
