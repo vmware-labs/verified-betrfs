@@ -285,9 +285,12 @@ state_machine!{AllocationCrashAwareJournal{
                 assert(post.journal_pages_not_free());
 
                 if post.inflight is Some {
+                    let pre_ephemeral_disk = pre.ephemeral.get_Known_v().tj().disk_view;
                     let ephemeral_disk = post.ephemeral.get_Known_v().tj().disk_view;
                     let inflight_disk = post.inflight.unwrap().tj.disk_view;
-                    // TODO(JL): flaky, fix this
+
+                    assert(inflight_disk.is_sub_disk_with_newer_lsn(pre_ephemeral_disk));
+                    // assert(pre_ephemeral_disk.is_sub_disk(ephemeral_disk));
                     assert(inflight_disk.is_sub_disk_with_newer_lsn(ephemeral_disk));
                 }
             }
