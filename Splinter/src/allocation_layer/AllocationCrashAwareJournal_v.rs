@@ -151,7 +151,7 @@ state_machine!{AllocationCrashAwareJournal{
             require AllocationJournal::State::next(
                 pre.ephemeral.get_Known_v(), 
                 pre.ephemeral.get_Known_v(),
-                AllocationJournal::Label::FreezeForCommit{ frozen_journal: frozen_journal},
+                AllocationJournal::Label::FreezeForCommit{frozen_journal},
             );
             update inflight = Option::Some(frozen_journal);
         }

@@ -19,6 +19,8 @@ use crate::abstract_system::AbstractCrashAwareJournal_v;
 use crate::abstract_system::AbstractCrashAwareJournal_v::{CrashTolerantJournal};
 use crate::disk::GenericDisk_v::*;
 use crate::disk::GenericDisk_v::AU;
+use crate::journal::PagedJournal_v::{JournalRecord};
+use crate::journal::LinkedJournal_v::{LinkedJournal, TruncatedJournal};
 use crate::journal::LikesJournal_v::{LikesJournal};
 use crate::allocation_layer::AllocationJournal_v::{AllocationJournal, JournalImage};
 use crate::allocation_layer::AllocationCrashAwareJournal_v::*;
@@ -42,11 +44,24 @@ impl AllocationJournal::State{
     }
 
     // refines to abstract journal
+    pub proof fn init_refines_abstract(self, journal: LinkedJournal::State, image: JournalImage)
+    requires
+        Self::initialize(self, journal, image)
+    ensures
+        AbstractJournal::State::initialize(self.i_abstract(), self.i_abstract().journal)
+    {
+        self.init_refines(journal, image);
+        self.i().init_refines(image.tj);
+        self.i().i().init_refines(image.tj);
+        self.i().i().i().init_refines(image.tj.i());
+    }
+
+    // refines to abstract journal
     pub proof fn next_refines_abstract(self, post: Self, lbl: AllocationJournal::Label)
     requires
         self.inv(),
         post.inv(),
-        AllocationJournal::State::next(self, post, lbl)
+        Self::next(self, post, lbl)
     ensures
         AbstractJournal::State::next(self.i_abstract(), post.i_abstract(), lbl.i_abstract())
     {
@@ -149,7 +164,12 @@ impl AllocationCrashAwareJournal::State{
         CrashTolerantJournal::State::next_by(self.i(), post.i(), lbl.i(), 
             CrashTolerantJournal::Step::load_ephemeral_from_persistent(new_journal.i_abstract()))
     {
-        assume(false);
+        reveal(AllocationJournal::State::init_by);
+        reveal(CrashTolerantJournal::State::next_by);
+        reveal(AbstractJournal::State::init_by);
+
+        new_journal.init_refines_abstract(new_journal.journal, self.persistent);
+        assert(new_journal.i_abstract().journal == post.i().persistent);
     }
 
     pub proof fn read_for_recovery_refines(self, post: Self, lbl: AllocationCrashAwareJournal::Label)
@@ -229,7 +249,20 @@ impl AllocationCrashAwareJournal::State{
         CrashTolerantJournal::State::next_by(self.i(), post.i(), lbl.i(), 
             CrashTolerantJournal::Step::commit_start(frozen_journal.i()))
     {
-        assume(false);
+        reveal(CrashTolerantJournal::State::next_by);
+
+        assert(self.i().ephemeral is Known);
+        assert(self.i().in_flight is None);
+
+        frozen_journal.tj.iwf();
+        JournalRecord::i_lemma_forall();
+
+        assert(frozen_journal.i().wf());
+        assert(frozen_journal.tj.seq_start() == frozen_journal.i().seq_start);
+
+        let aj = self.ephemeral.get_Known_v();
+        let alloc_lbl = AllocationJournal::Label::FreezeForCommit{frozen_journal};
+        aj.next_refines_abstract(aj, alloc_lbl);
     }
 
     pub proof fn commit_complete_refines(self, post: Self, lbl: AllocationCrashAwareJournal::Label, 
@@ -242,7 +275,20 @@ impl AllocationCrashAwareJournal::State{
         CrashTolerantJournal::State::next_by(self.i(), post.i(), lbl.i(), 
             CrashTolerantJournal::Step::commit_complete(new_journal.i_abstract()))
     {
-        assume(false);
+        reveal(CrashTolerantJournal::State::next_by);
+
+        self.inflight.unwrap().tj.iwf();
+        JournalRecord::i_lemma_forall();
+
+        assert(self.inflight.unwrap().tj.seq_start() == self.i().in_flight.unwrap().seq_start);
+
+        let aj = self.ephemeral.get_Known_v();
+        let alloc_lbl = AllocationJournal::Label::DiscardOld{ 
+            start_lsn: self.inflight.unwrap().tj.seq_start(), 
+            require_end: lbl.get_CommitComplete_require_end(),
+            deallocs: lbl.get_CommitComplete_discarded(),
+        };
+        aj.next_refines_abstract(new_journal, alloc_lbl);
     }
 
     pub proof fn next_refines(self, post: Self, lbl: AllocationCrashAwareJournal::Label)
@@ -293,6 +339,13 @@ impl AllocationCrashAwareJournal::State{
                 assert(false);
             },
         }
+    }
+
+    pub proof fn init_refines(self)
+    requires Self::initialize(self)
+    ensures CrashTolerantJournal::State::initialize(self.i())
+    {
+        TruncatedJournal::mkfs_ensures();
     }
 }
 
