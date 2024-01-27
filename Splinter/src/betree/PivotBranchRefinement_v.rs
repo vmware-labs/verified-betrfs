@@ -26,11 +26,11 @@ impl Node {
             }
             Node::Index{pivots, children} => {
                 Buffer{map: Map::new(
-                    // TODO: why do we also want self.all_keys().contains(key) here?
+                    // TODO(x9du): why do we also want self.all_keys().contains(key) here?
                     // children[self.route(key) + 1].i().map.contains_key(key)
                     // ==> self.i().map.contains_key(lbl.key) by lemma_interpretation_delegation
                     // ==> self.all_keys().contains(key) by lemma_interpretation
-                    // TODO: adding triggers in here causes ungraceful dump
+                    // TODO(x9du): adding triggers in here causes ungraceful dump
                     |key| /*self.all_keys().contains(key) &&*/ children[self.route(key) + 1].i().map.contains_key(key),
                     |key| children[self.route(key) + 1].i().map[key]
                 )}
@@ -61,7 +61,6 @@ pub open spec(checked) fn gt_route(node: Node, key: Key, i: int) -> bool
 pub proof fn lemma_route_ensures(node: Node, key: Key)
     requires node.wf()
     ensures ({
-        // TODO: this causes WARNING 'if' cannot be used in patterns
         let s = get_keys_or_pivots(node);
         &&& -1 <= #[trigger] node.route(key) < s.len()
         &&& forall |i| #[trigger] lte_route(node, key, i) ==> Key::lte(s[i], key)
@@ -512,7 +511,6 @@ pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
     requires
         pre.wf(),
         lbl.path.valid(),
-        // lbl.path.target().wf(), // maybe remove this, should come from valid
         lbl.path.node == pre,
         lbl.path.key == lbl.key,
         lbl.path.target() is Leaf,
@@ -522,46 +520,44 @@ pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
     decreases
         pre
 {
-    assume(false);
     lemma_route_auto();
 
-    // TODO(tenzinhl): fixy.
-    // assume(false);
     lemma_path_target_is_wf(lbl.path);
     assert(lbl.path.target().wf());
     lemma_insert_leaf_is_correct(lbl.path.target(), lbl.key, lbl.msg);
 
     // Goal 1 - After insertion the node is still well formed.
     lemma_insert_preserves_wf(pre, lbl.key, lbl.msg, lbl.path);
-    assert(pre.insert(lbl.key, lbl.msg, lbl.path).wf());
     
-    // Goal 2, will prove later (x9du) - Inserting into node then abstracting to Map,
+    // Goal 2 - Inserting into node then abstracting to Map,
     // is the same as abstracting to map, then inserting to map.
 
     match pre {
         Node::Leaf{keys, msgs} => {}, // Given by lemma_insert_leaf_is_correct!
         Node::Index{pivots, children} => {
             let post = pre.insert(lbl.key, lbl.msg, lbl.path);
-            let r = pre.route(lbl.key);
             let post_children = post.get_Index_children();
-
+            let r = pre.route(lbl.key);
+            
+            // Suppress recommendation
             assert(0 <= r + 1 < children.len());
+            assert(post.wf());
+            assert(post_children.len() == children.len()); 
+            assert(forall |i| 0 <= i < post_children.len() ==> (#[trigger] post_children[i]).wf());
 
             // Assert that other children don't change
-            assert(post_children.len() == children.len()); // Suppress recommendation
-            assert(forall |i| 0 <= i < post_children.len() ==> (#[trigger] post_children[i]).wf());
             assert(forall |i| #![auto] 0 <= i < children.len() && i != (r+1) ==> post_children[i].i() == children[i].i());
 
-            // Assert that the changed child, has original keys but also the new key-value pair.
+            // Assert that the changed child has original keys plus the new key-value pair.
             let child_label = InsertLabel{ key: lbl.key, msg: lbl.msg, path: lbl.path.subpath() };
             insert_refines(children[r+1], child_label);
+            assert(post_children[r+1].i() == children[r+1].i().insert(lbl.key, lbl.msg));
 
-
+            assert(post.i().map.dom() =~~= pre.i().insert(lbl.key, lbl.msg).map.dom());
+            assert(forall |k| post.i().map.contains_key(k) ==> #[trigger] post.i().map[k] == pre.i().insert(lbl.key, lbl.msg).map[k]);
+            assert(post.i() =~~= pre.i().insert(lbl.key, lbl.msg));
         },
     }
-
-
-    assert(pre.insert(lbl.key, lbl.msg, lbl.path).i() == pre.i().insert(lbl.key, lbl.msg));
 }
 
 // use `lemma_grow_preserves_i` instead
