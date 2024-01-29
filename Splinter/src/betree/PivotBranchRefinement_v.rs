@@ -554,9 +554,22 @@ pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
             insert_refines(children[r+1], child_label);
             assert(post_children[r+1].i() == children[r+1].i().insert(lbl.key, lbl.msg));
 
-            assert forall |k| #[trigger] post.i().map.dom().contains(k)
-            implies pre.i().insert(lbl.key, lbl.msg).map.dom().contains(k) by {
-                assume(false);
+            assert forall |k| post.i().map.contains_key(k)
+            implies #[trigger] pre.i().insert(lbl.key, lbl.msg).map.contains_key(k) by {
+                if (k == lbl.key) {
+                    assert(pre.i().insert(lbl.key, lbl.msg).map.contains_key(k));
+                } else
+                /*if (k != lbl.key)*/ {
+                    // (x9du) If commented out, only fails on following assert line 566.
+                    // If uncommented, fails on the second forall implies line 571 and the assert on line 575.
+                    assume(false);
+                    assert(pre.i().map.contains_key(k));
+                }
+                assert(pre.i().insert(lbl.key, lbl.msg).map.contains_key(k));
+            }
+
+            assert forall |k| pre.i().insert(lbl.key, lbl.msg).map.contains_key(k)
+            implies #[trigger] post.i().map.contains_key(k) by {
             }
             assert(post.i().map.dom() =~~= pre.i().insert(lbl.key, lbl.msg).map.dom());
             assert(forall |k| post.i().map.contains_key(k) ==> #[trigger] post.i().map[k] == pre.i().insert(lbl.key, lbl.msg).map[k]);
