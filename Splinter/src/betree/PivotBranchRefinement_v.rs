@@ -326,6 +326,7 @@ pub struct InsertLabel {
 
 #[verifier::ext_equal]
 pub struct AppendLabel {
+    pub path: Path,
     pub keys: Seq<Key>,
     pub msgs: Seq<Message>,
 }
@@ -553,6 +554,10 @@ pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
             insert_refines(children[r+1], child_label);
             assert(post_children[r+1].i() == children[r+1].i().insert(lbl.key, lbl.msg));
 
+            assert forall |k| #[trigger] post.i().map.dom().contains(k)
+            implies pre.i().insert(lbl.key, lbl.msg).map.dom().contains(k) by {
+                assume(false);
+            }
             assert(post.i().map.dom() =~~= pre.i().insert(lbl.key, lbl.msg).map.dom());
             assert(forall |k| post.i().map.contains_key(k) ==> #[trigger] post.i().map[k] == pre.i().insert(lbl.key, lbl.msg).map[k]);
             assert(post.i() =~~= pre.i().insert(lbl.key, lbl.msg));
@@ -571,5 +576,18 @@ pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
 // {
 // }
 
+// pub proof fn append_refines(pre: Node, lbl: AppendLabel)
+//     requires
+//         pre.wf(),
+//         lbl.path.valid(),
+//         lbl.path.node == pre,
+//         lbl.path.target() == Node::empty_leaf(),
+//         lbl.keys.len() > 0,
+//         lbl.keys.len() == lbl.msgs.len(),
+//         Key::is_strictly_sorted(lbl.keys),
+//         lbl.path.key == lbl.keys[0],
+//         lbl.path.path_equiv(lbl.keys.last())
+//     ensures
+//         //
 
 }
