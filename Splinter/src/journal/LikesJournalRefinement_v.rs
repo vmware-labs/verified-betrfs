@@ -18,9 +18,6 @@ use crate::journal::LikesJournal_v::*;
 
 verus!{
 
-impl DiskView {
-}
-
 // The thrilling climax, the actual proof goal we want to use in lower
 // refinement layers.
 impl LikesJournal::State {
@@ -28,6 +25,67 @@ impl LikesJournal::State {
     recommends self.journal.truncated_journal.decodable()
     {
         self.journal
+    }
+
+    pub proof fn freeze_for_commit_refines(self, post: Self, lbl: LikesJournal::Label, depth: nat)
+    requires 
+        self.inv(), 
+        post.inv(),
+        Self::freeze_for_commit(self, post, lbl, depth)
+    ensures 
+        LinkedJournal::State::next_by(self.i(), post.i(), Self::lbl_i(lbl), 
+            LinkedJournal::Step::freeze_for_commit(depth))
+    {
+        reveal(LinkedJournal::State::next_by);
+
+        let fj = lbl.get_FreezeForCommit_frozen_journal();
+        let tj = self.journal.truncated_journal;
+        let new_bdy = fj.seq_start();
+
+        let cropped_tj = tj.crop(depth);
+        tj.disk_view.pointer_after_crop_ensures(tj.freshest_rec, depth);
+
+        let post_discard = cropped_tj.discard_old(new_bdy);
+        let post_tight = post_discard.build_tight();
+        
+        cropped_tj.discard_old_decodable(new_bdy);
+        assert(post_discard.disk_view.acyclic()); 
+
+        post_discard.disk_view.build_tight_ensures(post_discard.freshest_rec);
+        post_discard.disk_view.build_tight_domain_is_build_lsn_addr_index_range(post_discard.freshest_rec);
+
+        let tj_sub_index = tj.disk_view.build_lsn_addr_index(post_discard.freshest_rec);
+        let post_discard_repr = post_discard.disk_view.build_lsn_addr_index(post_discard.freshest_rec);
+
+        if post_discard.freshest_rec is Some {
+            tj.disk_view.pointer_after_crop_seq_end(tj.freshest_rec, depth);
+            assert(post_discard.seq_end() <= tj.seq_end());
+
+            let frozen_lsns = Set::new(|lsn: LSN| new_bdy <= lsn && lsn < post_discard.seq_end());
+            let frozen_index = self.lsn_addr_index.restrict(frozen_lsns);
+
+            tj.build_lsn_addr_index_ensures();
+            post_discard.build_lsn_addr_index_ensures();
+
+            assert(post_discard_repr.dom() =~= frozen_index.dom()) by {
+                reveal(TruncatedJournal::index_domain_valid); 
+            }
+
+            tj.disk_view.cropped_ptr_build_sub_index(tj.freshest_rec, post_discard.freshest_rec, depth);
+            assert(tj_sub_index <= self.lsn_addr_index);
+
+            post_discard.disk_view.sub_disk_with_newer_lsn_repr_index(tj.disk_view, post_discard.freshest_rec);
+            assert(post_discard_repr <= tj_sub_index);
+
+            assert forall |lsn| #[trigger] post_discard_repr.contains_key(lsn)
+            implies post_discard_repr[lsn] == self.lsn_addr_index[lsn]
+            by {
+                assert(tj_sub_index.contains_key(lsn));
+            }
+            assert(post_discard_repr <= self.lsn_addr_index);
+            assert(frozen_index =~= post_discard_repr);
+            assert(cropped_tj.valid_discard_old(new_bdy, fj));
+        }
     }
 
     pub proof fn discard_old_refines(self, post: Self, lbl: LikesJournal::Label, new_journal: LinkedJournal_v::LinkedJournal::State)
@@ -91,24 +149,17 @@ impl LikesJournal::State {
 
         let step = choose |step| LikesJournal::State::next_by(self, post, lbl, step);
         match step {
-            LikesJournal::Step::read_for_recovery() => {
-                assert(LinkedJournal::State::next(self.i(), post.i(), Self::lbl_i(lbl)));
+            LikesJournal::Step::read_for_recovery() => {},
+            LikesJournal::Step::freeze_for_commit(depth) => {
+                self.freeze_for_commit_refines(post, lbl, depth);
             },
-            LikesJournal::Step::freeze_for_commit() => {
-                assert( LinkedJournal::State::next(self.i(), post.i(), Self::lbl_i(lbl)) );
-            },
-            LikesJournal::Step::query_end_lsn() => {
-                assert( LinkedJournal::State::next(self.i(), post.i(), Self::lbl_i(lbl)) );
-            },
-            LikesJournal::Step::put(new_journal) => {
-                assert(LinkedJournal::State::next(self.i(), post.i(), Self::lbl_i(lbl)));
-            },
+            LikesJournal::Step::query_end_lsn() => {},
+            LikesJournal::Step::put(..) => {},
             LikesJournal::Step::discard_old(new_journal) => {
                 self.discard_old_refines(post, lbl, new_journal);
             },
             LikesJournal::Step::internal_journal_marshal(cut, addr, new_journal) => {
-                assert(LinkedJournal::State::next_by(self.i(), post.i(), Self::lbl_i(lbl), 
-                    LinkedJournal::Step::internal_journal_marshal(cut, addr)));
+                assert(LinkedJournal::State::next_by(self.i(), post.i(), Self::lbl_i(lbl), LinkedJournal::Step::internal_journal_marshal(cut, addr)));
             },
             _ => {
                 assert( LinkedJournal::State::next_by(self.i(), post.i(), Self::lbl_i(lbl), LinkedJournal::Step::internal_no_op()) );

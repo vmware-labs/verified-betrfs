@@ -535,7 +535,8 @@ impl LinkedJournal::State {
         reveal(PagedJournal::State::next);       // unfortunate defaults
         reveal(LinkedJournal::State::next_by);   // unfortunate defaults
 
-        let new_bdy = lbl.i().get_FreezeForCommit_frozen_journal().boundary_lsn;
+        let fj = lbl.get_FreezeForCommit_frozen_journal();
+        let new_bdy = fj.disk_view.boundary_lsn;
         let depth = step.get_freeze_for_commit_0(); // ew. Using Steps in lemmas sucks. Another mismatch with Rust's
                                                     // match-everything-all-the-time style. Change Step() to Step{}?
         let tj = self.truncated_journal;
@@ -547,10 +548,11 @@ impl LinkedJournal::State {
         let cropped_tj = LinkedJournal_v::TruncatedJournal{freshest_rec: cropped_ptr, disk_view: tjd};
         tjd.pointer_after_crop_ensures(tj.freshest_rec, depth); // another lost spec-ensures that wasted time digging up
 
-        // cropped_tj.discard_old(new_bdy).disk_view.build_tight_maintains_interpretation(cropped_tj.discard_old(new_bdy).freshest_rec);
-
-         lbl.get_FreezeForCommit_frozen_journal().iwf();  // another lost spec-ensures that wasted time digging up
+        fj.iwf();  // another lost spec-ensures that wasted time digging up
         self.i().truncated_journal.crop_head_records_wf_lemma(depth); // another lost spec-ensures that wasted time digging up
+
+        let post_discard = cropped_tj.discard_old(new_bdy);
+        fj.disk_view.sub_disk_interp(post_discard.disk_view, post_discard.freshest_rec);
 
         assert( PagedJournal::State::next_by(self.i(), post.i(), lbl.i(), PagedJournal::Step::freeze_for_commit(depth)) );  // trigger
     }

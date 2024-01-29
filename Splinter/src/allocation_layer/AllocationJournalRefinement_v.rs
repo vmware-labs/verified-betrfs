@@ -13,12 +13,12 @@ use crate::allocation_layer::AllocationJournal_v::*;
 verus!{
 
 impl AllocationJournal::Step {
-    proof fn i(self) -> LikesJournal::Step {
+    pub open spec fn i(self) -> LikesJournal::Step {
         match self {
             Self::read_for_recovery() =>
                 LikesJournal::Step::read_for_recovery(),
-            Self::freeze_for_commit() =>
-                LikesJournal::Step::freeze_for_commit(),
+            Self::freeze_for_commit(depth) =>
+                LikesJournal::Step::freeze_for_commit(depth),
             Self::query_end_lsn() =>
                 LikesJournal::Step::query_end_lsn(),
             Self::put(new_journal) =>
@@ -88,6 +88,16 @@ impl AllocationJournal::State {
         }
     }
 
+    pub proof fn freeze_for_commit_refines(self, post: Self, lbl: AllocationJournal::Label, depth: nat)
+        requires self.inv(), post.inv(), Self::freeze_for_commit(self, post, lbl, depth)
+        ensures LikesJournal::State::next_by(self.i(), post.i(), lbl.i(), LikesJournal::Step::freeze_for_commit(depth))
+    {
+        reveal(LikesJournal::State::next_by);
+        self.tj().disk_view.build_lsn_au_index_equiv_page_walk(self.tj().freshest_rec, self.first);
+        self.tj().disk_view.build_lsn_au_index_page_walk_consistency(self.tj().freshest_rec);
+        self.tj().disk_view.build_lsn_addr_index_reflects_disk_view(self.tj().freshest_rec);
+    }
+
     pub proof fn discard_old_refines(self, post: Self, lbl: AllocationJournal::Label, new_journal: LinkedJournal::State)
         requires self.inv(), post.inv(), Self::discard_old(self, post, lbl, new_journal)
         ensures LikesJournal::State::next_by(self.i(), post.i(), lbl.i(), LikesJournal::Step::discard_old(new_journal))
@@ -154,19 +164,8 @@ impl AllocationJournal::State {
 
         let step = choose |step| AllocationJournal::State::next_by(self, post, lbl, step);
         match step {
-            AllocationJournal::Step::read_for_recovery() => {
-                assert( LikesJournal::State::next_by(self.i(), post.i(), lbl.i(), LikesJournal::Step::read_for_recovery()) );
-            },
-            AllocationJournal::Step::freeze_for_commit() => {
-                assert( LikesJournal::State::next_by(self.i(), post.i(), lbl.i(), LikesJournal::Step::freeze_for_commit()) );
-            },
-            AllocationJournal::Step::query_end_lsn() => {
-                assert( LikesJournal::State::next_by(self.i(), post.i(), lbl.i(), LikesJournal::Step::query_end_lsn()) );
-            },
-            AllocationJournal::Step::put(new_journal) => {
-                reveal(LinkedJournal::State::next);
-                reveal(LinkedJournal::State::next_by);
-                assert( LikesJournal::State::next_by(self.i(), post.i(), lbl.i(), LikesJournal::Step::put(new_journal)) );
+            AllocationJournal::Step::freeze_for_commit(depth) => {
+                self.freeze_for_commit_refines(post, lbl, depth);
             },
             AllocationJournal::Step::discard_old(new_journal) => {
                 self.discard_old_refines(post, lbl, new_journal);
@@ -175,7 +174,9 @@ impl AllocationJournal::State {
                 self.internal_journal_marshal_refines(post, lbl, cut, addr, new_journal);
             },
             _ => {
-                assert( LikesJournal::State::next_by(self.i(), post.i(), lbl.i(), LikesJournal::Step::internal_no_op()) );
+                reveal(LinkedJournal::State::next);
+                reveal(LinkedJournal::State::next_by);
+                assert( LikesJournal::State::next_by(self.i(), post.i(), lbl.i(), step.i()) );
             },
         }
     }

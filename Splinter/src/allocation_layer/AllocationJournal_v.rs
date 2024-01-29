@@ -43,10 +43,19 @@ impl JournalImage {
     {
         &&& self.tj.disk_view.wf_addrs()  // subsumed by decodable?
         &&& self.tj.disk_view.pointer_is_upstream(self.tj.freshest_rec, self.first)
+        &&& self.tj.disk_view.domain_tight_wrt_index(self.tj.build_lsn_au_index(self.first))
+        &&& self.tj.disk_view.range_bounded(self.tj.seq_end())
+    }
+
+    pub proof fn empty_is_valid_image()
+    ensures Self::empty().valid_image()
+    {
+        TruncatedJournal::mkfs_ensures();
+        reveal(DiskView::pages_allocated_in_lsn_order);
     }
 }
 
-type LsnAUIndex = Map<LSN, AU>;
+pub type LsnAUIndex = Map<LSN, AU>;
 
 // Removed (checked) due to lambda being total
 pub open spec/*(checked)*/ fn lsn_au_index_discard_up_to(lsn_au_index: LsnAUIndex, bdy: LSN) -> (out: LsnAUIndex)
@@ -109,6 +118,18 @@ pub open spec(checked) fn aus_hold_contiguous_lsns(lsn_au_index: LsnAUIndex) -> 
 }
 
 impl DiskView{
+    pub open spec fn domain_tight_wrt_index(self, lsn_au_index: LsnAUIndex) -> bool
+    {
+        forall |addr| #[trigger] self.entries.dom().contains(addr) 
+            ==> lsn_au_index.values().contains(addr.au)
+    }
+
+    pub open spec fn range_bounded(self, end_lsn: LSN) -> bool
+    {
+        forall |addr| #[trigger] self.entries.dom().contains(addr) 
+            ==> self.entries[addr].message_seq.seq_end <= end_lsn
+    }
+
     #[verifier(opaque)]
     pub closed spec(checked) fn index_keys_exist_valid_entries(self, lsn_au_index: LsnAUIndex) -> bool
     recommends
@@ -853,13 +874,28 @@ state_machine!{ AllocationJournal {
         require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::linked_lbl(lbl));
     } }
 
-    transition!{ freeze_for_commit(lbl: Label) {
+    transition!{ freeze_for_commit(lbl: Label, depth: nat) {
         require lbl is FreezeForCommit;
-        require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::linked_lbl(lbl));
 
-        let frozen_journal = lbl.get_FreezeForCommit_frozen_journal();
-        let frozen_first = Self::new_first(frozen_journal.tj, pre.lsn_au_index, pre.first, frozen_journal.tj.seq_start());
-        require frozen_journal.first == frozen_first;
+        let fj = lbl.get_FreezeForCommit_frozen_journal();
+        let tj = pre.tj();
+        let new_bdy = fj.tj.seq_start();
+
+        require fj.tj.decodable();
+        require tj.disk_view.can_crop(tj.freshest_rec, depth);
+        require tj.disk_view.boundary_lsn <= new_bdy;
+
+        let cropped_tj = tj.crop(depth);
+        require cropped_tj.can_discard_to(new_bdy);
+
+        // figure out the frozen lsn range
+        let post_discard = cropped_tj.discard_old(new_bdy);
+        let frozen_lsns = Set::new(|lsn: LSN| new_bdy <= lsn && lsn < post_discard.seq_end());
+        let frozen_index = pre.lsn_au_index.restrict(frozen_lsns);
+        let frozen_addrs = Set::new(|addr: Address| addr.wf() && frozen_index.values().contains(addr.au));
+
+        require cropped_tj.discard_old_tight(new_bdy, frozen_addrs, fj.tj);
+        require fj.first == Self::new_first(fj.tj, pre.lsn_au_index, pre.first, new_bdy);
     } }
 
     transition!{ query_end_lsn(lbl: Label) {
@@ -962,9 +998,6 @@ state_machine!{ AllocationJournal {
         let mini_allocator = MiniAllocator::empty();
         let lsn_au_index = image.tj.build_lsn_au_index(image.first);
 
-        // should be maintained by inv
-        require Self::disk_domain_valid(image.tj.disk_view, lsn_au_index, mini_allocator, image.tj.seq_end());
-
         init journal = journal;
         init lsn_au_index = lsn_au_index;
         init first = image.first;
@@ -988,33 +1021,27 @@ state_machine!{ AllocationJournal {
         }
     }
 
-    pub open spec(checked) fn disk_dom_not_free(dv: DiskView, allocator: MiniAllocator) -> bool
+    pub open spec(checked) fn disk_domain_not_free(dv: DiskView, allocator: MiniAllocator) -> bool
     {
-        forall |addr| #[trigger] dv.entries.dom().contains(addr) ==> addr.wf() && !allocator.can_allocate(addr)
-    }
-
-    pub open spec(checked) fn disk_domain_valid(dv: DiskView, lsn_au_index: LsnAUIndex, allocator: MiniAllocator, end_lsn: LSN) -> bool
-    {
-        forall |addr| #[trigger] dv.entries.dom().contains(addr) ==> ({
-            &&& lsn_au_index.values().contains(addr.au)
-            &&& !allocator.can_allocate(addr)
-            &&& dv.entries[addr].message_seq.seq_end <= end_lsn
-        })
+        forall |addr| #[trigger] dv.entries.dom().contains(addr) 
+            ==> !allocator.can_allocate(addr)
     }
 
     #[invariant]
     pub open spec(checked) fn inv(self) -> bool {
         &&& self.wf()
-
         &&& self.lsn_au_index == self.tj().build_lsn_au_index(self.first)
-        &&& self.tj().disk_view.pointer_is_upstream(self.tj().freshest_rec, self.first)
 
-        &&& Self::disk_domain_valid(self.tj().disk_view, self.lsn_au_index, self.mini_allocator, self.tj().seq_end())
+        &&& self.tj().disk_view.pointer_is_upstream(self.tj().freshest_rec, self.first)
+        &&& self.tj().disk_view.domain_tight_wrt_index(self.lsn_au_index)
+        &&& self.tj().disk_view.range_bounded(self.tj().seq_end())
+
+        &&& Self::disk_domain_not_free(self.tj().disk_view, self.mini_allocator)
         &&& Self::mini_allocator_follows_freshest_rec(self.tj().freshest_rec, self.mini_allocator)
     }
 
     #[inductive(freeze_for_commit)]
-    fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label) {
+    fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label, depth: nat) {
         reveal(LinkedJournal::State::next);
         reveal(LinkedJournal::State::next_by );
     }
@@ -1056,7 +1083,6 @@ state_machine!{ AllocationJournal {
         assert( post_dv.internal_au_pages_fully_linked() ) by {
             reveal(DiskView::pages_allocated_in_lsn_order);
         }
-        assert( Self::disk_domain_valid(post_dv, post.lsn_au_index, post.mini_allocator, post.tj().seq_end()) );
         assert( Self::mini_allocator_follows_freshest_rec(post.tj().freshest_rec, post.mini_allocator) );
 
         if post.tj().freshest_rec is Some {
@@ -1110,7 +1136,7 @@ state_machine!{ AllocationJournal {
         assert( update[msgs.seq_start] == addr.au );
         assert( post.lsn_au_index.contains_key(msgs.seq_start) );
 
-        assert(Self::disk_domain_valid(post_dv, post.lsn_au_index, post.mini_allocator, post.tj().seq_end())) by {
+        assert(post_dv.domain_tight_wrt_index(post.lsn_au_index)) by {
             assert forall |addr| #[trigger] post_dv.entries.dom().contains(addr)
             implies post.lsn_au_index.values().contains(addr.au)
             by {

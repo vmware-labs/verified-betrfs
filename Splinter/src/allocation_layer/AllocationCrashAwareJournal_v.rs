@@ -7,7 +7,7 @@ use state_machines_macros::state_machine;
 
 use crate::abstract_system::StampedMap_v::LSN;
 use crate::abstract_system::MsgHistory_v::*;
-use crate::disk::GenericDisk_v::AU;
+use crate::disk::GenericDisk_v::{Address, AU};
 use crate::allocation_layer::AllocationJournal_v::*;
 use crate::journal::LinkedJournal_v;
 
@@ -165,8 +165,8 @@ state_machine!{AllocationCrashAwareJournal{
 
             require AllocationJournal::State::next(
                 pre.ephemeral.get_Known_v(), 
-                new_journal, 
-                AllocationJournal::Label::DiscardOld{ 
+                new_journal,
+                AllocationJournal::Label::DiscardOld{
                     start_lsn: pre.inflight.unwrap().tj.seq_start(), 
                     require_end: lbl.get_CommitComplete_require_end(),
                     // where do we specify which aus are in deallocs?
@@ -212,12 +212,12 @@ state_machine!{AllocationCrashAwareJournal{
         &&& self.ephemeral is Known ==> {
             let v = self.ephemeral.get_Known_v();
             let persistent_disk = self.persistent.tj.disk_view;
-            &&& AllocationJournal::State::disk_dom_not_free(persistent_disk, v.mini_allocator)
+            &&& AllocationJournal::State::disk_domain_not_free(persistent_disk, v.mini_allocator)
         }
         &&& self.ephemeral is Known && self.inflight is Some ==> {
             let v = self.ephemeral.get_Known_v();
             let inflight_disk = self.inflight.unwrap().tj.disk_view;
-            &&& AllocationJournal::State::disk_dom_not_free(inflight_disk, v.mini_allocator)
+            &&& AllocationJournal::State::disk_domain_not_free(inflight_disk, v.mini_allocator)
         }
     }
 
@@ -225,8 +225,9 @@ state_machine!{AllocationCrashAwareJournal{
     pub open spec(checked) fn inv(self) -> bool {
         &&& self.ephemeral is Unknown ==> self.inflight is None
         &&& self.ephemeral is Known ==> self.ephemeral.get_Known_v().inv()
-        &&& self.inflight is Some ==> self.inflight.unwrap().tj.decodable()
-        &&& self.persistent.tj.decodable()
+        &&& self.inflight is Some ==> self.inflight.unwrap().valid_image()
+        &&& self.persistent.valid_image()
+
         // not used here but easier to maintain here
         &&& self.state_relations()
         &&& self.journal_pages_not_free()
@@ -234,8 +235,7 @@ state_machine!{AllocationCrashAwareJournal{
 
     #[inductive(initialize)]
     fn initialize_inductive(post: Self) {
-        LinkedJournal_v::TruncatedJournal::mkfs_ensures();
-        assert(post.persistent.tj.decodable()); // show empty is decodable
+        JournalImage::empty_is_valid_image();
     }
    
     #[inductive(load_ephemeral_from_persistent)]
@@ -325,6 +325,7 @@ state_machine!{AllocationCrashAwareJournal{
         /*assert(ephemeral_discarded_disk.is_nondangling_pointer(frozen_journal.tj.freshest_rec));
         assert(ephemeral_discarded_disk.decodable(frozen_journal.tj.freshest_rec));*/
 
+        assume(false); // TODO(JL): continue from here
         ephemeral_discarded_disk.build_tight_builds_sub_disks(frozen_journal.tj.freshest_rec);
         /*assert(ephemeral_discarded_disk.build_tight(frozen_journal.tj.freshest_rec) == frozen_journal.tj.disk_view);
         assert(frozen_journal.tj.disk_view.entries <= ephemeral_disk.entries);

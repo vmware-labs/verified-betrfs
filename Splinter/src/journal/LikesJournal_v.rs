@@ -130,23 +130,44 @@ impl DiskView {
         &&& self.entries[addr].contains_lsn(self.boundary_lsn, lsn)
     }
 
-    proof fn build_lsn_addr_index_ignores_build_tight(self, bt_root: Pointer, repr_root: Pointer)
+    pub proof fn cropped_ptr_build_sub_index(self, root: Pointer, cropped: Pointer, depth: nat)
     requires
-        self.buildable(repr_root),
-        self.decodable(bt_root),
-        self.build_tight(bt_root).decodable(repr_root),
+        self.buildable(root),
+        self.buildable(cropped),
+        self.can_crop(root, depth),
+        cropped == self.pointer_after_crop(root, depth)
     ensures
-        self.build_tight(bt_root).wf(),
-        self.build_tight(bt_root).acyclic(),
-        repr_root.is_Some() ==> self.boundary_lsn < self.build_tight(bt_root).entries[repr_root.unwrap()].message_seq.seq_end,
-        self.build_lsn_addr_index(repr_root) == self.build_tight(bt_root).build_lsn_addr_index(repr_root),
-    decreases self.the_rank_of(repr_root)
+        self.build_lsn_addr_index(cropped) <= self.build_lsn_addr_index(root)
+    decreases self.the_rank_of(root)
     {
-        self.build_tight_is_awesome(bt_root);
-        if repr_root.is_Some() {
-            self.build_lsn_addr_index_ignores_build_tight(bt_root, self.next(repr_root));
+        reveal(TruncatedJournal::index_domain_valid);
+        if depth > 0 {
+            self.build_lsn_addr_index_domain_valid(root);
+            self.cropped_ptr_build_sub_index(self.next(root), cropped, (depth-1) as nat);
+            if self.next(root) is Some {
+                self.build_lsn_addr_index_domain_valid(self.next(root));
+                assert(self.build_lsn_addr_index(self.next(root)) <= self.build_lsn_addr_index(root));
+            }
         }
     }
+
+    // proof fn build_lsn_addr_index_ignores_build_tight(self, bt_root: Pointer, repr_root: Pointer)
+    // requires
+    //     self.buildable(repr_root),
+    //     self.decodable(bt_root),
+    //     self.build_tight(bt_root).decodable(repr_root),
+    // ensures
+    //     self.build_tight(bt_root).wf(),
+    //     self.build_tight(bt_root).acyclic(),
+    //     repr_root.is_Some() ==> self.boundary_lsn < self.build_tight(bt_root).entries[repr_root.unwrap()].message_seq.seq_end,
+    //     self.build_lsn_addr_index(repr_root) == self.build_tight(bt_root).build_lsn_addr_index(repr_root),
+    // decreases self.the_rank_of(repr_root)
+    // {
+    //     self.build_tight_is_awesome(bt_root);
+    //     if repr_root.is_Some() {
+    //         self.build_lsn_addr_index_ignores_build_tight(bt_root, self.next(repr_root));
+    //     }
+    // }
 
     // proof fn representation_ignores_build_tight(self, bt_root: Pointer, repr_root: Pointer)
     // requires
@@ -301,50 +322,6 @@ impl DiskView {
 //         assert( self.build_lsn_addr_index(root).values() =~= self.representation(root) );    // TODO remove
     }
 
-//     pub proof fn build_lsn_addr_index_gives_representation(self, root: Pointer) 
-//     requires
-//         self.buildable(root),
-//     ensures
-//         // This conclusion is used inside the recursion
-//         root.is_Some() ==>
-//             forall |lsn| self.build_lsn_addr_index(root).contains_key(lsn) ==>
-//                 self.boundary_lsn <= lsn < self.entries[root.unwrap()].message_seq.seq_end,
-//         // This conclusion is the one we're trying to actually export
-//         self.build_lsn_addr_index(root).values() =~= self.representation(root),
-//         // TODO(chris): I find it kind of disturbing that the ~ between the == in the line above
-//         // is a functional part of the proof strategy. --jonh
-//     decreases self.the_rank_of(root)
-//     {
-//         reveal(TruncatedJournal::index_domain_valid);
-//         reveal(DiskView::index_keys_map_to_valid_entries);
-
-//         if root.is_Some() {
-//             self.build_lsn_addr_index_gives_representation(self.next(root));
-//             let curr_msgs = self.entries[root.unwrap()].message_seq;
-//             let begin = max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
-//             let update = singleton_index(begin, curr_msgs.seq_end, root.unwrap());
-//             assert(update.contains_key(begin));
-//             assert forall |k| #![auto] self.build_lsn_addr_index(root).values().contains(k) implies self.representation(root).contains(k) by {
-//             }
-//             self.representation_ensures(root);
-//             assert forall |addr| #![auto]
-//                 self.representation(root).contains(addr) implies
-//                 self.build_lsn_addr_index(root).values().contains(addr) by {
-
-//                 let left_index = self.build_lsn_addr_index(self.entries[root.unwrap()].cropped_prior(self.boundary_lsn));
-//                 if update.values().contains(addr) {
-//                     assert( self.build_lsn_addr_index(root).contains_key(begin) );   // witness
-// //                     assert( self.build_lsn_addr_index(root).values().contains(addr) );
-//                 } else {
-//                     let lsn = choose |lsn| #![auto] left_index.contains_key(lsn) && left_index[lsn]==addr;
-//                     assert( self.build_lsn_addr_index(root).contains_key(lsn) );    // witness
-// //                     assert( self.build_lsn_addr_index(root).values().contains(addr) );
-//                 }
-//             }
-//         }
-// //         assert( self.build_lsn_addr_index(root).values() =~= self.representation(root) );    // TODO remove
-//     }
-
     pub proof fn sub_disk_with_newer_lsn_repr_index(self, big: DiskView, ptr: Pointer)
     requires 
         self.decodable(ptr),
@@ -401,22 +378,6 @@ impl DiskView {
         }
     }
 
-//     pub open spec fn lsns_from_unique_addrs(self) -> bool
-//     {
-//         forall |lsn, addr1, addr2| ({
-//             &&& self.entries[addr1].message_seq.contains(lsn)
-//             &&& self.entries[addr2].message_seq.contains(lsn)
-//         }) ==> addr1 == addr2
-//     }
-
-//     pub build_lsn_addr_index_gives_unique_addrs(self, root: Pointer)
-//     requires
-//         self.buildable(root),
-//     ensures
-//         self.build_lsn_addr_index(root),
-//     {
-//     }
-   
     pub proof fn build_lsn_addr_all_decodable(self, root: Pointer)
     requires
         self.buildable(root),
@@ -744,9 +705,26 @@ state_machine!{ LikesJournal {
         require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
     } }
 
-    transition!{ freeze_for_commit(lbl: Label) {
+    transition!{ freeze_for_commit(lbl: Label, depth: nat) {
         require lbl is FreezeForCommit;
-        require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
+
+        let fj = lbl.get_FreezeForCommit_frozen_journal();
+        let tj = pre.journal.truncated_journal;
+        let new_bdy = fj.seq_start();
+
+        require fj.decodable();
+        require tj.disk_view.can_crop(tj.freshest_rec, depth);
+        require tj.disk_view.boundary_lsn <= new_bdy;
+
+        let cropped_tj = tj.crop(depth);
+        require cropped_tj.can_discard_to(new_bdy);
+
+        // figure out the frozen lsn range
+        let post_discard = cropped_tj.discard_old(new_bdy);
+        let frozen_lsns = Set::new(|lsn: LSN| new_bdy <= lsn && lsn < post_discard.seq_end());
+        let frozen_index = pre.lsn_addr_index.restrict(frozen_lsns);
+
+        require cropped_tj.discard_old_cond(new_bdy, frozen_index.values(), fj);
     } }
 
     transition!{ query_end_lsn(lbl: Label) {
@@ -821,20 +799,14 @@ state_machine!{ LikesJournal {
 
     #[inductive(read_for_recovery)]
     fn read_for_recovery_inductive(pre: Self, post: Self, lbl: Label) {
-        reveal(LinkedJournal_v::LinkedJournal::State::next);
-        reveal(LinkedJournal_v::LinkedJournal::State::next_by);
     }
    
     #[inductive(freeze_for_commit)]
-    fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label) {
-        reveal(LinkedJournal_v::LinkedJournal::State::next);
-        reveal(LinkedJournal_v::LinkedJournal::State::next_by);
+    fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label, depth: nat) {
     }
 
     #[inductive(query_end_lsn)]
     fn query_end_lsn_inductive(pre: Self, post: Self, lbl: Label) {
-        reveal(LinkedJournal_v::LinkedJournal::State::next);
-        reveal(LinkedJournal_v::LinkedJournal::State::next_by);
     }
    
     #[inductive(put)]

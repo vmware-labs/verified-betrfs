@@ -264,64 +264,6 @@ impl DiskView {
         }
     }
 
-//     #[verifier(decreases_by)]
-//     proof fn thing(self, root: Pointer)
-//     {
-//          if self.decodable(root) && root.is_Some() {
-//             assert( self.acyclic() );
-//             let addr = root.unwrap();
-//             assert( self.valid_ranking(self.the_ranking()) );
-//             assert( self.entries.contains_key(addr) );
-//             assert( self.the_rank_of(self.entries[addr].cropped_prior(self.boundary_lsn)) < self.the_rank_of(root) );
-//         }
-//     }
-
-    // pub open spec(checked) fn representation(self, root: Pointer) -> (out: Set<Address>)
-    // recommends
-    //     self.decodable(root),
-    //     self.acyclic(),
-    // decreases self.the_rank_of(root) when self.decodable(root) && self.acyclic()
-    // {
-    //     // TODO(chris): debugging these failures sucks, unlike inline asserts.
-    //     match root {
-    //         None => set!{},
-    //         Some(addr) => self.representation(self.entries[addr].cropped_prior(self.boundary_lsn)).insert(addr)
-    //     }
-    // }
-
-    // pub proof fn representation_ensures(self, root: Pointer)
-    // requires
-    //     self.decodable(root),
-    //     self.acyclic(),
-    // ensures
-    //     forall |addr| self.representation(root).contains(addr) ==> self.entries.contains_key(addr)
-    // decreases
-    //     self.the_rank_of(root),
-    // {
-    //     match root {
-    //         None => {},
-    //         Some(addr) => {
-    //             self.representation_ensures(self.entries[addr].cropped_prior(self.boundary_lsn));
-    //         },
-    //     }
-    // }
-
-    // pub proof fn representation_auto(self)
-    // ensures
-    //     forall |root|
-    //         self.decodable(root) && self.acyclic()
-    //         ==>
-    //         forall |addr| self.representation(root).contains(addr) ==> self.entries.contains_key(addr)
-    // {
-    //     assert forall |root|
-    //         self.decodable(root) && self.acyclic()
-    //         implies
-    //         forall |addr| self.representation(root).contains(addr) ==> self.entries.contains_key(addr) by
-    //     {
-    //         self.representation_ensures(root);
-    //     }
-    // }
-
     pub open spec(checked) fn can_crop(self, root: Pointer, depth: nat) -> bool
     recommends
         self.decodable(root),
@@ -357,6 +299,20 @@ impl DiskView {
     {
         if depth > 0 {
             self.pointer_after_crop_ensures(self.next(root), (depth-1) as nat)
+        }
+    }
+
+    pub proof fn pointer_after_crop_seq_end(self, root: Pointer, depth: nat)
+    requires
+        self.decodable(root),
+        self.block_in_bounds(root),
+        self.can_crop(root, depth),
+    ensures
+        self.seq_end(self.pointer_after_crop(root, depth)) <= self.seq_end(root)
+    decreases depth
+    {
+        if depth > 0 {
+            self.pointer_after_crop_seq_end(self.next(root), (depth-1) as nat)
         }
     }
 
@@ -931,13 +887,6 @@ state_machine!{ LinkedJournal {
         Internal{},   // Local No-op label
     }
 
-    // unfortunate:
-    // error: this item is not supported
-//     impl Label {
-//         pub open spec(checked) fn wf(self) -> bool {
-//             self.is_FreezeForCommit() ==> self.get_FreezeForCommit().decodable()
-//         }
-//     }
     pub open spec(checked) fn lbl_wf(lbl: Label) -> bool
     {
         match lbl {
@@ -964,19 +913,18 @@ state_machine!{ LinkedJournal {
         require Self::lbl_wf(lbl);
         require lbl.is_FreezeForCommit();
         require pre.truncated_journal.decodable(); // Shown by invariant, not runtime-checked
+
         let dv = pre.truncated_journal.disk_view;
         require dv.can_crop(pre.truncated_journal.freshest_rec, depth);
-        let ptr = dv.pointer_after_crop(pre.truncated_journal.freshest_rec, depth);
-        let cropped_tj = TruncatedJournal{
-            freshest_rec: ptr,
-            disk_view: pre.truncated_journal.disk_view
-        };
+
+        let cropped_tj = pre.truncated_journal.crop(depth);
         let label_fj = lbl.get_FreezeForCommit_frozen_journal();
         let new_bdy = label_fj.seq_start();
         require dv.boundary_lsn <= new_bdy;
+
         require cropped_tj.can_discard_to(new_bdy);
-        // NOTE(Jialin): remove build tight requirement for layers below
-        require label_fj == cropped_tj.discard_old(new_bdy);
+        require cropped_tj.valid_discard_old(new_bdy, label_fj);
+        // require label_fj == cropped_tj.discard_old(new_bdy);
     }}
 
     transition!{ query_end_lsn(lbl: Label) {
