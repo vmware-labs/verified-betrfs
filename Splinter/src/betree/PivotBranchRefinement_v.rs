@@ -553,6 +553,22 @@ pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
             insert_refines(children[r+1], child_label);
             assert(post_children[r+1].i() == children[r+1].i().insert(lbl.key, lbl.msg));
 
+            assert forall |k| post.i().map.contains_key(k)
+            implies #[trigger] pre.i().insert(lbl.key, lbl.msg).map.contains_key(k) by {
+                if (k == lbl.key) {
+                    assert(pre.i().insert(lbl.key, lbl.msg).map.contains_key(k));
+                } else
+                /*if (k != lbl.key)*/ {
+                    assume(false);
+                    assert(pre.i().map.contains_key(k));
+                }
+                assert(pre.i().insert(lbl.key, lbl.msg).map.contains_key(k));
+            }
+
+            assert forall |k| pre.i().insert(lbl.key, lbl.msg).map.contains_key(k)
+            implies #[trigger] post.i().map.contains_key(k) by {
+            }
+
             assert(post.i().map.dom() =~~= pre.i().insert(lbl.key, lbl.msg).map.dom());
             assert(forall |k| post.i().map.contains_key(k) ==> #[trigger] post.i().map[k] == pre.i().insert(lbl.key, lbl.msg).map[k]);
             assert(post.i() =~~= pre.i().insert(lbl.key, lbl.msg));
