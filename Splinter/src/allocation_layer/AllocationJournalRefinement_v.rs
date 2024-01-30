@@ -92,10 +92,32 @@ impl AllocationJournal::State {
         requires self.inv(), post.inv(), Self::freeze_for_commit(self, post, lbl, depth)
         ensures LikesJournal::State::next_by(self.i(), post.i(), lbl.i(), LikesJournal::Step::freeze_for_commit(depth))
     {
+        reveal(AllocationJournal::State::next);
+        reveal(AllocationJournal::State::next_by);
         reveal(LikesJournal::State::next_by);
+
+        let frozen_journal = lbl.get_FreezeForCommit_frozen_journal();
+        let new_bdy = frozen_journal.tj.seq_start();
+
+        assert(Self::next_by(self, post, lbl, AllocationJournal::Step::freeze_for_commit(depth)));
+        Self::frozen_journal_is_valid_image(self, post, lbl);
+        assert(frozen_journal.tj.decodable());
+
+        self.tj().crop_ensures(depth);
+        let post_discard = self.tj().crop(depth).discard_old(new_bdy);
+        let frozen_lsns = Set::new(|lsn: LSN| new_bdy <= lsn && lsn < post_discard.seq_end());
+        let frozen_index = self.lsn_au_index.restrict(frozen_lsns);
+        let i_frozen_index = self.i().lsn_addr_index.restrict(frozen_lsns);
+
+        let addrs_past_new_end = Set::new(|addr: Address| frozen_journal.tj.freshest_rec.unwrap().after_page(addr));
+        let frozen_addrs = Set::new(|addr: Address| addr.wf() && frozen_index.values().contains(addr.au)) - addrs_past_new_end;
+
         self.tj().disk_view.build_lsn_au_index_equiv_page_walk(self.tj().freshest_rec, self.first);
         self.tj().disk_view.build_lsn_au_index_page_walk_consistency(self.tj().freshest_rec);
         self.tj().disk_view.build_lsn_addr_index_reflects_disk_view(self.tj().freshest_rec);
+
+        // likes frozen 
+        assume(i_frozen_index.values() <= frozen_addrs);
     }
 
     pub proof fn discard_old_refines(self, post: Self, lbl: AllocationJournal::Label, new_journal: LinkedJournal::State)

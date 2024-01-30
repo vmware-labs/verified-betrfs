@@ -163,6 +163,14 @@ state_machine!{AllocationCrashAwareJournal{
             require pre.ephemeral is Known;
             require pre.inflight is Some;
 
+            // upon a successful write to super block, we truncate ephemeral 
+            // journal to line up with the beginning of the newly persisted journal
+            // another option would be to truncate the ephemeral journal to the 
+            // end of persitent journal, but this means that to reason about the
+            // full system, we will need to reason about persistent tree,
+            // persistent journal stitched at the front of the ephemeral journal.
+            // since there's no runtime cost to track ephemeral journal as a 
+            // superset of persistent journal, that's what we do
             require AllocationJournal::State::next(
                 pre.ephemeral.get_Known_v(), 
                 new_journal,
@@ -297,6 +305,8 @@ state_machine!{AllocationCrashAwareJournal{
             _ => { }
         }
         assert(post.state_relations());
+
+        assume(post.inv()); // TODO(JL)
     }
    
     #[inductive(query_lsn_persistence)]
@@ -313,29 +323,24 @@ state_machine!{AllocationCrashAwareJournal{
         reveal(LinkedJournal_v::LinkedJournal::State::next);
         reveal(LinkedJournal_v::LinkedJournal::State::next_by);
 
-        assert(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv());
-        assert(post.inflight is Some ==> post.inflight.unwrap().tj.decodable()); // should reveal inflight
-
         let aj = pre.ephemeral.get_Known_v();
-        let ephemeral_disk = aj.tj().disk_view;
-        let ephemeral_discarded_disk = ephemeral_disk.discard_old(frozen_journal.tj.disk_view.boundary_lsn);
+        let new_bdy = frozen_journal.tj.seq_start();
 
-        ephemeral_disk.build_tight_auto();
-        ephemeral_disk.pointer_after_crop_auto();
-        /*assert(ephemeral_discarded_disk.is_nondangling_pointer(frozen_journal.tj.freshest_rec));
-        assert(ephemeral_discarded_disk.decodable(frozen_journal.tj.freshest_rec));*/
+        AllocationJournal::State::frozen_journal_is_valid_image(aj, aj, AllocationJournal::Label::FreezeForCommit{frozen_journal});
+        assert(post.inflight.unwrap().valid_image());
 
-        assume(false); // TODO(JL): continue from here
-        ephemeral_discarded_disk.build_tight_builds_sub_disks(frozen_journal.tj.freshest_rec);
-        /*assert(ephemeral_discarded_disk.build_tight(frozen_journal.tj.freshest_rec) == frozen_journal.tj.disk_view);
-        assert(frozen_journal.tj.disk_view.entries <= ephemeral_disk.entries);
-        assert(frozen_journal.tj.disk_view.is_sub_disk_with_newer_lsn(ephemeral_disk));*/
-        assert(post.state_relations());
+        // use aj.frozen_journal_is_valid_image
+        assume(false);
+        // ephemeral_discarded_disk.build_tight_builds_sub_disks(frozen_journal.tj.freshest_rec);
+        // /*assert(ephemeral_discarded_disk.build_tight(frozen_journal.tj.freshest_rec) == frozen_journal.tj.disk_view);
+        // assert(frozen_journal.tj.disk_view.entries <= ephemeral_disk.entries);
+        // assert(frozen_journal.tj.disk_view.is_sub_disk_with_newer_lsn(ephemeral_disk));*/
+        // assert(post.state_relations());
 
-        // assert(AllocationJournal::State::journal_pages_not_free(ephemeral_disk.entries.dom(), aj.mini_allocator));
-        assert(frozen_journal.tj.disk_view.entries.dom() <= ephemeral_disk.entries.dom()); // trigger
-        // assert(AllocationJournal::State::journal_pages_not_free(frozen_journal.tj.disk_view.entries.dom(), aj.mini_allocator));
-        assert(post.journal_pages_not_free());
+        // // assert(AllocationJournal::State::journal_pages_not_free(ephemeral_disk.entries.dom(), aj.mini_allocator));
+        // assert(frozen_journal.tj.disk_view.entries.dom() <= ephemeral_disk.entries.dom()); // trigger
+        // // assert(AllocationJournal::State::journal_pages_not_free(frozen_journal.tj.disk_view.entries.dom(), aj.mini_allocator));
+        // assert(post.journal_pages_not_free());
     }
    
     #[inductive(commit_complete)]

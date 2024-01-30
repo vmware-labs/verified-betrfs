@@ -56,6 +56,13 @@ impl Address {
     pub open spec(checked) fn next(self) -> Address {
         Address{page: self.page+1, ..self}
     }
+
+    // Returns true for WF addresses within the same AU but after self
+    pub open spec(checked) fn after_page(self, addr: Self) -> bool {
+        &&& addr.wf()
+        &&& addr.au == self.au
+        &&& addr.page > self.page
+    }
 }
 
 pub open spec(checked) fn first_page(ptr: Pointer) -> Pointer {
