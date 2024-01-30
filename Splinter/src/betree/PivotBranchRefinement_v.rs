@@ -544,10 +544,10 @@ pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
             assert(post.wf());
             assert(post_children.len() == children.len()); 
             assert(forall |i| 0 <= i < post_children.len() ==> (#[trigger] post_children[i]).wf());
+
             assert forall |i| 0 <= i < children.len() && children[i] is Index
             implies (forall |key| 0 <= #[trigger] children[i].route(key) + 1 < children[i].get_Index_children().len()) by {
-                // assert forall |key| 0 <= #[trigger] children[i].route(key) + 1 < children[i].get_Index_children().len()
-                assume(false);
+                assert(forall |key| 0 <= #[trigger] children[i].route(key) + 1 < children[i].get_Index_children().len());
             }
 
             // Assert that other children don't change
@@ -572,6 +572,11 @@ pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
                 }
                 assert(pre.i().insert(lbl.key, lbl.msg).map.contains_key(k));
             }
+
+            // TODO(x9du): When this assume is left here, lemma verifies.
+            // But: when assume is moved below the following assert forall, verus complains about this assert forall above:
+            // assert forall |i| 0 <= i < children.len() && children[i] is Index
+            // implies (forall |key| 0 <= #[trigger] children[i].route(key) + 1 < children[i].get_Index_children().len())
             assume(false);
 
             assert forall |k| pre.i().insert(lbl.key, lbl.msg).map.contains_key(k)
