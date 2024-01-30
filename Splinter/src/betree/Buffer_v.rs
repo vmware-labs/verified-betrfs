@@ -20,6 +20,7 @@ pub struct Buffer {
     pub map: Map<Key, Message>
 }
 
+// A Buffer is a map from keys to messages.
 impl Buffer {
     pub open spec(checked) fn query(self, key: Key) -> Message {
         if self.map.contains_key(key) {
@@ -60,6 +61,10 @@ impl Buffer {
 
     pub open spec(checked) fn empty() -> Buffer {
         Buffer{ map: Map::empty() }
+    }
+
+    pub open spec(checked) fn insert(self, key: Key, msg: Message) -> Buffer {
+        Buffer { map: self.map.insert(key, msg) }
     }
 } // end impl Buffer
 }  // end verus!

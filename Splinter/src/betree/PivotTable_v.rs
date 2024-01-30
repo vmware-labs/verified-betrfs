@@ -19,7 +19,7 @@ verus! {
 // Each bucket must be nonempty.
 
 // Elements are used for providing an upperbound for the keys
-// Everything besides the last node cannot be maximum
+// Only the last node can be Element::Max.
 
 pub struct PivotTable {
     pub pivots: Seq<Element>

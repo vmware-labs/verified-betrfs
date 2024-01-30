@@ -325,7 +325,7 @@ impl LinkedBranch {
             self.valid_ranking(ranking)
         decreases self.get_rank(ranking), 1int
     {
-        // TODO: the match doesn't satisfy the self.root() is Index recommends
+        // TODO (x9du): the match doesn't satisfy the self.root() is Index recommends
         // but the if does?
         if self.root() is Leaf {
             self.root().get_Leaf_keys().to_set()
@@ -641,7 +641,7 @@ pub open spec(checked) fn empty_linked_branch(root: Address) -> LinkedBranch
     LinkedBranch{root: root, disk_view: empty_disk().modify_disk(root, Node::Leaf{keys: seq![], msgs: seq![]})}
 }
 
-// TODO: may want to move this to a utils file
+// TODO (x9du): may want to move this to a utils file
 pub open spec(checked) fn union_seq_of_sets<T>(s: Seq<Set<T>>) -> Set<T>
     decreases s.len()
 {
