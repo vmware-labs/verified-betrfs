@@ -559,6 +559,7 @@ pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
                 if (k == lbl.key) {
                     assert(pre.i().insert(lbl.key, lbl.msg).map.contains_key(k));
                 } else
+                // TODO (x9du): See if fixing recommends/where will get rid of this behavior
                 /*if (k != lbl.key)*/ {
                     // (x9du) Verus version 0.2024.01.27.a7c432b. If commented out, only fails on following assert line 566.
                     // If uncommented, fails on the second forall implies line 571 and the assert on line 575.
