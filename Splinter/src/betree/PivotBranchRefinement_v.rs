@@ -547,7 +547,9 @@ pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
 
             assert forall |i| 0 <= i < children.len() && children[i] is Index
             implies (forall |key| 0 <= #[trigger] children[i].route(key) + 1 < children[i].get_Index_children().len()) by {
-                assert(forall |key| 0 <= #[trigger] children[i].route(key) + 1 < children[i].get_Index_children().len());
+                assert forall |key| 0 <= #[trigger] children[i].route(key) + 1 < children[i].get_Index_children().len() by {
+                    lemma_route_ensures(children[i], key);
+                }
             }
 
             // Assert that other children don't change
@@ -558,33 +560,6 @@ pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
             insert_refines(children[r+1], child_label);
             assert(post_children[r+1].i() == children[r+1].i().insert(lbl.key, lbl.msg));
 
-            assert forall |k| post.i().map.contains_key(k)
-            implies #[trigger] pre.i().insert(lbl.key, lbl.msg).map.contains_key(k) by {
-                if (k == lbl.key) {
-                    assert(pre.i().insert(lbl.key, lbl.msg).map.contains_key(k));
-                } else {
-                    assert(children[pre.route(k) + 1].i().map.contains_key(k));
-                    assert(pre.i().map =~~= Map::new(
-                        |k2| children[pre.route(k2) + 1].i().map.contains_key(k2),
-                        |k2| children[pre.route(k2) + 1].i().map[k2]
-                    ));
-                    assert(pre.i().map.contains_key(k));
-                }
-                assert(pre.i().insert(lbl.key, lbl.msg).map.contains_key(k));
-            }
-
-            // TODO(x9du): When this assume is left here, lemma verifies.
-            // But: when assume is moved below the following assert forall, verus complains about this assert forall above:
-            // assert forall |i| 0 <= i < children.len() && children[i] is Index
-            // implies (forall |key| 0 <= #[trigger] children[i].route(key) + 1 < children[i].get_Index_children().len())
-            assume(false);
-
-            assert forall |k| pre.i().insert(lbl.key, lbl.msg).map.contains_key(k)
-            implies #[trigger] post.i().map.contains_key(k) by {
-            }
-
-            assert(post.i().map.dom() =~~= pre.i().insert(lbl.key, lbl.msg).map.dom());
-            assert(forall |k| post.i().map.contains_key(k) ==> #[trigger] post.i().map[k] == pre.i().insert(lbl.key, lbl.msg).map[k]);
             assert(post.i() =~~= pre.i().insert(lbl.key, lbl.msg));
         },
     }
