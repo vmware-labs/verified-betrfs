@@ -544,6 +544,11 @@ pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
             assert(post.wf());
             assert(post_children.len() == children.len()); 
             assert(forall |i| 0 <= i < post_children.len() ==> (#[trigger] post_children[i]).wf());
+            assert forall |i| 0 <= i < children.len() && children[i] is Index
+            implies (forall |key| 0 <= #[trigger] children[i].route(key) + 1 < children[i].get_Index_children().len()) by {
+                // assert forall |key| 0 <= #[trigger] children[i].route(key) + 1 < children[i].get_Index_children().len()
+                assume(false);
+            }
 
             // Assert that other children don't change
             assert(forall |i| #![auto] 0 <= i < children.len() && i != (r+1) ==> post_children[i].i() == children[i].i());
@@ -557,13 +562,17 @@ pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
             implies #[trigger] pre.i().insert(lbl.key, lbl.msg).map.contains_key(k) by {
                 if (k == lbl.key) {
                     assert(pre.i().insert(lbl.key, lbl.msg).map.contains_key(k));
-                } else
-                /*if (k != lbl.key)*/ {
-                    assume(false);
+                } else {
+                    assert(children[pre.route(k) + 1].i().map.contains_key(k));
+                    assert(pre.i().map =~~= Map::new(
+                        |k2| children[pre.route(k2) + 1].i().map.contains_key(k2),
+                        |k2| children[pre.route(k2) + 1].i().map[k2]
+                    ));
                     assert(pre.i().map.contains_key(k));
                 }
                 assert(pre.i().insert(lbl.key, lbl.msg).map.contains_key(k));
             }
+            assume(false);
 
             assert forall |k| pre.i().insert(lbl.key, lbl.msg).map.contains_key(k)
             implies #[trigger] post.i().map.contains_key(k) by {
