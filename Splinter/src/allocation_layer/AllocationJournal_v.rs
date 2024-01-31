@@ -399,8 +399,9 @@ impl DiskView{
     }
 
     // Profiling suggested this quantifier is trigger happy
+    // Changing from close to open bc we need it in the refinement proof
     #[verifier(opaque)]
-    pub closed spec(checked) fn pages_allocated_in_lsn_order(self) -> bool
+    pub open spec(checked) fn pages_allocated_in_lsn_order(self) -> bool
     recommends
         self.wf(),
     {
