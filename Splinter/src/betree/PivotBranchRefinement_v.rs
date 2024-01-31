@@ -769,8 +769,66 @@ pub proof fn append_refines(pre: Node, lbl: AppendLabel)
                 |key| { let i = choose |i| 0 <= i < lbl.keys.len() && lbl.keys[i] == key; lbl.msgs[i] }))}),
 {
     lemma_route_auto();
+
+    // Goal 1 - WF is preserved
     lemma_append_preserves_wf(pre, lbl.keys, lbl.msgs, lbl.path);
-    assume(false);
+    // assume(false);
+
+    let post = pre.append(lbl.keys, lbl.msgs, lbl.path);
+
+    // Goal 2 - Appending to node then refine is same as refine then append.
+    match pre {
+        Node::Leaf{keys, msgs} => {
+            assert(pre.i().map =~~= Map::empty());
+
+            assert(post =~~= Node::Leaf{ keys: lbl.keys, msgs: lbl.msgs });
+
+            
+
+            // Take advantage of fact that pre should be empty leaf in this case, and thus Buffer will only be
+            // new keys and values.
+            assert(post.i() =~~= (
+                Buffer{map: Map::new(
+                    |key| lbl.keys.contains(key),
+                    |key| { let i = choose |i| 0 <= i < lbl.keys.len() && lbl.keys[i] == key; lbl.msgs[i] })}));
+
+            // GOAL
+            assert(pre.append(lbl.keys, lbl.msgs, lbl.path).i() =~~= (
+                Buffer{map: pre.i().map.union_prefer_right(Map::new(
+                    |key| lbl.keys.contains(key),
+                    |key| { let i = choose |i| 0 <= i < lbl.keys.len() && lbl.keys[i] == key; lbl.msgs[i] }))}));
+            
+        }, // Given by lemma_insert_leaf_is_correct!
+        Node::Index{pivots, children} => {
+            assume(false);
+            // let post = pre.insert(lbl.key, lbl.msg, lbl.path);
+            // let post_children = post.get_Index_children();
+            // let r = pre.route(lbl.key);
+            
+            // // Suppress recommendation
+            // assert(0 <= r + 1 < children.len());
+            // assert(post.wf());
+            // assert(post_children.len() == children.len()); 
+            // assert(forall |i| 0 <= i < post_children.len() ==> (#[trigger] post_children[i]).wf());
+
+            // assert forall |i| 0 <= i < children.len() && children[i] is Index
+            // implies (forall |key| 0 <= #[trigger] children[i].route(key) + 1 < children[i].get_Index_children().len()) by {
+            //     assert forall |key| 0 <= #[trigger] children[i].route(key) + 1 < children[i].get_Index_children().len() by {
+            //         lemma_route_ensures(children[i], key);
+            //     }
+            // }
+
+            // // Assert that other children don't change
+            // assert(forall |i| #![auto] 0 <= i < children.len() && i != (r+1) ==> post_children[i].i() == children[i].i());
+
+            // // Assert that the changed child has original keys plus the new key-value pair.
+            // let child_label = InsertLabel{ key: lbl.key, msg: lbl.msg, path: lbl.path.subpath() };
+            // insert_refines(children[r+1], child_label);
+            // assert(post_children[r+1].i() == children[r+1].i().insert(lbl.key, lbl.msg));
+
+            // assert(post.i() =~~= pre.i().insert(lbl.key, lbl.msg));
+        },
+    }
 }
 
 }
