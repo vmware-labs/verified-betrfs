@@ -130,6 +130,7 @@ impl DiskView {
         &&& self.entries[addr].contains_lsn(self.boundary_lsn, lsn)
     }
 
+    // ahhh this seems hacky, but just gonna shove the ensures here for now
     pub proof fn cropped_ptr_build_sub_index(self, root: Pointer, cropped: Pointer, depth: nat)
     requires
         self.buildable(root),
@@ -137,7 +138,8 @@ impl DiskView {
         self.can_crop(root, depth),
         cropped == self.pointer_after_crop(root, depth)
     ensures
-        self.build_lsn_addr_index(cropped) <= self.build_lsn_addr_index(root)
+        self.build_lsn_addr_index(cropped) <= self.build_lsn_addr_index(root),
+        self.build_lsn_au_index_page_walk(cropped) <= self.build_lsn_au_index_page_walk(root),
     decreases self.the_rank_of(root)
     {
         reveal(TruncatedJournal::index_domain_valid);
@@ -147,6 +149,9 @@ impl DiskView {
             if self.next(root) is Some {
                 self.build_lsn_addr_index_domain_valid(self.next(root));
                 assert(self.build_lsn_addr_index(self.next(root)) <= self.build_lsn_addr_index(root));
+                
+                self.build_lsn_au_index_page_walk_domain(self.next(root));
+                assert(self.build_lsn_au_index_page_walk(self.next(root)) <= self.build_lsn_au_index_page_walk(root));
             }
         }
     }
