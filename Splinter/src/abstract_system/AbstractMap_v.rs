@@ -7,10 +7,10 @@ use builtin_macros::*;
 
 use state_machines_macros::state_machine;
 
+use crate::abstract_system::MsgHistory_v::*;
+use crate::abstract_system::StampedMap_v::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
-use crate::abstract_system::StampedMap_v::*;
-use crate::abstract_system::MsgHistory_v::*;
 
 verus! {
 
@@ -38,7 +38,7 @@ state_machine!{ AbstractMap {
         InternalLabel,
     }
 
-    init!{ 
+    init!{
         initialize(persistent_map: StampedMap) {
             init stamped_map = persistent_map;
         }
@@ -56,7 +56,7 @@ state_machine!{ AbstractMap {
     /// A put transition represents applying a sequence of Msgs (i.e.: a MsgHistory)
     /// to this AbstractMap.
     transition!{
-        // Apply the MsgHistory in the label to this.state 
+        // Apply the MsgHistory in the label to this.state
         put(lbl: Label) {
             require lbl.is_PutLabel();
             require lbl.get_PutLabel_puts().can_follow(pre.stamped_map.seq_end);
@@ -83,4 +83,4 @@ state_machine!{ AbstractMap {
     }
 }}
 
-}
+} // verus!

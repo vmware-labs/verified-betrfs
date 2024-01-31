@@ -3,74 +3,84 @@
 //
 #![allow(unused_imports)]
 use builtin::*;
-use vstd::prelude::*;
-use vstd::{map::*,multiset::*};
 use vstd::math;
+use vstd::prelude::*;
+use vstd::{map::*, multiset::*};
 
 use builtin_macros::*;
 use state_machines_macros::state_machine;
 
-use crate::abstract_system::StampedMap_v::LSN;
 use crate::abstract_system::MsgHistory_v::*;
-use crate::journal::LinkedJournal_v;
-use crate::journal::LinkedJournal_v::TruncatedJournal;
-use crate::journal::LinkedJournal_v::DiskView;
-use crate::disk::GenericDisk_v::*;
+use crate::abstract_system::StampedMap_v::LSN;
 use crate::allocation_layer::Likes_v::*;
+use crate::disk::GenericDisk_v::*;
+use crate::journal::LinkedJournal_v;
+use crate::journal::LinkedJournal_v::DiskView;
+use crate::journal::LinkedJournal_v::TruncatedJournal;
 
-verus!{
+verus! {
 
 impl TruncatedJournal {
+
 }
 
 //////////////////////////////////////////////////////////////////////////////
 type LsnAddrIndex = Map<LSN, Address>;
 
-pub open spec(checked) fn lsn_disjoint(lsn_index: Set<LSN>, msgs: MsgHistory) -> bool
-{
-    forall |lsn| msgs.seq_start <= lsn < msgs.seq_end
-        ==> !lsn_index.contains(lsn)
+pub open spec(checked) fn lsn_disjoint(lsn_index: Set<LSN>, msgs: MsgHistory) -> bool {
+    forall|lsn| msgs.seq_start <= lsn < msgs.seq_end ==> !lsn_index.contains(lsn)
 }
 
-pub open spec fn lsn_addr_index_discard_up_to(lsn_addr_index: LsnAddrIndex, bdy: LSN) -> (out: LsnAddrIndex)
-{
-    Map::new(
-        |k| lsn_addr_index.contains_key(k) && bdy <= k,
-        |k| lsn_addr_index[k])
+pub open spec fn lsn_addr_index_discard_up_to(lsn_addr_index: LsnAddrIndex, bdy: LSN) -> (out:
+    LsnAddrIndex) {
+    Map::new(|k| lsn_addr_index.contains_key(k) && bdy <= k, |k| lsn_addr_index[k])
 }
 
 pub proof fn lsn_addr_index_discard_up_to_ensures(lsn_addr_index: LsnAddrIndex, bdy: LSN)
-ensures ({
-    let out = lsn_addr_index_discard_up_to(lsn_addr_index, bdy);
-    &&& out <= lsn_addr_index
-    &&& forall |k| out.contains_key(k) ==> bdy <= k
-    &&& forall |k| lsn_addr_index.contains_key(k) && bdy <= k ==> out.contains_key(k)
-})
+    ensures
+        ({
+            let out = lsn_addr_index_discard_up_to(lsn_addr_index, bdy);
+            &&& out <= lsn_addr_index
+            &&& forall|k|
+                out.contains_key(k) ==> bdy <= k
+                &&& forall|k| lsn_addr_index.contains_key(k) && bdy <= k ==> out.contains_key(k)
+        }),
 {
 }
 
-pub open spec(checked) fn singleton_index(start: LSN, end: LSN, value: Address) -> LsnAddrIndex
-{
-    Map::new(|x: LSN| start <= x < end, |x:LSN| value)
+pub open spec(checked) fn singleton_index(start: LSN, end: LSN, value: Address) -> LsnAddrIndex {
+    Map::new(|x: LSN| start <= x < end, |x: LSN| value)
 }
 
-pub open spec(checked) fn lsn_addr_index_append_record(lsn_addr_index: LsnAddrIndex, msgs: MsgHistory, addr: Address) -> LsnAddrIndex
-recommends
-    msgs.wf(),
-    msgs.seq_start < msgs.seq_end,  // non-empty
+pub open spec(checked) fn lsn_addr_index_append_record(
+    lsn_addr_index: LsnAddrIndex,
+    msgs: MsgHistory,
+    addr: Address,
+) -> LsnAddrIndex
+    recommends
+        msgs.wf(),
+        msgs.seq_start < msgs.seq_end,  // non-empty
+
 {
     let update = singleton_index(msgs.seq_start, msgs.seq_end, addr);
     lsn_addr_index.union_prefer_right(update)
 }
 
-pub proof fn lsn_addr_index_append_record_ensures(lsn_addr_index: LsnAddrIndex, msgs: MsgHistory, addr: Address)
-requires
-    msgs.wf(),
-    msgs.seq_start < msgs.seq_end,  // non-empty
-ensures
-    lsn_disjoint(lsn_addr_index.dom(), msgs) ==>
-        lsn_addr_index_append_record(lsn_addr_index, msgs, addr).values()
-        == lsn_addr_index.values() + set![addr],
+pub proof fn lsn_addr_index_append_record_ensures(
+    lsn_addr_index: LsnAddrIndex,
+    msgs: MsgHistory,
+    addr: Address,
+)
+    requires
+        msgs.wf(),
+        msgs.seq_start < msgs.seq_end,  // non-empty
+
+    ensures
+        lsn_disjoint(lsn_addr_index.dom(), msgs) ==> lsn_addr_index_append_record(
+            lsn_addr_index,
+            msgs,
+            addr,
+        ).values() == lsn_addr_index.values() + set![addr],
 {
     let out = lsn_addr_index_append_record(lsn_addr_index, msgs, addr);
     // TODO(chris): Dafny needed only one line of proof for this mess; does our stdlib need some
@@ -78,33 +88,34 @@ ensures
     if lsn_disjoint(lsn_addr_index.dom(), msgs) {
         let sum = lsn_addr_index.values() + set![addr];
         // TODO(chris): #[auto] doesn't work in the assert-forall context?
-        assert forall |a| #[trigger] sum.contains(a) implies out.values().contains(a) by {
+        assert forall|a| #[trigger] sum.contains(a) implies out.values().contains(a) by {
             // Go find witnesses.
             if lsn_addr_index.values().contains(a) {
-                let lsn = choose |lsn| #![auto] lsn_addr_index.contains_key(lsn) && lsn_addr_index[lsn] == a;
-                assert( out.contains_key(lsn) );
+                let lsn = choose|lsn|
+                    #![auto]
+                    lsn_addr_index.contains_key(lsn) && lsn_addr_index[lsn] == a;
+                assert(out.contains_key(lsn));
             } else {
-                assert( out.contains_key(msgs.seq_start) );
+                assert(out.contains_key(msgs.seq_start));
             }
         };
-        assert( out.values() =~= lsn_addr_index.values() + set![addr] );
+        assert(out.values() =~= lsn_addr_index.values() + set![addr]);
     }
 }
 
 //////////////////////////////////////////////////////////////////////////////
-
 impl DiskView {
-    pub open spec(checked) fn buildable(self, root: Pointer) -> bool
-    {
+    pub open spec(checked) fn buildable(self, root: Pointer) -> bool {
         &&& self.decodable(root)
         &&& self.acyclic()
         &&& root.is_Some() ==> self.boundary_lsn < self.entries[root.unwrap()].message_seq.seq_end
     }
 
     pub open spec(checked) fn build_lsn_addr_index(self, root: Pointer) -> LsnAddrIndex
-    recommends
-        self.buildable(root),
-    decreases self.the_rank_of(root) when self.decodable(root) && self.acyclic()
+        recommends
+            self.buildable(root),
+        decreases self.the_rank_of(root),
+        when self.decodable(root) && self.acyclic()
     {
         if root.is_None() {
             map!{}
@@ -113,45 +124,45 @@ impl DiskView {
             let start_lsn = math::max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
             //let start_lsn = if self.boundary_lsn > curr_msgs.seq_start { self.boundary_lsn } else { curr_msgs.seq_start };
             let update = singleton_index(start_lsn, curr_msgs.seq_end, root.unwrap());
-
             // Put the update on the "preferred" side to make recursive proof reasoning easier:
             // there should be no conflicts between update and inner call, but this way we don't
             // even have to make that argument because update values dominate.
             self.build_lsn_addr_index(self.next(root)).union_prefer_right(update)
         }
     }
-} // end of impl DiskView
-
+}
+  // end of impl DiskView
 // invariant proof stuff that moved here from the Refinement file
 impl DiskView {
-    pub open spec(checked) fn addr_supports_lsn(self, addr: Address, lsn: LSN) -> bool
-    {
+    pub open spec(checked) fn addr_supports_lsn(self, addr: Address, lsn: LSN) -> bool {
         &&& self.entries.contains_key(addr)
         &&& self.entries[addr].contains_lsn(self.boundary_lsn, lsn)
     }
 
     // ahhh this seems hacky, but just gonna shove the ensures here for now
     pub proof fn cropped_ptr_build_sub_index(self, root: Pointer, cropped: Pointer, depth: nat)
-    requires
-        self.buildable(root),
-        self.buildable(cropped),
-        self.can_crop(root, depth),
-        cropped == self.pointer_after_crop(root, depth)
-    ensures
-        self.build_lsn_addr_index(cropped) <= self.build_lsn_addr_index(root),
-        self.build_lsn_au_index_page_walk(cropped) <= self.build_lsn_au_index_page_walk(root),
-    decreases self.the_rank_of(root)
+        requires
+            self.buildable(root),
+            self.buildable(cropped),
+            self.can_crop(root, depth),
+            cropped == self.pointer_after_crop(root, depth),
+        ensures
+            self.build_lsn_addr_index(cropped) <= self.build_lsn_addr_index(root),
+            self.build_lsn_au_index_page_walk(cropped) <= self.build_lsn_au_index_page_walk(root),
+        decreases self.the_rank_of(root),
     {
         reveal(TruncatedJournal::index_domain_valid);
         if depth > 0 {
             self.build_lsn_addr_index_domain_valid(root);
-            self.cropped_ptr_build_sub_index(self.next(root), cropped, (depth-1) as nat);
+            self.cropped_ptr_build_sub_index(self.next(root), cropped, (depth - 1) as nat);
             if self.next(root) is Some {
                 self.build_lsn_addr_index_domain_valid(self.next(root));
-                assert(self.build_lsn_addr_index(self.next(root)) <= self.build_lsn_addr_index(root));
-                
+                assert(self.build_lsn_addr_index(self.next(root)) <= self.build_lsn_addr_index(
+                    root,
+                ));
                 self.build_lsn_au_index_page_walk_domain(self.next(root));
-                assert(self.build_lsn_au_index_page_walk(self.next(root)) <= self.build_lsn_au_index_page_walk(root));
+                assert(self.build_lsn_au_index_page_walk(self.next(root))
+                    <= self.build_lsn_au_index_page_walk(root));
             }
         }
     }
@@ -173,7 +184,6 @@ impl DiskView {
     //         self.build_lsn_addr_index_ignores_build_tight(bt_root, self.next(repr_root));
     //     }
     // }
-
     // proof fn representation_ignores_build_tight(self, bt_root: Pointer, repr_root: Pointer)
     // requires
     //     self.decodable(bt_root),
@@ -191,7 +201,6 @@ impl DiskView {
     //         self.representation_ignores_build_tight(bt_root, self.next(repr_root));
     //     }
     // }
-
     // proof fn build_tight_gives_representation(self, root: Pointer)
     // requires
     //     self.decodable(root),
@@ -204,27 +213,28 @@ impl DiskView {
     //         self.build_tight_gives_representation(self.next(root));
     //     }
     // }
-
-    spec(checked) fn cropped_msg_seq_contains_lsn(boundary: LSN, message_seq: MsgHistory, lsn: LSN) -> bool
-    {
+    spec(checked) fn cropped_msg_seq_contains_lsn(
+        boundary: LSN,
+        message_seq: MsgHistory,
+        lsn: LSN,
+    ) -> bool {
         max(boundary as int, message_seq.seq_start as int) <= lsn < message_seq.seq_end
     }
 
-    pub open spec(checked) fn tj_at(self, root: Pointer) -> TruncatedJournal
-    {
-        TruncatedJournal{freshest_rec: root, disk_view: self}
+    pub open spec(checked) fn tj_at(self, root: Pointer) -> TruncatedJournal {
+        TruncatedJournal { freshest_rec: root, disk_view: self }
     }
 
     pub proof fn build_lsn_addr_index_domain_valid(self, root: Pointer)
-    requires
-        self.decodable(root),
-        self.acyclic(),
-        root.is_Some(), // otherwise BuildLsnAddrIndex is trivially empty
-        self.boundary_lsn < self.entries[root.unwrap()].message_seq.seq_end,
-    ensures
-        self.tj_at(root).index_domain_valid(self.build_lsn_addr_index(root)),
-        self.index_keys_map_to_valid_entries(self.build_lsn_addr_index(root)),
-    decreases self.the_rank_of(root)
+        requires
+            self.decodable(root),
+            self.acyclic(),
+            root.is_Some(),  // otherwise BuildLsnAddrIndex is trivially empty
+            self.boundary_lsn < self.entries[root.unwrap()].message_seq.seq_end,
+        ensures
+            self.tj_at(root).index_domain_valid(self.build_lsn_addr_index(root)),
+            self.index_keys_map_to_valid_entries(self.build_lsn_addr_index(root)),
+        decreases self.the_rank_of(root),
     {
         reveal(TruncatedJournal::index_domain_valid);
         reveal(DiskView::index_keys_map_to_valid_entries);
@@ -241,109 +251,113 @@ impl DiskView {
     }
 
     pub proof fn build_lsn_addr_index_range_valid(self, root: Pointer)
-    requires
-        self.buildable(root),
-        self.tj_at(root).index_domain_valid(self.build_lsn_addr_index(root)),
-        self.index_keys_map_to_valid_entries(self.build_lsn_addr_index(root)),
-    ensures
-        self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)),
-    decreases
-        self.the_rank_of(root)
+        requires
+            self.buildable(root),
+            self.tj_at(root).index_domain_valid(self.build_lsn_addr_index(root)),
+            self.index_keys_map_to_valid_entries(self.build_lsn_addr_index(root)),
+        ensures
+            self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)),
+        decreases self.the_rank_of(root),
     {
         reveal(TruncatedJournal::index_domain_valid);
         reveal(DiskView::index_keys_map_to_valid_entries);
-
         if root.is_None() {
-            assert( self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)) );
+            assert(self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)));
         } else if self.next(root).is_None() {
             // let curr_msgs = self.entries[root.unwrap()].message_seq;
             // let start_lsn = math::max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
             // let update = singleton_index(start_lsn, curr_msgs.seq_end, root.unwrap());
             // let output = self.build_lsn_addr_index(self.next(root)).union_prefer_right(update);
-            assert( self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)) );
+            assert(self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)));
         } else {
             self.build_lsn_addr_index_domain_valid(self.next(root));
             self.build_lsn_addr_index_range_valid(self.next(root));
-
             let tj = self.tj_at(root);
             let sub_index = self.build_lsn_addr_index(self.next(root));
             let index = self.build_lsn_addr_index(root);
-
-            assert forall |addr| index.values().contains(addr)
-            implies tj.every_lsn_at_addr_indexed_to_addr(index, addr)
-            by {
+            assert forall|addr|
+                index.values().contains(addr) implies tj.every_lsn_at_addr_indexed_to_addr(
+                index,
+                addr,
+            ) by {
                 if addr != root.unwrap() {
                     assert(sub_index.values().contains(addr));
                 }
             }
-            assert( self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)) );
+            assert(self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)));
         }
     }
 
     // oh nice, this really shows the representation is just a duplicate of build_tight
-    // replacing all reference of representation to build_tight 
-    pub proof fn build_tight_domain_is_build_lsn_addr_index_range(self, root: Pointer) 
-    requires
-        self.buildable(root),
-    ensures
-        // This conclusion is used inside the recursion
-        root.is_Some() ==>
-            forall |lsn| self.build_lsn_addr_index(root).contains_key(lsn) ==>
-                self.boundary_lsn <= lsn < self.entries[root.unwrap()].message_seq.seq_end,
-        // This conclusion is the one we're trying to actually export
-        self.build_lsn_addr_index(root).values() =~= self.build_tight(root).entries.dom(),
-        // TODO(chris): I find it kind of disturbing that the ~ between the == in the line above
-        // is a functional part of the proof strategy. --jonh
-    decreases self.the_rank_of(root)
+    // replacing all reference of representation to build_tight
+    pub proof fn build_tight_domain_is_build_lsn_addr_index_range(self, root: Pointer)
+        requires
+            self.buildable(root),
+        ensures// This conclusion is used inside the recursion
+
+            root.is_Some() ==> forall|lsn|
+                self.build_lsn_addr_index(root).contains_key(lsn) ==> self.boundary_lsn <= lsn
+                    < self.entries[root.unwrap()].message_seq.seq_end,
+            // This conclusion is the one we're trying to actually export
+            self.build_lsn_addr_index(root).values() =~= self.build_tight(
+                root,
+            ).entries.dom(),// TODO(chris): I find it kind of disturbing that the ~ between the == in the line above
+    // is a functional part of the proof strategy. --jonh
+
+        decreases self.the_rank_of(root),
     {
         reveal(TruncatedJournal::index_domain_valid);
         reveal(DiskView::index_keys_map_to_valid_entries);
-
         if root.is_Some() {
             self.build_tight_domain_is_build_lsn_addr_index_range(self.next(root));
             let curr_msgs = self.entries[root.unwrap()].message_seq;
             let begin = max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
             let update = singleton_index(begin, curr_msgs.seq_end, root.unwrap());
             assert(update.contains_key(begin));
-            assert forall |k| #![auto] self.build_lsn_addr_index(root).values().contains(k) 
-            implies self.build_tight(root).entries.dom().contains(k) by {
-            }
+            assert forall|k|
+                #![auto]
+                self.build_lsn_addr_index(root).values().contains(k) implies self.build_tight(
+                root,
+            ).entries.dom().contains(k) by {}
             self.build_tight_ensures(root);
-            assert forall |addr| #![auto]
-                self.build_tight(root).entries.dom().contains(addr) implies
-                self.build_lsn_addr_index(root).values().contains(addr) by {
-
-                let left_index = self.build_lsn_addr_index(self.entries[root.unwrap()].cropped_prior(self.boundary_lsn));
+            assert forall|addr|
+                #![auto]
+                self.build_tight(root).entries.dom().contains(
+                    addr,
+                ) implies self.build_lsn_addr_index(root).values().contains(addr) by {
+                let left_index = self.build_lsn_addr_index(
+                    self.entries[root.unwrap()].cropped_prior(self.boundary_lsn),
+                );
                 if update.values().contains(addr) {
-                    assert( self.build_lsn_addr_index(root).contains_key(begin) );   // witness
-//                     assert( self.build_lsn_addr_index(root).values().contains(addr) );
+                    assert(self.build_lsn_addr_index(root).contains_key(begin));  // witness
+                    //                     assert( self.build_lsn_addr_index(root).values().contains(addr) );
                 } else {
-                    let lsn = choose |lsn| #![auto] left_index.contains_key(lsn) && left_index[lsn]==addr;
-                    assert( self.build_lsn_addr_index(root).contains_key(lsn) );    // witness
-//                     assert( self.build_lsn_addr_index(root).values().contains(addr) );
+                    let lsn = choose|lsn|
+                        #![auto]
+                        left_index.contains_key(lsn) && left_index[lsn] == addr;
+                    assert(self.build_lsn_addr_index(root).contains_key(lsn));  // witness
+                    //                     assert( self.build_lsn_addr_index(root).values().contains(addr) );
                 }
             }
-        }
-//         assert( self.build_lsn_addr_index(root).values() =~= self.representation(root) );    // TODO remove
+        }//         assert( self.build_lsn_addr_index(root).values() =~= self.representation(root) );    // TODO remove
+
     }
 
     pub proof fn sub_disk_with_newer_lsn_repr_index(self, big: DiskView, ptr: Pointer)
-    requires 
-        self.decodable(ptr),
-        self.acyclic(),
-        big.decodable(ptr),
-        big.acyclic(),
-        ptr is Some ==> self.boundary_lsn < self.entries[ptr.unwrap()].message_seq.seq_end,
-        ptr is Some ==> big.boundary_lsn < big.entries[ptr.unwrap()].message_seq.seq_end,
-        self.is_sub_disk_with_newer_lsn(big)
-    ensures 
-        self.build_lsn_addr_index(ptr) <= big.build_lsn_addr_index(ptr)
-    decreases 
-        self.the_rank_of(ptr)
+        requires
+            self.decodable(ptr),
+            self.acyclic(),
+            big.decodable(ptr),
+            big.acyclic(),
+            ptr is Some ==> self.boundary_lsn < self.entries[ptr.unwrap()].message_seq.seq_end,
+            ptr is Some ==> big.boundary_lsn < big.entries[ptr.unwrap()].message_seq.seq_end,
+            self.is_sub_disk_with_newer_lsn(big),
+        ensures
+            self.build_lsn_addr_index(ptr) <= big.build_lsn_addr_index(ptr),
+        decreases self.the_rank_of(ptr),
     {
         reveal(TruncatedJournal::index_domain_valid);
         reveal(DiskView::index_keys_map_to_valid_entries);
-
         if ptr is Some {
             self.sub_disk_with_newer_lsn_repr_index(big, self.next(ptr));
             if self.next(ptr) is Some {
@@ -356,97 +370,119 @@ impl DiskView {
     }
 
     pub proof fn sub_disk_repr_index(self, big: Self, ptr: Pointer)
-    requires
-        self.wf(),
-        big.wf(),
-        big.acyclic(),
-        self.is_sub_disk(big),
-        self.is_nondangling_pointer(ptr),
-        ptr.is_Some() ==> self.boundary_lsn < self.entries[ptr.unwrap()].message_seq.seq_end,
-    ensures
-        self.build_lsn_addr_index(ptr) == big.build_lsn_addr_index(ptr),
-    decreases if ptr.is_Some() { big.the_ranking()[ptr.unwrap()]+1 } else { 0 }
+        requires
+            self.wf(),
+            big.wf(),
+            big.acyclic(),
+            self.is_sub_disk(big),
+            self.is_nondangling_pointer(ptr),
+            ptr.is_Some() ==> self.boundary_lsn < self.entries[ptr.unwrap()].message_seq.seq_end,
+        ensures
+            self.build_lsn_addr_index(ptr) == big.build_lsn_addr_index(ptr),
+        decreases
+                if ptr.is_Some() {
+                    big.the_ranking()[ptr.unwrap()] + 1
+                } else {
+                    0
+                },
     {
         reveal(TruncatedJournal::index_domain_valid);
         reveal(DiskView::index_keys_map_to_valid_entries);
-
-        assert( forall |addr| #[trigger] self.entries.contains_key(addr) ==> big.entries.dom().contains(addr) );    // new clunikness related to contains-vs-contains_key
-        assert( self.valid_ranking(big.the_ranking()) );
+        assert(forall|addr|
+            #[trigger]
+            self.entries.contains_key(addr) ==> big.entries.dom().contains(addr));  // new clunikness related to contains-vs-contains_key
+        assert(self.valid_ranking(big.the_ranking()));
         if ptr.is_Some() {
             //let jr = big.entries[ptr.unwrap()];
             //self.sub_disk_repr_index(big, jr.cropped_prior(big.boundary_lsn));
             if big.next(ptr).is_Some() {
-                assert( big.entries.contains_key(ptr.unwrap()) );
-                assert( big.the_ranking()[big.next(ptr).unwrap()] < big.the_ranking()[ptr.unwrap()] );
+                assert(big.entries.contains_key(ptr.unwrap()));
+                assert(big.the_ranking()[big.next(ptr).unwrap()] < big.the_ranking()[ptr.unwrap()]);
             }
             self.sub_disk_repr_index(big, big.next(ptr));
         }
     }
 
     pub proof fn build_lsn_addr_all_decodable(self, root: Pointer)
-    requires
-        self.buildable(root),
-    ensures
-        forall |lsn| #![auto] self.build_lsn_addr_index(root).contains_key(lsn) ==> self.decodable(Some(self.build_lsn_addr_index(root)[lsn])),
-    decreases self.the_rank_of(root)
+        requires
+            self.buildable(root),
+        ensures
+            forall|lsn|
+                #![auto]
+                self.build_lsn_addr_index(root).contains_key(lsn) ==> self.decodable(
+                    Some(self.build_lsn_addr_index(root)[lsn]),
+                ),
+        decreases self.the_rank_of(root),
     {
-        let lsn_addr_index = self.build_lsn_addr_index(root);   // I want that super-let!
+        let lsn_addr_index = self.build_lsn_addr_index(root);  // I want that super-let!
         if root.is_None() {
         } else {
             self.build_lsn_addr_all_decodable(self.next(root));
-            assert forall |lsn| #![auto] lsn_addr_index.contains_key(lsn)
-            implies self.decodable(Some(lsn_addr_index[lsn])) by {
+            assert forall|lsn| #![auto] lsn_addr_index.contains_key(lsn) implies self.decodable(
+                Some(lsn_addr_index[lsn]),
+            ) by {
                 if self.build_lsn_addr_index(self.next(root)).contains_key(lsn) {
-                    assert( self.decodable(Some(lsn_addr_index[lsn])) );
+                    assert(self.decodable(Some(lsn_addr_index[lsn])));
                 } else {
-                    assert( lsn_addr_index[lsn] == root.unwrap() );
-                    assert( self.decodable(Some(lsn_addr_index[lsn])) );
+                    assert(lsn_addr_index[lsn] == root.unwrap());
+                    assert(self.decodable(Some(lsn_addr_index[lsn])));
                 }
             }
         }
     }
 
     pub proof fn build_lsn_addr_honors_rank(self, root: Pointer, lsn_addr_index: Map<LSN, Address>)
-    requires
-        self.buildable(root),
-        lsn_addr_index == self.build_lsn_addr_index(root),  // wish this were a super-let!
-    ensures
-        forall |lsn1, lsn2| #![auto] ({
-            &&& lsn_addr_index.contains_key(lsn1)
-            &&& lsn_addr_index.contains_key(lsn2)
-            &&& lsn1 <= lsn2
-        }) ==> self.the_rank_of(Some(lsn_addr_index[lsn1])) <= self.the_rank_of(Some(lsn_addr_index[lsn2]))
-    decreases self.the_rank_of(root)
+        requires
+            self.buildable(root),
+            lsn_addr_index == self.build_lsn_addr_index(
+                root,
+            ),  // wish this were a super-let!
+
+        ensures
+            forall|lsn1, lsn2|
+                #![auto]
+                ({
+                    &&& lsn_addr_index.contains_key(lsn1)
+                    &&& lsn_addr_index.contains_key(lsn2)
+                    &&& lsn1 <= lsn2
+                }) ==> self.the_rank_of(Some(lsn_addr_index[lsn1])) <= self.the_rank_of(
+                    Some(lsn_addr_index[lsn2]),
+                ),
+        decreases self.the_rank_of(root),
     {
         self.build_lsn_addr_all_decodable(root);
         if root.is_None() {
         } else if self.next(root).is_None() {
-//             assert( self.build_lsn_addr_index(self.next(root)) == Map::<LSN, Address>::empty() );
+            //             assert( self.build_lsn_addr_index(self.next(root)) == Map::<LSN, Address>::empty() );
         } else {
             self.build_lsn_addr_index_domain_valid(root);
             self.build_lsn_addr_index_domain_valid(self.next(root));
             let prior_index = self.build_lsn_addr_index(self.next(root));
             self.build_lsn_addr_honors_rank(self.next(root), prior_index);
-            assert forall |lsn1, lsn2| #![auto] ({
-                &&& lsn_addr_index.contains_key(lsn1)
-                &&& lsn_addr_index.contains_key(lsn2)
-                &&& lsn1 <= lsn2
-            }) implies ({
+            assert forall|lsn1, lsn2|
+                #![auto]
+                ({
+                    &&& lsn_addr_index.contains_key(lsn1)
+                    &&& lsn_addr_index.contains_key(lsn2)
+                    &&& lsn1 <= lsn2
+                }) implies ({
                 &&& self.decodable(Some(lsn_addr_index[lsn1]))
                 &&& self.decodable(Some(lsn_addr_index[lsn2]))
-                &&& self.the_rank_of(Some(lsn_addr_index[lsn1])) <= self.the_rank_of(Some(lsn_addr_index[lsn2]))
+                &&& self.the_rank_of(Some(lsn_addr_index[lsn1])) <= self.the_rank_of(
+                    Some(lsn_addr_index[lsn2]),
+                )
             }) by {
                 let corner = self.entries[self.next(root).unwrap()].message_seq.seq_end;
                 let before = (corner - 1) as nat;
                 if lsn1 < corner {
-                    assert( prior_index.contains_key(before) ) by {
+                    assert(prior_index.contains_key(before)) by {
                         reveal(TruncatedJournal::index_domain_valid);
-                    }
-//                     assert( lsn1 <= corner );
-//                     assert( self.the_rank_of(Some(lsn_addr_index[lsn1])) <= self.the_rank_of(Some(lsn_addr_index[before])) );
-//                     assert( self.the_rank_of(Some(lsn_addr_index[corner])) <= self.the_rank_of(Some(lsn_addr_index[corner])) );
+                    }//                     assert( lsn1 <= corner );
+                    //                     assert( self.the_rank_of(Some(lsn_addr_index[lsn1])) <= self.the_rank_of(Some(lsn_addr_index[before])) );
+                    //                     assert( self.the_rank_of(Some(lsn_addr_index[corner])) <= self.the_rank_of(Some(lsn_addr_index[corner])) );
+
                 } else {
-                    assert( !prior_index.contains_key(lsn1) && !prior_index.contains_key(lsn2) ) by {
+                    assert(!prior_index.contains_key(lsn1) && !prior_index.contains_key(lsn2)) by {
                         reveal(TruncatedJournal::index_domain_valid);
                     }
                 }
@@ -454,21 +490,22 @@ impl DiskView {
         }
     }
 
-    pub open spec fn index_reflects_disk_view(self, lsn_addr_index: LsnAddrIndex) -> bool
-    {
-        forall |lsn| #[trigger] lsn_addr_index.contains_key(lsn) ==> {
-            &&& self.entries.contains_key(lsn_addr_index[lsn])
-            &&& self.entries[lsn_addr_index[lsn]].message_seq.contains(lsn)
-        }
+    pub open spec fn index_reflects_disk_view(self, lsn_addr_index: LsnAddrIndex) -> bool {
+        forall|lsn|
+            #[trigger]
+            lsn_addr_index.contains_key(lsn) ==> {
+                &&& self.entries.contains_key(lsn_addr_index[lsn])
+                &&& self.entries[lsn_addr_index[lsn]].message_seq.contains(lsn)
+            }
     }
 
     // another thing to tuck into build_lsn_addr_index ensures
     pub proof fn build_lsn_addr_index_reflects_disk_view(self, root: Pointer)
-    requires
-        self.buildable(root),
-    ensures
-        self.index_reflects_disk_view(self.build_lsn_addr_index(root)),
-    decreases self.the_rank_of(root)
+        requires
+            self.buildable(root),
+        ensures
+            self.index_reflects_disk_view(self.build_lsn_addr_index(root)),
+        decreases self.the_rank_of(root),
     {
         if root is Some {
             self.build_lsn_addr_index_reflects_disk_view(self.next(root))
@@ -476,31 +513,39 @@ impl DiskView {
     }
 
     #[verifier(opaque)]
-    pub closed spec(checked) fn index_keys_map_to_valid_entries(self, lsn_addr_index: LsnAddrIndex) -> bool
-    recommends
-        self.wf(),
+    pub closed spec(checked) fn index_keys_map_to_valid_entries(
+        self,
+        lsn_addr_index: LsnAddrIndex,
+    ) -> bool
+        recommends
+            self.wf(),
     {
-        forall |lsn| #![auto] lsn_addr_index.contains_key(lsn)
-            ==> self.addr_supports_lsn(lsn_addr_index[lsn], lsn)
+        forall|lsn|
+            #![auto]
+            lsn_addr_index.contains_key(lsn) ==> self.addr_supports_lsn(lsn_addr_index[lsn], lsn)
     }
 
     // one-off explicit instantiation lemma for use in predicates where reveal is verboten.
-    pub proof fn instantiate_index_keys_map_to_valid_entries(self, lsn_addr_index: LsnAddrIndex, lsn: LSN)
-    requires
-        self.wf(),
-        lsn_addr_index.contains_key(lsn),
-        self.index_keys_map_to_valid_entries(lsn_addr_index),
-    ensures
-        self.entries.contains_key(lsn_addr_index[lsn]),
-        self.entries[lsn_addr_index[lsn]].contains_lsn(self.boundary_lsn, lsn),
+    pub proof fn instantiate_index_keys_map_to_valid_entries(
+        self,
+        lsn_addr_index: LsnAddrIndex,
+        lsn: LSN,
+    )
+        requires
+            self.wf(),
+            lsn_addr_index.contains_key(lsn),
+            self.index_keys_map_to_valid_entries(lsn_addr_index),
+        ensures
+            self.entries.contains_key(lsn_addr_index[lsn]),
+            self.entries[lsn_addr_index[lsn]].contains_lsn(self.boundary_lsn, lsn),
     {
         reveal(DiskView::index_keys_map_to_valid_entries);
     }
-
-} // DiskView proof bits
-
+}
+  // DiskView proof bits
 pub open spec(checked) fn map_to_likes(lsn_addr_map: LsnAddrIndex) -> Likes
-decreases lsn_addr_map.dom().len() when lsn_addr_map.dom().finite()
+    decreases lsn_addr_map.dom().len(),
+    when lsn_addr_map.dom().finite()
 {
     if lsn_addr_map.dom().len() == 0 {
         no_likes()
@@ -512,19 +557,21 @@ decreases lsn_addr_map.dom().len() when lsn_addr_map.dom().finite()
 }
 
 impl TruncatedJournal {
-    pub open spec(checked) fn build_lsn_addr_index(self) ->  LsnAddrIndex
-    recommends self.decodable()
+    pub open spec(checked) fn build_lsn_addr_index(self) -> LsnAddrIndex
+        recommends
+            self.decodable(),
     {
         self.disk_view.build_lsn_addr_index(self.freshest_rec)
     }
 
     pub proof fn build_lsn_addr_index_ensures(self)
-    requires self.decodable()
-    ensures 
-        self.index_domain_valid(self.build_lsn_addr_index()),
-        self.disk_view.index_keys_map_to_valid_entries(self.build_lsn_addr_index()),
-        self.index_range_valid(self.build_lsn_addr_index())
-    {        
+        requires
+            self.decodable(),
+        ensures
+            self.index_domain_valid(self.build_lsn_addr_index()),
+            self.disk_view.index_keys_map_to_valid_entries(self.build_lsn_addr_index()),
+            self.index_range_valid(self.build_lsn_addr_index()),
+    {
         reveal(TruncatedJournal::index_domain_valid);
         reveal(DiskView::index_keys_map_to_valid_entries);
         if self.freshest_rec is Some {
@@ -533,61 +580,90 @@ impl TruncatedJournal {
         }
     }
 
-    pub open spec(checked) fn transitive_likes(self) -> Likes
-    {
-        if !self.decodable() { arbitrary() }
-        else { Multiset::from_set(self.build_lsn_addr_index().values()) }
+    pub open spec(checked) fn transitive_likes(self) -> Likes {
+        if !self.decodable()  {
+            arbitrary()
+        } else {
+            Multiset::from_set(self.build_lsn_addr_index().values())
+        }
     }
 
-    pub open spec(checked) fn discard_old_cond(self, start_lsn: LSN, keep_addrs: Set<Address>, new: Self) -> bool
-    recommends self.wf()
+    pub open spec(checked) fn discard_old_cond(
+        self,
+        start_lsn: LSN,
+        keep_addrs: Set<Address>,
+        new: Self,
+    ) -> bool
+        recommends
+            self.wf(),
     {
-        // new disk_view must be a subdisk contain all kept addrs 
+        // new disk_view must be a subdisk contain all kept addrs
         &&& new.wf()
         &&& new.disk_view.boundary_lsn == start_lsn
         &&& new.disk_view.entries <= self.disk_view.entries
-        &&& forall |addr| #[trigger] keep_addrs.contains(addr) ==> new.disk_view.entries.dom().contains(addr)
-        &&& new.freshest_rec == if self.seq_end() == start_lsn { None } else { self.freshest_rec }
+        &&& forall|addr|
+            #[trigger]
+            keep_addrs.contains(addr) ==> new.disk_view.entries.dom().contains(addr)
+            &&& new.freshest_rec == if self.seq_end() == start_lsn {
+                None
+            } else {
+                self.freshest_rec
+            }
     }
 
-    pub proof fn discard_old_preserves_acyclicity(self, start_lsn: LSN, keep_addrs: Set<Address>, new: Self)
-    requires
-        self.wf(),
-        self.disk_view.acyclic(),
-        self.can_discard_to(start_lsn),
-        self.discard_old_cond(start_lsn, keep_addrs, new)
-    ensures 
-        new.disk_view.acyclic()
+    pub proof fn discard_old_preserves_acyclicity(
+        self,
+        start_lsn: LSN,
+        keep_addrs: Set<Address>,
+        new: Self,
+    )
+        requires
+            self.wf(),
+            self.disk_view.acyclic(),
+            self.can_discard_to(start_lsn),
+            self.discard_old_cond(start_lsn, keep_addrs, new),
+        ensures
+            new.disk_view.acyclic(),
     {
         let dv = self.disk_view;
         let post_dv = new.disk_view;
         let ranking = dv.the_ranking();
-   
-        assert forall |addr| #[trigger] post_dv.entries.contains_key(addr) && post_dv.entries[addr].cropped_prior(post_dv.boundary_lsn).is_Some()
-        implies ranking[post_dv.entries[addr].cropped_prior(post_dv.boundary_lsn).unwrap()] < ranking[addr]
-        by {
-            assert(dv.entries.contains_key(addr)); // trigger
+        assert forall|addr|
+            #[trigger]
+            post_dv.entries.contains_key(addr) && post_dv.entries[addr].cropped_prior(
+                post_dv.boundary_lsn,
+            ).is_Some() implies ranking[post_dv.entries[addr].cropped_prior(
+            post_dv.boundary_lsn,
+        ).unwrap()] < ranking[addr] by {
+            assert(dv.entries.contains_key(addr));  // trigger
         }
-        assert(post_dv.valid_ranking(ranking)); // witness
+        assert(post_dv.valid_ranking(ranking));  // witness
     }
 }
 
 impl MsgHistory {
     pub open spec(checked) fn tight_discard_old(self, new: Self, new_bdy: LSN) -> bool
-    recommends
-        self.wf(),
-        new.wf(),
-        self.can_discard_to(new_bdy),
+        recommends
+            self.wf(),
+            new.wf(),
+            self.can_discard_to(new_bdy),
     {
-        let msgs = if self.seq_start <= new_bdy { self.discard_old(new_bdy) } else { self };
+        let msgs = if self.seq_start <= new_bdy {
+            self.discard_old(new_bdy)
+        } else {
+            self
+        };
         &&& new.ext_equal(msgs)
     }
 }
 
 // TODO(jonh): move to pervasive
-spec(checked) fn max(a: int, b: int) -> int
-{
-    if a < b { b } else { a }
+spec(checked) fn max(a: int, b: int) -> int {
+    if a < b {
+        b
+    } else {
+        a
+    }
 }
 
 // Definitions that used to live in the Refinement file, but jonh pulled in here so the invariant
@@ -604,50 +680,61 @@ impl TruncatedJournal {
     //     forall |addr, lsn| self.disk_view.addr_supports_lsn(addr, lsn)
     //          ==> lsn_addr_index.contains_key(lsn) && lsn_addr_index[lsn]==addr
     // }
-
     #[verifier(opaque)]
     pub open spec(checked) fn index_domain_valid(self, lsn_addr_index: LsnAddrIndex) -> bool
-    recommends
-        self.wf(),
+        recommends
+            self.wf(),
     {
         // lsnAddrIndex's domain is exactly the set of LSN between journal.SeqStart() and journal.SeqEnd()
-        &&& forall |lsn| lsn_addr_index.contains_key(lsn) <==> (self.seq_start() <= lsn < self.seq_end())
+        &&& forall|lsn|
+            lsn_addr_index.contains_key(lsn) <==> (self.seq_start() <= lsn < self.seq_end())
     }
 
-    pub closed spec /*XXX (checked)*/ fn every_lsn_at_addr_indexed_to_addr(self, lsn_addr_index: LsnAddrIndex, addr: Address) -> bool
-    {
+    pub closed spec   /*XXX (checked)*/
+    fn every_lsn_at_addr_indexed_to_addr(
+        self,
+        lsn_addr_index: LsnAddrIndex,
+        addr: Address,
+    ) -> bool {
         let msgs = self.disk_view.entries[addr].message_seq;
         let boundary_lsn = self.disk_view.boundary_lsn;
-        forall |lsn| #[trigger] DiskView::cropped_msg_seq_contains_lsn(boundary_lsn, msgs, lsn) ==> {
-            &&& lsn_addr_index.contains_key(lsn)
-            &&& lsn_addr_index[lsn] == addr
-        }
+        forall|lsn|
+            #[trigger]
+            DiskView::cropped_msg_seq_contains_lsn(boundary_lsn, msgs, lsn) ==> {
+                &&& lsn_addr_index.contains_key(lsn)
+                &&& lsn_addr_index[lsn] == addr
+            }
     }
 
-    pub closed spec /*XXX (checked)*/ fn index_range_valid(self, lsn_addr_index: LsnAddrIndex) -> bool
-    recommends
-        self.wf(),
-        self.index_domain_valid(lsn_addr_index),
-        self.disk_view.index_keys_map_to_valid_entries(lsn_addr_index),
+    pub closed spec   /*XXX (checked)*/
+    fn index_range_valid(self, lsn_addr_index: LsnAddrIndex) -> bool
+        recommends
+            self.wf(),
+            self.index_domain_valid(lsn_addr_index),
+            self.disk_view.index_keys_map_to_valid_entries(lsn_addr_index),
     {
-        forall |addr| lsn_addr_index.values().contains(addr) ==> {
-            self.every_lsn_at_addr_indexed_to_addr(lsn_addr_index, addr)
-        }
+        forall|addr|
+            lsn_addr_index.values().contains(addr) ==> {
+                self.every_lsn_at_addr_indexed_to_addr(lsn_addr_index, addr)
+            }
     }
 
     pub proof fn build_lsn_addr_honors_rank(self, lsn_addr_index: Map<LSN, Address>)
-    requires
-        self.decodable(),
-        lsn_addr_index == self.build_lsn_addr_index(),
-    ensures
-        forall |lsn1, lsn2| #![auto] ({
-            &&& lsn_addr_index.contains_key(lsn1)
-            &&& lsn_addr_index.contains_key(lsn2)
-            &&& lsn1 <= lsn2
-        }) ==> self.disk_view.the_rank_of(Some(lsn_addr_index[lsn1])) <= self.disk_view.the_rank_of(Some(lsn_addr_index[lsn2]))
+        requires
+            self.decodable(),
+            lsn_addr_index == self.build_lsn_addr_index(),
+        ensures
+            forall|lsn1, lsn2|
+                #![auto]
+                ({
+                    &&& lsn_addr_index.contains_key(lsn1)
+                    &&& lsn_addr_index.contains_key(lsn2)
+                    &&& lsn1 <= lsn2
+                }) ==> self.disk_view.the_rank_of(Some(lsn_addr_index[lsn1]))
+                    <= self.disk_view.the_rank_of(Some(lsn_addr_index[lsn2])),
     {
         self.disk_view.build_lsn_addr_honors_rank(self.freshest_rec, lsn_addr_index)
-    }    
+    }
 }
 
 state_machine!{ LikesJournal {
@@ -688,14 +775,14 @@ state_machine!{ LikesJournal {
                 => LinkedJournal_v::LinkedJournal::Label::Internal{},
         }
     }
-    
+
     pub open spec(checked) fn wf(self) -> bool {
         &&& self.journal.wf()
         // TODO this conjunct ought to be part of journal.wf, at least.
         // &&& self.journal.truncated_journal.seq_start() <= self.journal.truncated_journal.seq_end()
     }
 
-    pub open spec fn transitive_likes(self) -> Likes 
+    pub open spec fn transitive_likes(self) -> Likes
     {
         self.journal.truncated_journal.transitive_likes()
     }
@@ -736,7 +823,7 @@ state_machine!{ LikesJournal {
         require lbl is QueryEndLsn;
         require LinkedJournal_v::LinkedJournal::State::next(pre.journal, pre.journal, Self::lbl_i(lbl));
     } }
-    
+
     transition!{ put(lbl: Label, new_journal: LinkedJournal_v::LinkedJournal::State) {
         require lbl is Put;
         require LinkedJournal_v::LinkedJournal::State::next(pre.journal, new_journal, Self::lbl_i(lbl));
@@ -758,7 +845,7 @@ state_machine!{ LikesJournal {
         // require new_journal.wf();
         require pre.journal.truncated_journal.discard_old_cond(
             start_lsn, keep_addrs, new_journal.truncated_journal);
-        require new_journal.unmarshalled_tail == 
+        require new_journal.unmarshalled_tail ==
             pre.journal.unmarshalled_tail.bounded_discard(start_lsn);
 
         update journal = new_journal;
@@ -767,7 +854,7 @@ state_machine!{ LikesJournal {
 
     transition!{ internal_journal_marshal(lbl: Label, cut: LSN, addr: Address, new_journal: LinkedJournal_v::LinkedJournal::State) {
         require lbl is Internal;
-        require LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, new_journal, 
+        require LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, new_journal,
             Self::lbl_i(lbl), LinkedJournal_v::LinkedJournal::Step::internal_journal_marshal(cut, addr));
 
         update journal = new_journal;
@@ -805,7 +892,7 @@ state_machine!{ LikesJournal {
     #[inductive(read_for_recovery)]
     fn read_for_recovery_inductive(pre: Self, post: Self, lbl: Label) {
     }
-   
+
     #[inductive(freeze_for_commit)]
     fn freeze_for_commit_inductive(pre: Self, post: Self, lbl: Label, depth: nat) {
     }
@@ -813,7 +900,7 @@ state_machine!{ LikesJournal {
     #[inductive(query_end_lsn)]
     fn query_end_lsn_inductive(pre: Self, post: Self, lbl: Label) {
     }
-   
+
     #[inductive(put)]
     fn put_inductive(pre: Self, post: Self, lbl: Label, new_journal: LinkedJournal_v::LinkedJournal::State) {
         reveal(LinkedJournal_v::LinkedJournal::State::next);
@@ -900,15 +987,16 @@ state_machine!{ LikesJournal {
 
         assert( post.inv() );
     }
-   
+
     #[inductive(internal_no_op)]
     fn internal_no_op_inductive(pre: Self, post: Self, lbl: Label) {
     }
-   
+
     #[inductive(initialize)]
     fn initialize_inductive(post: Self, ijournal: TruncatedJournal) {
     }
-    
-} } // state_machine!
-        
+
+} }  // state_machine!
+
+
 } // verus!

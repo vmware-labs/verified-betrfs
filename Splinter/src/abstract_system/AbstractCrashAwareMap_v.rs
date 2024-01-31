@@ -3,22 +3,21 @@
 /// An AbstractMap (see `AbstractMap_v.rs`) but wrapped with the concept of crashes and recovery.
 /// We use this as the abstract crash tolerant map which is coordinated with the
 /// CrashAwareJournal in the coordination layer in our refinement proof.
-
 #[allow(unused_imports)]
 use builtin::*;
 
 use builtin_macros::*;
 use state_machines_macros::state_machine;
 #[allow(unused_imports)]
-use vstd::{map::*};
+use vstd::map::*;
 
 // use crate::spec::Option_t::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 
-use crate::abstract_system::StampedMap_v::*;
-use crate::abstract_system::MsgHistory_v::*;
 use crate::abstract_system::AbstractMap_v::*;
+use crate::abstract_system::MsgHistory_v::*;
+use crate::abstract_system::StampedMap_v::*;
 
 verus! {
 
@@ -29,7 +28,7 @@ type StoreImage = StampedMap;
 #[is_variant]
 pub enum Ephemeral {
     Unknown,
-    Known{ v: AbstractMap::State },
+    Known { v: AbstractMap::State },
 }
 
 state_machine!{ CrashTolerantMap {
@@ -102,7 +101,7 @@ state_machine!{ CrashTolerantMap {
             require lbl.is_PutRecordsLabel();
             require pre.ephemeral.is_Known();
             require AbstractMap::State::next(
-                pre.ephemeral.get_Known_v(), 
+                pre.ephemeral.get_Known_v(),
                 new_map,
                 AbstractMap::Label::PutLabel{ puts: lbl.get_PutRecordsLabel_records() });
             update ephemeral = Ephemeral::Known{ v: new_map };
@@ -114,9 +113,9 @@ state_machine!{ CrashTolerantMap {
             require lbl.is_QueryLabel();
             require pre.ephemeral.is_Known();
             require AbstractMap::State::next(
-                pre.ephemeral.get_Known_v(), 
+                pre.ephemeral.get_Known_v(),
                 new_map,
-                AbstractMap::Label::QueryLabel{ 
+                AbstractMap::Label::QueryLabel{
                     end_lsn: lbl.get_QueryLabel_end_lsn(),
                     key: lbl.get_QueryLabel_key(),
                     value: lbl.get_QueryLabel_value()
@@ -131,12 +130,12 @@ state_machine!{ CrashTolerantMap {
             require pre.ephemeral.is_Known();
             require pre.in_flight is None;
             require AbstractMap::State::next(
-                pre.ephemeral.get_Known_v(), 
+                pre.ephemeral.get_Known_v(),
                 new_map,
                 AbstractMap::Label::FreezeAsLabel{ stamped_map: frozen_map}
             );
             update ephemeral = Ephemeral::Known{ v: new_map };
-            update in_flight = Option::Some(frozen_map);            
+            update in_flight = Option::Some(frozen_map);
         }
     }
 
@@ -145,11 +144,11 @@ state_machine!{ CrashTolerantMap {
             require lbl.is_InternalLabel();
             require pre.ephemeral.is_Known();
             require AbstractMap::State::next(
-                pre.ephemeral.get_Known_v(), 
+                pre.ephemeral.get_Known_v(),
                 new_map,
                 AbstractMap::Label::InternalLabel,
             );
-            update ephemeral = Ephemeral::Known{ v: new_map };   
+            update ephemeral = Ephemeral::Known{ v: new_map };
         }
     }
 
@@ -180,4 +179,5 @@ state_machine!{ CrashTolerantMap {
         }
     }
 }}
-}
+
+} // verus!

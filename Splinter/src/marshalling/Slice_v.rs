@@ -5,7 +5,7 @@ use builtin_macros::*;
 
 use vstd::prelude::*;
 
-verus!{
+verus! {
 
 pub struct Slice {
     pub start: u64,
@@ -14,22 +14,20 @@ pub struct Slice {
 
 impl Slice {
     // Translates WF'
-    pub open spec fn valid<T>(&self, data: Seq<T>) -> bool
-    {
+    pub open spec fn valid<T>(&self, data: Seq<T>) -> bool {
         0 <= (self.start as int) <= (self.end as int) <= data.len()
     }
 
     pub open spec fn i<T>(&self, data: Seq<T>) -> Seq<T>
-    recommends
-        self.valid(data),
+        recommends
+            self.valid(data),
     {
         data.subrange(self.start as int, self.end as int)
     }
 
-    pub open spec fn all<T>(data: Seq<T>) -> Slice
-    {
-        Slice{start: 0, end: data.len() as u64}
+    pub open spec fn all<T>(data: Seq<T>) -> Slice {
+        Slice { start: 0, end: data.len() as u64 }
     }
 }
 
-} //verus!
+} // verus!
