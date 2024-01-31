@@ -317,7 +317,6 @@ impl DiskView {
     }
 
     pub proof fn pointer_after_crop_auto(self)
-    requires
     ensures
         forall |root, depth| {
             &&& self.decodable(root)
