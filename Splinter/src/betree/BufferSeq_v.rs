@@ -8,7 +8,7 @@ use crate::betree::Buffer_v::*;
 use crate::betree::OffsetMap_v::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
-use vstd::{seq::*, set::*, *};
+use vstd::{seq::*, set::*};
 
 verus! {
 

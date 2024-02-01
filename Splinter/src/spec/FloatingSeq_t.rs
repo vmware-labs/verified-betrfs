@@ -3,7 +3,7 @@
 use crate::spec::MapSpec_t::Version;
 use builtin::*;
 use builtin_macros::*;
-use vstd::{seq::*, *};
+use vstd::{seq::*};
 
 verus! {
 

@@ -4,7 +4,7 @@
 // approaching/modifying/enhancing crate build...?
 use builtin::*;
 use builtin_macros::*;
-use vstd::{map::*, set::*, *};
+use vstd::{map::*, set::*};
 
 use crate::spec::FloatingSeq_t::*;
 use crate::spec::KeyType_t::*;

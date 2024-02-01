@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 use builtin::*;
 use builtin_macros::*;
-use vstd::{map::*, set::*, *};
+use vstd::{map::*, set::*};
 
 use crate::abstract_system::StampedMap_v::*;
 use crate::spec::KeyType_t::*;
