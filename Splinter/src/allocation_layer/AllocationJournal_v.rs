@@ -869,35 +869,34 @@ impl TruncatedJournal {
         self.disk_view.build_lsn_au_index_page_walk_exist_valid_entries(self.freshest_rec);
     }
 
-
     pub proof fn sub_disk_build_sub_lsn_au_index(self, first: AU, big: Self, big_first: AU)
-    requires
-        big.disk_view.wf_addrs(),
-        big.disk_view.pointer_is_upstream(big.freshest_rec, big_first),
-        self.disk_view.pointer_is_upstream(self.freshest_rec, first),
-        self.disk_view.is_sub_disk(big.disk_view) || self.disk_view.is_sub_disk_with_newer_lsn(big.disk_view),
-        self.seq_end() <= big.seq_end()
-    ensures
-        self.build_lsn_au_index(first) <= big.build_lsn_au_index(big_first)
+        requires
+            big.disk_view.wf_addrs(),
+            big.disk_view.pointer_is_upstream(big.freshest_rec, big_first),
+            self.disk_view.pointer_is_upstream(self.freshest_rec, first),
+            self.disk_view.is_sub_disk(big.disk_view) || self.disk_view.is_sub_disk_with_newer_lsn(
+                big.disk_view,
+            ),
+            self.seq_end() <= big.seq_end(),
+        ensures
+            self.build_lsn_au_index(first) <= big.build_lsn_au_index(big_first),
     {
         let index = self.build_lsn_au_index(first);
         let big_index = big.build_lsn_au_index(big_first);
-
-        assert forall |addr| self.disk_view.entries.contains_key(addr) 
-            ==> big.disk_view.entries.contains_key(addr) by {}
+        assert forall|addr|
+            self.disk_view.entries.contains_key(addr) ==> big.disk_view.entries.contains_key(
+                addr,
+            ) by {}
         assert(self.disk_view.wf_addrs());
-        
         self.build_lsn_au_index_ensures(first);
         big.build_lsn_au_index_ensures(big_first);
-
         assert(index.dom() <= big_index.dom());
-        
-        assert forall |lsn| index.contains_key(lsn)
-        implies #[trigger] index[lsn] == big_index[lsn]
-        by {
+        assert forall|lsn| index.contains_key(lsn) implies #[trigger]
+        index[lsn] == big_index[lsn] by {
             reveal(DiskView::index_keys_exist_valid_entries);
-            let addr = choose |addr: Address| addr.wf() && addr.au == index[lsn] 
-                && #[trigger] self.disk_view.addr_supports_lsn(addr, lsn);
+            let addr = choose|addr: Address|
+                addr.wf() && addr.au == index[lsn] && #[trigger]
+                self.disk_view.addr_supports_lsn(addr, lsn);
             assert(big.disk_view.addr_supports_lsn(addr, lsn));
         }
     }
@@ -1369,13 +1368,13 @@ state_machine!{ AllocationJournal {
     }
 
     // NOTE(JL): temporary workaround
-    pub proof fn inv_next(pre: Self, post: Self, lbl: Label) 
+    pub proof fn inv_next(pre: Self, post: Self, lbl: Label)
     requires pre.inv(), Self::next(pre, post, lbl)
     ensures post.inv()
     {
         reveal(AllocationJournal::State::next);
         reveal(AllocationJournal::State::next_by);
-        
+
         let step = choose |step| Self::next_by(pre, post, lbl, step);
         match step {
             AllocationJournal::Step::freeze_for_commit(depth) => {
@@ -1404,7 +1403,7 @@ state_machine!{ AllocationJournal {
 
     pub proof fn frozen_journal_is_valid_image(pre: Self, post: Self, lbl: AllocationJournal::Label)
     requires pre.inv(), post.inv(), lbl is FreezeForCommit, Self::next(pre, post, lbl)
-    ensures 
+    ensures
         lbl.get_FreezeForCommit_frozen_journal().valid_image(),
         lbl.get_FreezeForCommit_frozen_journal().tj.seq_end() <= post.tj().seq_end()
     {
