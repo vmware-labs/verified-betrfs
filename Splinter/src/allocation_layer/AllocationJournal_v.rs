@@ -866,6 +866,39 @@ impl TruncatedJournal {
         self.disk_view.build_lsn_au_index_page_walk_exist_valid_entries(self.freshest_rec);
     }
 
+
+    pub proof fn sub_disk_build_sub_lsn_au_index(self, first: AU, big: Self, big_first: AU)
+    requires
+        big.disk_view.wf_addrs(),
+        big.disk_view.pointer_is_upstream(big.freshest_rec, big_first),
+        self.disk_view.pointer_is_upstream(self.freshest_rec, first),
+        self.disk_view.is_sub_disk(big.disk_view) || self.disk_view.is_sub_disk_with_newer_lsn(big.disk_view),
+        self.seq_end() <= big.seq_end()
+    ensures
+        self.build_lsn_au_index(first) <= big.build_lsn_au_index(big_first)
+    {
+        let index = self.build_lsn_au_index(first);
+        let big_index = big.build_lsn_au_index(big_first);
+
+        assert forall |addr| self.disk_view.entries.contains_key(addr) 
+            ==> big.disk_view.entries.contains_key(addr) by {}
+        assert(self.disk_view.wf_addrs());
+        
+        self.build_lsn_au_index_ensures(first);
+        big.build_lsn_au_index_ensures(big_first);
+
+        assert(index.dom() <= big_index.dom());
+        
+        assert forall |lsn| index.contains_key(lsn)
+        implies #[trigger] index[lsn] == big_index[lsn]
+        by {
+            reveal(DiskView::index_keys_exist_valid_entries);
+            let addr = choose |addr: Address| addr.wf() && addr.au == index[lsn] 
+                && #[trigger] self.disk_view.addr_supports_lsn(addr, lsn);
+            assert(big.disk_view.addr_supports_lsn(addr, lsn));
+        }
+    }
+
     pub open spec fn discard_old_tight(
         self,
         start_lsn: LSN,
@@ -1162,7 +1195,7 @@ state_machine!{ AllocationJournal {
     }
 
     #[inductive(discard_old)]
-    pub fn discard_old_inductive(pre: Self, post: Self, lbl: Label, new_journal: LinkedJournal::State) {
+    fn discard_old_inductive(pre: Self, post: Self, lbl: Label, new_journal: LinkedJournal::State) {
         assert( post.wf() );
 
         let start_lsn = lbl.get_DiscardOld_start_lsn();
@@ -1223,7 +1256,7 @@ state_machine!{ AllocationJournal {
     }
 
     #[inductive(internal_journal_marshal)]
-    pub fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal::State) {
+    fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address, post_linked_journal: LinkedJournal::State) {
         let msgs = pre.journal.unmarshalled_tail.discard_recent(cut);
         let pre_dv = pre.tj().disk_view;
         let pre_root = pre.tj().freshest_rec;
@@ -1332,9 +1365,45 @@ state_machine!{ AllocationJournal {
         assert( post.inv() );
     }
 
+    // NOTE(JL): temporary workaround
+    pub proof fn inv_next(pre: Self, post: Self, lbl: Label) 
+    requires pre.inv(), Self::next(pre, post, lbl)
+    ensures post.inv()
+    {
+        reveal(AllocationJournal::State::next);
+        reveal(AllocationJournal::State::next_by);
+        
+        let step = choose |step| Self::next_by(pre, post, lbl, step);
+        match step {
+            AllocationJournal::Step::freeze_for_commit(depth) => {
+                Self::freeze_for_commit_inductive(pre, post, lbl, depth);
+            },
+            AllocationJournal::Step::put(new_journal) => {
+                Self::put_inductive(pre, post, lbl, new_journal);
+            },
+            AllocationJournal::Step::internal_mini_allocator_fill() => {
+                Self::internal_mini_allocator_fill_inductive(pre, post, lbl);
+            },
+            AllocationJournal::Step::internal_mini_allocator_prune() => {
+                Self::internal_mini_allocator_prune_inductive(pre, post, lbl);
+            },
+            AllocationJournal::Step::discard_old(new_journal) => {
+                Self::discard_old_inductive(pre, post, lbl, new_journal);
+            },
+            AllocationJournal::Step::internal_journal_marshal(cut, addr, new_journal) => {
+                Self::internal_journal_marshal_inductive(pre, post, lbl, cut, addr, new_journal);
+            },
+            _ => {
+                assert(post.inv());
+            },
+        }
+    }
+
     pub proof fn frozen_journal_is_valid_image(pre: Self, post: Self, lbl: AllocationJournal::Label)
     requires pre.inv(), post.inv(), lbl is FreezeForCommit, Self::next(pre, post, lbl)
-    ensures lbl.get_FreezeForCommit_frozen_journal().valid_image()
+    ensures 
+        lbl.get_FreezeForCommit_frozen_journal().valid_image(),
+        lbl.get_FreezeForCommit_frozen_journal().tj.seq_end() <= post.tj().seq_end()
     {
         reveal(AllocationJournal::State::next);
         reveal(AllocationJournal::State::next_by);
@@ -1398,22 +1467,7 @@ state_machine!{ AllocationJournal {
         if frozen_root is Some {
             frozen_journal.tj.build_lsn_au_index_ensures(frozen_journal.first);
             assert(frozen_repr.dom() =~= frozen_index.dom());
-
-            let tmp_repr = pre.tj().disk_view.build_lsn_au_index_page_walk(frozen_root);
-            frozen_dv.build_lsn_au_index_equiv_page_walk(frozen_root, frozen_journal.first);
-            frozen_dv.build_lsn_au_index_page_walk_sub_disk(pre.tj().disk_view, frozen_root);
-            assert(frozen_repr <= tmp_repr);
-
-            pre.tj().disk_view.build_lsn_au_index_equiv_page_walk(pre.tj().freshest_rec, pre.first);
-            pre.tj().disk_view.cropped_ptr_build_sub_index(pre.tj().freshest_rec, frozen_root, depth);
-            assert(tmp_repr <= pre.lsn_au_index);
-
-            assert(frozen_repr.dom() <= pre.lsn_au_index.dom());
-            assert forall |lsn| frozen_repr.contains_key(lsn)
-            implies #[trigger] frozen_repr[lsn] == pre.lsn_au_index[lsn]
-            by {
-                assert(tmp_repr.contains_key(lsn)); // trigger
-            }
+            frozen_journal.tj.sub_disk_build_sub_lsn_au_index(frozen_journal.first, pre.tj(), pre.first);
             assert(frozen_repr <= pre.lsn_au_index);
         }
         assert(frozen_repr =~= frozen_index);

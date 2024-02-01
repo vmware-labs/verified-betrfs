@@ -148,7 +148,6 @@ impl DiskView {
             cropped == self.pointer_after_crop(root, depth),
         ensures
             self.build_lsn_addr_index(cropped) <= self.build_lsn_addr_index(root),
-            self.build_lsn_au_index_page_walk(cropped) <= self.build_lsn_au_index_page_walk(root),
         decreases self.the_rank_of(root),
     {
         reveal(TruncatedJournal::index_domain_valid);
@@ -160,9 +159,6 @@ impl DiskView {
                 assert(self.build_lsn_addr_index(self.next(root)) <= self.build_lsn_addr_index(
                     root,
                 ));
-                self.build_lsn_au_index_page_walk_domain(self.next(root));
-                assert(self.build_lsn_au_index_page_walk(self.next(root))
-                    <= self.build_lsn_au_index_page_walk(root));
             }
         }
     }
