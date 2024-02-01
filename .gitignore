@@ -21,3 +21,6 @@
 **/.record-history/
 
 **/.verus-log/
+
+# Ignore per-user VSCode configuration
+.vscode/

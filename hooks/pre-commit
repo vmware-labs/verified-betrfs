@@ -2,6 +2,7 @@
 import os
 import subprocess
 import sys
+import glob
 
 EXPECTED_VERSION="verusfmt 0.1.6"
 ACTUAL_VERSION=subprocess.check_output(["verusfmt", "--version"]).strip().decode("utf-8")
@@ -12,13 +13,16 @@ if EXPECTED_VERSION != ACTUAL_VERSION:
     sys.exit(1)
 
 cwd = os.getcwd()
-find_cmd = ["find", cwd, "-name", "*.rs"]
-p1 = subprocess.Popen(find_cmd, stdout=subprocess.PIPE)
-xargs_cmd = ["xargs", "verusfmt"]
-p2 = subprocess.Popen(xargs_cmd + ["--check"], stdin=p1.stdout, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-rc = p2.wait()
+
+rustpaths = glob.glob("**/*.rs", recursive=True)
+
+fmt_cmd = ["verusfmt"] + rustpaths
+pwhatever = subprocess.Popen(fmt_cmd, stdout=subprocess.PIPE)
+rc = pwhatever.wait()
 if rc == 0:
     sys.exit(0)
+
+# Otherwise command failed, print command
 sys.stderr.write(f"verusfmt failed. Format all source with:\n")
-cmd = (" ".join(find_cmd)) + " | " + (" ".join(xargs_cmd))
+cmd = (" ".join(fmt_cmd))
 sys.stderr.write(cmd+"\n")
