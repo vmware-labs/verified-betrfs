@@ -156,7 +156,8 @@ impl BetreeNode {
         BetreeNode::Node { buffer: kept_buffer, children: ChildMap { map: out_children_map } }
     }
 }
-  // end impl BetreeNode
+
+// end impl BetreeNode
 pub struct QueryReceiptLine {
     pub node: BetreeNode,
     pub result: Message,
@@ -168,7 +169,8 @@ impl QueryReceiptLine {
         &&& self.result.is_Define()
     }
 }
-  //end impl QueryReceiptLine
+
+//end impl QueryReceiptLine
 // NB the top line is the line for the root node; hence Result()==ResultAt(0)
 // The bottom line is always Nil
 // #[verifier::ext_equal]
@@ -248,7 +250,8 @@ impl QueryReceipt {
         &&& self.key == key
     }
 }
-  // end impl QueryReceipt
+
+// end impl QueryReceipt
 pub struct Path {
     pub node: BetreeNode,
     pub key: Key,
@@ -340,7 +343,8 @@ impl Path {
         }
     }
 }
-  //end impl Path
+
+//end impl Path
 state_machine!{ PagedBetree {
     fields {
         pub memtable: Memtable,

@@ -330,7 +330,8 @@ impl BetreeNode {
         self.get_Node_children()[self.get_Node_pivots().route(key)]
     }
 }
-  // end impl BetreeNode
+
+// end impl BetreeNode
 pub struct QueryReceiptLine {
     pub node: BetreeNode,
     pub result: Message,
@@ -342,7 +343,8 @@ impl QueryReceiptLine {
         &&& self.result.is_Define()
     }
 }
-  // end impl QueryReceiptLine
+
+// end impl QueryReceiptLine
 pub struct QueryReceipt {
     pub key: Key,
     pub root: BetreeNode,
@@ -423,7 +425,8 @@ impl QueryReceipt {
         &&& self.key == key
     }
 }
-  // end impl QueryReceipt
+
+// end impl QueryReceipt
 pub struct Path {
     pub node: BetreeNode,
     pub key: Key,
@@ -499,7 +502,8 @@ impl Path {
         }
     }
 }
-  // end impl Path
+
+// end impl Path
 state_machine!{ PivotBetree {
     fields {
         pub memtable: Memtable,

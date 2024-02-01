@@ -131,7 +131,8 @@ impl DiskView {
         }
     }
 }
-  // end of impl DiskView
+
+// end of impl DiskView
 // invariant proof stuff that moved here from the Refinement file
 impl DiskView {
     pub open spec(checked) fn addr_supports_lsn(self, addr: Address, lsn: LSN) -> bool {
@@ -289,7 +290,7 @@ impl DiskView {
     pub proof fn build_tight_domain_is_build_lsn_addr_index_range(self, root: Pointer)
         requires
             self.buildable(root),
-        ensures// This conclusion is used inside the recursion
+        ensures  // This conclusion is used inside the recursion
 
             root.is_Some() ==> forall|lsn|
                 self.build_lsn_addr_index(root).contains_key(lsn) ==> self.boundary_lsn <= lsn
@@ -297,7 +298,7 @@ impl DiskView {
             // This conclusion is the one we're trying to actually export
             self.build_lsn_addr_index(root).values() =~= self.build_tight(
                 root,
-            ).entries.dom(),// TODO(chris): I find it kind of disturbing that the ~ between the == in the line above
+            ).entries.dom(),  // TODO(chris): I find it kind of disturbing that the ~ between the == in the line above
     // is a functional part of the proof strategy. --jonh
 
         decreases self.the_rank_of(root),
@@ -335,7 +336,7 @@ impl DiskView {
                     //                     assert( self.build_lsn_addr_index(root).values().contains(addr) );
                 }
             }
-        }//         assert( self.build_lsn_addr_index(root).values() =~= self.representation(root) );    // TODO remove
+        }  //         assert( self.build_lsn_addr_index(root).values() =~= self.representation(root) );    // TODO remove
 
     }
 
@@ -538,7 +539,8 @@ impl DiskView {
         reveal(DiskView::index_keys_map_to_valid_entries);
     }
 }
-  // DiskView proof bits
+
+// DiskView proof bits
 pub open spec(checked) fn map_to_likes(lsn_addr_map: LsnAddrIndex) -> Likes
     decreases lsn_addr_map.dom().len(),
     when lsn_addr_map.dom().finite()

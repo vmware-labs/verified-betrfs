@@ -927,7 +927,7 @@ impl LinkedBetree {
             result.root().valid_child_index(i) ==> ({
                 &&& i < child_idx ==> self.root().valid_child_index(i)
                 &&& i > child_idx + 1 ==> self.root().valid_child_index((i - 1) as nat)
-            }) by {}// assert(result.dv.node_children_respects_rank(new_ranking, new_addrs.parent));
+            }) by {}  // assert(result.dv.node_children_respects_rank(new_ranking, new_addrs.parent));
 
         assert(result.dv.valid_ranking(new_ranking));
         assert(new_ranking.dom() =~= ranking.dom() + new_addrs.repr());
@@ -1333,7 +1333,8 @@ impl LinkedBetree {
         assert(a =~= b);
     }
 }
-  // end impl LinkedBetree
+
+// end impl LinkedBetree
 pub open spec(checked) fn i_stamped_betree(
     stamped: StampedBetree,
 ) -> FilteredBetree_v::StampedBetree
@@ -1774,7 +1775,8 @@ impl LinkedBetreeVars::Label {
         }
     }
 }
-  // end impl LinkedBetreeVars::Label
+
+// end impl LinkedBetreeVars::Label
 impl LinkedBetreeVars::State {
     pub open spec(checked) fn inv(self) -> bool {
         &&& self.wf()

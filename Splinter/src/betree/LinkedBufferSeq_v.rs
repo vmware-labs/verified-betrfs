@@ -51,7 +51,8 @@ impl DiskView {
         DiskView { entries: self.entries.union_prefer_right(other.entries) }
     }
 }
-  // end of DiskView impl
+
+// end of DiskView impl
 pub open spec(checked) fn empty_disk() -> DiskView {
     DiskView { entries: Map::empty() }
 }

@@ -170,7 +170,7 @@ impl BetreeNode {
             #[trigger]
             self.valid_child_index(i) ==> {
                 &&& other_children[i as int].wf()
-                &&& other_children[i as int].is_Node()//XXX self.get_Node_children()[i] is wf by instantiating linked_children
+                &&& other_children[i as int].is_Node()  //XXX self.get_Node_children()[i] is wf by instantiating linked_children
 
                 &&& other_children[i as int].my_domain()
                     == self.get_Node_children()[i as int].my_domain()
@@ -550,7 +550,8 @@ impl BetreeNode {
         ).get_Node_children().map);
     }
 }
-  // end impl BetreeNode
+
+// end impl BetreeNode
 pub open spec(checked) fn i_stamped_betree(stamped: StampedBetree) -> PagedBetree_v::StampedBetree {
     Stamped { value: stamped.value.i(), seq_end: stamped.seq_end }
 }
@@ -777,7 +778,8 @@ impl PivotBetree::Label {
         }
     }
 }
-  // end impl PivotBetree::Label
+
+// end impl PivotBetree::Label
 impl PivotBetree::State {
     pub open spec(checked) fn inv(self) -> bool {
         &&& self.wf()

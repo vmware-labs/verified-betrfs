@@ -242,7 +242,7 @@ impl BetreeNode {
             (#[trigger]
             self.valid_child_index(i)) ==> {
                 &&& other_children[i as int].wf()
-                &&& other_children[i as int].is_Node()//XXX need to instantiate linked_children
+                &&& other_children[i as int].is_Node()  //XXX need to instantiate linked_children
 
                 &&& other_children[i as int].my_domain()
                     == self.get_Node_children()[i as int].my_domain()
@@ -1076,7 +1076,8 @@ impl BetreeNode {
         assert(result.i().get_Node_buffer() =~= self.i().get_Node_buffer());
     }
 }
-  // end impl BetreeNode
+
+// end impl BetreeNode
 // TODO(jialin): Why isn't this just impl StampedBetree { fn i() }?
 pub open spec(checked) fn i_stamped_betree(stamped: StampedBetree) -> PivotBetree_v::StampedBetree
     recommends
@@ -1318,7 +1319,8 @@ impl FilteredBetree::Label {
         }
     }
 }
-  // end impl FilteredBetree::Label
+
+// end impl FilteredBetree::Label
 impl FilteredBetree::State {
     pub open spec(checked) fn inv(self) -> bool {
         &&& self.wf()

@@ -260,7 +260,8 @@ impl BetreeNode {
         }
     }
 }
-  // end impl BetreeNode
+
+// end impl BetreeNode
 pub struct DiskView {
     pub entries: Map<Address, BetreeNode>,
 }
@@ -818,7 +819,8 @@ impl LinkedBetree {
         LinkedBetree { root: Some(new_addrs.addr1), dv: new_dv, buffer_dv: new_buffer_dv }
     }
 }
-  // end of LinkedBetree impl
+
+// end of LinkedBetree impl
 pub struct QueryReceiptLine {
     pub linked: LinkedBetree,
     pub result: Message,
@@ -829,7 +831,8 @@ impl QueryReceiptLine {
         &&& self.result.is_Define()
     }
 }
-  // end impl QueryReceiptLine
+
+// end impl QueryReceiptLine
 pub struct QueryReceipt {
     pub key: Key,
     pub linked: LinkedBetree,
@@ -931,7 +934,8 @@ impl QueryReceipt {
         &&& self.key == key
     }
 }
-  // end impl QueryReceipt
+
+// end impl QueryReceipt
 pub type PathAddrs = Seq<Address>;
 
 pub struct Path {
@@ -1026,7 +1030,8 @@ impl Path {
         }
     }
 }
-  // end impl Path
+
+// end impl Path
 state_machine!{ LinkedBetreeVars {
     fields {
         pub memtable: Memtable,

@@ -216,7 +216,7 @@ impl CoordinationSystem::State {
         )// Ephemeral map ends no earlier than persistent map
 
         &&& self.mapadt.persistent.seq_end
-            <= self.mapadt.i().seq_end// Ephemeral journal ends no earlier than ephmeral map
+            <= self.mapadt.i().seq_end  // Ephemeral journal ends no earlier than ephmeral map
         // (With the first conjunct, this conjunct happens to subsume the second conjunct,
         // but this was the nicest way to write it.)
 
@@ -225,7 +225,7 @@ impl CoordinationSystem::State {
         )// Ephemeral journal is no shorter than persistent state
 
         &&& self.journal.persistent.seq_end
-            <= self.ephemeral_seq_end()// Local snapshot of mapLsn matched actual map state machine
+            <= self.ephemeral_seq_end()  // Local snapshot of mapLsn matched actual map state machine
 
         &&& self.ephemeral.get_Some_0().map_lsn
             == self.mapadt.ephemeral.get_Known_v().stamped_map.seq_end
@@ -267,7 +267,7 @@ impl CoordinationSystem::State {
     {
         // frozen map hasn't passed ephemeral journal
         &&& self.mapadt.in_flight.get_Some_0().seq_end
-            <= self.ephemeral_seq_end()// Frozen map doesn't regress before persistent map
+            <= self.ephemeral_seq_end()  // Frozen map doesn't regress before persistent map
 
         &&& self.mapadt.persistent.seq_end <= self.mapadt.in_flight.get_Some_0().seq_end
     }
@@ -300,7 +300,7 @@ impl CoordinationSystem::State {
         // We need a well-behaved journal to relate in-flight state to.
         &&& self.wf()
         &&& self.ephemeral.is_Some()
-        &&& self.inv_ephemeral_geometry()// Geometry properties
+        &&& self.inv_ephemeral_geometry()  // Geometry properties
         // In-flight map + journal stitch.
 
         &&& if_journal.can_follow(
@@ -308,12 +308,12 @@ impl CoordinationSystem::State {
         )// Commiting in-flight state won't shrink persistent state
 
         &&& self.journal.persistent.seq_end
-            <= if_journal.seq_end// In-flight map doesn't precede persistent map -- that would cause
+            <= if_journal.seq_end  // In-flight map doesn't precede persistent map -- that would cause
         // forgotten lsns to pop back into existence, and we don't have those lsns
         // in the ephemeral journal to compare to.
 
         &&& self.mapadt.persistent.seq_end
-            <= if_map.seq_end// in-flight view hasn't passed ephemeral journal
+            <= if_map.seq_end  // in-flight view hasn't passed ephemeral journal
 
         &&& if_journal.seq_end <= self.ephemeral_seq_end()
     }
@@ -826,7 +826,8 @@ pub proof fn inv_inductive(
         },
     }
 }
-  // lemma inv_inductive
+
+// lemma inv_inductive
 pub proof fn put_step_refines(
     v: CoordinationSystem::State,
     vp: CoordinationSystem::State,

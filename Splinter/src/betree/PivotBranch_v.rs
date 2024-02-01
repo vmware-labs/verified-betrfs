@@ -157,7 +157,7 @@ impl Node {
                 &&& Key::is_strictly_sorted(pivots)
                 &&& forall|i|
                     0 <= i < children.len() ==> (#[trigger]
-                    children[i]).wf()// For children[0:-1], all keys they contain should be < their upper pivot.
+                    children[i]).wf()  // For children[0:-1], all keys they contain should be < their upper pivot.
 
                     &&& forall|i|
                         0 <= i < children.len() - 1 ==> self.all_keys_below_bound(

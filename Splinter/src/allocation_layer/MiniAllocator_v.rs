@@ -42,7 +42,10 @@ impl PageAllocator {
     pub open spec(checked) fn reserve(self, addrs: Set<Address>) -> (out: Self)
         recommends
             self.wf(),
-            forall|addr| addrs.contains(addr) ==> self.is_free_addr(addr),// ensures out.wf()
+            forall|addr|
+                addrs.contains(addr) ==> self.is_free_addr(
+                    addr,
+                ),  // ensures out.wf()
 
     {
         Self { reserved: self.reserved + addrs, ..self }
@@ -52,7 +55,7 @@ impl PageAllocator {
     pub open spec(checked) fn unreserve(self, addrs: Set<Address>) -> (out: Self)
         recommends
             self.wf(),
-            addrs.subset_of(self.reserved),// ensures out.wf()
+            addrs.subset_of(self.reserved),  // ensures out.wf()
 
     {
         Self { reserved: self.reserved.difference(addrs), ..self }
@@ -63,7 +66,8 @@ impl PageAllocator {
             self.wf(),
             forall|addr|
                 #[trigger]
-                addrs.contains(addr) ==> addr.wf() && addr.au == self.au,// ensures out.wf()
+                addrs.contains(addr) ==> addr.wf() && addr.au
+                    == self.au,  // ensures out.wf()
 
     {
         Self { observed: self.observed + addrs, ..self }
@@ -92,7 +96,7 @@ impl PageAllocator {
     pub open spec(checked) fn unobserve(self, addrs: Set<Address>) -> (out: Self)
         recommends
             self.wf(),
-            addrs.subset_of(self.observed),// ensures out.wf()
+            addrs.subset_of(self.observed),  // ensures out.wf()
 
     {
         Self { observed: self.observed.difference(addrs), ..self }
@@ -100,7 +104,7 @@ impl PageAllocator {
 
     pub open spec(checked) fn unobserve_all(self) -> (out: Self)
         recommends
-            self.wf(),// ensures out.wf()
+            self.wf(),  // ensures out.wf()
 
     {
         self.unobserve(self.observed)
@@ -109,7 +113,7 @@ impl PageAllocator {
     pub open spec(checked) fn free(self, addrs: Set<Address>) -> (out: Self)
         recommends
             self.wf(),
-            addrs.subset_of(self.observed + self.reserved),// ensures out.wf()
+            addrs.subset_of(self.observed + self.reserved),  // ensures out.wf()
 
     {
         Self {
@@ -158,7 +162,7 @@ impl MiniAllocator {
 
     pub open spec(checked) fn add_aus(self, aus: Set<AU>) -> Self
         recommends
-            self.wf(),// ensures out.wf()
+            self.wf(),  // ensures out.wf()
 
     {
         let new_allocs = Map::new(
@@ -193,7 +197,7 @@ impl MiniAllocator {
     pub open spec(checked) fn allocate_and_observe(self, addr: Address) -> Self
         recommends
             self.wf(),
-            self.can_allocate(addr),// ensures out.wf()
+            self.can_allocate(addr),  // ensures out.wf()
 
     {
         let result = self.allocs[addr.au].observe(set![addr]);
@@ -256,7 +260,7 @@ impl MiniAllocator {
     pub open spec(checked) fn allocate(self, addr: Address) -> Self
         recommends
             self.wf(),
-            self.can_allocate(addr),// ensures out.wf()
+            self.can_allocate(addr),  // ensures out.wf()
 
     {
         let result = self.allocs[addr.au].reserve(set![addr]);
@@ -274,7 +278,7 @@ impl MiniAllocator {
     pub open spec   /*(checked)*/
     fn prune(self, aus: Set<AU>) -> Self
         recommends
-            self.wf(),// ensures out.wf()
+            self.wf(),  // ensures out.wf()
     // ensures out.allocs.dom() == self.alloc.dom() - aus
 
     {

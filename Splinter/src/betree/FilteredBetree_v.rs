@@ -143,10 +143,7 @@ impl BetreeNode {
     }
 
     #[verifier(recommends_by)]
-    pub proof fn flushed_ofs_inline_lemma(self, key: Key)//     requires
-    //         self.key_in_domain(key),
-    //     ensures
-    //         0 <= self.get_Node_pivots().route(key) < self.get_Node_flushed().offsets.len(),
+    pub proof fn flushed_ofs_inline_lemma(self, key: Key)  //     requires  //         self.key_in_domain(key),  //     ensures  //         0 <= self.get_Node_pivots().route(key) < self.get_Node_flushed().offsets.len(),
     {
         self.get_Node_pivots().route_lemma(key);
         assert(0 <= self.get_Node_pivots().route(key) < self.get_Node_flushed().offsets.len());
@@ -467,7 +464,8 @@ impl BetreeNode {
         }
     }
 }
-  // end impl BetreeNode
+
+// end impl BetreeNode
 pub struct QueryReceiptLine {
     pub node: BetreeNode,
     pub result: Message,
@@ -479,7 +477,8 @@ impl QueryReceiptLine {
         &&& self.result.is_Define()
     }
 }
-  // end impl QueryReceiptLine
+
+// end impl QueryReceiptLine
 pub struct QueryReceipt {
     pub key: Key,
     pub root: BetreeNode,
@@ -563,7 +562,8 @@ impl QueryReceipt {
         &&& self.key == key
     }
 }
-  // end impl QueryReceipt
+
+// end impl QueryReceipt
 pub struct Path {
     pub node: BetreeNode,
     pub key: Key,
@@ -591,7 +591,7 @@ impl Path {
 
     pub open spec(checked) fn target(self) -> BetreeNode
         recommends
-            self.valid(),// ensures out.wf(), out.is_Node(),
+            self.valid(),  // ensures out.wf(), out.is_Node(),
 
         decreases self.depth,
     {
@@ -606,7 +606,7 @@ impl Path {
     fn can_substitute(self, replacement: BetreeNode) -> bool {
         &&& self.valid()
         &&& replacement.wf()
-        &&& replacement.is_Node()//XXX needs target() ensures wf
+        &&& replacement.is_Node()  //XXX needs target() ensures wf
 
         &&& replacement.my_domain() == self.target().my_domain()
     }
@@ -641,7 +641,8 @@ impl Path {
         }
     }
 }
-  // end impl Path
+
+// end impl Path
 state_machine!{ FilteredBetree {
     fields {
         pub memtable: Memtable,

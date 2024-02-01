@@ -122,11 +122,12 @@ state_machine!{ MapSpec {
             require let Output::NoopOutput = output;
         }
     }
-}}// Async things
+}}  // Async things
 
 
 type ID = int;
-  // wishing for genericity
+
+// wishing for genericity
 pub struct Request {
     pub input: Input,
     pub id: ID,

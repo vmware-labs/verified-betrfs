@@ -57,10 +57,8 @@ pub type LsnAUIndex = Map<LSN, AU>;
 
 // Removed (checked) due to lambda being total
 pub open spec   /*(checked)*/
-fn lsn_au_index_discard_up_to(lsn_au_index: LsnAUIndex, bdy: LSN) -> (out: LsnAUIndex)//     ensures
-//         out.len(lsn_au_index),
-//         forall |k| out.contains_key(k) :: bdy <= k,
-//         forall |k| lsn_au_index.contains_key(k) && bdy <= k ==> out.contains_key(k),
+fn lsn_au_index_discard_up_to(lsn_au_index: LsnAUIndex, bdy: LSN) -> (out:
+    LsnAUIndex)  //     ensures  //         out.len(lsn_au_index),  //         forall |k| out.contains_key(k) :: bdy <= k,  //         forall |k| lsn_au_index.contains_key(k) && bdy <= k ==> out.contains_key(k),
 {
     Map::new(|lsn| lsn_au_index.contains_key(lsn) && bdy <= lsn, |lsn| lsn_au_index[lsn])
 }
@@ -159,7 +157,11 @@ impl DiskView {
         recommends
             self.decodable(root),
             self.acyclic(),
-        decreases self.the_rank_of(root),// TODO(chris): this when clause isn't working!
+        decreases
+                self.the_rank_of(
+                    root,
+                ),  // TODO(chris): this when clause isn't working!
+
         when {
         // TODO(chris): oh look, &&&s not ,s! Let's run with that!
         &&& self.decodable(root)
@@ -387,7 +389,7 @@ impl DiskView {
             self.pointer_is_upstream(root, first),
             root.is_Some(),
             root.unwrap().au != first,
-        ensures// TODO wish I had a superlet for bottom=first_page(root) here
+        ensures  // TODO wish I had a superlet for bottom=first_page(root) here
 
             self.next(first_page(root)) is Some,  // else root.au == first
             self.decodable(self.next(first_page(root))),  // because decodable-ity is recursive
@@ -487,7 +489,7 @@ impl DiskView {
             root.au != first,
             root.au == later.au,
             root.page <= later.page,
-            self.internal_au_pages_fully_linked(),// should be less than <= bc it's enough to prove termination, cause later is already < caller's root
+            self.internal_au_pages_fully_linked(),  // should be less than <= bc it's enough to prove termination, cause later is already < caller's root
 
         ensures
             self.the_rank_of(Some(root)) <= self.the_rank_of(Some(later)),
@@ -627,6 +629,7 @@ impl DiskView {
                         ==> self.pointer_is_upstream(Some(lsn_addr_index[lsn]), first)
             }),
         decreases self.the_rank_of(root),  // when self.buildable(root)
+
     {
         let lsn_addr_index = self.build_lsn_addr_index(root);
         if root is Some {

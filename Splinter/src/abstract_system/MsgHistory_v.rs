@@ -286,7 +286,7 @@ impl MsgHistory {
         requires
             self.wf(),
             self.can_discard_to(middle),
-        ensures// history[:middle] + history[middle:] = history
+        ensures  // history[:middle] + history[middle:] = history
 
             self.discard_recent(middle).concat(self.discard_old(middle)) == self,
     {

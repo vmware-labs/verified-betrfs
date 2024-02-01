@@ -86,13 +86,16 @@ impl Config for DefaultConfig {
 struct IntegerMarshalling {}
 
 impl Marshalling<DefaultConfig, u64> for IntegerMarshalling {
-    spec fn parsable(cfg: &DefaultConfig, data: Seq<u8>) -> bool//     recommends cfg.valid()
+    spec fn parsable(
+        cfg: &DefaultConfig,
+        data: Seq<u8>,
+    ) -> bool  //     recommends cfg.valid()
      {
         /*std::mem::size_of<u64>()*/
         8 <= data.len()
     }
 
-    spec fn parse(cfg: &DefaultConfig, data: Seq<u8>) -> u64//     recommends
+    spec fn parse(cfg: &DefaultConfig, data: Seq<u8>) -> u64  //     recommends
     //         cfg.valid(),
     //         Self::parsable(cfg, data)
      {
@@ -100,11 +103,9 @@ impl Marshalling<DefaultConfig, u64> for IntegerMarshalling {
     }
 
     // Should this be slices? in verus-ironfleet, jayb used Vec<u8> + start
-    fn try_parse(cfg: &DefaultConfig, data: &Vec<u8>) -> (ov: Option<u64>)//     requires
-    //         cfg.valid(),
-    //     ensures
-    //         Self::parsable(cfg, data@) <==> ov is Some,
-    //         Self::parsable(cfg, data@) ==> ov.unwrap() == Self::parse(cfg, data@)
+    fn try_parse(cfg: &DefaultConfig, data: &Vec<u8>) -> (ov: Option<
+        u64,
+    >)  //     requires  //         cfg.valid(),  //     ensures  //         Self::parsable(cfg, data@) <==> ov is Some,  //         Self::parsable(cfg, data@) ==> ov.unwrap() == Self::parse(cfg, data@)
     {
         if 8 <= data.len() {
             Some(u64_from_le_bytes(slice_subrange(data.as_slice(), 0, 8)))
@@ -113,10 +114,8 @@ impl Marshalling<DefaultConfig, u64> for IntegerMarshalling {
         }
     }
 
-    fn exec_parsable(cfg: &DefaultConfig, data: &Vec<u8>) -> (p: bool)//     requires
-    //         cfg.valid(),
-    //     ensures
-    //         p == Self::parsable(cfg, data@),
+    fn exec_parsable(cfg: &DefaultConfig, data: &Vec<u8>) -> (p:
+        bool)  //     requires  //         cfg.valid(),  //     ensures  //         p == Self::parsable(cfg, data@),
     {
         8 <= data.len()
     }
@@ -125,34 +124,20 @@ impl Marshalling<DefaultConfig, u64> for IntegerMarshalling {
         true
     }
 
-    spec fn size(cfg: &DefaultConfig, value: &u64) -> u64//     recommends
+    spec fn size(cfg: &DefaultConfig, value: &u64) -> u64  //     recommends
     //         cfg.valid(),
     //         Self::marshallable(cfg, value)
      {
         8
     }
 
-    fn exec_size(cfg: &DefaultConfig, value: &u64) -> (sz: u64)//     requires
-    //         cfg.valid(),
-    //         Self::marshallable(cfg, value),
-    //     ensures
-    //         sz == Self::size(cfg, value)
+    fn exec_size(cfg: &DefaultConfig, value: &u64) -> (sz: u64)  //     requires  //         cfg.valid(),  //         Self::marshallable(cfg, value),  //     ensures  //         sz == Self::size(cfg, value)
     {
         8
     }
 
     fn marshall(cfg: &DefaultConfig, value: &u64, data: &mut Vec<u8>, start: u64) -> (end:
-        u64)//     requires
-    //         cfg.valid(),
-    //         Self::marshallable(cfg, value),
-    //         start as int + Self::size(cfg, value) as int <= old(data).len(),
-    //     ensures
-    //         end == start + Self::size(cfg, value),
-    //         data.len() == old(data).len(),
-    //         forall |i| 0 <= i < start ==> data[i] == old(data)[i],
-    //         forall |i| end <= i < data.len() ==> data[i] == old(data)[i],
-    //         Self::parsable(cfg, data@.subrange(start as int, end as int)),
-    //         Self::parse(cfg, data@.subrange(start as int, end as int)) == value
+        u64)  //     requires  //         cfg.valid(),  //         Self::marshallable(cfg, value),  //         start as int + Self::size(cfg, value) as int <= old(data).len(),  //     ensures  //         end == start + Self::size(cfg, value),  //         data.len() == old(data).len(),  //         forall |i| 0 <= i < start ==> data[i] == old(data)[i],  //         forall |i| end <= i < data.len() ==> data[i] == old(data)[i],  //         Self::parsable(cfg, data@.subrange(start as int, end as int)),  //         Self::parse(cfg, data@.subrange(start as int, end as int)) == value
     {
         // TODO this interface from verus pervasive bytes.rs can't be fast...
         let s = u64_to_le_bytes(*value);
@@ -185,8 +170,8 @@ impl Marshalling<DefaultConfig, u64> for IntegerMarshalling {
 trait SeqMarshalling<C: Config, U, Elt: Marshalling<C, U>>: Marshalling<DefaultConfig, Vec<U>> {
     spec fn spec_elt_cfg(cfg: &DefaultConfig) -> (elt_cfg: C)
         recommends
-            cfg.valid(),//     ensures
-            //         elt_cfg.valid()
+            cfg.valid(),  //     ensures
+    //         elt_cfg.valid()
 
     ;
 
@@ -252,10 +237,10 @@ trait SeqMarshalling<C: Config, U, Elt: Marshalling<C, U>>: Marshalling<DefaultC
     spec fn elt_parsable(cfg: &DefaultConfig, data: Seq<u8>, idx: int) -> bool
         recommends
             cfg.valid(),
-            Self::gettable(cfg, data, idx),//     Wants to be a default method
-            //     {
-            //         Elt.parsable(Self::spec_elt_cfg(cfg), Self::get_data(cfg, slic, data, idx))
-            //     }
+            Self::gettable(cfg, data, idx),  //     Wants to be a default method
+    //     {
+    //         Elt.parsable(Self::spec_elt_cfg(cfg), Self::get_data(cfg, slic, data, idx))
+    //     }
 
     ;
 
@@ -263,10 +248,14 @@ trait SeqMarshalling<C: Config, U, Elt: Marshalling<C, U>>: Marshalling<DefaultC
         recommends
             cfg.valid(),
             Self::gettable(cfg, slice.i(data), idx),
-            Self::elt_parsable(cfg, slice.i(data), idx),//     Wants to be a default method
-            //     {
-            //         Elt.parse(Self::spec_elt_cfg(cfg), Self::get_data(cfg, slic, data, idx))
-            //     }
+            Self::elt_parsable(
+                cfg,
+                slice.i(data),
+                idx,
+            ),  //     Wants to be a default method
+    //     {
+    //         Elt.parse(Self::spec_elt_cfg(cfg), Self::get_data(cfg, slic, data, idx))
+    //     }
 
     ;
 
@@ -298,16 +287,7 @@ trait SeqMarshalling<C: Config, U, Elt: Marshalling<C, U>>: Marshalling<DefaultC
                 slice,
                 data,
                 idx as int,
-            ),//     Wants to be a default method
-            //     {
-            //         match try_get(cfg, slice, data, idx) {
-            //            None => None,
-            //            Some(slice) => {
-            //              Elt::try_parse(Self::elt_cfg(cfg), slice, data)
-            //            }
-            //         }
-            //     }
-
+            ),  //     Wants to be a default method  //     {  //         match try_get(cfg, slice, data, idx) {  //            None => None,  //            Some(slice) => {  //              Elt::try_parse(Self::elt_cfg(cfg), slice, data)  //            }  //         }  //     }
     ;
 
     spec fn settable(cfg: &DefaultConfig, data: Seq<u8>, idx: int, value: U)

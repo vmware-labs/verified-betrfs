@@ -386,9 +386,9 @@ pub proof fn lemma_interpretation(node: Node)
     requires
         node.wf(),
     ensures
-        node.i().map.dom().subset_of(node.all_keys()),// maybe a hassle to prove
-        // forall |key| node.all_keys().contains(key) ==> node.query(lbl.key) == node.i().map[key]
-
+        node.i().map.dom().subset_of(
+            node.all_keys(),
+        ),  // maybe a hassle to prove  // forall |key| node.all_keys().contains(key) ==> node.query(lbl.key) == node.i().map[key]
 {
     assume(false);
 }

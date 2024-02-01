@@ -170,7 +170,8 @@ impl BetreeNode {
             child_map.map[k]).wf() by {}
     }
 }
-  // end impl BetreeNode
+
+// end impl BetreeNode
 pub open spec(checked) fn map_apply(memtable: Memtable, base: TotalKMMap) -> TotalKMMap {
     TotalKMMap(Map::new(|k: Key| true, |k: Key| base[k].merge(memtable.query(k))))
 }
@@ -326,7 +327,8 @@ impl PagedBetree::Label {
         }
     }
 }
-  // end impl PagedBetree::Label
+
+// end impl PagedBetree::Label
 pub proof fn composite_single_put(puts1: MsgHistory, puts2: MsgHistory, stamped_map: StampedMap)
     requires
         puts1.wf(),

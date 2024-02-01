@@ -118,7 +118,7 @@ impl JournalRecord {
                 ojr,
                 boundary_lsn,
                 depth,
-            ),// ensures no longer available; becomes lemma
+            ),  // ensures no longer available; becomes lemma
     //    ensures
     //        out.is_Some() ==> out.unwrap().valid(boundary_lsn),
 
@@ -217,7 +217,7 @@ impl JournalRecord {
         requires
             0 <= depth < more,
             self.can_crop_head_records(boundary_lsn, more),
-        ensures//self.can_crop_head_records(boundary_lsn, depth) //
+        ensures  //self.can_crop_head_records(boundary_lsn, depth) //
 
             self.crop_head_records(boundary_lsn, depth).is_Some(),
         decreases depth,
@@ -258,7 +258,7 @@ impl JournalRecord {
     }
 
     pub proof fn option_new_boundary_valid(ojr: Option<JournalRecord>, old_lsn: LSN, new_lsn: LSN)
-        requires// jonh has decided that the match form is harder to read than the dafny
+        requires  // jonh has decided that the match form is harder to read than the dafny
     // test-and-dereference style. In dafny form, ==> vs && is sitting right in
     // front of you. In match form, they're encoded in the 'default' arm of the
     // match. Misreading that has caused me some headaches already.
@@ -278,7 +278,7 @@ impl JournalRecord {
     pub open spec(checked) fn discard_old_journal_rec(ojr: Option<JournalRecord>, lsn: LSN) -> (out:
         Option<JournalRecord>)
         recommends
-            ojr.is_Some() ==> ojr.unwrap().valid(lsn),// ensures
+            ojr.is_Some() ==> ojr.unwrap().valid(lsn),  // ensures
     //     out.is_Some() ==> out.unwrap().valid(lsn),
 
         decreases ojr,
@@ -380,7 +380,7 @@ impl TruncatedJournal {
     fn discard_old_defn(self, lsn: LSN) -> (out: TruncatedJournal)
         recommends
             self.wf(),
-            self.can_discard_to(lsn),//ensures out.wf()
+            self.can_discard_to(lsn),  //ensures out.wf()
 
     {
         TruncatedJournal {
@@ -425,7 +425,7 @@ impl TruncatedJournal {
 
     pub open spec(checked) fn crop_head_records(self, depth: nat) -> (out: TruncatedJournal)
         recommends
-            self.can_crop(depth),// ensures out.wf()
+            self.can_crop(depth),  // ensures out.wf()
 
     {
         TruncatedJournal {
@@ -470,7 +470,7 @@ impl TruncatedJournal {
     }
 }
 
-pub open spec(checked) fn mkfs() -> (out: TruncatedJournal)// ensures out.wf()
+pub open spec(checked) fn mkfs() -> (out: TruncatedJournal)  // ensures out.wf()
 {
     TruncatedJournal { boundary_lsn: 0, freshest_rec: None }
 }

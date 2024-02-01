@@ -280,7 +280,7 @@ impl DiskView {
         requires
             self.decodable(root),
             self.acyclic(),
-        ensures// You know what build_tight_awesome is for? To package ensures conveniently with a spec(checked) fn!
+        ensures  // You know what build_tight_awesome is for? To package ensures conveniently with a spec(checked) fn!
 
             self.iptr(root) == self.build_tight(root).iptr(root),
         decreases self.the_rank_of(root),
@@ -307,7 +307,7 @@ impl TruncatedJournal {
 
     pub open spec(checked) fn i(self) -> (out: PagedJournal_v::TruncatedJournal)
         recommends
-            self.decodable(),// ensures out.wf()
+            self.decodable(),  // ensures out.wf()
 
     {
         PagedJournal_v::TruncatedJournal {
@@ -396,7 +396,7 @@ impl TruncatedJournal {
         g: FnSpec(L) -> L,
         G: FnSpec(H) -> H,
     )
-        requires// TODO(verus): Verus refused to guess a trigger here. I had to go run Dafny to see what it
+        requires  // TODO(verus): Verus refused to guess a trigger here. I had to go run Dafny to see what it
     // chose. I wanted that automated experience so desperately I *went back to Dafny to get it*
 
             forall|x|

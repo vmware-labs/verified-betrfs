@@ -227,7 +227,7 @@ impl DiskView {
 
     pub open spec(checked) fn build_tight(self, root: Pointer) -> (out: Self)
         recommends
-            self.decodable(root),// TODO want ensures here
+            self.decodable(root),  // TODO want ensures here
 
         decreases self.the_rank_of(root),
         when self.decodable(root)
@@ -251,8 +251,7 @@ impl DiskView {
     pub proof fn build_tight_ensures(
         self,
         root: Pointer,
-    )// TODO(chris): really want the `let` that scopes around requires, ensures, and body here!
-
+    )  // TODO(chris): really want the `let` that scopes around requires, ensures, and body here!
         requires
             self.decodable(root),
         ensures
@@ -393,7 +392,7 @@ impl DiskView {
     >)
         recommends
             self.decodable(ptr),
-            self.acyclic(),//     ensures
+            self.acyclic(),  //     ensures
     //         self.block_in_bounds(ptr),
     //         out.is_Some() ==> out.unwrap().valid(self.boundary_lsn)
 
@@ -528,7 +527,7 @@ impl DiskView {
     {
         if root.is_Some() {
             self.build_tight_builds_sub_disks(self.next(root));
-        }//         assert( self.build_tight(root).is_sub_disk(self) ); // This line shouldn't be necessary
+        }  //         assert( self.build_tight(root).is_sub_disk(self) ); // This line shouldn't be necessary
 
     }
 

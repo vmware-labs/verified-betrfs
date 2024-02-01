@@ -19,7 +19,7 @@ pub open spec(checked) fn total_domain() -> Set<Key> {
 }
 
 impl TotalKMMap {
-    pub open spec(checked) fn empty() -> TotalKMMap// ensures wf()
+    pub open spec(checked) fn empty() -> TotalKMMap  // ensures wf()
      {
         // TODO(verus): Should not have to declare binder twice.
         TotalKMMap(Map::new(|k: Key| true, |k: Key| Message::empty()))
@@ -38,13 +38,13 @@ impl TotalKMMap {
         self,
         key: Key,
         value: Message,
-    ) -> Self// ensures wf() if recommends wf()
+    ) -> Self  // ensures wf() if recommends wf()
      {
         TotalKMMap(self.0.insert(key, value))
     }
 
     // pass through to Map :v/
-    pub open spec(checked) fn dom(self) -> Set<Key>// ensures forall?
+    pub open spec(checked) fn dom(self) -> Set<Key>  // ensures forall?
      {
         self.0.dom()
     }
