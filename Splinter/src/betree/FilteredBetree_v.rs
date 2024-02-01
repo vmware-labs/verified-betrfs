@@ -143,7 +143,10 @@ impl BetreeNode {
     }
 
     #[verifier(recommends_by)]
-    pub proof fn flushed_ofs_inline_lemma(self, key: Key)  //     requires  //         self.key_in_domain(key),  //     ensures  //         0 <= self.get_Node_pivots().route(key) < self.get_Node_flushed().offsets.len(),
+    pub proof fn flushed_ofs_inline_lemma(
+        self,
+        key: Key,
+    )  //     requires  //         self.key_in_domain(key),  //     ensures  //         0 <= self.get_Node_pivots().route(key) < self.get_Node_flushed().offsets.len(),
     {
         self.get_Node_pivots().route_lemma(key);
         assert(0 <= self.get_Node_pivots().route(key) < self.get_Node_flushed().offsets.len());

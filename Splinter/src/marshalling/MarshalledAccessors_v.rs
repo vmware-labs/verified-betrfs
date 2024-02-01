@@ -131,7 +131,8 @@ impl Marshalling<DefaultConfig, u64> for IntegerMarshalling {
         8
     }
 
-    fn exec_size(cfg: &DefaultConfig, value: &u64) -> (sz: u64)  //     requires  //         cfg.valid(),  //         Self::marshallable(cfg, value),  //     ensures  //         sz == Self::size(cfg, value)
+    fn exec_size(cfg: &DefaultConfig, value: &u64) -> (sz:
+        u64)  //     requires  //         cfg.valid(),  //         Self::marshallable(cfg, value),  //     ensures  //         sz == Self::size(cfg, value)
     {
         8
     }
