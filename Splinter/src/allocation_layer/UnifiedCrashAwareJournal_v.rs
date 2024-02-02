@@ -6,7 +6,7 @@ use state_machines_macros::state_machine;
 
 use crate::abstract_system::MsgHistory_v::*;
 use crate::abstract_system::StampedMap_v::LSN;
-use crate::allocation_layer::AllocationJournal_v::*;
+use crate::allocation_layer::AllocationJournal_v::{AllocationJournal as AJ, *};
 use crate::allocation_layer::MiniAllocator_v::*;
 use crate::disk::GenericDisk_v::AU;
 use crate::disk::GenericDisk_v::*;
@@ -26,14 +26,8 @@ pub struct ImageState {
     pub freshest_rec: Pointer,  // from LinkedJournal::TruncatedJournal
     pub boundary_lsn: LSN,  // from LinkedJournal::TruncatedJournal
     pub first:
-        AU,  // from AllocationJournal::State, needed to faciliate AU recovery scan (page skip)
+        AU,  // from AJ::State, needed to faciliate AU recovery scan (page skip)
     // in memory Option<lsn_au_index>
-}
-
-// another struct
-pub struct FullState {
-    pub image: ImageState,
-    pub index: LsnAUIndex,
 }
 
 impl ImageState {
@@ -54,7 +48,7 @@ impl ImageState {
         self.freshest_rec is Some ==> self.dom(dv).contains(self.freshest_rec.unwrap())
     }
 
-    // equivalent to AllocationJournal::valid_journal_image
+    // equivalent to AJ::valid_journal_image
     pub open spec(checked) fn valid_image(self, dv: DiskView) -> bool {
         &&& dv.to_JournalDiskView(self.boundary_lsn).wf_addrs()
         &&& dv.to_JournalDiskView(self.boundary_lsn).pointer_is_upstream(
@@ -89,10 +83,8 @@ impl ImageState {
 pub struct EphemeralState {
     pub image: ImageState,
     pub unmarshalled_tail: MsgHistory,  // from LinkedJournal::State
-    pub lsn_au_index: Map<LSN, AU>,  // from AllocationJournal::State
-    pub mini_allocator: MiniAllocator,  // from AllocationJournal::State
-    // persistent index
-    // inflight index
+    pub lsn_au_index: Map<LSN, AU>,  // from AJ::State
+    pub mini_allocator: MiniAllocator,  // from AJ::State
 }
 
 impl EphemeralState {
@@ -107,7 +99,6 @@ impl EphemeralState {
 
         &&& self.lsn_au_index == tj.build_lsn_au_index(self.image.first)
         &&& self.mini_allocator == MiniAllocator::empty()
-        &&& dv.domain_valid(self.lsn_au_index, self.mini_allocator, tj.seq_end())
     }
 
     pub open spec(checked) fn wf(self, dv: DiskView) -> bool {
@@ -197,6 +188,7 @@ impl EphemeralState {
         // &&& self.mini_allocator.wf()
         // &&& self.to_lj(dv).wf()
         &&& allocs.disjoint(self.mini_allocator.allocs.dom())
+        &&& allocs.disjoint(self.lsn_au_index.values())
         &&& deallocs == Set::<AU>::empty()
         &&& post == EphemeralState { mini_allocator: self.mini_allocator.add_aus(allocs), ..self }
         &&& new_dv == dv
@@ -251,6 +243,82 @@ impl EphemeralState {
             ||| self.is_allocator_prune(dv, allocs, deallocs, post, new_dv)
             ||| self.is_no_op(dv, allocs, deallocs, post, new_dv)
     }
+
+    pub open spec   /*XXX (checked)*/
+    fn is_freeze_for_commit(
+        self,
+        dv: DiskView,
+        frozen_image: ImageState,
+        frozen_dv: DiskView,
+        depth: nat,
+    ) -> bool {
+        let tj = self.image.to_tj(dv);
+        let new_bdy = self.image.seq_start();
+        let cropped_tj = tj.crop(depth);
+        let post_discard = cropped_tj.discard_old(new_bdy);
+        let frozen_lsns = Set::new(|lsn: LSN| new_bdy <= lsn && lsn < post_discard.seq_end());
+        let frozen_index = self.lsn_au_index.restrict(frozen_lsns);
+        let addrs_past_new_end = Set::new(
+            |addr: Address| frozen_image.freshest_rec.unwrap().after_page(addr),
+        );
+        let frozen_addrs = Set::new(
+            |addr: Address| addr.wf() && frozen_index.values().contains(addr.au),
+        ) - addrs_past_new_end;
+        &&& tj.disk_view.can_crop(self.image.freshest_rec, depth)
+        &&& new_bdy <= frozen_image.seq_start()
+        &&& cropped_tj.can_discard_to(new_bdy)
+        &&& cropped_tj.discard_old_tight(new_bdy, frozen_addrs, frozen_image.to_tj(frozen_dv))
+        &&& frozen_image.first == AJ::State::new_first(
+            frozen_image.to_tj(frozen_dv),
+            self.lsn_au_index,
+            new_bdy,
+        )
+    }
+
+    pub open spec(checked) fn is_freeze_for_commit_op(
+        self,
+        dv: DiskView,
+        frozen_image: ImageState,
+        frozen_dv: DiskView,
+    ) -> bool {
+        exists|depth: nat| #[trigger] self.is_freeze_for_commit(dv, frozen_image, frozen_dv, depth)
+    }
+
+    pub open spec(checked) fn is_discard_old_op(
+        self,
+        dv: DiskView,
+        start_lsn: LSN,
+        require_end: LSN,
+        deallocs: Set<AU>,
+        new_ephemeral: Self,
+        new_dv: DiskView,
+    ) -> bool
+        recommends
+            self.wf(dv),
+    {
+        let tj = self.image.to_tj(dv);
+        let new_tj = new_ephemeral.image.to_tj(new_dv);
+        let new_lsn_au_index = lsn_au_index_discard_up_to(self.lsn_au_index, start_lsn);
+        let keep_addrs = Set::new(
+            |addr: Address| addr.wf() && new_lsn_au_index.values().contains(addr.au),
+        );
+        &&& tj.can_discard_to(start_lsn)
+        &&& require_end == tj.seq_end()
+        &&& deallocs == self.lsn_au_index.values().difference(
+            new_lsn_au_index.values(),
+        )// bounds new_dv, new_ephemeral.image.boundary_lsn and freshest rec
+
+        &&& tj.discard_old_tight(start_lsn, keep_addrs, new_tj)
+        &&& new_ephemeral.image.first == AJ::State::new_first(
+            tj,
+            self.lsn_au_index,
+            start_lsn,
+        )// --- image update complete ----
+
+        &&& new_ephemeral.unmarshalled_tail == self.unmarshalled_tail.bounded_discard(start_lsn)
+        &&& new_ephemeral.lsn_au_index == new_lsn_au_index
+        &&& new_ephemeral.mini_allocator == self.mini_allocator.prune(deallocs)
+    }
 }
 
 #[is_variant]
@@ -290,28 +358,11 @@ impl DiskView {
                 self.entries[addr].cropped_prior(boundary_lsn),
             )
     }
-
-    pub open spec(checked) fn domain_valid(
-        self,
-        lsn_au_index: LsnAUIndex,
-        allocator: MiniAllocator,
-        end_lsn: LSN,
-    ) -> bool {
-        forall|addr|
-            #[trigger]
-            self.entries.dom().contains(addr) ==> ({
-                &&& lsn_au_index.values().contains(addr.au)
-                &&& !allocator.can_allocate(addr)
-                &&& self.entries[addr].message_seq.seq_end <= end_lsn
-            })
-    }
 }
 
 state_machine!{UnifiedCrashAwareJournal{
     fields {
         pub ephemeral: Ephemeral,
-        // inflight index
-        // persistent index
         pub inflight: Option<ImageState>,
         pub persistent: ImageState,
         pub dv: DiskView,  // shared disk
@@ -421,24 +472,17 @@ state_machine!{UnifiedCrashAwareJournal{
             require pre.inflight is None;
             // Journal doesn't go backwards
             require pre.persistent.seq_end(pre.dv) <= frozen_journal.seq_end(pre.dv);
+
+            let new_bdy = frozen_journal.seq_start();
             // There should be no way for the frozen journal to have passed the ephemeral map!
-            require frozen_journal.seq_start() <= lbl.get_CommitStart_max_lsn();
+            require new_bdy <= lbl.get_CommitStart_max_lsn();
             // Frozen journal stitches to frozen map
-            require frozen_journal.seq_start() == lbl.get_CommitStart_new_boundary_lsn();
+            require new_bdy == lbl.get_CommitStart_new_boundary_lsn();
 
             // make sure frozen journal is ready to freeze
+            // allocation journal equivalent conditions
             let v = pre.ephemeral.get_Known_v();
-            let frozen_tj = frozen_journal.to_tj(frozen_dv);
-
-            require LinkedJournal::State::next(
-                pre.ephemeral.get_Known_v().to_lj(pre.dv),
-                pre.ephemeral.get_Known_v().to_lj(pre.dv),
-                LinkedJournal::Label::FreezeForCommit{ frozen_journal: frozen_tj },
-            );
-
-            // check first updated
-            require frozen_journal.first == AllocationJournal::State::new_first(
-                frozen_tj, v.lsn_au_index, v.image.first, frozen_tj.seq_start());
+            require v.is_freeze_for_commit_op(pre.dv, frozen_journal, frozen_dv);
 
             update inflight = Option::Some(frozen_journal);
         }
@@ -450,23 +494,12 @@ state_machine!{UnifiedCrashAwareJournal{
             require pre.ephemeral is Known;
             require pre.inflight is Some;
 
-            // maybe the key here is to compute deallocs differently?
-            // deallocs should
-
             // how would we perform this update?
+            let v = pre.ephemeral.get_Known_v();
+            require v.is_discard_old_op(pre.dv, pre.inflight.unwrap().seq_start(),
+                lbl.get_CommitComplete_require_end(),lbl.get_CommitComplete_discarded(), new_ephemeral, new_dv);
 
-    // TODO (Jialin)
-    //         require AllocationJournal::State::next(
-    //             pre.ephemeral.get_Known_v(),
-    //             new_journal,
-    //             AllocationJournal::Label::DiscardOld{
-    //                 start_lsn: pre.inflight.get_Some_0().tj.seq_start(),
-    //                 require_end: lbl.get_CommitComplete_require_end(),
-    //                 deallocs: lbl.get_CommitComplete_discarded(),
-    //             },
-    //         );
-
-            update persistent = pre.inflight.get_Some_0();
+            update persistent = pre.inflight.unwrap();
             update ephemeral = Ephemeral::Known{ v: new_ephemeral };
             update inflight = Option::None;
             update dv = new_dv;
@@ -497,32 +530,13 @@ state_machine!{UnifiedCrashAwareJournal{
 // //         }
 // //     }
 
-// //     pub open spec(checked) fn journal_pages_not_free(self) -> bool
-// //         recommends self.ephemeral is Known ==> self.ephemeral.get_Known_v().inv()
-// //     {
-// //         // ephemeral pages are not free as promised by the recommends
-// //         &&& self.ephemeral is Known ==> {
-// //             let v = self.ephemeral.get_Known_v();
-// //             let persistent_disk = self.persistent.tj.disk_view;
-// //             &&& AllocationJournal::State::journal_pages_not_free(persistent_disk.entries.dom(), v.mini_allocator)
-// //         }
-// //         &&& self.ephemeral is Known && self.inflight is Some ==> {
-// //             let v = self.ephemeral.get_Known_v();
-// //             let inflight_disk = self.inflight.get_Some_0().tj.disk_view;
-// //             &&& AllocationJournal::State::journal_pages_not_free(inflight_disk.entries.dom(), v.mini_allocator)
-// //         }
-// //     }
-
-// //     #[invariant]
-// //     pub open spec(checked) fn inv(self) -> bool {
-// //         &&& self.ephemeral is Unknown ==> self.inflight is None
-// //         &&& self.ephemeral is Known ==> self.ephemeral.get_Known_v().inv()
-// //         &&& self.inflight is Some ==> self.inflight.get_Some_0().tj.decodable()
-// //         &&& self.persistent.tj.decodable()
-// //         // not used here but easier to maintain here
-// //         &&& self.state_relations()
-// //         &&& self.journal_pages_not_free()
-// //     }
+    // #[invariant]
+    // pub open spec(checked) fn inv(self) -> bool {
+    //     &&& self.ephemeral is Unknown ==> self.inflight is None
+    //     &&& self.ephemeral is Known ==> self.ephemeral.get_Known_v().inv()
+    //     &&& self.inflight is Some ==> self.inflight.get_Some_0().tj.decodable()
+    //     &&& self.persistent.tj.decodable()
+    // }
 
 // //     #[inductive(initialize)]
 // //     fn initialize_inductive(post: Self) {
@@ -531,7 +545,7 @@ state_machine!{UnifiedCrashAwareJournal{
 
 // //     #[inductive(load_ephemeral_from_persistent)]
 // //     fn load_ephemeral_from_persistent_inductive(pre: Self, post: Self, lbl: Label,
-// //         new_journal: AllocationJournal::State, journal_config: AllocationJournal::Config)
+// //         new_journal: AJ::State, journal_config: AJ::Config)
 // //     {
 // //         assert(pre.ephemeral is Known ==> pre.ephemeral.get_Known_v().inv());
 // //         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
@@ -551,7 +565,7 @@ state_machine!{UnifiedCrashAwareJournal{
 // //     }
 
 // //     #[inductive(put)]
-// //     fn put_inductive(pre: Self, post: Self, lbl: Label, new_journal: AllocationJournal::State)
+// //     fn put_inductive(pre: Self, post: Self, lbl: Label, new_journal: AJ::State)
 // //     {
 // //         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
 // //         assume(post.journal_pages_not_free());
@@ -559,7 +573,7 @@ state_machine!{UnifiedCrashAwareJournal{
 // //     }
 
 // //     #[inductive(internal)]
-// //     fn internal_inductive(pre: Self, post: Self, lbl: Label, new_journal: AllocationJournal::State)
+// //     fn internal_inductive(pre: Self, post: Self, lbl: Label, new_journal: AJ::State)
 // //     {
 // //         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
 // //         assume(post.journal_pages_not_free());
@@ -573,7 +587,7 @@ state_machine!{UnifiedCrashAwareJournal{
 // //      }
 
 // //     #[inductive(commit_start)]
-// //     fn commit_start_inductive(pre: Self, post: Self, lbl: Label, frozen_journal: StoreImage, new_journal: AllocationJournal::State)
+// //     fn commit_start_inductive(pre: Self, post: Self, lbl: Label, frozen_journal: StoreImage, new_journal: AJ::State)
 // //     {
 // //         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
 // //         assume(post.inflight is Some ==> post.inflight.get_Some_0().tj.decodable()); // should reveal inflight
@@ -582,7 +596,7 @@ state_machine!{UnifiedCrashAwareJournal{
 // //     }
 
 // //     #[inductive(commit_complete)]
-// //     fn commit_complete_inductive(pre: Self, post: Self, lbl: Label, new_journal: AllocationJournal::State)
+// //     fn commit_complete_inductive(pre: Self, post: Self, lbl: Label, new_journal: AJ::State)
 // //     {
 // //         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
 // //         assume(post.journal_pages_not_free());

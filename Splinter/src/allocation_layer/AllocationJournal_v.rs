@@ -993,7 +993,6 @@ state_machine!{ AllocationJournal {
         let frozen_journal = lbl.get_FreezeForCommit_frozen_journal();
         let new_bdy = frozen_journal.tj.seq_start();
 
-        // require frozen_journal.tj.decodable();
         require pre.tj().disk_view.can_crop(pre.tj().freshest_rec, depth);
         require pre.tj().disk_view.boundary_lsn <= new_bdy;
 
@@ -1011,7 +1010,7 @@ state_machine!{ AllocationJournal {
         let frozen_addrs = Set::new(|addr: Address| addr.wf() && frozen_index.values().contains(addr.au)) - addrs_past_new_end;
 
         require cropped_tj.discard_old_tight(new_bdy, frozen_addrs, frozen_journal.tj);
-        require frozen_journal.first == Self::new_first(frozen_journal.tj, pre.lsn_au_index, pre.first, new_bdy);
+        require frozen_journal.first == Self::new_first(frozen_journal.tj, pre.lsn_au_index, new_bdy);
     } }
 
     transition!{ query_end_lsn(lbl: Label) {
@@ -1026,14 +1025,16 @@ state_machine!{ AllocationJournal {
     } }
 
     // TODO old_first is really an abritrary value; remove the parameter (dependency)
-    pub open spec(checked) fn new_first(tj: TruncatedJournal, lsn_au_index: LsnAUIndex, old_first: AU, new_bdy: LSN) -> AU
+    pub open spec(checked) fn new_first(tj: TruncatedJournal, lsn_au_index: LsnAUIndex, new_bdy: LSN) -> AU
     recommends
         tj.wf(),
-        lsn_au_index.contains_key(new_bdy),
     {
         let post_freshest_rec = if tj.seq_end() == new_bdy { None } else { tj.freshest_rec }; // matches defn at TruncatedJournal::discard_old
-        if post_freshest_rec is None { old_first } // kinda doesn't matter, since no recs!
-        else { lsn_au_index[new_bdy] }
+        if post_freshest_rec is Some && lsn_au_index.contains_key(new_bdy) {
+            lsn_au_index[new_bdy]
+        } else {
+            arbitrary() // doesn't matter, would never reach here
+        }
     }
 
     transition!{ discard_old(lbl: Label, new_journal: LinkedJournal::State) {
@@ -1046,7 +1047,7 @@ state_machine!{ AllocationJournal {
         require require_end == pre.journal.seq_end();
         require pre.tj().can_discard_to(start_lsn);
 
-        let new_first = Self::new_first(pre.tj(), pre.lsn_au_index, pre.first, start_lsn);
+        let new_first = Self::new_first(pre.tj(), pre.lsn_au_index, start_lsn);
         let new_lsn_au_index = lsn_au_index_discard_up_to(pre.lsn_au_index, start_lsn);
         let discarded_aus = pre.lsn_au_index.values().difference(new_lsn_au_index.values());
         let keep_addrs = Set::new(|addr: Address| addr.wf() && new_lsn_au_index.values().contains(addr.au));
@@ -1224,12 +1225,15 @@ state_machine!{ AllocationJournal {
             }
 
             assert( post_dv.valid_first_au(post.first) ) by {
-                reveal(DiskView::index_keys_exist_valid_entries);
                 assert(pre.lsn_au_index.contains_key(start_lsn));
+                assert(post.lsn_au_index.contains_key(start_lsn));
+
+                reveal(DiskView::index_keys_exist_valid_entries);
                 let witness = choose |witness: Address| witness.wf() && witness.au == pre.lsn_au_index[start_lsn]
                     && #[trigger] pre_dv.addr_supports_lsn(witness, start_lsn);
 
-                assert(post.lsn_au_index.contains_key(start_lsn));
+                assert(pre_dv.entries.contains_key(witness)); // trigger
+                assert(post_dv.entries.contains_key(witness));
                 assert(post_dv.addr_supports_lsn(witness, start_lsn)); // trigger
             }
 
