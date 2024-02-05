@@ -35,28 +35,6 @@ impl ImageState {
         ImageState { freshest_rec: None, boundary_lsn: 0, first: 0 }
     }
 
-    pub open spec(checked) fn dom(self, dv: DiskView) -> Set<Address> {
-        if self.to_tj(dv).decodable() {
-            self.to_tj(dv).build_lsn_addr_index().values()
-        } else {
-            Set::empty()  // NOT REACHED WHEN INV is true
-
-        }
-    }
-
-    pub open spec(checked) fn wf(self, dv: DiskView) -> bool {
-        self.freshest_rec is Some ==> self.dom(dv).contains(self.freshest_rec.unwrap())
-    }
-
-    // equivalent to AJ::valid_journal_image
-    pub open spec(checked) fn valid_image(self, dv: DiskView) -> bool {
-        &&& dv.to_JournalDiskView(self.boundary_lsn).wf_addrs()
-        &&& dv.to_JournalDiskView(self.boundary_lsn).pointer_is_upstream(
-            self.freshest_rec,
-            self.first,
-        )
-    }
-
     pub open spec(checked) fn to_tj(self, dv: DiskView) -> LinkedJournal_v::TruncatedJournal {
         LinkedJournal_v::TruncatedJournal {
             freshest_rec: self.freshest_rec,
@@ -70,13 +48,113 @@ impl ImageState {
 
     pub open spec(checked) fn seq_end(self, dv: DiskView) -> LSN
         recommends
-            dv.is_nondangling_pointer(self.freshest_rec),
+            self.to_tj(dv).disk_view.is_nondangling_pointer(self.freshest_rec),
     {
-        if self.freshest_rec is None {
-            self.boundary_lsn
-        } else {
-            dv.entries[self.freshest_rec.unwrap()].message_seq.seq_end
+        self.to_tj(dv).seq_end()
+    }
+
+    // equivalent to AJ::valid_journal_image
+    pub open spec(checked) fn valid_image(self, dv: DiskView) -> bool {
+        let jdv = dv.to_JournalDiskView(self.boundary_lsn);
+        &&& jdv.wf_addrs()
+        &&& jdv.pointer_is_upstream(self.freshest_rec, self.first)
+        &&& jdv.non_index_lsn_bounded(self.to_tj(dv).build_lsn_au_index(self.first))
+    }
+
+    pub open spec(checked) fn tight_domain(self, dv: DiskView) -> Set<Address>
+        recommends
+            self.valid_image(dv),
+    {
+        let index = self.to_tj(dv).build_lsn_au_index(self.first);
+        let addrs_past_new_end = au_addrs_past_pointer(self.freshest_rec);
+        Set::new(
+            |addr: Address|
+                dv.entries.contains_key(addr) && index.values().contains(addr.au)
+                    && !addrs_past_new_end.contains(addr),
+        )
+    }
+
+    pub open spec(checked) fn tight_dv(self, dv: DiskView) -> DiskView
+        recommends
+            self.valid_image(dv),
+    {
+        DiskView { entries: dv.entries.restrict(self.tight_domain(dv)) }
+    }
+
+    pub proof fn tight_dv_preserves_valid_image(self, dv: DiskView)
+        requires
+            self.valid_image(dv),
+        ensures
+            self.valid_image(self.tight_dv(dv)),
+            self.to_tj(dv).build_lsn_au_index(self.first) == self.to_tj(
+                self.tight_dv(dv),
+            ).build_lsn_au_index(self.first),
+    {
+        let jdv = dv.to_JournalDiskView(self.boundary_lsn);
+        let tight_jdv = self.tight_dv(dv).to_JournalDiskView(self.boundary_lsn);
+        let index = self.to_tj(dv).build_lsn_au_index(self.first);
+        self.to_tj(dv).build_lsn_au_index_ensures(self.first);
+        if self.freshest_rec is Some {
+            let last_lsn = (jdv.entries[self.freshest_rec.unwrap()].message_seq.seq_end - 1) as nat;
+            assert(index.contains_key(last_lsn));
+            assert(jdv.addr_supports_lsn(self.freshest_rec.unwrap(), last_lsn));
+            let _ = jdv.instantiate_index_keys_exist_valid_entries(index, last_lsn);
+            assert(tight_jdv.is_nondangling_pointer(self.freshest_rec));
         }
+        reveal(LinkedJournal_v::DiskView::pages_allocated_in_lsn_order);
+        assert forall|addr|
+            #[trigger]
+            tight_jdv.entries.contains_key(addr) implies tight_jdv.is_nondangling_pointer(
+            tight_jdv.entries[addr].cropped_prior(self.boundary_lsn),
+        ) by {
+            let head = jdv.entries[addr];
+            let next_ptr = head.cropped_prior(self.boundary_lsn);
+            if next_ptr is Some {
+                if addr.au == next_ptr.unwrap().au {
+                    if addr.after_page(next_ptr.unwrap()) {
+                        assert(false);
+                    }
+                } else {
+                    let lsn1 = head.message_seq.seq_start;
+                    if index.contains_key(lsn1) {
+                        let lsn2 = (jdv.entries[next_ptr.unwrap()].message_seq.seq_end - 1) as nat;
+                        assert(index.contains_key(lsn2));
+                        assert(jdv.addr_supports_lsn(next_ptr.unwrap(), lsn2));
+                        let _ = jdv.instantiate_index_keys_exist_valid_entries(index, lsn2);
+                        assert(tight_jdv.is_nondangling_pointer(next_ptr));
+                    } else {
+                        assert(jdv.entries.dom().contains(addr));
+                        assert(jdv.entries[addr].message_seq.contains(lsn1));
+                        assert(lsn1 < self.boundary_lsn);
+                        assert(false);
+                    }
+                }
+            }
+        }
+        assert(tight_jdv.nondangling_pointers());
+        assert(tight_jdv.decodable(self.freshest_rec));
+        assert(tight_jdv.valid_ranking(jdv.the_ranking()));
+        assert(tight_jdv.acyclic());
+        assert(tight_jdv.internal_au_pages_fully_linked());
+        assert(tight_jdv.has_unique_lsns()) by {
+            assert(forall|lsn, addr|
+                tight_jdv.addr_supports_lsn(addr, lsn) ==> jdv.addr_supports_lsn(addr, lsn));
+        }
+        if self.freshest_rec is Some {
+            assert(index.contains_key(self.boundary_lsn));
+            let addr = choose|addr: Address|
+                addr.au == self.first && #[trigger]
+                jdv.addr_supports_lsn(addr, self.boundary_lsn);
+            let _ = jdv.instantiate_index_keys_exist_valid_entries(index, self.boundary_lsn);
+            assert(tight_jdv.addr_supports_lsn(addr, self.boundary_lsn));
+            assert(tight_jdv.valid_first_au(self.first));
+        }
+        assert(tight_jdv.pointer_is_upstream(self.freshest_rec, self.first));
+        tight_jdv.build_lsn_au_index_page_walk_sub_disk(jdv, self.freshest_rec);
+        tight_jdv.build_lsn_au_index_equiv_page_walk(self.freshest_rec, self.first);
+        jdv.build_lsn_au_index_equiv_page_walk(self.freshest_rec, self.first);
+        assert(index == self.to_tj(self.tight_dv(dv)).build_lsn_au_index(self.first));
+        assert(tight_jdv.non_index_lsn_bounded(index));
     }
 }
 
@@ -103,6 +181,7 @@ impl EphemeralState {
 
     pub open spec(checked) fn wf(self, dv: DiskView) -> bool {
         &&& self.image.to_tj(dv).wf()
+        &&& self.mini_allocator.wf()
         &&& self.unmarshalled_tail.wf()
     }
 
@@ -120,204 +199,13 @@ impl EphemeralState {
         }
     }
 
-    // NOTE(JL): this is really created so that we can reason about
-    // changes done to linked journal steps and things outside that
-    pub open spec(checked) fn same_except_lj(self, post: Self) -> bool {
-        post == EphemeralState {
-            image: ImageState { first: self.image.first, ..post.image },
-            unmarshalled_tail: post.unmarshalled_tail,
-            ..self
+    pub open spec(checked) fn to_aj(self, dv: DiskView) -> AllocationJournal::State {
+        AllocationJournal::State {
+            journal: self.to_lj(dv),
+            lsn_au_index: self.lsn_au_index,
+            first: self.image.first,
+            mini_allocator: self.mini_allocator,
         }
-    }
-
-    pub open spec fn is_marshalled_state(
-        self,
-        dv: DiskView,
-        allocs: Set<AU>,
-        deallocs: Set<AU>,
-        cut: LSN,
-        addr: Address,
-        post: Self,
-        new_dv: DiskView,
-    ) -> bool {
-        &&& allocs == Set::<AU>::empty()
-        &&& deallocs == Set::<AU>::empty()
-        &&& self.mini_allocator.tight_next_addr(
-            self.image.freshest_rec,
-            addr,
-        )// LinkedJournal conditions
-
-        &&& self.unmarshalled_tail.seq_start < cut
-        &&& self.unmarshalled_tail.can_discard_to(cut)
-        &&& post.image == ImageState {
-            freshest_rec: Some(addr),
-            first: if self.image.freshest_rec is Some {
-                self.image.first
-            } else {
-                addr.au
-            },
-            ..self.image
-        }
-        &&& new_dv == DiskView {
-            entries: dv.entries.insert(
-                addr,
-                JournalRecord {
-                    message_seq: self.unmarshalled_tail.discard_recent(cut),
-                    prior_rec: self.image.freshest_rec,
-                },
-            ),
-        }// end of LinkedJournal conditions
-
-        &&& post.unmarshalled_tail == self.unmarshalled_tail.discard_old(cut)
-        &&& post.lsn_au_index == lsn_au_index_append_record(
-            self.lsn_au_index,
-            self.unmarshalled_tail.discard_recent(cut),
-            addr.au,
-        )
-        &&& post.mini_allocator == self.mini_allocator.allocate_and_observe(addr)
-    }
-
-    pub open spec fn is_allocator_fill(
-        self,
-        dv: DiskView,
-        allocs: Set<AU>,
-        deallocs: Set<AU>,
-        post: Self,
-        new_dv: DiskView,
-    ) -> bool {
-        // &&& self.mini_allocator.wf()
-        // &&& self.to_lj(dv).wf()
-        &&& allocs.disjoint(self.mini_allocator.allocs.dom())
-        &&& allocs.disjoint(self.lsn_au_index.values())
-        &&& deallocs == Set::<AU>::empty()
-        &&& post == EphemeralState { mini_allocator: self.mini_allocator.add_aus(allocs), ..self }
-        &&& new_dv == dv
-    }
-
-    pub open spec fn is_allocator_prune(
-        self,
-        dv: DiskView,
-        allocs: Set<AU>,
-        deallocs: Set<AU>,
-        post: Self,
-        new_dv: DiskView,
-    ) -> bool {
-        // &&& self.mini_allocator.wf()
-        // &&& self.to_lj(dv).wf()
-        &&& allocs == Set::<AU>::empty()
-        &&& forall|au|
-            #![auto]
-            deallocs.contains(au) ==> self.mini_allocator.can_remove(au)
-            &&& post == EphemeralState {
-                mini_allocator: self.mini_allocator.prune(deallocs),
-                ..self
-            }
-            &&& new_dv == dv
-    }
-
-    pub open spec(checked) fn is_no_op(
-        self,
-        dv: DiskView,
-        allocs: Set<AU>,
-        deallocs: Set<AU>,
-        post: Self,
-        new_dv: DiskView,
-    ) -> bool {
-        &&& allocs == Set::<AU>::empty()
-        &&& deallocs == Set::<AU>::empty()
-        &&& post == self
-        &&& new_dv == dv
-    }
-
-    pub open spec(checked) fn is_internal_op(
-        self,
-        dv: DiskView,
-        allocs: Set<AU>,
-        deallocs: Set<AU>,
-        post: Self,
-        new_dv: DiskView,
-    ) -> bool {
-        ||| exists|cut, addr|
-            self.is_marshalled_state(dv, allocs, deallocs, cut, addr, post, new_dv)
-            ||| self.is_allocator_fill(dv, allocs, deallocs, post, new_dv)
-            ||| self.is_allocator_prune(dv, allocs, deallocs, post, new_dv)
-            ||| self.is_no_op(dv, allocs, deallocs, post, new_dv)
-    }
-
-    pub open spec   /*XXX (checked)*/
-    fn is_freeze_for_commit(
-        self,
-        dv: DiskView,
-        frozen_image: ImageState,
-        frozen_dv: DiskView,
-        depth: nat,
-    ) -> bool {
-        let tj = self.image.to_tj(dv);
-        let new_bdy = self.image.seq_start();
-        let cropped_tj = tj.crop(depth);
-        let post_discard = cropped_tj.discard_old(new_bdy);
-        let frozen_lsns = Set::new(|lsn: LSN| new_bdy <= lsn && lsn < post_discard.seq_end());
-        let frozen_index = self.lsn_au_index.restrict(frozen_lsns);
-        let addrs_past_new_end = Set::new(
-            |addr: Address| frozen_image.freshest_rec.unwrap().after_page(addr),
-        );
-        let frozen_addrs = Set::new(
-            |addr: Address| addr.wf() && frozen_index.values().contains(addr.au),
-        ) - addrs_past_new_end;
-        &&& tj.disk_view.can_crop(self.image.freshest_rec, depth)
-        &&& new_bdy <= frozen_image.seq_start()
-        &&& cropped_tj.can_discard_to(new_bdy)
-        &&& cropped_tj.discard_old_tight(new_bdy, frozen_addrs, frozen_image.to_tj(frozen_dv))
-        &&& frozen_image.first == AJ::State::new_first(
-            frozen_image.to_tj(frozen_dv),
-            self.lsn_au_index,
-            new_bdy,
-        )
-    }
-
-    pub open spec(checked) fn is_freeze_for_commit_op(
-        self,
-        dv: DiskView,
-        frozen_image: ImageState,
-        frozen_dv: DiskView,
-    ) -> bool {
-        exists|depth: nat| #[trigger] self.is_freeze_for_commit(dv, frozen_image, frozen_dv, depth)
-    }
-
-    pub open spec(checked) fn is_discard_old_op(
-        self,
-        dv: DiskView,
-        start_lsn: LSN,
-        require_end: LSN,
-        deallocs: Set<AU>,
-        new_ephemeral: Self,
-        new_dv: DiskView,
-    ) -> bool
-        recommends
-            self.wf(dv),
-    {
-        let tj = self.image.to_tj(dv);
-        let new_tj = new_ephemeral.image.to_tj(new_dv);
-        let new_lsn_au_index = lsn_au_index_discard_up_to(self.lsn_au_index, start_lsn);
-        let keep_addrs = Set::new(
-            |addr: Address| addr.wf() && new_lsn_au_index.values().contains(addr.au),
-        );
-        &&& tj.can_discard_to(start_lsn)
-        &&& require_end == tj.seq_end()
-        &&& deallocs == self.lsn_au_index.values().difference(
-            new_lsn_au_index.values(),
-        )// bounds new_dv, new_ephemeral.image.boundary_lsn and freshest rec
-
-        &&& tj.discard_old_tight(start_lsn, keep_addrs, new_tj)
-        &&& new_ephemeral.image.first == AJ::State::new_first(
-            tj,
-            self.lsn_au_index,
-            start_lsn,
-        )// --- image update complete ----
-
-        &&& new_ephemeral.unmarshalled_tail == self.unmarshalled_tail.bounded_discard(start_lsn)
-        &&& new_ephemeral.lsn_au_index == new_lsn_au_index
-        &&& new_ephemeral.mini_allocator == self.mini_allocator.prune(deallocs)
     }
 }
 
@@ -334,29 +222,6 @@ pub struct DiskView {
 impl DiskView {
     pub open spec(checked) fn to_JournalDiskView(self, boundary_lsn: LSN) -> JournalDiskView {
         JournalDiskView { boundary_lsn: boundary_lsn, entries: self.entries }
-    }
-
-    pub open spec(checked) fn entries_wf(self) -> bool {
-        forall|addr| #[trigger] self.entries.contains_key(addr) ==> self.entries[addr].wf()
-    }
-
-    pub open spec(checked) fn is_nondangling_pointer(self, ptr: Pointer) -> bool {
-        ptr.is_Some() ==> self.entries.contains_key(ptr.unwrap())
-    }
-
-    pub open spec(checked) fn nondangling_pointers(
-        self,
-        boundary_lsn: LSN,
-        dom: Set<Address>,
-    ) -> bool
-        recommends
-            dom.subset_of(self.entries.dom()),
-    {
-        forall|addr|
-            #[trigger]
-            dom.contains(addr) ==> self.is_nondangling_pointer(
-                self.entries[addr].cropped_prior(boundary_lsn),
-            )
     }
 }
 
@@ -396,7 +261,9 @@ state_machine!{UnifiedCrashAwareJournal{
             require lbl is LoadEphemeralFromPersistent;
             require pre.ephemeral is Unknown;
             require new_ephemeral.init_by(pre.persistent, pre.dv);
+
             update ephemeral = Ephemeral::Known{ v: new_ephemeral };
+            update dv = pre.persistent.tight_dv(pre.dv);
         }
     }
 
@@ -404,10 +271,10 @@ state_machine!{UnifiedCrashAwareJournal{
         read_for_recovery(lbl: Label) {
             require lbl is ReadForRecovery;
             require pre.ephemeral is Known;
-            require LinkedJournal::State::next(
-                pre.ephemeral.get_Known_v().to_lj(pre.dv),
-                pre.ephemeral.get_Known_v().to_lj(pre.dv),
-                LinkedJournal::Label::ReadForRecovery{ messages: lbl.get_ReadForRecovery_records() }
+            require AllocationJournal::State::next(
+                pre.ephemeral.get_Known_v().to_aj(pre.dv),
+                pre.ephemeral.get_Known_v().to_aj(pre.dv),
+                AllocationJournal::Label::ReadForRecovery{ messages: lbl.get_ReadForRecovery_records() }
             );
         }
     }
@@ -416,10 +283,10 @@ state_machine!{UnifiedCrashAwareJournal{
         query_end_lsn(lbl: Label) {
             require lbl is QueryEndLsn;
             require pre.ephemeral is Known;
-            require LinkedJournal::State::next(
-                pre.ephemeral.get_Known_v().to_lj(pre.dv),
-                pre.ephemeral.get_Known_v().to_lj(pre.dv),
-                LinkedJournal::Label::QueryEndLsn{ end_lsn: lbl.get_QueryEndLsn_end_lsn() },
+            require AllocationJournal::State::next(
+                pre.ephemeral.get_Known_v().to_aj(pre.dv),
+                pre.ephemeral.get_Known_v().to_aj(pre.dv),
+                AllocationJournal::Label::QueryEndLsn{ end_lsn: lbl.get_QueryEndLsn_end_lsn() },
             );
         }
     }
@@ -428,14 +295,11 @@ state_machine!{UnifiedCrashAwareJournal{
         put(lbl: Label, new_ephemeral: EphemeralState) {
             require lbl is Put;
             require pre.ephemeral is Known;
-            require LinkedJournal::State::next(
-                pre.ephemeral.get_Known_v().to_lj(pre.dv),
-                new_ephemeral.to_lj(pre.dv),
-                LinkedJournal::Label::Put{ messages: lbl.get_Put_records() },
+            require AllocationJournal::State::next(
+                pre.ephemeral.get_Known_v().to_aj(pre.dv),
+                new_ephemeral.to_aj(pre.dv),
+                AllocationJournal::Label::Put{ messages: lbl.get_Put_records() },
             );
-            // NOTE(JL): update and predicate style don't mix well
-            // pretty easy to not specify enough constraints on new_ephemeral
-            require pre.ephemeral.get_Known_v().same_except_lj(new_ephemeral);
             update ephemeral = Ephemeral::Known{ v: new_ephemeral };
         }
     }
@@ -444,13 +308,20 @@ state_machine!{UnifiedCrashAwareJournal{
         internal(lbl: Label, new_ephemeral: EphemeralState, new_dv: DiskView) {
             require lbl is Internal;
             require pre.ephemeral is Known;
-            require pre.ephemeral.get_Known_v().is_internal_op(
-                pre.dv,
-                lbl.get_Internal_allocs(),
-                lbl.get_Internal_deallocs(),
-                new_ephemeral,
-                new_dv,
+
+            let pre_v = pre.ephemeral.get_Known_v();
+            let allocs = lbl.get_Internal_allocs();
+            let deallocs = lbl.get_Internal_deallocs();
+
+            require allocs.disjoint(pre_v.lsn_au_index.values());
+            require allocs.disjoint(pre_v.mini_allocator.allocs.dom());
+
+            require AllocationJournal::State::next(
+                pre_v.to_aj(pre.dv),
+                new_ephemeral.to_aj(new_dv),
+                AllocationJournal::Label::InternalAllocations{ allocs, deallocs }
             );
+
             update ephemeral = Ephemeral::Known{ v: new_ephemeral };
             update dv = new_dv;
         }
@@ -464,7 +335,7 @@ state_machine!{UnifiedCrashAwareJournal{
     }
 
     transition!{
-        commit_start(lbl: Label, frozen_journal: ImageState, frozen_dv: DiskView) {
+        commit_start(lbl: Label, frozen_journal: ImageState, depth: nat) {
             require lbl is CommitStart;
             require pre.ephemeral is Known;
             // Can't start a commit if one is in-flight, or we'd forget to maintain the
@@ -479,10 +350,19 @@ state_machine!{UnifiedCrashAwareJournal{
             // Frozen journal stitches to frozen map
             require new_bdy == lbl.get_CommitStart_new_boundary_lsn();
 
-            // make sure frozen journal is ready to freeze
-            // allocation journal equivalent conditions
+            // freeze for commit conditions
             let v = pre.ephemeral.get_Known_v();
-            require v.is_freeze_for_commit_op(pre.dv, frozen_journal, frozen_dv);
+            let tj = v.image.to_tj(pre.dv);
+
+            require tj.disk_view.can_crop(v.image.freshest_rec, depth); // depth is croppable
+            let cropped_tj = tj.crop(depth);
+            require cropped_tj.can_discard_to(new_bdy); // new_bdy is valid after the crop
+
+            // arbitrary if newbdy isn't present
+            require frozen_journal.first == v.lsn_au_index[new_bdy];
+            require frozen_journal.freshest_rec ==
+                if cropped_tj.seq_end() == new_bdy { None }
+                else { cropped_tj.freshest_rec };
 
             update inflight = Option::Some(frozen_journal);
         }
@@ -494,10 +374,16 @@ state_machine!{UnifiedCrashAwareJournal{
             require pre.ephemeral is Known;
             require pre.inflight is Some;
 
-            // how would we perform this update?
-            let v = pre.ephemeral.get_Known_v();
-            require v.is_discard_old_op(pre.dv, pre.inflight.unwrap().seq_start(),
-                lbl.get_CommitComplete_require_end(),lbl.get_CommitComplete_discarded(), new_ephemeral, new_dv);
+            require AllocationJournal::State::next(
+                pre.ephemeral.get_Known_v().to_aj(pre.dv),
+                new_ephemeral.to_aj(new_dv),
+                AllocationJournal::Label::DiscardOld{
+                    start_lsn: pre.inflight.unwrap().seq_start(),
+                    require_end: lbl.get_CommitComplete_require_end(),
+                    // where do we specify which aus are in deallocs?
+                    deallocs: lbl.get_CommitComplete_discarded(),
+                },
+            );
 
             update persistent = pre.inflight.unwrap();
             update ephemeral = Ephemeral::Known{ v: new_ephemeral };
@@ -514,99 +400,91 @@ state_machine!{UnifiedCrashAwareJournal{
         }
     }
 
-// //     pub open spec(checked) fn state_relations(self) -> bool
-// //     {
-// //         // persistent and ephemeral agree on values
-// //         &&& self.ephemeral is Known ==> {
-// //             let ephemeral_disk = self.ephemeral.get_Known_v().tj().disk_view;
-// //             let persistent_disk = self.persistent.tj.disk_view;
-// //             &&& Map::agrees(ephemeral_disk.entries, persistent_disk.entries)
-// //         }
-// //         // inflight is always a subset of ephemeral
-// //         &&& self.ephemeral is Known && self.inflight is Some ==> {
-// //             let ephemeral_disk = self.ephemeral.get_Known_v().tj().disk_view;
-// //             let inflight_disk = self.inflight.get_Some_0().tj.disk_view;
-// //             &&& inflight_disk.is_sub_disk_with_newer_lsn(ephemeral_disk)
-// //         }
-// //     }
+    pub open spec(checked) fn state_relations(self) -> bool
+        recommends
+            self.ephemeral is Known ==> self.ephemeral.get_Known_v().wf(self.dv),
+            self.inflight is Some ==> self.inflight.unwrap().valid_image(self.dv),
+            self.persistent.valid_image(self.dv)
+    {
+        self.ephemeral is Known ==> {
+            let v = self.ephemeral.get_Known_v();
+            &&& self.persistent.seq_end(self.dv) <= v.image.seq_end(self.dv)
+            &&& (self.inflight is Some ==>
+                self.inflight.unwrap().seq_end(self.dv) <= v.image.seq_end(self.dv))
+        }
+    }
 
-    // #[invariant]
-    // pub open spec(checked) fn inv(self) -> bool {
-    //     &&& self.ephemeral is Unknown ==> self.inflight is None
-    //     &&& self.ephemeral is Known ==> self.ephemeral.get_Known_v().inv()
-    //     &&& self.inflight is Some ==> self.inflight.get_Some_0().tj.decodable()
-    //     &&& self.persistent.tj.decodable()
-    // }
+    #[invariant]
+    pub open spec(checked) fn inv(self) -> bool {
+        &&& self.ephemeral is Unknown ==> self.inflight is None
+        &&& self.ephemeral is Known ==> self.ephemeral.get_Known_v().to_aj(self.dv).inv()
+        &&& self.inflight is Some ==> self.inflight.unwrap().valid_image(self.dv)
+        &&& self.persistent.valid_image(self.dv)
+        &&& self.state_relations()
+    }
 
-// //     #[inductive(initialize)]
-// //     fn initialize_inductive(post: Self) {
-// //         assume(post.persistent.tj.decodable()); // show empty is decodable
-// //     }
+    #[inductive(initialize)]
+    fn initialize_inductive(post: Self) {
+        LinkedJournal_v::TruncatedJournal::mkfs_ensures();
+        reveal(LinkedJournal_v::DiskView::pages_allocated_in_lsn_order);
+        assert(post.persistent.valid_image(post.dv));
+    }
 
-// //     #[inductive(load_ephemeral_from_persistent)]
-// //     fn load_ephemeral_from_persistent_inductive(pre: Self, post: Self, lbl: Label,
-// //         new_journal: AJ::State, journal_config: AJ::Config)
-// //     {
-// //         assert(pre.ephemeral is Known ==> pre.ephemeral.get_Known_v().inv());
-// //         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
-// //         assume(post.journal_pages_not_free());
-// //     }
+    #[inductive(load_ephemeral_from_persistent)]
+    fn load_ephemeral_from_persistent_inductive(pre: Self, post: Self, lbl: Label,
+        new_ephemeral: EphemeralState)
+    {
+        let v = post.ephemeral.get_Known_v();
+        pre.persistent.tight_dv_preserves_valid_image(pre.dv);
+        assert(v.to_aj(post.dv).inv());
+    }
 
-// //     #[inductive(read_for_recovery)]
-// //     fn read_for_recovery_inductive(pre: Self, post: Self, lbl: Label)
-// //     {
-// //         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
-// //     }
+    #[inductive(read_for_recovery)]
+    fn read_for_recovery_inductive(pre: Self, post: Self, lbl: Label)
+    {
+    }
 
-// //     #[inductive(query_end_lsn)]
-// //     fn query_end_lsn_inductive(pre: Self, post: Self, lbl: Label)
-// //     {
-// //         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
-// //     }
+    #[inductive(query_end_lsn)]
+    fn query_end_lsn_inductive(pre: Self, post: Self, lbl: Label)
+    {
+    }
 
-// //     #[inductive(put)]
-// //     fn put_inductive(pre: Self, post: Self, lbl: Label, new_journal: AJ::State)
-// //     {
-// //         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
-// //         assume(post.journal_pages_not_free());
-// //         assume(post.state_relations());
-// //     }
+    #[inductive(put)]
+    fn put_inductive(pre: Self, post: Self, lbl: Label, new_ephemeral: EphemeralState)
+    {
+        reveal(AllocationJournal::State::next);
+        reveal(AllocationJournal::State::next_by);
+        reveal(LinkedJournal::State::next);
+        reveal(LinkedJournal::State::next_by);
+    }
 
-// //     #[inductive(internal)]
-// //     fn internal_inductive(pre: Self, post: Self, lbl: Label, new_journal: AJ::State)
-// //     {
-// //         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
-// //         assume(post.journal_pages_not_free());
-// //         assume(post.state_relations());
-// //     }
+    #[inductive(internal)]
+    fn internal_inductive(pre: Self, post: Self, lbl: Label, new_ephemeral: EphemeralState, new_dv: DiskView)
+    {
+        assume(false);
+    }
 
-// //     #[inductive(query_lsn_persistence)]
-// //     fn query_lsn_persistence_inductive(pre: Self, post: Self, lbl: Label)
-// //     {
-// //         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
-// //      }
+    #[inductive(query_lsn_persistence)]
+    fn query_lsn_persistence_inductive(pre: Self, post: Self, lbl: Label)
+    {
+    }
 
-// //     #[inductive(commit_start)]
-// //     fn commit_start_inductive(pre: Self, post: Self, lbl: Label, frozen_journal: StoreImage, new_journal: AJ::State)
-// //     {
-// //         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
-// //         assume(post.inflight is Some ==> post.inflight.get_Some_0().tj.decodable()); // should reveal inflight
-// //         assume(post.journal_pages_not_free());
-// //         assume(post.state_relations());
-// //     }
+    #[inductive(commit_start)]
+    fn commit_start_inductive(pre: Self, post: Self, lbl: Label, frozen_journal: ImageState, depth: nat)
+    {
+        assume(false);
+    }
 
-// //     #[inductive(commit_complete)]
-// //     fn commit_complete_inductive(pre: Self, post: Self, lbl: Label, new_journal: AJ::State)
-// //     {
-// //         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
-// //         assume(post.journal_pages_not_free());
-// //     }
+    #[inductive(commit_complete)]
+    fn commit_complete_inductive(pre: Self, post: Self, lbl: Label, new_ephemeral: EphemeralState, new_dv: DiskView)
+    {
+        assume(false);
+    }
 
-// //     #[inductive(crash)]
-// //     fn crash_inductive(pre: Self, post: Self, lbl: Label)
-// //     {
-// //         assume(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()); // promised by submodule inv currently not accessible
-// //     }
+    #[inductive(crash)]
+    fn crash_inductive(pre: Self, post: Self, lbl: Label)
+    {
+    }
 
   }}  // state_machine
 

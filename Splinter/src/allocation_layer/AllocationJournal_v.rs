@@ -122,6 +122,14 @@ pub open spec(checked) fn aus_hold_contiguous_lsns(lsn_au_index: LsnAUIndex) -> 
     forall|lsn1, lsn2, lsn3| contiguous_lsns(lsn_au_index, lsn1, lsn2, lsn3)
 }
 
+pub open spec(checked) fn au_addrs_past_pointer(ptr: Pointer) -> Set<Address> {
+    if ptr is None {
+        Set::empty()
+    } else {
+        Set::new(|addr: Address| ptr.unwrap().after_page(addr))
+    }
+}
+
 impl DiskView {
     pub open spec fn domain_tight_wrt_index(self, lsn_au_index: LsnAUIndex) -> bool {
         forall|addr|
@@ -134,6 +142,7 @@ impl DiskView {
             ({
                 &&& self.entries.dom().contains(addr)
                 &&& self.entries[addr].message_seq.contains(lsn)
+                &&& lsn_au_index.values().contains(addr.au)
                 &&& !lsn_au_index.contains_key(lsn)
             }) ==> lsn < self.boundary_lsn
     }
@@ -151,6 +160,28 @@ impl DiskView {
             lsn_au_index.contains_key(lsn) ==> exists|addr: Address|
                 addr.wf() && addr.au == lsn_au_index[lsn] && #[trigger]
                 self.addr_supports_lsn(addr, lsn)
+    }
+
+    // one-off explicit instantiation lemma for use in predicates where reveal is verboten.
+    pub proof fn instantiate_index_keys_exist_valid_entries(
+        self,
+        lsn_au_index: LsnAUIndex,
+        lsn: LSN,
+    ) -> (addr: Address)
+        requires
+            self.wf(),
+            lsn_au_index.contains_key(lsn),
+            self.index_keys_exist_valid_entries(lsn_au_index),
+        ensures
+            addr.wf(),
+            lsn_au_index[lsn] == addr.au,
+            self.addr_supports_lsn(addr, lsn),
+    {
+        reveal(DiskView::index_keys_exist_valid_entries);
+        let addr = choose|addr: Address|
+            addr.wf() && addr.au == lsn_au_index[lsn] && #[trigger]
+            self.addr_supports_lsn(addr, lsn);
+        addr
     }
 
     pub open spec(checked) fn build_lsn_au_index_page_walk(self, root: Pointer) -> LsnAUIndex
@@ -349,6 +380,11 @@ impl DiskView {
         assert(self.valid_ranking(big.the_ranking()));
         if root is Some {
             self.build_lsn_au_index_page_walk_sub_disk(big, self.next(root));
+            // idk why this might be needed, but this proof is unstable
+            if self.is_sub_disk_with_newer_lsn(big) {
+                assert(self.build_lsn_au_index_page_walk(self.next(root))
+                    <= big.build_lsn_au_index_page_walk(self.next(root)));
+            }
         }
     }
 
@@ -994,20 +1030,18 @@ state_machine!{ AllocationJournal {
         let new_bdy = frozen_journal.tj.seq_start();
 
         require pre.tj().disk_view.can_crop(pre.tj().freshest_rec, depth);
-        require pre.tj().disk_view.boundary_lsn <= new_bdy;
-
         let cropped_tj = pre.tj().crop(depth);
-        require cropped_tj.can_discard_to(new_bdy);
 
         // figure out the frozen lsn range
+        require cropped_tj.can_discard_to(new_bdy);
         let post_discard = cropped_tj.discard_old(new_bdy);
         let frozen_lsns = Set::new(|lsn: LSN| new_bdy <= lsn && lsn < post_discard.seq_end());
         let frozen_index = pre.lsn_au_index.restrict(frozen_lsns);
 
         // we can leave in pages prior to first
         // but can't keep pages beyond freshest rec in our frozen domain
-        let addrs_past_new_end = Set::new(|addr: Address| frozen_journal.tj.freshest_rec.unwrap().after_page(addr));
-        let frozen_addrs = Set::new(|addr: Address| addr.wf() && frozen_index.values().contains(addr.au)) - addrs_past_new_end;
+        let frozen_addrs = Set::new(|addr: Address| addr.wf() && frozen_index.values().contains(addr.au))
+            - au_addrs_past_pointer(frozen_journal.tj.freshest_rec);
 
         require cropped_tj.discard_old_tight(new_bdy, frozen_addrs, frozen_journal.tj);
         require frozen_journal.first == Self::new_first(frozen_journal.tj, pre.lsn_au_index, new_bdy);
@@ -1427,8 +1461,7 @@ state_machine!{ AllocationJournal {
 
         let frozen_lsns = Set::new(|lsn: LSN| new_bdy <= lsn && lsn < frozen_journal.tj.seq_end());
         let frozen_index = pre.lsn_au_index.restrict(frozen_lsns);
-
-        let addrs_past_new_end = Set::new(|addr: Address| frozen_journal.tj.freshest_rec.unwrap().after_page(addr));
+        let addrs_past_new_end = au_addrs_past_pointer(frozen_journal.tj.freshest_rec);
         let frozen_addrs = Set::new(|addr: Address| addr.wf() && frozen_index.values().contains(addr.au)) - addrs_past_new_end;
 
         pre.tj().build_lsn_au_index_ensures(pre.first);
