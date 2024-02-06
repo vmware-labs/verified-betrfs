@@ -526,7 +526,6 @@ pub proof fn lemma_path_target_is_wf(path: Path)
 
 // Proves that inserting into a node and then refining is the same
 // as refining then inserting into the refinement.
-#[verifier::spinoff_prover]
 pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
     requires
         pre.wf(),
@@ -779,7 +778,6 @@ pub proof fn append_refines(pre: Node, lbl: AppendLabel)
 
     // Goal 1 - WF is preserved
     lemma_append_preserves_wf(pre, lbl.keys, lbl.msgs, lbl.path);
-    // assume(false);
 
     let post = pre.append(lbl.keys, lbl.msgs, lbl.path);
 
@@ -789,56 +787,17 @@ pub proof fn append_refines(pre: Node, lbl: AppendLabel)
             // It's trivial!
         },
         Node::Index{pivots, children} => {
+            // (tenzinhl) This let statement is necessary for proof to succeed. Seems to be triggering
+            // something.
             let pre_i_then_append = Buffer{map: pre.i().map.union_prefer_right(Map::new(
                 |key| lbl.keys.contains(key),
                 |key| lbl.msgs[(Node::Leaf{ keys: lbl.keys, msgs: lbl.msgs }).route(key)]))};
-            let post_i = pre.append(lbl.keys, lbl.msgs, lbl.path).i();
 
-            let post_children = post.get_Index_children();
             let r = pre.route(lbl.keys[0]);
-
-            // GOAL 1 START (prove by showing that all children are the same except children along
-            // modified path).
-
-            // Start copying insert_refines proof that unmodified children
-            // are unmodified.
-
-            // Trigger stuff to get that the post_children are wf() and more.
-            assert(0 <= r + 1 < children.len());
-            assert(post.wf());
-            assert(post_children.len() == children.len()); 
-            assert(forall |i| 0 <= i < post_children.len() ==> (#[trigger] post_children[i]).wf());
-
-            // Required to trigger the route ensures for each of the children.
-            assert forall |i| 0 <= i < children.len() && children[i] is Index
-            implies (forall |key| 0 <= #[trigger] children[i].route(key) + 1 < children[i].get_Index_children().len()) by {
-                assert forall |key| 0 <= #[trigger] children[i].route(key) + 1 < children[i].get_Index_children().len() by {
-                    lemma_route_ensures(children[i], key);
-                }
-            }
-    
-            // Assert that the i() of all unchanged children are the same!
-            assert(forall |i| #![auto] 0 <= i < children.len() && i != (r+1) ==> post_children[i].i() == children[i].i());
 
             // Prove that the changed child still satisfies the append_refines.
             let child_label = AppendLabel{ keys: lbl.keys, msgs: lbl.msgs, path: lbl.path.subpath() };
             append_refines(children[r+1], child_label);
-
-            // GOAL 1
-            assert(post_i.map.dom() =~~= pre_i_then_append.map.dom());
-
-            // assume(false);
-
-            // GOAL 2
-            assert(forall |k| post_i.map.contains_key(k) ==>
-                (#[trigger] post_i.map[k]) =~~= (#[trigger] pre_i_then_append.map[k]));
-            assert(post_i.map =~~= pre_i_then_append.map);
-
-            // OVERALL GOAL
-            assert(pre.append(lbl.keys, lbl.msgs, lbl.path).i() =~~= (
-                Buffer{map: pre.i().map.union_prefer_right(Map::new(
-                    |key| lbl.keys.contains(key),
-                    |key| lbl.msgs[(Node::Leaf{ keys: lbl.keys, msgs: lbl.msgs }).route(key)]))}));
         },
     }
 }
