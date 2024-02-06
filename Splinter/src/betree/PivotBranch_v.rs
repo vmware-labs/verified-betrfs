@@ -329,7 +329,8 @@ impl Node {
         }
     }
 
-    /// 
+    /// Returns true iff self is an Index node and can be split with the provided split_arg 
+    /// (split_arg.wf() with respect to `self.children[r+1]`).
     pub open spec/* XXX (checked)*/ fn can_split_child_of_index(self, split_arg: SplitArg) -> bool
     {
         &&& self.wf()
