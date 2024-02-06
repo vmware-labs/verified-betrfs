@@ -771,6 +771,8 @@ pub proof fn append_refines(pre: Node, lbl: AppendLabel)
             Buffer{map: pre.i().map.union_prefer_right(Map::new(
                 |key| lbl.keys.contains(key),
                 |key| lbl.msgs[(Node::Leaf{ keys: lbl.keys, msgs: lbl.msgs }).route(key)]))}),
+    decreases
+        pre,
 {
     lemma_route_auto();
     lemma_append_keys_are_path_equiv(lbl.keys, lbl.path);
@@ -825,7 +827,7 @@ pub proof fn append_refines(pre: Node, lbl: AppendLabel)
             // GOAL 1
             assert(post_i.map.dom() =~~= pre_i_then_append.map.dom());
 
-            assume(false);
+            // assume(false);
 
             // GOAL 2
             assert(forall |k| post_i.map.contains_key(k) ==>
@@ -837,33 +839,6 @@ pub proof fn append_refines(pre: Node, lbl: AppendLabel)
                 Buffer{map: pre.i().map.union_prefer_right(Map::new(
                     |key| lbl.keys.contains(key),
                     |key| lbl.msgs[(Node::Leaf{ keys: lbl.keys, msgs: lbl.msgs }).route(key)]))}));
-            // let post = pre.insert(lbl.key, lbl.msg, lbl.path);
-            // let post_children = post.get_Index_children();
-            // let r = pre.route(lbl.key);
-            
-            // // Suppress recommendation
-            // assert(0 <= r + 1 < children.len());
-            // assert(post.wf());
-            // assert(post_children.len() == children.len()); 
-            // assert(forall |i| 0 <= i < post_children.len() ==> (#[trigger] post_children[i]).wf());
-
-            // assert forall |i| 0 <= i < children.len() && children[i] is Index
-            // implies (forall |key| 0 <= #[trigger] children[i].route(key) + 1 < children[i].get_Index_children().len()) by {
-            //     assert forall |key| 0 <= #[trigger] children[i].route(key) + 1 < children[i].get_Index_children().len() by {
-            //         lemma_route_ensures(children[i], key);
-            //     }
-            // }
-
-            // // Assert that other children don't change
-            // assert(forall |i| #![auto] 0 <= i < children.len() && i != (r+1) ==> post_children[i].i() == children[i].i());
-
-            // // Assert that the changed child has original keys plus the new key-value pair.
-            // let child_label = InsertLabel{ key: lbl.key, msg: lbl.msg, path: lbl.path.subpath() };
-            // insert_refines(children[r+1], child_label);
-            // assert(post_children[r+1].i() == children[r+1].i().insert(lbl.key, lbl.msg));
-
-            // assert(post.i() =~~= pre.i().insert(lbl.key, lbl.msg));
-
         },
     }
 }
