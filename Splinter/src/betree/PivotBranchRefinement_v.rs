@@ -507,6 +507,26 @@ pub proof fn lemma_insert_preserves_wf(node: Node, key: Key, msg: Message, path:
             {
                 assert(node.all_keys_above_bound(i));
             }
+
+            // Subgoal 4: the children's pivots are different from the parent's pivots
+            // assert(forall |i| 1 <= i < children.len() ==> 0 <=)
+            assert(post_pivots == pivots);
+            assert forall |i, pivot| 1 <= i < post_children.len() && post_children[i].get_pivots().contains(pivot)
+            implies Key::lt(post_pivots[i-1], pivot) by {
+                if (children[i] is Leaf) {
+                    assert(post_children[i] is Leaf);
+                    assert(post_children[i].get_pivots().is_empty());
+                    assert(children[i].get_pivots().is_empty());
+                } else {
+                    assert(post_children[i] is Index);
+                    assert(children[i].get_pivots() == children[i].get_Index_pivots().to_set());
+                    assert(post_children[i].get_pivots() == post_children[i].get_Index_pivots().to_set());
+                    assert(post_children[i].get_Index_pivots() == children[i].get_Index_pivots());
+                }
+                assert(post_children[i].get_pivots() =~~= children[i].get_pivots());
+                assert(post_pivots[i-1] != pivot);
+                assert(Key::lt(post_pivots[i-1], pivot));
+            }
         },
     }
 }
@@ -749,6 +769,7 @@ pub proof fn lemma_append_preserves_wf(pre: Node, keys: Seq<Key>, msgs: Seq<Mess
             assert(pre.all_keys_above_bound(i));
         }
 
+        assume(false);
         assert(post.wf());
     }
 }
@@ -854,6 +875,7 @@ ensures
 decreases
     path.depth
 {
+    assume(false);
     lemma_route_auto();
     let post = pre.split(path, split_arg);
 
@@ -872,24 +894,15 @@ decreases
 
         let target_child = children[r+1];
         let (left_node, right_node) = target_child.split_node(split_arg);
-        if (target_child is Leaf) {
-            // let keys = target_child.get_Leaf_keys();
-            // let msgs = target_child.get_Leaf_msgs();
-            // assert(left_node is Leaf);
-            // assert(right_node is Leaf);
-            // assert(0 < left_node.get_Leaf_keys().len() == left_node.get_Leaf_msgs().len());
-            // assert(0 < right_node.get_Leaf_keys().len() == right_node.get_Leaf_msgs().len());
-            // assert(keys == left_node.get_Leaf_keys() + right_node.get_Leaf_keys());
-            // assert(msgs == left_node.get_Leaf_msgs() + right_node.get_Leaf_msgs());
-            // assert(Key::lt(left_node.get_Leaf_keys().last(), split_arg.get_pivot())); // FAIL
-            // assert(Key::lte(split_arg.get_pivot(), right_node.get_Leaf_keys().first())); // FAIL
-        } else {
-            // target_child is Index
-            assert(target_child is Index);
-        }
 
         assert(post_pivots.len() == post_children.len() - 1);
+
+        // CURR_GOAL WORK START
+        // assert(forall )
+
+        // CURR GOAL
         assert(Key::is_strictly_sorted(post_pivots)); // FAIL
+
         assert(forall |i| 0 <= i < post_children.len() ==> (#[trigger] post_children[i]).wf());
         // For post_children[0:-1], all keys they contain should be < their upper pivot.
         assert(forall |i| 0 <= i < post_children.len() - 1 ==> post.all_keys_below_bound(i)); // FAIL

@@ -95,6 +95,18 @@ impl Node {
         Node::Leaf{ keys: seq![], msgs: seq![] }
     }
 
+    pub open spec(checked) fn get_pivots(self) -> Set<Key>
+    {
+        match self {
+            Node::Leaf{keys, msgs} => {
+                Set::empty()
+            },
+            Node::Index{pivots, children} => {
+                pivots.to_set()
+            }
+        }
+    }
+
     /// Returns the set of all keys contained under this node.
     /// - For leaf nodes this is just all keys the leaf node contains.
     /// - For index nodes, this is the set union of all pivot keys + keys contained
@@ -150,13 +162,19 @@ impl Node {
                 &&& keys.len() == msgs.len()
                 &&& Key::is_strictly_sorted(keys)
             },
+            // For a well-formed tree, all pivots are unique and strictly sorted if we do an in-order traversal.
+            // This ensures that no child has an empty domain.
             Node::Index{pivots, children} => {
                 // The pivots go between the children, thus |pivots| == |children| - 1.
                 &&& pivots.len() == children.len() - 1
                 &&& Key::is_strictly_sorted(pivots)
                 &&& forall |i| 0 <= i < children.len() ==> (#[trigger] children[i]).wf()
                 // For children[0:-1], all keys they contain should be < their upper pivot.
+                // This also gives us that children[i]'s pivots are < pivots[i] (if children are index nodes)
                 &&& forall |i| 0 <= i < children.len() - 1 ==> self.all_keys_below_bound(i)
+                // Children[i]'s pivots > pivots[i-1] (if children are index nodes)
+                &&& forall |i, pivot| 1 <= i < children.len() && children[i].get_pivots().contains(pivot)
+                    ==> Key::lt(pivots[i-1], pivot)
                 // For children[1:], all keys they contain should be >= their lower pivot.
                 &&& forall |i| 0 < i < children.len() ==> self.all_keys_above_bound(i)
             }
