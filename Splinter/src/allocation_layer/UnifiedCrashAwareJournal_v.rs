@@ -693,6 +693,7 @@ state_machine!{UnifiedCrashAwareJournal{
                     let valid_addr = tj.disk_view.instantiate_index_keys_exist_valid_entries(v.lsn_au_index, valid_lsn);
 
                     assert(frozen_index[valid_lsn] == addr.au);
+                    assert(v.lsn_au_index.contains_key(valid_lsn)); // trigger
                     assert(v.lsn_au_index[valid_lsn] == frozen_index[valid_lsn]);
                     assert(v.lsn_au_index[valid_lsn] == v.lsn_au_index[lsn]);
 
@@ -717,7 +718,89 @@ state_machine!{UnifiedCrashAwareJournal{
     #[inductive(commit_complete)]
     fn commit_complete_inductive(pre: Self, post: Self, lbl: Label, new_ephemeral: EphemeralState, new_dv: DiskView)
     {
-        assume(false);
+        let pre_aj = pre.ephemeral.get_Known_v().to_aj(pre.dv);
+        let post_aj = post.ephemeral.get_Known_v().to_aj(post.dv);
+        let deallocs = lbl.get_CommitComplete_discarded();
+
+        let aj_lbl = AllocationJournal::Label::DiscardOld{
+            start_lsn: pre.inflight.unwrap().seq_start(),
+            require_end: lbl.get_CommitComplete_require_end(),
+            deallocs: deallocs,
+        };
+
+        AJ::State::inv_next(pre_aj, post_aj, aj_lbl);
+        assert( post_aj.inv() );
+
+        reveal(AllocationJournal::State::next);
+        reveal(AllocationJournal::State::next_by);
+
+        // prove persistent image still valid upon a disk truncate
+        let bdy = post.persistent.boundary_lsn;
+        let root = post.persistent.freshest_rec;
+
+        let pre_jdv = pre.dv.to_JournalDiskView(bdy);
+        let post_jdv = post.dv.to_JournalDiskView(bdy);
+
+        let pre_index = post.persistent.to_tj(pre.dv).build_lsn_au_index(post.persistent.first);
+        post.persistent.to_tj(pre.dv).build_lsn_au_index_ensures(post.persistent.first);
+        post.persistent.to_tj(pre.dv).sub_disk_build_sub_lsn_au_index(post.persistent.first, pre_aj.tj(), pre_aj.first);
+        assert(pre_index <= pre_aj.lsn_au_index);
+
+        pre_aj.tj().build_lsn_au_index_ensures(pre_aj.first);
+        assert(post_aj.lsn_au_index <= pre_aj.lsn_au_index);
+
+        if root is Some {
+            // prove root is_nondanglingly_pointer
+            let last_lsn = (pre.dv.entries[root.unwrap()].message_seq.seq_end - 1) as nat;
+            assert(pre_aj.tj().disk_view.addr_supports_lsn(root.unwrap(), last_lsn));
+            assert(pre_aj.lsn_au_index.contains_key(last_lsn));
+            assert(pre_aj.lsn_au_index[last_lsn] == root.unwrap().au) by {
+                let _ = pre_aj.tj().disk_view.instantiate_index_keys_exist_valid_entries(pre_aj.lsn_au_index, last_lsn);
+            }
+            assert(post_aj.lsn_au_index.contains_key(last_lsn));
+            assert(!deallocs.contains(root.unwrap().au));
+            assert(post_jdv.is_nondangling_pointer(root));
+
+            // prove valid_first_au
+            assert(pre_index.contains_key(bdy));
+            pre_jdv.first_contains_boundary(root, post.persistent.first);
+            pre_jdv.build_lsn_au_index_equiv_page_walk(root, post.persistent.first);
+
+            assert(post.persistent.first == pre_index[bdy]);
+            assert(post_aj.first === post_aj.lsn_au_index[bdy]);
+            assert(post.persistent.first == post_aj.first);
+            assert(post_jdv.valid_first_au(post.persistent.first));
+        }
+        assert(post_jdv.decodable(root));
+        assert(post_jdv.acyclic());
+
+        assert(post_jdv.internal_au_pages_fully_linked());
+        assert(post_jdv.has_unique_lsns());
+        assert(post_jdv.pointer_is_upstream(root, post.persistent.first));
+
+        let post_index = post.persistent.to_tj(post.dv).build_lsn_au_index(post.persistent.first);
+        post.persistent.to_tj(post.dv).build_lsn_au_index_ensures(post.persistent.first);
+        post_jdv.build_lsn_au_index_equiv_page_walk(root, post.persistent.first);
+        post_jdv.build_lsn_au_index_page_walk_sub_disk(pre_jdv, root);
+        assert(post_index == pre_index);
+
+        post.persistent.to_tj(post.dv).sub_disk_build_sub_lsn_au_index(
+            post.persistent.first, post_aj.tj(), post_aj.first);
+        assert(post_index <= post_aj.lsn_au_index);
+        assert(post_index.dom() <= post_aj.lsn_au_index.dom());
+        assert(post_index.values() <= post_aj.lsn_au_index.values());
+
+        let tight_pre_jdv = post.persistent.tight_dv(pre.dv).to_JournalDiskView(bdy);
+        let tight_post_jdv = post.persistent.tight_dv(post.dv).to_JournalDiskView(bdy);
+
+        assert(tight_post_jdv.entries.dom() <= tight_pre_jdv.entries.dom());
+        assert(tight_pre_jdv.entries =~= tight_post_jdv.entries);
+
+        assert(tight_pre_jdv.non_index_lsn_bounded(post_index));
+        assert(tight_post_jdv.non_index_lsn_bounded(post_index));
+
+        assert(post.persistent.valid_image(post.dv));
+        assert(post.state_relations());
     }
 
     #[inductive(crash)]
