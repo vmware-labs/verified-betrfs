@@ -55,14 +55,19 @@ impl<T> IntMarshalling<T> {
     }
 }
 
-// trait Obligations<T> {
-//     open spec fn o_spec_size() -> usize;
-//     exec fn o_exec_size() -> usize;
-// }
+trait Obligations<T> {
+    open spec fn o_spec_size() -> usize;
+    exec fn o_exec_size() -> usize;
+}
 
 impl Deepview<int> for u32 {
     //type DV = int;
     open spec fn deepv(&self) -> int { *self as int }
+}
+
+impl Obligations<u32> for IntMarshalling<u32> {
+    open spec fn o_spec_size() -> usize { 4 } 
+    exec fn o_exec_size() -> usize; { 4 } 
 }
 
 impl Marshalling<int, u32> for IntMarshalling<u32> {
