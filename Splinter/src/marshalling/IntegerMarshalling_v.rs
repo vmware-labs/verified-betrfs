@@ -16,11 +16,11 @@ verus! {
 //////////////////////////////////////////////////////////////////////////////
 
 // First try: T == u32
-struct IntMarshalling {
-    //_p: std::marker::PhantomData<(T,)>,
+struct IntMarshalling<T> {
+    _p: std::marker::PhantomData<(T,)>,
 }
 
-impl IntMarshalling {
+impl<T> IntMarshalling<T> {
     exec fn install_bytes(&self, source: &Vec<u8>, data: &mut Vec<u8>, start: usize) -> (end: usize)
     requires
         start + source.len() <= old(data).len(),
@@ -55,12 +55,17 @@ impl IntMarshalling {
     }
 }
 
+// trait Obligations<T> {
+//     open spec fn o_spec_size() -> usize;
+//     exec fn o_exec_size() -> usize;
+// }
+
 impl Deepview<int> for u32 {
     //type DV = int;
     open spec fn deepv(&self) -> int { *self as int }
 }
 
-impl Marshalling<int, u32> for IntMarshalling {
+impl Marshalling<int, u32> for IntMarshalling<u32> {
     open spec fn valid(&self) -> bool
     {
         true
@@ -117,6 +122,75 @@ impl Marshalling<int, u32> for IntMarshalling {
         let s = u32_to_le_bytes(*value);
         proof { lemma_auto_spec_u32_to_from_le_bytes(); }
         assert( s@.subrange(0, 4) =~= s@ ); // need a little extensionality? Do it by hand!
+        let end = self.install_bytes(&s, data, start);
+        assert( data@.subrange(start as int, end as int) == s@ );   // trigger
+
+        end
+    }
+}
+
+impl Deepview<int> for u64 {
+    //type DV = int;
+    open spec fn deepv(&self) -> int { *self as int }
+}
+
+impl Marshalling<int, u64> for IntMarshalling<u64> {
+    open spec fn valid(&self) -> bool
+    {
+        true
+    }
+
+    open spec fn parsable(&self, data: Seq<u8>) -> bool
+    {
+        8 <= data.len()
+    }
+
+    fn exec_parsable(&self, slice: &Slice, data: &Vec<u8>) -> (p: bool)
+    {
+        8 <= slice.exec_len()
+    }
+
+    open spec fn marshallable(&self, value: int) -> bool
+    {
+        true
+    }
+
+    open spec fn spec_size(&self, value: int) -> usize
+    {
+        8
+    }
+
+    fn exec_size(&self, value: &u64) -> (sz: usize)
+    {
+        8
+    }
+
+    open spec fn parse(&self, data: Seq<u8>) -> int
+    {
+        spec_u64_from_le_bytes(data.subrange(0, 8)) as int
+    }
+
+    exec fn try_parse(&self, slice: &Slice, data: &Vec<u8>) -> (ov: Option<u64>)
+    {
+        // TODO(verus): shouldn't need to trigger this; it's in our (inherited) requires
+        assert( slice.valid(data@) );
+
+        if 8 <= slice.exec_len() {
+            let sr = slice_subrange(data.as_slice(), slice.start, slice.start+8);
+            let parsed = u64_from_le_bytes(sr);
+            assert( sr@ == slice.i(data@).subrange(0, 8) ); // trigger
+            Some(parsed)
+        } else {
+            assert( !self.parsable(slice.i(data@)) );
+            None
+        }
+    }
+
+    exec fn marshall(&self, value: &u64, data: &mut Vec<u8>, start: usize) -> (end: usize)
+    {
+        let s = u64_to_le_bytes(*value);
+        proof { lemma_auto_spec_u64_to_from_le_bytes(); }
+        assert( s@.subrange(0, 8) =~= s@ ); // need a little extensionality? Do it by hand!
         let end = self.install_bytes(&s, data, start);
         assert( data@.subrange(start as int, end as int) == s@ );   // trigger
 
