@@ -191,7 +191,7 @@ impl Marshalling<int, u32> for IntMarshalling<u32> {
 
     exec fn marshall(&self, value: &u32, data: &mut Vec<u8>, start: usize) -> (end: usize)
     {
-        let s = u32_to_le_bytes(*value);
+        let s = Self::to_le_bytes(*value);
         assert( s@.subrange(0, Self::o_spec_size() as int) =~= s@ ); // need a little extensionality? Do it by hand!
         let end = self.install_bytes(&s, data, start);
 
