@@ -55,9 +55,12 @@ impl<T> IntMarshalling<T> {
     }
 }
 
-trait Obligations<T> {
-    open spec fn o_spec_size() -> usize;
-    exec fn o_exec_size() -> usize;
+pub trait Obligations<T> {
+    spec fn o_spec_size() -> usize;
+
+    exec fn o_exec_size() -> (s: usize)
+        ensures s == Self::o_spec_size()
+    ;
 }
 
 impl Deepview<int> for u32 {
@@ -67,7 +70,8 @@ impl Deepview<int> for u32 {
 
 impl Obligations<u32> for IntMarshalling<u32> {
     open spec fn o_spec_size() -> usize { 4 } 
-    exec fn o_exec_size() -> usize; { 4 } 
+
+    exec fn o_exec_size() -> usize { 4 } 
 }
 
 impl Marshalling<int, u32> for IntMarshalling<u32> {
@@ -78,12 +82,12 @@ impl Marshalling<int, u32> for IntMarshalling<u32> {
 
     open spec fn parsable(&self, data: Seq<u8>) -> bool
     {
-        4 <= data.len()
+        Self::o_spec_size() <= data.len()
     }
 
     fn exec_parsable(&self, slice: &Slice, data: &Vec<u8>) -> (p: bool)
     {
-        4 <= slice.exec_len()
+        Self::o_exec_size() <= slice.exec_len()
     }
 
     open spec fn marshallable(&self, value: int) -> bool
@@ -93,17 +97,17 @@ impl Marshalling<int, u32> for IntMarshalling<u32> {
 
     open spec fn spec_size(&self, value: int) -> usize
     {
-        4
+        Self::o_spec_size()
     }
 
     fn exec_size(&self, value: &u32) -> (sz: usize)
     {
-        4
+        Self::o_exec_size()
     }
 
     open spec fn parse(&self, data: Seq<u8>) -> int
     {
-        spec_u32_from_le_bytes(data.subrange(0, 4)) as int
+        spec_u32_from_le_bytes(data.subrange(0, Self::o_spec_size() as int)) as int
     }
 
     exec fn try_parse(&self, slice: &Slice, data: &Vec<u8>) -> (ov: Option<u32>)
@@ -111,10 +115,10 @@ impl Marshalling<int, u32> for IntMarshalling<u32> {
         // TODO(verus): shouldn't need to trigger this; it's in our (inherited) requires
         assert( slice.valid(data@) );
 
-        if 4 <= slice.exec_len() {
-            let sr = slice_subrange(data.as_slice(), slice.start, slice.start+4);
+        if Self::o_exec_size() <= slice.exec_len() {
+            let sr = slice_subrange(data.as_slice(), slice.start, slice.start+Self::o_exec_size());
             let parsed = u32_from_le_bytes(sr);
-            assert( sr@ == slice.i(data@).subrange(0, 4) ); // trigger
+            assert( sr@ == slice.i(data@).subrange(0, Self::o_spec_size() as int) ); // trigger
             Some(parsed)
         } else {
             assert( !self.parsable(slice.i(data@)) );
@@ -126,7 +130,7 @@ impl Marshalling<int, u32> for IntMarshalling<u32> {
     {
         let s = u32_to_le_bytes(*value);
         proof { lemma_auto_spec_u32_to_from_le_bytes(); }
-        assert( s@.subrange(0, 4) =~= s@ ); // need a little extensionality? Do it by hand!
+        assert( s@.subrange(0, Self::o_spec_size() as int) =~= s@ ); // need a little extensionality? Do it by hand!
         let end = self.install_bytes(&s, data, start);
         assert( data@.subrange(start as int, end as int) == s@ );   // trigger
 
@@ -139,6 +143,12 @@ impl Deepview<int> for u64 {
     open spec fn deepv(&self) -> int { *self as int }
 }
 
+impl Obligations<u64> for IntMarshalling<u64> {
+    open spec fn o_spec_size() -> usize { 8 } 
+
+    exec fn o_exec_size() -> usize { 8 } 
+}
+
 impl Marshalling<int, u64> for IntMarshalling<u64> {
     open spec fn valid(&self) -> bool
     {
@@ -147,12 +157,12 @@ impl Marshalling<int, u64> for IntMarshalling<u64> {
 
     open spec fn parsable(&self, data: Seq<u8>) -> bool
     {
-        8 <= data.len()
+        Self::o_spec_size() <= data.len()
     }
 
     fn exec_parsable(&self, slice: &Slice, data: &Vec<u8>) -> (p: bool)
     {
-        8 <= slice.exec_len()
+        Self::o_exec_size() <= slice.exec_len()
     }
 
     open spec fn marshallable(&self, value: int) -> bool
@@ -162,12 +172,12 @@ impl Marshalling<int, u64> for IntMarshalling<u64> {
 
     open spec fn spec_size(&self, value: int) -> usize
     {
-        8
+        Self::o_spec_size()
     }
 
     fn exec_size(&self, value: &u64) -> (sz: usize)
     {
-        8
+        Self::o_exec_size()
     }
 
     open spec fn parse(&self, data: Seq<u8>) -> int
