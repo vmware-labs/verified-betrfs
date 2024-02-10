@@ -260,68 +260,14 @@ impl Obligations<u64> for IntMarshalling<u64> {
     proof fn as_int_ensures() { }
 }
 
-// impl Marshalling<int, u64> for IntMarshalling<u64> {
-//     open spec fn valid(&self) -> bool
-//     {
-//         true
-//     }
+// Confirm that I really have built Marshalling<int, u32> and u64
+// fn do_thing<T: Deepview<int>, M: Marshalling<int, T>>() {
+// }
 // 
-//     open spec fn parsable(&self, data: Seq<u8>) -> bool
-//     {
-//         Self::o_spec_size() <= data.len()
-//     }
-// 
-//     fn exec_parsable(&self, slice: &Slice, data: &Vec<u8>) -> (p: bool)
-//     {
-//         Self::o_exec_size() <= slice.exec_len()
-//     }
-// 
-//     open spec fn marshallable(&self, value: int) -> bool
-//     {
-//         true
-//     }
-// 
-//     open spec fn spec_size(&self, value: int) -> usize
-//     {
-//         Self::o_spec_size()
-//     }
-// 
-//     fn exec_size(&self, value: &u64) -> (sz: usize)
-//     {
-//         Self::o_exec_size()
-//     }
-// 
-//     open spec fn parse(&self, data: Seq<u8>) -> int
-//     {
-//         spec_u64_from_le_bytes(data.subrange(0, 8)) as int
-//     }
-// 
-//     exec fn try_parse(&self, slice: &Slice, data: &Vec<u8>) -> (ov: Option<u64>)
-//     {
-//         // TODO(verus): shouldn't need to trigger this; it's in our (inherited) requires
-//         assert( slice.valid(data@) );
-// 
-//         if 8 <= slice.exec_len() {
-//             let sr = slice_subrange(data.as_slice(), slice.start, slice.start+8);
-//             let parsed = u64_from_le_bytes(sr);
-//             assert( sr@ == slice.i(data@).subrange(0, 8) ); // trigger
-//             Some(parsed)
-//         } else {
-//             assert( !self.parsable(slice.i(data@)) );
-//             None
-//         }
-//     }
-// 
-//     exec fn marshall(&self, value: &u64, data: &mut Vec<u8>, start: usize) -> (end: usize)
-//     {
-//         let s = u64_to_le_bytes(*value);
-//         proof { lemma_auto_spec_u64_to_from_le_bytes(); }
-//         assert( s@.subrange(0, 8) =~= s@ ); // need a little extensionality? Do it by hand!
-//         let end = self.install_bytes(&s, data, start);
-//         assert( data@.subrange(start as int, end as int) == s@ );   // trigger
-// 
-//         end
-//     }
+// fn fiddle() {
+// //     do_thing::<u16, IntMarshalling<u16>>();
+//     do_thing::<u32, IntMarshalling<u32>>();
+//     do_thing::<u64, IntMarshalling<u64>>();
 // }
 
 } // verus!
