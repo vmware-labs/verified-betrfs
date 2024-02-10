@@ -34,7 +34,7 @@ impl<DVE, Elt: Deepview<DVE>> Deepview<Seq<DVE>> for Vec<Elt> {
 //     fn deepv(&self) -> Self::DV;
 // }
 
-pub trait Premarshalling<DV, U: Deepview<DV>> {
+pub trait Marshalling<DV, U: Deepview<DV>> {
     spec fn valid(&self) -> bool;
 
     spec fn parsable(&self, data: Seq<u8>) -> bool
@@ -44,6 +44,7 @@ pub trait Premarshalling<DV, U: Deepview<DV>> {
     exec fn exec_parsable(&self, slice: &Slice, data: &Vec<u8>) -> (p: bool)
     requires
         self.valid(),
+        slice.valid(data@),
     ensures
         p == self.parsable(slice.i(data@))
     ;
@@ -64,9 +65,7 @@ pub trait Premarshalling<DV, U: Deepview<DV>> {
     ensures
         sz == self.spec_size(value.deepv())
     ;
-}
 
-pub trait Marshalling<DV, U: Deepview<DV>> : Premarshalling<DV, U> {
     spec fn parse(&self, data: Seq<u8>) -> DV
     recommends 
         self.valid(),
