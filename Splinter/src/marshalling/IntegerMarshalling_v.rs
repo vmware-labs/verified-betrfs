@@ -98,9 +98,13 @@ impl Marshalling<int, u32> for IntMarshalling {
 
     exec fn try_parse(&self, slice: &Slice, data: &Vec<u8>) -> (ov: Option<u32>)
     {
+        // TODO(verus): shouldn't need to trigger this; it's in our (inherited) requires
+        assert( slice.valid(data@) );
+
         if 4 <= slice.exec_len() {
-            let parsed = u32_from_le_bytes(slice_subrange(data.as_slice(), 0, 4));
-            assume( parsed.deepv() == self.parse(slice.i(data@)) ); // TODO need to know about u32_from_le_bytes
+            let sr = slice_subrange(data.as_slice(), slice.start, slice.start+4);
+            let parsed = u32_from_le_bytes(sr);
+            assert( sr@ == slice.i(data@).subrange(0, 4) ); // trigger
             Some(parsed)
         } else {
             assert( !self.parsable(slice.i(data@)) );
@@ -113,18 +117,8 @@ impl Marshalling<int, u32> for IntMarshalling {
         let s = u32_to_le_bytes(*value);
         proof { lemma_auto_spec_u32_to_from_le_bytes(); }
         assert( s@.subrange(0, 4) =~= s@ ); // need a little extensionality? Do it by hand!
-
-        assert( self.parse(s@) == value.deepv() );  // why do we believe this here but not the converse in try_parse?
-
         let end = self.install_bytes(&s, data, start);
-        assert( data@.subrange(start as int, end as int) == s@ );
-
-        // TODO(help): Why isn't this assertion equal to the postcondition?
-        // - start is immutable
-        // - end is indeed what we're returning (next line)
-        // - data is mutable, but we are talking about the last value of it because we don't touch
-        // it anymore.
-        assume( self.parse(data@.subrange(start as int, end as int)) == value.deepv() );
+        assert( data@.subrange(start as int, end as int) == s@ );   // trigger
 
         end
     }
