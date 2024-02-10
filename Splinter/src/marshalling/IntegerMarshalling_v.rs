@@ -61,6 +61,36 @@ pub trait Obligations<T> {
     exec fn o_exec_size() -> (s: usize)
         ensures s == Self::o_spec_size()
     ;
+
+    // generic wrappers over vstd::bytes, which should probably be rewritten this way.
+    spec fn spec_from_le_bytes(s: Seq<u8>) -> T
+    ;
+
+    spec fn spec_to_le_bytes(x: T) -> Seq<u8>
+    ;
+
+    exec fn to_le_bytes(x: T) -> (s: Vec<u8>)
+      ensures 
+        s@ == Self::spec_to_le_bytes(x),
+        s@.len() == Self::o_spec_size()
+    ;
+        
+    exec fn from_le_bytes(s: &[u8]) -> (x:T)
+      requires s@.len() == Self::o_spec_size(),
+      ensures x == Self::spec_from_le_bytes(s@)
+    ;
+        
+    proof fn lemma_auto_spec_to_from_le_bytes()
+      ensures
+        forall |x: T|
+            #![trigger Self::spec_to_le_bytes(x)]
+        {
+          &&& Self::spec_to_le_bytes(x).len() == Self::o_spec_size()
+          &&& Self::spec_from_le_bytes(Self::spec_to_le_bytes(x)) == x
+        },
+        forall |s: Seq<u8>|
+          s.len() == Self::o_spec_size() ==> #[trigger] Self::spec_to_le_bytes(Self::spec_from_le_bytes(s)) == s
+    ;
 }
 
 impl Deepview<int> for u32 {
@@ -72,6 +102,39 @@ impl Obligations<u32> for IntMarshalling<u32> {
     open spec fn o_spec_size() -> usize { 4 } 
 
     exec fn o_exec_size() -> usize { 4 } 
+
+    closed spec fn spec_from_le_bytes(s: Seq<u8>) -> u32
+    {
+        spec_u32_from_le_bytes(s)
+    }
+
+    closed spec fn spec_to_le_bytes(x: u32) -> Seq<u8>
+    {
+        spec_u32_to_le_bytes(x)
+    }
+
+    exec fn to_le_bytes(x: u32) -> (s: Vec<u8>)
+    {
+        u32_to_le_bytes(x)
+    }
+
+    exec fn from_le_bytes(s: &[u8]) -> (x:u32)
+    {
+        u32_from_le_bytes(s)
+    }
+        
+    proof fn lemma_auto_spec_to_from_le_bytes()
+    {
+        lemma_auto_spec_u32_to_from_le_bytes();
+
+        assert forall |x: u32| #![auto]
+        {
+          &&& Self::spec_from_le_bytes(Self::spec_to_le_bytes(x)) == x
+        } by {
+            assert( spec_u32_to_le_bytes(x).len() == 4 ); // stupid trigger; TODO(jonh): fix vstd::bytes.
+                                                          // Comically u64 version has a sane trigger.
+        };
+    }
 }
 
 impl Marshalling<int, u32> for IntMarshalling<u32> {
@@ -107,7 +170,7 @@ impl Marshalling<int, u32> for IntMarshalling<u32> {
 
     open spec fn parse(&self, data: Seq<u8>) -> int
     {
-        spec_u32_from_le_bytes(data.subrange(0, Self::o_spec_size() as int)) as int
+        Self::spec_from_le_bytes(data.subrange(0, Self::o_spec_size() as int)) as int
     }
 
     exec fn try_parse(&self, slice: &Slice, data: &Vec<u8>) -> (ov: Option<u32>)
@@ -117,7 +180,7 @@ impl Marshalling<int, u32> for IntMarshalling<u32> {
 
         if Self::o_exec_size() <= slice.exec_len() {
             let sr = slice_subrange(data.as_slice(), slice.start, slice.start+Self::o_exec_size());
-            let parsed = u32_from_le_bytes(sr);
+            let parsed = Self::from_le_bytes(sr);
             assert( sr@ == slice.i(data@).subrange(0, Self::o_spec_size() as int) ); // trigger
             Some(parsed)
         } else {
@@ -129,10 +192,12 @@ impl Marshalling<int, u32> for IntMarshalling<u32> {
     exec fn marshall(&self, value: &u32, data: &mut Vec<u8>, start: usize) -> (end: usize)
     {
         let s = u32_to_le_bytes(*value);
-        proof { lemma_auto_spec_u32_to_from_le_bytes(); }
         assert( s@.subrange(0, Self::o_spec_size() as int) =~= s@ ); // need a little extensionality? Do it by hand!
         let end = self.install_bytes(&s, data, start);
+
         assert( data@.subrange(start as int, end as int) == s@ );   // trigger
+        assert( Self::spec_from_le_bytes(Self::spec_to_le_bytes(*value)) == *value )
+            by { Self::lemma_auto_spec_to_from_le_bytes(); }
 
         end
     }
@@ -147,6 +212,31 @@ impl Obligations<u64> for IntMarshalling<u64> {
     open spec fn o_spec_size() -> usize { 8 } 
 
     exec fn o_exec_size() -> usize { 8 } 
+
+    closed spec fn spec_from_le_bytes(s: Seq<u8>) -> u64
+    {
+        spec_u64_from_le_bytes(s)
+    }
+
+    closed spec fn spec_to_le_bytes(x: u64) -> Seq<u8>
+    {
+        spec_u64_to_le_bytes(x)
+    }
+
+    exec fn to_le_bytes(x: u64) -> (s: Vec<u8>)
+    {
+        u64_to_le_bytes(x)
+    }
+
+    exec fn from_le_bytes(s: &[u8]) -> (x:u64)
+    {
+        u64_from_le_bytes(s)
+    }
+        
+    proof fn lemma_auto_spec_to_from_le_bytes()
+    {
+        lemma_auto_spec_u64_to_from_le_bytes();
+    }
 }
 
 impl Marshalling<int, u64> for IntMarshalling<u64> {
