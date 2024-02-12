@@ -90,6 +90,12 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> ResizableUniformSizedE
     }
 
     exec fn try_length(&self, slice: &Slice, data: &Vec<u8>) -> (out: Option<usize>)
+    requires
+        self.valid(),
+        slice.valid(data@),
+    ensures
+        out is Some <==> self.lengthable(slice.i(data@)),
+        out is Some ==> out.unwrap() as int == self.length(slice.i(data@))
     {
         // TODO(verus): Why are these trait requires not auto-triggering, but then asserting them works?
         assert(slice.valid(data@));
