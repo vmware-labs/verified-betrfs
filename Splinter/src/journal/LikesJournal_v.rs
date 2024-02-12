@@ -141,6 +141,7 @@ impl DiskView {
     }
 
     // ahhh this seems hacky, but just gonna shove the ensures here for now
+    #[verifier::spinoff_prover]
     pub proof fn cropped_ptr_build_sub_index(self, root: Pointer, cropped: Pointer, depth: nat)
         requires
             self.buildable(root),
@@ -152,64 +153,18 @@ impl DiskView {
         decreases self.the_rank_of(root),
     {
         reveal(TruncatedJournal::index_domain_valid);
+
         if depth > 0 {
             self.build_lsn_addr_index_domain_valid(root);
             self.cropped_ptr_build_sub_index(self.next(root), cropped, (depth - 1) as nat);
             if self.next(root) is Some {
                 self.build_lsn_addr_index_domain_valid(self.next(root));
-                assert(self.build_lsn_addr_index(self.next(root)) <= self.build_lsn_addr_index(
-                    root,
-                ));
+                assert(self.build_lsn_addr_index(self.next(root)) 
+                    <= self.build_lsn_addr_index(root));
             }
         }
     }
 
-    // proof fn build_lsn_addr_index_ignores_build_tight(self, bt_root: Pointer, repr_root: Pointer)
-    // requires
-    //     self.buildable(repr_root),
-    //     self.decodable(bt_root),
-    //     self.build_tight(bt_root).decodable(repr_root),
-    // ensures
-    //     self.build_tight(bt_root).wf(),
-    //     self.build_tight(bt_root).acyclic(),
-    //     repr_root.is_Some() ==> self.boundary_lsn < self.build_tight(bt_root).entries[repr_root.unwrap()].message_seq.seq_end,
-    //     self.build_lsn_addr_index(repr_root) == self.build_tight(bt_root).build_lsn_addr_index(repr_root),
-    // decreases self.the_rank_of(repr_root)
-    // {
-    //     self.build_tight_is_awesome(bt_root);
-    //     if repr_root.is_Some() {
-    //         self.build_lsn_addr_index_ignores_build_tight(bt_root, self.next(repr_root));
-    //     }
-    // }
-    // proof fn representation_ignores_build_tight(self, bt_root: Pointer, repr_root: Pointer)
-    // requires
-    //     self.decodable(bt_root),
-    //     self.decodable(repr_root),
-    //     self.acyclic(),
-    //     self.build_tight(bt_root).decodable(repr_root),
-    // ensures
-    //     self.build_tight(bt_root).wf(),
-    //     self.build_tight(bt_root).acyclic(),
-    //     self.build_tight(bt_root).representation(repr_root) == self.representation(repr_root)
-    // decreases self.the_rank_of(repr_root)
-    // {
-    //     self.build_tight_is_awesome(bt_root);
-    //     if repr_root.is_Some() {
-    //         self.representation_ignores_build_tight(bt_root, self.next(repr_root));
-    //     }
-    // }
-    // proof fn build_tight_gives_representation(self, root: Pointer)
-    // requires
-    //     self.decodable(root),
-    //     self.acyclic(),
-    // ensures
-    //     self.build_tight(root).entries.dom() == self.representation(root),
-    // decreases self.the_rank_of(root)
-    // {
-    //     if root.is_Some() {
-    //         self.build_tight_gives_representation(self.next(root));
-    //     }
-    // }
     spec(checked) fn cropped_msg_seq_contains_lsn(
         boundary: LSN,
         message_seq: MsgHistory,

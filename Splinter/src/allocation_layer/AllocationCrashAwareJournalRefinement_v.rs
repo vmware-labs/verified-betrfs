@@ -1,29 +1,17 @@
 // Copyright 2018-2023 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 //
-#![allow(unused_imports)]
-use builtin::*;
-use vstd::math;
 use vstd::prelude::*;
-
-use builtin_macros::*;
-use state_machines_macros::state_machine;
 
 use crate::abstract_system::AbstractCrashAwareJournal_v;
 use crate::abstract_system::AbstractCrashAwareJournal_v::CrashTolerantJournal;
 use crate::abstract_system::AbstractJournal_v::AbstractJournal;
 use crate::abstract_system::MsgHistory_v::*;
-use crate::abstract_system::StampedMap_v::LSN;
 use crate::allocation_layer::AllocationCrashAwareJournal_v::*;
 use crate::allocation_layer::AllocationJournal_v::{AllocationJournal, JournalImage};
-use crate::disk::GenericDisk_v::AU;
-use crate::disk::GenericDisk_v::*;
 use crate::journal::LikesJournal_v::LikesJournal;
 use crate::journal::LinkedJournal_v::{LinkedJournal, TruncatedJournal};
 use crate::journal::PagedJournal_v::JournalRecord;
-use vstd::map::*;
-use vstd::map_lib::*;
-use vstd::prelude::*;
 
 // Refines Allocation Journal => Abstract Journal
 // Refines Allocation Crash Aware Journal => Abstract Crash Aware Journal

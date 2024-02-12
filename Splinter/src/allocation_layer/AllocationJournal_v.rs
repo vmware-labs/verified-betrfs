@@ -364,12 +364,9 @@ impl DiskView {
             self.decodable(root),
             big.decodable(root),
             big.acyclic(),
-            self.is_sub_disk(big) || self.is_sub_disk_with_newer_lsn(big),
+            self.is_sub_disk(big) 
         ensures
-            self.is_sub_disk_with_newer_lsn(big) ==> self.build_lsn_au_index_page_walk(root)
-                <= big.build_lsn_au_index_page_walk(root),
-            self.is_sub_disk(big) ==> self.build_lsn_au_index_page_walk(root)
-                == big.build_lsn_au_index_page_walk(root),
+            self.build_lsn_au_index_page_walk(root) == big.build_lsn_au_index_page_walk(root)
         decreases self.the_rank_of(root),
     {
         assert forall|addr|
@@ -380,11 +377,30 @@ impl DiskView {
         assert(self.valid_ranking(big.the_ranking()));
         if root is Some {
             self.build_lsn_au_index_page_walk_sub_disk(big, self.next(root));
-            // idk why this might be needed, but this proof is unstable
-            if self.is_sub_disk_with_newer_lsn(big) {
-                assert(self.build_lsn_au_index_page_walk(self.next(root))
-                    <= big.build_lsn_au_index_page_walk(self.next(root)));
-            }
+        }
+    }
+
+    #[verifier::spinoff_prover]
+    pub proof fn build_lsn_au_index_page_walk_sub_disk_with_newer_lsn(self, big: DiskView, root: Pointer)
+        requires
+            self.decodable(root),
+            big.decodable(root),
+            big.acyclic(),
+            self.is_sub_disk_with_newer_lsn(big),
+        ensures
+            self.build_lsn_au_index_page_walk(root) <= big.build_lsn_au_index_page_walk(root)
+        decreases self.the_rank_of(root),
+    {
+        assert forall|addr|
+            self.entries.contains_key(addr) ==> big.entries.contains_key(
+                addr,
+            ) by {}  // trigger for ranking
+
+        assert(self.valid_ranking(big.the_ranking()));
+        if root is Some {
+            self.build_lsn_au_index_page_walk_sub_disk_with_newer_lsn(big, self.next(root));
+            assert(self.build_lsn_au_index_page_walk(self.next(root))
+                <= big.build_lsn_au_index_page_walk(self.next(root)));
         }
     }
 
@@ -1141,6 +1157,8 @@ state_machine!{ AllocationJournal {
 
     transition!{ internal_no_op(lbl: Label) {
         require lbl is InternalAllocations;
+        require lbl.get_InternalAllocations_allocs() == Set::<AU>::empty();
+        require lbl.get_InternalAllocations_deallocs() == Set::<AU>::empty();
     } }
 
     init!{ initialize(journal: LinkedJournal::State, image: JournalImage) {
@@ -1279,7 +1297,7 @@ state_machine!{ AllocationJournal {
 
             post_dv.build_lsn_au_index_page_walk_domain(post.tj().freshest_rec); // same domain
             assert( post.lsn_au_index.dom() =~= repr.dom() ); // needs more proof
-            post_dv.build_lsn_au_index_page_walk_sub_disk(pre_dv, post.tj().freshest_rec); // index subset
+            post_dv.build_lsn_au_index_page_walk_sub_disk_with_newer_lsn(pre_dv, post.tj().freshest_rec); // index subset
         }
         assert( post.lsn_au_index =~= post.tj().build_lsn_au_index(post.first) ); // needs more proof
 

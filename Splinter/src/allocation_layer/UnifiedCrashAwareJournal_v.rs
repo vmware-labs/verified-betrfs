@@ -85,14 +85,40 @@ impl ImageState {
         DiskView { entries: dv.entries.restrict(self.tight_domain(dv)) }
     }
 
+    pub proof fn last_lsn(self, dv: DiskView) -> (lsn: LSN)
+        requires 
+            self.valid_image(dv),
+            self.freshest_rec is Some,
+        ensures 
+            lsn == (self.seq_end(dv) - 1) as nat,
+            self.to_tj(dv).build_lsn_au_index(self.first).contains_key(lsn),
+            self.to_tj(dv).build_lsn_au_index(self.first)[lsn] == self.freshest_rec.unwrap().au,
+            self.to_tj(dv).disk_view.addr_supports_lsn(self.freshest_rec.unwrap(), lsn)
+    {
+        let index = self.to_tj(dv).build_lsn_au_index(self.first);
+        self.to_tj(dv).build_lsn_au_index_ensures(self.first);
+
+        let jdv = self.to_tj(dv).disk_view;
+        let lsn = (jdv.entries[self.freshest_rec.unwrap()].message_seq.seq_end-1) as nat;
+        assert(index.contains_key(lsn));
+
+        let addr = jdv.instantiate_index_keys_exist_valid_entries(index, lsn);
+        assert(addr.au == index[lsn]);
+        assert(jdv.addr_supports_lsn(addr, lsn));
+        assert(jdv.addr_supports_lsn(self.freshest_rec.unwrap(), lsn));
+        assert(jdv.has_unique_lsns());
+        assert(addr == self.freshest_rec.unwrap());
+
+        lsn
+    }
+
     pub proof fn tight_dv_preserves_valid_image(self, dv: DiskView)
         requires
             self.valid_image(dv),
         ensures
             self.valid_image(self.tight_dv(dv)),
-            self.to_tj(dv).build_lsn_au_index(self.first) == self.to_tj(
-                self.tight_dv(dv),
-            ).build_lsn_au_index(self.first),
+            self.to_tj(dv).build_lsn_au_index(self.first) == 
+            self.to_tj(self.tight_dv(dv)).build_lsn_au_index(self.first),
     {
         let jdv = dv.to_JournalDiskView(self.boundary_lsn);
         let tight_jdv = self.tight_dv(dv).to_JournalDiskView(self.boundary_lsn);
@@ -101,12 +127,8 @@ impl ImageState {
         self.to_tj(dv).build_lsn_au_index_ensures(self.first);
 
         if self.freshest_rec is Some {
-            let last_lsn = (jdv.entries[self.freshest_rec.unwrap()].message_seq.seq_end - 1) as nat;
-            assert(index.contains_key(last_lsn));
-            assert(jdv.addr_supports_lsn(self.freshest_rec.unwrap(), last_lsn));
-
-            let _ = jdv.instantiate_index_keys_exist_valid_entries(index, last_lsn);
-            assert(tight_jdv.is_nondangling_pointer(self.freshest_rec));
+            let _ = self.last_lsn(dv);
+            // assert(tight_jdv.is_nondangling_pointer(self.freshest_rec));
         }
 
         reveal(LinkedJournal_v::DiskView::pages_allocated_in_lsn_order);
@@ -249,13 +271,12 @@ impl ImageState {
                     assert(self.freshest_rec is Some);
                     assert(post_jdv.entries.contains_key(self.freshest_rec.unwrap()));
 
-                    let last_lsn = (post_jdv.entries[self.freshest_rec.unwrap()].message_seq.seq_end-1) as nat;
-                    assert(post_jdv.addr_supports_lsn(self.freshest_rec.unwrap(), last_lsn));
-
-                    assert(post_index.contains_key(last_lsn)); // trigger
-                    assert(post_index[last_lsn] == self.freshest_rec.unwrap().au);
-                    assert(post_index.values().contains(self.freshest_rec.unwrap().au));
-                    assert(post_tight_jdv.addr_supports_lsn(self.freshest_rec.unwrap(), last_lsn));
+                    let last_lsn = self.last_lsn(dv);
+                    // assert(post_jdv.addr_supports_lsn(self.freshest_rec.unwrap(), last_lsn));
+                    // assert(post_index.contains_key(last_lsn)); // trigger
+                    // assert(post_index[last_lsn] == self.freshest_rec.unwrap().au);
+                    // assert(post_index.values().contains(self.freshest_rec.unwrap().au));
+                    // assert(post_tight_jdv.addr_supports_lsn(self.freshest_rec.unwrap(), last_lsn));
 
                     assert(big_index.contains_key(last_lsn));
                     assert(big_index[last_lsn] == self.freshest_rec.unwrap().au);
@@ -751,13 +772,14 @@ state_machine!{UnifiedCrashAwareJournal{
 
         if root is Some {
             // prove root is_nondanglingly_pointer
-            let last_lsn = (pre.dv.entries[root.unwrap()].message_seq.seq_end - 1) as nat;
-            assert(pre_aj.tj().disk_view.addr_supports_lsn(root.unwrap(), last_lsn));
-            assert(pre_aj.lsn_au_index.contains_key(last_lsn));
-            assert(pre_aj.lsn_au_index[last_lsn] == root.unwrap().au) by {
-                let _ = pre_aj.tj().disk_view.instantiate_index_keys_exist_valid_entries(pre_aj.lsn_au_index, last_lsn);
-            }
-            assert(post_aj.lsn_au_index.contains_key(last_lsn));
+            let last_lsn = post.persistent.last_lsn(pre.dv);
+            // (pre.dv.entries[root.unwrap()].message_seq.seq_end - 1) as nat;
+            // assert(pre_aj.tj().disk_view.addr_supports_lsn(root.unwrap(), last_lsn));
+            // assert(pre_aj.lsn_au_index.contains_key(last_lsn));
+            // assert(pre_aj.lsn_au_index[last_lsn] == root.unwrap().au) by {
+            //     let _ = pre_aj.tj().disk_view.instantiate_index_keys_exist_valid_entries(pre_aj.lsn_au_index, last_lsn);
+            // }
+            assert(post_aj.lsn_au_index.contains_key(last_lsn)); // trigger
             assert(!deallocs.contains(root.unwrap().au));
             assert(post_jdv.is_nondangling_pointer(root));
 
@@ -782,7 +804,7 @@ state_machine!{UnifiedCrashAwareJournal{
         post.persistent.to_tj(post.dv).build_lsn_au_index_ensures(post.persistent.first);
         post_jdv.build_lsn_au_index_equiv_page_walk(root, post.persistent.first);
         post_jdv.build_lsn_au_index_page_walk_sub_disk(pre_jdv, root);
-        assert(post_index == pre_index);
+        assert(post_index =~= pre_index);
 
         post.persistent.to_tj(post.dv).sub_disk_build_sub_lsn_au_index(
             post.persistent.first, post_aj.tj(), post_aj.first);
