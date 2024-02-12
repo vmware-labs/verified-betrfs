@@ -41,7 +41,7 @@ impl UnifiedCrashAwareJournal::Label {
                 AllocationCrashAwareJournal::Label::CommitComplete { require_end, discarded },
             Self::Crash => AllocationCrashAwareJournal::Label::Crash,
         }
-    }  
+    }
 }
 
 impl Ephemeral {

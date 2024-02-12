@@ -569,6 +569,14 @@ state_machine!{UnifiedCrashAwareJournal{
 
     #[invariant]
     pub open spec(checked) fn inv(self) -> bool {
+
+        // the other strategy is to not duplicate the same invariant proofs
+        // if we make this true 
+
+        // we need to be maintaining this 
+        // perhaps if we wanted to do this, we would have to show that 
+        // inv is refinement? but then at refinement time these proofs will be used again?
+
         &&& self.ephemeral is Unknown ==> self.inflight is None
         &&& self.ephemeral is Known ==> self.ephemeral.get_Known_v().to_aj(self.dv).inv()
         &&& self.inflight is Some ==> self.inflight.unwrap().valid_image(self.dv)

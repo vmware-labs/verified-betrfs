@@ -151,7 +151,6 @@ impl AllocationCrashAwareJournal::State {
                 ),
             ),
     {
-        reveal(AllocationJournal::State::init_by);
         reveal(CrashTolerantJournal::State::next_by);
         reveal(AbstractJournal::State::init_by);
         new_journal.init_refines_abstract(new_journal.journal, self.persistent);
@@ -259,7 +258,7 @@ impl AllocationCrashAwareJournal::State {
         self,
         post: Self,
         lbl: AllocationCrashAwareJournal::Label,
-        frozen_journal: StoreImage,
+        frozen_journal: JournalImage,
     )
         requires
             self.inv(),

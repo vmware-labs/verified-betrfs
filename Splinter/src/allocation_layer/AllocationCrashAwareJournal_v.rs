@@ -1,19 +1,18 @@
 // Copyright 2018-2023 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
-#![allow(unused_imports)]
+// #![allow(unused_imports)]
 use builtin::*;
 use state_machines_macros::state_machine;
 use vstd::prelude::*;
 
 use crate::abstract_system::MsgHistory_v::*;
 use crate::abstract_system::StampedMap_v::LSN;
+use crate::disk::GenericDisk_v::AU;
+use crate::journal::LinkedJournal_v::{LinkedJournal};
 use crate::allocation_layer::AllocationJournal_v::*;
-use crate::disk::GenericDisk_v::{Address, AU};
-use crate::journal::LinkedJournal_v;
+use crate::allocation_layer::MiniAllocator_v::*;
 
 verus! {
-
-pub type StoreImage = JournalImage;
 
 #[is_variant]
 pub enum Ephemeral {
@@ -27,12 +26,28 @@ impl Ephemeral {
     }
 }
 
+impl JournalImage {
+    pub open spec(checked) fn init_by(self, aj: AllocationJournal::State) -> bool 
+        recommends self.valid_image()
+    {
+        aj == AllocationJournal::State{
+            journal: LinkedJournal::State{
+                truncated_journal: self.tj,
+                unmarshalled_tail: MsgHistory::empty_history_at(self.tj.seq_end()),
+            },
+            lsn_au_index: self.tj.build_lsn_au_index(self.first),
+            first: self.first,
+            mini_allocator: MiniAllocator::empty(),
+        }
+    }
+}
+
 // valid image
 state_machine!{AllocationCrashAwareJournal{
     fields {
-      pub persistent: StoreImage,
+      pub persistent: JournalImage,
       pub ephemeral: Ephemeral,
-      pub inflight: Option<StoreImage>
+      pub inflight: Option<JournalImage>
     }
 
     init!{
@@ -71,8 +86,7 @@ state_machine!{AllocationCrashAwareJournal{
         load_ephemeral_from_persistent(lbl: Label, new_journal: AllocationJournal::State) {
             require lbl is LoadEphemeralFromPersistent;
             require pre.ephemeral is Unknown;
-            require AllocationJournal::State::init_by(new_journal,
-                AllocationJournal::Config::initialize(new_journal.journal, pre.persistent));
+            require pre.persistent.init_by(new_journal);
             update ephemeral = Ephemeral::Known{ v: new_journal };
         }
     }
@@ -136,7 +150,7 @@ state_machine!{AllocationCrashAwareJournal{
     }
 
     transition!{
-        commit_start(lbl: Label, frozen_journal: StoreImage) {
+        commit_start(lbl: Label, frozen_journal: JournalImage) {
             require lbl is CommitStart;
             require pre.ephemeral is Known;
             // Can't start a commit if one is in-flight, or we'd forget to maintain the
@@ -234,7 +248,6 @@ state_machine!{AllocationCrashAwareJournal{
     #[inductive(load_ephemeral_from_persistent)]
     fn load_ephemeral_from_persistent_inductive(pre: Self, post: Self, lbl: Label, new_journal: AllocationJournal::State)
     {
-        reveal(AllocationJournal::State::init_by);
     }
 
     #[inductive(read_for_recovery)]
@@ -253,8 +266,8 @@ state_machine!{AllocationCrashAwareJournal{
         reveal(AllocationJournal::State::next);
         reveal(AllocationJournal::State::next_by);
 
-        reveal(LinkedJournal_v::LinkedJournal::State::next);
-        reveal(LinkedJournal_v::LinkedJournal::State::next_by);
+        reveal(LinkedJournal::State::next);
+        reveal(LinkedJournal::State::next_by);
 
         assert(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv());
         assert(post.state_relations());
@@ -280,6 +293,7 @@ state_machine!{AllocationCrashAwareJournal{
 
                     assert(inflight_disk.is_sub_disk_with_newer_lsn(pre_ephemeral_disk));
                     assert(pre_ephemeral_disk.is_sub_disk(ephemeral_disk));
+                    assert(inflight_disk.entries <= pre_ephemeral_disk.entries);
                     assert(inflight_disk.entries <= ephemeral_disk.entries);
                     assert(inflight_disk.is_sub_disk_with_newer_lsn(ephemeral_disk));
                     assert(post.state_relations());
@@ -296,7 +310,7 @@ state_machine!{AllocationCrashAwareJournal{
     }
 
     #[inductive(commit_start)]
-    fn commit_start_inductive(pre: Self, post: Self, lbl: Label, frozen_journal: StoreImage)
+    fn commit_start_inductive(pre: Self, post: Self, lbl: Label, frozen_journal: JournalImage)
     {
         reveal(AllocationJournal::State::next);
         reveal(AllocationJournal::State::next_by);
