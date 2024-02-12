@@ -1,30 +1,19 @@
 // Copyright 2018-2023 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 //
-#![allow(unused_imports)]
+// #![allow(unused_imports)]
 use builtin::*;
-use vstd::math;
 use vstd::prelude::*;
 
-use builtin_macros::*;
-
-// use crate::abstract_system::AbstractCrashAwareJournal_v;
-// use crate::abstract_system::AbstractCrashAwareJournal_v::CrashTolerantJournal;
-// use crate::abstract_system::AbstractJournal_v::AbstractJournal;
-// use crate::abstract_system::MsgHistory_v::*;
 use crate::abstract_system::StampedMap_v::LSN;
-use crate::disk::GenericDisk_v::{AU, Address};
+use crate::disk::GenericDisk_v::{Address};
 use crate::journal::LinkedJournal_v;
 use crate::journal::LinkedJournal_v::{TruncatedJournal};
 use crate::allocation_layer::AllocationJournal_v;
 use crate::allocation_layer::AllocationJournal_v::{JournalImage, AllocationJournal};
 use crate::allocation_layer::AllocationCrashAwareJournal_v;
 use crate::allocation_layer::AllocationCrashAwareJournal_v::{AllocationCrashAwareJournal};
-use crate::allocation_layer::UnifiedCrashAwareJournal_v;
 use crate::allocation_layer::UnifiedCrashAwareJournal_v::*;
-// use crate::disk::GenericDisk_v::*;
-// use crate::journal::LikesJournal_v::LikesJournal;
-// use crate::journal::PagedJournal_v::JournalRecord;
 
 // Refines Unified Crash Aware Journal => Allocation Crash Aware Journal
 
@@ -208,6 +197,7 @@ impl UnifiedCrashAwareJournal::State {
         assert(i_pre_dv.entries =~= i_post_dv.entries);
     }
 
+    #[verifier::spinoff_prover]
     pub proof fn internal_refines(
         self,
         post: Self,
@@ -293,7 +283,7 @@ impl UnifiedCrashAwareJournal::State {
         let frozen_addrs = Set::new(|addr: Address| cropped_tj.disk_view.entries.contains_key(addr) 
             && i_frozen_index.values().contains(addr.au)) - AllocationJournal_v::au_addrs_past_pointer(frozen_journal.freshest_rec);
 
-        assert(i_frozen_index =~= frozen_journal.to_tj(self.dv).build_lsn_au_index(frozen_journal.first));
+        assert(i_frozen_index.dom() =~= frozen_index.dom());
         assert(cropped_tj.discard_old_cond(new_bdy, frozen_addrs, i_frozen.tj));
         assert(cropped_tj.discard_old_tight(new_bdy, frozen_addrs, i_frozen.tj));
 
@@ -303,36 +293,62 @@ impl UnifiedCrashAwareJournal::State {
         )); // witness
     }
 
-//     pub proof fn commit_complete_refines(
-//         self,
-//         post: Self,
-//         lbl: AllocationCrashAwareJournal::Label,
-//         new_journal: AllocationJournal::State,
-//     )
-//         requires
-//             self.inv(),
-//             post.inv(),
-//             Self::commit_complete(self, post, lbl, new_journal),
-//         ensures
-//             CrashTolerantJournal::State::next_by(
-//                 self.i(),
-//                 post.i(),
-//                 lbl.i(),
-//                 CrashTolerantJournal::Step::commit_complete(new_journal.i_abstract()),
-//             ),
-//     {
-//         reveal(CrashTolerantJournal::State::next_by);
-//         self.inflight.unwrap().tj.iwf();
-//         JournalRecord::i_lemma_forall();
-//         assert(self.inflight.unwrap().tj.seq_start() == self.i().in_flight.unwrap().seq_start);
-//         let aj = self.ephemeral.get_Known_v();
-//         let alloc_lbl = AllocationJournal::Label::DiscardOld {
-//             start_lsn: self.inflight.unwrap().tj.seq_start(),
-//             require_end: lbl.get_CommitComplete_require_end(),
-//             deallocs: lbl.get_CommitComplete_discarded(),
-//         };
-//         aj.next_refines_abstract(new_journal, alloc_lbl);
-//     }
+    pub proof fn commit_complete_refines(
+        self,
+        post: Self,
+        lbl: UnifiedCrashAwareJournal::Label,
+        new_ephemeral: EphemeralState, 
+        new_dv: DiskView
+    )
+        requires
+            self.inv(),
+            post.inv(),
+            Self::commit_complete(self, post, lbl, new_ephemeral, new_dv),
+        ensures
+            AllocationCrashAwareJournal::State::next_by(
+                self.i(),
+                post.i(),
+                lbl.i(),
+                AllocationCrashAwareJournal::Step::commit_complete(new_ephemeral.to_aj(new_dv)),
+            ),
+    {
+        reveal(AllocationCrashAwareJournal::State::next_by);
+        reveal(AllocationJournal::State::next);
+        reveal(AllocationJournal::State::next_by);
+        
+        ImageState::i_valid_auto();
+
+        let post_v = post.ephemeral.get_Known_v();
+
+        let bdy = post.persistent.boundary_lsn;
+        let root = post.persistent.freshest_rec;
+        let first = post.persistent.first;
+
+        let index = post.persistent.to_tj(self.dv).build_lsn_au_index(first);
+        let post_index = post.persistent.to_tj(post.dv).build_lsn_au_index(first);
+
+        assert(index == post_index) by {
+            let pre_jdv = self.dv.to_JournalDiskView(bdy);
+            let post_jdv = post.dv.to_JournalDiskView(bdy);
+            pre_jdv.build_lsn_au_index_equiv_page_walk(root, first);
+            post_jdv.build_lsn_au_index_equiv_page_walk(root, first);
+            post_jdv.build_lsn_au_index_page_walk_sub_disk(pre_jdv, root);
+        }
+
+        // assert(lbl.get_CommitComplete_discarded().disjoint(post_v.lsn_au_index.values()));
+        assert(index <= post_v.lsn_au_index) by {
+            post.persistent.to_tj(post.dv).sub_disk_build_sub_lsn_au_index(
+                first, post_v.to_aj(post.dv).tj(), post_v.image.first);
+        }
+        assert(index.dom() <= post_v.lsn_au_index.dom());
+        assert(index.values() <= post_v.lsn_au_index.values());
+
+        let tight_pre_jdv = post.persistent.tight_dv(self.dv).to_JournalDiskView(bdy);
+        let tight_post_jdv = post.persistent.tight_dv(post.dv).to_JournalDiskView(bdy);
+
+        assert(tight_post_jdv.entries.dom() =~= tight_pre_jdv.entries.dom());
+        assert(tight_pre_jdv.entries =~= tight_post_jdv.entries);
+    }
 
     pub proof fn next_refines(self, post: Self, lbl: UnifiedCrashAwareJournal::Label)
         requires
@@ -385,8 +401,7 @@ impl UnifiedCrashAwareJournal::State {
                 self.commit_start_refines(post, lbl, frozen_journal, depth);
             },
             UnifiedCrashAwareJournal::Step::commit_complete(new_ephemeral, new_dv) => {
-                assume(false);
-                // self.commit_complete_refines(post, lbl, new_journal);
+                self.commit_complete_refines(post, lbl, new_ephemeral, new_dv);
             },
             UnifiedCrashAwareJournal::Step::crash() => {
                 assert(
@@ -400,14 +415,14 @@ impl UnifiedCrashAwareJournal::State {
         }
     }
 
-//     pub proof fn init_refines(self)
-//         requires
-//             Self::initialize(self),
-//         ensures
-//             CrashTolerantJournal::State::initialize(self.i()),
-//     {
-//         TruncatedJournal::mkfs_ensures();
-//     }
+    pub proof fn init_refines(self)
+        requires
+            Self::initialize(self),
+        ensures
+            AllocationCrashAwareJournal::State::initialize(self.i()),
+    {
+        assert(self.i().persistent.tj.disk_view.entries =~= map![]);
+    }
 }
 
 } // verus!
