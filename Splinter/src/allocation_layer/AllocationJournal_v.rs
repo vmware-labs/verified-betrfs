@@ -963,7 +963,7 @@ impl TruncatedJournal {
             self.wf(),
     {
         &&& self.discard_old_cond(start_lsn, keep_addrs, new)
-        &&& self.disk_view.entries.dom().intersect(keep_addrs) == new.disk_view.entries.dom()
+        &&& keep_addrs =~= new.disk_view.entries.dom()
     }
 }
 
@@ -1056,8 +1056,8 @@ state_machine!{ AllocationJournal {
 
         // we can leave in pages prior to first
         // but can't keep pages beyond freshest rec in our frozen domain
-        let frozen_addrs = Set::new(|addr: Address| addr.wf() && frozen_index.values().contains(addr.au))
-            - au_addrs_past_pointer(frozen_journal.tj.freshest_rec);
+        let frozen_addrs = Set::new(|addr: Address| cropped_tj.disk_view.entries.contains_key(addr) 
+            && frozen_index.values().contains(addr.au)) - au_addrs_past_pointer(frozen_journal.tj.freshest_rec);
 
         require cropped_tj.discard_old_tight(new_bdy, frozen_addrs, frozen_journal.tj);
         require frozen_journal.first == Self::new_first(frozen_journal.tj, pre.lsn_au_index, new_bdy);
@@ -1100,7 +1100,8 @@ state_machine!{ AllocationJournal {
         let new_first = Self::new_first(pre.tj(), pre.lsn_au_index, start_lsn);
         let new_lsn_au_index = lsn_au_index_discard_up_to(pre.lsn_au_index, start_lsn);
         let discarded_aus = pre.lsn_au_index.values().difference(new_lsn_au_index.values());
-        let keep_addrs = Set::new(|addr: Address| addr.wf() && new_lsn_au_index.values().contains(addr.au));
+        let keep_addrs = Set::new(|addr: Address| pre.tj().disk_view.entries.contains_key(addr) 
+            && new_lsn_au_index.values().contains(addr.au));
 
         require deallocs == discarded_aus;
         require pre.tj().discard_old_tight(start_lsn, keep_addrs, new_journal.truncated_journal);
@@ -1254,7 +1255,8 @@ state_machine!{ AllocationJournal {
         assert( post.wf() );
 
         let start_lsn = lbl.get_DiscardOld_start_lsn();
-        let keep_addrs = Set::new(|addr: Address| addr.wf() && post.lsn_au_index.values().contains(addr.au));
+        let keep_addrs = Set::new(|addr: Address| pre.tj().disk_view.entries.contains_key(addr) 
+            && post.lsn_au_index.values().contains(addr.au));
 
         pre.tj().discard_old_preserves_acyclicity(start_lsn, keep_addrs, post.tj());
         assert( post.tj().disk_view.acyclic() );

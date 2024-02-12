@@ -12,7 +12,8 @@ use builtin_macros::*;
 // use crate::abstract_system::AbstractCrashAwareJournal_v::CrashTolerantJournal;
 // use crate::abstract_system::AbstractJournal_v::AbstractJournal;
 // use crate::abstract_system::MsgHistory_v::*;
-// use crate::abstract_system::StampedMap_v::LSN;
+use crate::abstract_system::StampedMap_v::LSN;
+use crate::disk::GenericDisk_v::{AU, Address};
 use crate::journal::LinkedJournal_v;
 use crate::journal::LinkedJournal_v::{TruncatedJournal};
 use crate::allocation_layer::AllocationJournal_v;
@@ -21,8 +22,6 @@ use crate::allocation_layer::AllocationCrashAwareJournal_v;
 use crate::allocation_layer::AllocationCrashAwareJournal_v::{AllocationCrashAwareJournal};
 use crate::allocation_layer::UnifiedCrashAwareJournal_v;
 use crate::allocation_layer::UnifiedCrashAwareJournal_v::*;
-
-// use crate::disk::GenericDisk_v::AU;
 // use crate::disk::GenericDisk_v::*;
 // use crate::journal::LikesJournal_v::LikesJournal;
 // use crate::journal::PagedJournal_v::JournalRecord;
@@ -253,35 +252,56 @@ impl UnifiedCrashAwareJournal::State {
         }
     }
 
-//     pub proof fn commit_start_refines(
-//         self,
-//         post: Self,
-//         lbl: AllocationCrashAwareJournal::Label,
-//         frozen_journal: StoreImage,
-//     )
-//         requires
-//             self.inv(),
-//             post.inv(),
-//             Self::commit_start(self, post, lbl, frozen_journal),
-//         ensures
-//             CrashTolerantJournal::State::next_by(
-//                 self.i(),
-//                 post.i(),
-//                 lbl.i(),
-//                 CrashTolerantJournal::Step::commit_start(frozen_journal.i()),
-//             ),
-//     {
-//         reveal(CrashTolerantJournal::State::next_by);
-//         assert(self.i().ephemeral is Known);
-//         assert(self.i().in_flight is None);
-//         frozen_journal.tj.iwf();
-//         JournalRecord::i_lemma_forall();
-//         assert(frozen_journal.i().wf());
-//         assert(frozen_journal.tj.seq_start() == frozen_journal.i().seq_start);
-//         let aj = self.ephemeral.get_Known_v();
-//         let alloc_lbl = AllocationJournal::Label::FreezeForCommit { frozen_journal };
-//         aj.next_refines_abstract(aj, alloc_lbl);
-//     }
+    pub proof fn commit_start_refines(
+        self,
+        post: Self,
+        lbl: UnifiedCrashAwareJournal::Label,
+        frozen_journal: ImageState,
+        depth: nat,
+    )
+        requires
+            self.inv(),
+            post.inv(),
+            Self::commit_start(self, post, lbl, frozen_journal, depth),
+        ensures
+            AllocationCrashAwareJournal::State::next_by(
+                self.i(),
+                post.i(),
+                lbl.i(),
+                AllocationCrashAwareJournal::Step::commit_start(frozen_journal.i(self.dv)),
+            ),
+    {
+        reveal(AllocationCrashAwareJournal::State::next_by);
+        reveal(AllocationJournal::State::next);
+        reveal(AllocationJournal::State::next_by);
+
+        ImageState::i_valid_auto();
+
+        let aj = self.ephemeral.get_Known_v().to_aj(self.dv);
+        let new_bdy = frozen_journal.seq_start();
+        let i_frozen = frozen_journal.i(self.dv);
+        let frozen_index = frozen_journal.to_tj(self.dv).build_lsn_au_index(frozen_journal.first);
+
+        frozen_journal.to_tj(self.dv).build_lsn_au_index_ensures(frozen_journal.first);
+        frozen_journal.to_tj(self.dv).sub_disk_build_sub_lsn_au_index(frozen_journal.first, aj.tj(), aj.first);
+        assert(frozen_index <= aj.lsn_au_index);
+        assert(frozen_journal.freshest_rec is Some ==> frozen_index.contains_key(new_bdy)); // trigger
+
+        let cropped_tj = aj.tj().crop(depth);
+        let frozen_lsns = Set::new(|lsn: LSN| new_bdy <= lsn && lsn < cropped_tj.discard_old(new_bdy).seq_end());
+        let i_frozen_index = aj.lsn_au_index.restrict(frozen_lsns);
+        let frozen_addrs = Set::new(|addr: Address| cropped_tj.disk_view.entries.contains_key(addr) 
+            && i_frozen_index.values().contains(addr.au)) - AllocationJournal_v::au_addrs_past_pointer(frozen_journal.freshest_rec);
+
+        assert(i_frozen_index =~= frozen_journal.to_tj(self.dv).build_lsn_au_index(frozen_journal.first));
+        assert(cropped_tj.discard_old_cond(new_bdy, frozen_addrs, i_frozen.tj));
+        assert(cropped_tj.discard_old_tight(new_bdy, frozen_addrs, i_frozen.tj));
+
+        assert(AllocationJournal::State::next_by(aj, aj,
+            AllocationJournal::Label::FreezeForCommit{frozen_journal: i_frozen},
+            AllocationJournal::Step::freeze_for_commit(depth),
+        )); // witness
+    }
 
 //     pub proof fn commit_complete_refines(
 //         self,
@@ -362,8 +382,7 @@ impl UnifiedCrashAwareJournal::State {
                 );
             },
             UnifiedCrashAwareJournal::Step::commit_start(frozen_journal, depth) => {
-                assume(false);
-                // self.commit_start_refines(post, lbl, frozen_journal);
+                self.commit_start_refines(post, lbl, frozen_journal, depth);
             },
             UnifiedCrashAwareJournal::Step::commit_complete(new_ephemeral, new_dv) => {
                 assume(false);

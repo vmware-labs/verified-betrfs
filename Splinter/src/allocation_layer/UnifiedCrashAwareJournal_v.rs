@@ -506,7 +506,9 @@ state_machine!{UnifiedCrashAwareJournal{
             require cropped_tj.can_discard_to(new_bdy); // new_bdy is valid after the crop
 
             // arbitrary if newbdy isn't present
-            require frozen_journal.first == v.lsn_au_index[new_bdy];
+            require frozen_journal.first == 
+                if frozen_journal.freshest_rec is None { arbitrary() }
+                else { v.lsn_au_index[new_bdy] };
             require frozen_journal.freshest_rec ==
                 if cropped_tj.seq_end() == new_bdy { None }
                 else { cropped_tj.freshest_rec };

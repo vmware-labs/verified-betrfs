@@ -120,9 +120,8 @@ impl AllocationJournal::State {
         let frozen_index = self.lsn_au_index.restrict(frozen_lsns);
         let i_frozen_index = self.i().lsn_addr_index.restrict(frozen_lsns);
         let addrs_past_new_end = Set::new(|addr: Address| frozen_root.unwrap().after_page(addr));
-        let frozen_addrs = Set::new(
-            |addr: Address| addr.wf() && frozen_index.values().contains(addr.au),
-        ) - addrs_past_new_end;
+        let frozen_addrs = Set::new(|addr: Address| self.tj().crop(depth).disk_view.entries.contains_key(addr) 
+            && frozen_index.values().contains(addr.au)) - addrs_past_new_end;
         self.tj().build_lsn_au_index_ensures(self.first);
         self.tj().disk_view.build_lsn_au_index_equiv_page_walk(self.tj().freshest_rec, self.first);
         self.tj().disk_view.build_lsn_au_index_page_walk_consistency(self.tj().freshest_rec);
