@@ -97,39 +97,25 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> ResizableUniformSizedE
         out is Some <==> self.lengthable(slice.i(data@)),
         out is Some ==> out.unwrap() as int == self.length(slice.i(data@))
     {
-        // TODO(verus): Why are these trait requires not auto-triggering, but then asserting them works?
-        assert(slice.valid(data@));
-        assert(self.valid());
+        proof { C::LengthMarshalling::as_int_ensures(); }
+
         if slice.exec_len() < self.total_size {
-            assert( !self.lengthable(slice.i(data@)) );
             None
         } else {
             // TODO(jonh): here's a place where we know it's parsable,
             // but we're calling a try_parse method and wasting a conditional.
-            assert( self.length_marshalling.valid() );
             let len_slice = slice.exec_sub(0, C::LengthMarshalling::o_exec_size());
-            proof {
-//                 self.length_marshalling.parsable_property(slice.i(data@));
-//                 // TODO(verus): line above should have been sufficient. https://github.com/verus-lang/verus/issues/964
-//                 let lm = self.length_marshalling;
-//                 let ld = len_slice.i(data@);
-//                 lm.parsable_property(ld);
-//                 assert( self.length_marshalling.parsable(len_slice.i(data@)) );
-            }
             let o_parsed_len = self.length_marshalling.try_parse(&len_slice, data);
             if o_parsed_len.is_none() {
-                assert( !self.lengthable(slice.i(data@)) );
                 None
             } else {
-                assert( slice.i(data@).subrange(0, Self::spec_size_of_length_field() as int) == len_slice.i(data@) );   //subrange trigger
                 let parsed_len: C::LengthInt = o_parsed_len.unwrap();
+                // subrange trigger
+                assert( len_slice.i(data@) == slice.i(data@).subrange(0, Self::spec_size_of_length_field() as int) );
                 if !C::LengthMarshalling::exec_this_fits_in_usize(parsed_len) {
-                    //assert( !self.lengthable(slice.i(data@)) );
                     None
                 } else {
-                    let out = Some(C::LengthMarshalling::to_usize(parsed_len));
-                    assert( out.unwrap() as int == self.length(slice.i(data@)) );   // trigger
-                    out
+                    Some(C::LengthMarshalling::to_usize(parsed_len))
                 }
             }
         }
@@ -269,7 +255,7 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> ResizableUniformSizedE
     requires
         self.valid(),
     {
-        //proof { self.config.spec_uniform_size_ensures() };
+        proof { self.config.spec_uniform_size_ensures() };
         (self.total_size - C::LengthMarshalling::o_exec_size()) / self.config.exec_uniform_size()
     }
 
@@ -303,8 +289,32 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig>
 
     exec fn exec_parsable(&self, slice: &Slice, data: &Vec<u8>) -> (p: bool)
     {
+        assert( self.valid() );
+        assert( slice.valid(data@) );
+
         let olen = self.try_length(slice, data);
-        return olen.is_some() && olen.unwrap() <= self.exec_max_length()
+        if olen.is_some() {
+            if olen.unwrap() <= self.exec_max_length() {
+                proof {
+                    let datai = slice.i(data@);
+                    assert( self.length(datai) <= usize::MAX as int );
+                    let len = self.length(datai);
+                    assert( forall |i: int| 0 <= i < len ==> self.gettable(datai, i) );
+                    assert( Self::gettable_to_len(self, datai, len as int) );
+                    assert( Self::elt_parsable_to_len(self, datai, len as int) );
+                    assert( Self::parsable_to_len(self, datai, self.length(datai)) );
+                }
+                assert( self.parsable(slice.i(data@)) );
+                true
+            } else {
+                assert( !self.parsable(slice.i(data@)) );
+                false
+            }
+        } else {
+            assert( !self.parsable(slice.i(data@)) );
+            false
+        }
+//         return olen.is_some() && olen.unwrap() <= self.exec_max_length()
     }
 
     open spec fn marshallable(&self, value: Seq<C::EltDV>) -> bool
