@@ -13,6 +13,11 @@ pub struct Slice {
 }
 
 impl Slice {
+    pub open spec fn wf(&self) -> bool
+    {
+        self.start as int <= self.end as int
+    }
+
     // Translates WF'
     pub open spec fn valid<T>(&self, data: Seq<T>) -> bool
     {

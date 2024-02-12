@@ -188,14 +188,40 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig> ResizableUniformSizedE
     // jonh skipped over the `exec fn get` that requires gettable, perhaps a useful optimization
     // for some other day..
 
-    exec fn try_get(&self, slice: &Slice, data: &Vec<u8>, idx: usize) -> (oeslice: Option<Slice>)
+    proof fn index_bounds_facts(&self, slice: &Slice, idx: int)
+    requires
+        self.valid(),
+        slice.wf(),
+        idx < slice.spec_len() as int / self.config.spec_uniform_size() as int,
+    ensures (
+            0 <= (idx * self.config.spec_uniform_size() as int)
+              <  idx * (self.config.spec_uniform_size() as int) + (self.config.spec_uniform_size() as int)
+              == (idx + 1) * (self.config.spec_uniform_size() as int)
+              <= (slice.spec_len() as int)
+              )
     {
+        assume( false );     // TODO port this proof
+    }
+
+    // UniformSizedElementSeqMarshalling.TryGet uses index_bounds_facts
+    // ResizableUniformSizedElementSeqMarshalling.TryGet also does.
+    exec fn try_get(&self, slice: &Slice, data: &Vec<u8>, idx: usize) -> (oeslice: Option<Slice>)
+    requires
+        self.valid(),
+        slice.valid(data@),
+    ensures
+        oeslice is Some <==> self.gettable(slice.i(data@), idx as int),
+        oeslice is Some ==> oeslice.unwrap() == self.get(slice, data@, idx as int)
+    {
+        proof { self.index_bounds_facts(slice, idx as int) }
         let olen = self.try_length(slice, data);
         if olen.is_none() { return None; }
         let mlen = self.exec_max_length();
         if idx < mlen {
             let ls = C::LengthMarshalling::o_exec_size();
             let us = self.config.exec_uniform_size();
+            assert( (idx as int) * (us as int) + (us as int) <= slice.spec_len() as int );
+            assert( ls + (idx as int) * (us as int) <= slice.spec_len() as int );
             Some(
                 slice.exec_sub(ls + idx * us, ls + idx * us + us))
         } else {
@@ -289,31 +315,36 @@ impl<C: ResizableUniformSizedElementSeqMarshallingConfig>
 
     exec fn exec_parsable(&self, slice: &Slice, data: &Vec<u8>) -> (p: bool)
     {
-        assert( self.valid() );
-        assert( slice.valid(data@) );
+        let ovalue = self.try_parse(slice, data);
+        ovalue.is_some()
 
-        let olen = self.try_length(slice, data);
-        if olen.is_some() {
-            if olen.unwrap() <= self.exec_max_length() {
-                proof {
-                    let datai = slice.i(data@);
-                    assert( self.length(datai) <= usize::MAX as int );
-                    let len = self.length(datai);
-                    assert( forall |i: int| 0 <= i < len ==> self.gettable(datai, i) );
-                    assert( Self::gettable_to_len(self, datai, len as int) );
-                    assert( Self::elt_parsable_to_len(self, datai, len as int) );
-                    assert( Self::parsable_to_len(self, datai, self.length(datai)) );
-                }
-                assert( self.parsable(slice.i(data@)) );
-                true
-            } else {
-                assert( !self.parsable(slice.i(data@)) );
-                false
-            }
-        } else {
-            assert( !self.parsable(slice.i(data@)) );
-            false
-        }
+// I don't know what this code was doing.
+// 
+//         assert( self.valid() );
+//         assert( slice.valid(data@) );
+// 
+//         let olen = self.try_length(slice, data);
+//         if olen.is_some() {
+//             if olen.unwrap() <= self.exec_max_length() {
+//                 proof {
+//                     let datai = slice.i(data@);
+//                     assert( self.length(datai) <= usize::MAX as int );
+//                     let len = self.length(datai);
+//                     assert( forall |i: int| 0 <= i < len ==> self.gettable(datai, i) );
+//                     assert( Self::gettable_to_len(self, datai, len as int) );
+//                     assert( Self::elt_parsable_to_len(self, datai, len as int) );
+//                     assert( Self::parsable_to_len(self, datai, self.length(datai)) );
+//                 }
+//                 assert( self.parsable(slice.i(data@)) );
+//                 true
+//             } else {
+//                 assert( !self.parsable(slice.i(data@)) );
+//                 false
+//             }
+//         } else {
+//             assert( !self.parsable(slice.i(data@)) );
+//             false
+//         }
 //         return olen.is_some() && olen.unwrap() <= self.exec_max_length()
     }
 
