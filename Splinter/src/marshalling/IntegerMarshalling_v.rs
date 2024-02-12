@@ -15,15 +15,7 @@ verus! {
 // Integer marshalling
 //////////////////////////////////////////////////////////////////////////////
 
-// First try: T == u32
-struct IntMarshalling<T> {
-    _p: std::marker::PhantomData<(T,)>,
-}
-
-impl<T> IntMarshalling<T> {
-}
-
-pub trait Obligations<T: Deepview<int> + builtin::Integer> {
+pub trait IntObligations<T: Deepview<int> + builtin::Integer> {
     spec fn o_spec_size() -> usize;
 
     exec fn o_exec_size() -> (s: usize)
@@ -66,54 +58,18 @@ pub trait Obligations<T: Deepview<int> + builtin::Integer> {
 
     proof fn as_int_ensures()
     ensures forall |t: T| t.deepv() == #[trigger] Self::as_int(t);
-}
 
-impl Deepview<int> for u32 {
-    //type DV = int;
-    open spec fn deepv(&self) -> int { *self as int }
-}
+    // Helpers for SeqMarshalling
+    spec fn spec_this_fits_in_usize(v: int) -> bool { v <= usize::MAX as int }
 
-impl Obligations<u32> for IntMarshalling<u32> {
-    open spec fn o_spec_size() -> usize { 4 } 
+    exec fn exec_this_fits_in_usize(v: T) -> (rc: bool)
+        ensures rc == Self::spec_this_fits_in_usize(Self::as_int(v))
+    ;
 
-    exec fn o_exec_size() -> usize { 4 } 
-
-    closed spec fn spec_from_le_bytes(s: Seq<u8>) -> u32
-    {
-        spec_u32_from_le_bytes(s)
-    }
-
-    closed spec fn spec_to_le_bytes(x: u32) -> Seq<u8>
-    {
-        spec_u32_to_le_bytes(x)
-    }
-
-    exec fn to_le_bytes(x: u32) -> (s: Vec<u8>)
-    {
-        u32_to_le_bytes(x)
-    }
-
-    exec fn from_le_bytes(s: &[u8]) -> (x:u32)
-    {
-        u32_from_le_bytes(s)
-    }
-        
-    proof fn lemma_auto_spec_to_from_le_bytes()
-    {
-        lemma_auto_spec_u32_to_from_le_bytes();
-
-        assert forall |x: u32| #![auto]
-        {
-          &&& Self::spec_from_le_bytes(Self::spec_to_le_bytes(x)) == x
-        } by {
-            assert( spec_u32_to_le_bytes(x).len() == 4 ); // stupid trigger; TODO(jonh): fix vstd::bytes.
-                                                          // Comically u64 version has a sane trigger.
-        };
-    }
-
-    open spec fn as_int(t: u32) -> int { t as int }
-
-    proof fn as_int_ensures() { }
+    exec fn to_usize(v: T) -> (w: usize)
+        requires Self::spec_this_fits_in_usize(Self::as_int(v))
+        ensures Self::as_int(v) == w as int
+    ;
 }
 
 // impl Marshalling helper fn
@@ -150,7 +106,7 @@ ensures
     end
 }
 
-impl<T: Deepview<int> + builtin::Integer + Copy, O: Obligations<T>> Marshalling<int, T> for O {
+impl<T: Deepview<int> + builtin::Integer + Copy, O: IntObligations<T>> Marshalling<int, T> for O {
     open spec fn valid(&self) -> bool
     {
         true
@@ -220,12 +176,75 @@ impl<T: Deepview<int> + builtin::Integer + Copy, O: Obligations<T>> Marshalling<
     }
 }
 
+//////////////////////////////////////////////////////////////////////////////
+// Concrete instances
+//////////////////////////////////////////////////////////////////////////////
+
+// Empty struct to name this implementation
+struct IntMarshalling<T> {
+    _p: std::marker::PhantomData<(T,)>,
+}
+
+impl Deepview<int> for u32 {
+    //type DV = int;
+    open spec fn deepv(&self) -> int { *self as int }
+}
+
+impl IntObligations<u32> for IntMarshalling<u32> {
+    open spec fn o_spec_size() -> usize { 4 } 
+
+    exec fn o_exec_size() -> usize { 4 } 
+
+    closed spec fn spec_from_le_bytes(s: Seq<u8>) -> u32
+    {
+        spec_u32_from_le_bytes(s)
+    }
+
+    closed spec fn spec_to_le_bytes(x: u32) -> Seq<u8>
+    {
+        spec_u32_to_le_bytes(x)
+    }
+
+    exec fn to_le_bytes(x: u32) -> (s: Vec<u8>)
+    {
+        u32_to_le_bytes(x)
+    }
+
+    exec fn from_le_bytes(s: &[u8]) -> (x:u32)
+    {
+        u32_from_le_bytes(s)
+    }
+        
+    proof fn lemma_auto_spec_to_from_le_bytes()
+    {
+        lemma_auto_spec_u32_to_from_le_bytes();
+
+        assert forall |x: u32| #![auto]
+        {
+          &&& Self::spec_from_le_bytes(Self::spec_to_le_bytes(x)) == x
+        } by {
+            assert( spec_u32_to_le_bytes(x).len() == 4 ); // stupid trigger; TODO(jonh): fix vstd::bytes.
+                                                          // Comically u64 version has a sane trigger.
+        };
+    }
+
+    open spec fn as_int(t: u32) -> int { t as int }
+
+    proof fn as_int_ensures() { }
+
+    exec fn exec_this_fits_in_usize(v: u32) -> (rc: bool) {
+        if u32::BITS <= usize::BITS { true } else { v < usize::MAX as u32  }
+    }
+
+    exec fn to_usize(v: u32) -> (w: usize) { v as usize }
+}
+
 impl Deepview<int> for u64 {
     //type DV = int;
     open spec fn deepv(&self) -> int { *self as int }
 }
 
-impl Obligations<u64> for IntMarshalling<u64> {
+impl IntObligations<u64> for IntMarshalling<u64> {
     open spec fn o_spec_size() -> usize { 8 } 
 
     exec fn o_exec_size() -> usize { 8 } 
@@ -258,6 +277,12 @@ impl Obligations<u64> for IntMarshalling<u64> {
     open spec fn as_int(t: u64) -> int { t as int }
 
     proof fn as_int_ensures() { }
+
+    exec fn exec_this_fits_in_usize(v: u64) -> (rc: bool) {
+        if u64::BITS <= usize::BITS { true } else { v <= usize::MAX as u64 }
+    }
+
+    exec fn to_usize(v: u64) -> (w: usize) { v as usize }
 }
 
 // Confirm that I really have built Marshalling<int, u32> and u64
