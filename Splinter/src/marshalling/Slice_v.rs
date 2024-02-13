@@ -37,6 +37,7 @@ impl Slice {
     }
 
     pub exec fn exec_len(&self) -> (out: usize)
+    requires self.wf(),
     ensures out as int == self.spec_len(),
     {
         self.end - self.start
@@ -61,6 +62,8 @@ impl Slice {
     }
 
     pub exec fn exec_sub(&self, a: usize, b: usize) -> (result: Slice)
+    requires self.wf(),
+        a <= b <= self.end - self.start
     ensures
         result == self.spec_sub(a, b),
     {

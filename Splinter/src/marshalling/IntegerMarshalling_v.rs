@@ -160,6 +160,14 @@ impl<T: Deepview<int> + builtin::Integer + Copy, O: IntObligations<T>> Marshalli
         }
     }
 
+    exec fn exec_parse(&self, slice: &Slice, data: &Vec<u8>) -> (value: T)
+    {
+        proof { Self::as_int_ensures(); }
+        let sr = slice_subrange(data.as_slice(), slice.start, slice.start+Self::o_exec_size());
+        assert( sr@ == slice.i(data@).subrange(0, Self::o_spec_size() as int) ); // trigger
+        Self::from_le_bytes(sr)
+    }
+
     exec fn marshall(&self, value: &T, data: &mut Vec<u8>, start: usize) -> (end: usize)
     {
         proof { Self::as_int_ensures(); }

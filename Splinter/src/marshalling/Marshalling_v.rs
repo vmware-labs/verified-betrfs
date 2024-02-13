@@ -81,6 +81,15 @@ pub trait Marshalling<DV, U: Deepview<DV>> {
         self.parsable(slice.i(data@)) ==> ov.unwrap().deepv() == self.parse(slice.i(data@))
     ;
 
+    exec fn exec_parse(&self, slice: &Slice, data: &Vec<u8>) -> (value: U)
+    requires
+        self.valid(),
+        slice.valid(data@),
+        self.parsable(slice.i(data@)),
+    ensures
+        value.deepv() == self.parse(slice.i(data@)),
+    ;
+
     // jonh skipping translation of Parse -- does it ever save more than
     // a cheap if condition?
 
