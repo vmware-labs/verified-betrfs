@@ -30,31 +30,31 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
         self.lengthable(data)
     ;
 
-    exec fn try_length(&self, slice: &Slice, data: &Vec<u8>) -> (out: Option<usize>)
+    exec fn try_length(&self, dslice: &Slice, data: &Vec<u8>) -> (out: Option<usize>)
     requires
         self.valid(),
-        slice.valid(data@),
+        dslice.valid(data@),
     ensures
-        out is Some <==> self.lengthable(slice.i(data@)),
-        out is Some ==> out.unwrap() as int == self.length(slice.i(data@))
+        out is Some <==> self.lengthable(dslice.i(data@)),
+        out is Some ==> out.unwrap() as int == self.length(dslice.i(data@))
     ;
 
-    exec fn exec_lengthable(&self, slice: &Slice, data: &Vec<u8>) -> (l: bool)
+    exec fn exec_lengthable(&self, dslice: &Slice, data: &Vec<u8>) -> (l: bool)
     requires
         self.valid(),
-        slice.valid(data@),
+        dslice.valid(data@),
     ensures
-        l == self.lengthable(slice.i(data@))
+        l == self.lengthable(dslice.i(data@))
     // TODO dfy has a default impl here based on try_length
     ;
 
-    exec fn exec_length(&self, slice: &Slice, data: &Vec<u8>) -> (len: usize)
+    exec fn exec_length(&self, dslice: &Slice, data: &Vec<u8>) -> (len: usize)
     requires
         self.valid(),
-        slice.valid(data@),
-        self.lengthable(slice.i(data@)),
+        dslice.valid(data@),
+        self.lengthable(dslice.i(data@)),
     ensures
-        len == self.length(slice.i(data@))
+        len == self.length(dslice.i(data@))
     // TODO dfy has a default impl here based on try_length
     ;
 
@@ -146,10 +146,10 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
     // TODO dfy has a default impl here
     ;
 
-    exec fn exec_gettable(&self, slice: &Slice, data: &Vec<u8>, idx: usize) -> (g: bool)
+    exec fn exec_gettable(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (g: bool)
     requires self.valid(),
-        slice.valid(data@),
-    ensures g == self.gettable(slice.i(data@), idx as int)
+        dslice.valid(data@),
+    ensures g == self.gettable(dslice.i(data@), idx as int)
     // TODO dfy has a default impl here
     ;
     
@@ -164,25 +164,27 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
     // TODO dfy has a default impl here
     ;
 
-    exec fn try_get_elt(&self, slice: &Slice, data: &Vec<u8>, idx: usize) -> (oelt: Option<Elt>)
+    exec fn try_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oelt: Option<Elt>)
     requires
         self.valid(),
-        slice.valid(data@),
+        dslice.valid(data@),
     ensures
         oelt is Some <==> {
-                &&& self.gettable(slice.i(data@), idx as int)
-                &&& self.elt_parsable(slice.i(data@), idx as int)
+                &&& self.gettable(dslice.i(data@), idx as int)
+                &&& self.elt_parsable(dslice.i(data@), idx as int)
         },
-        oelt is Some ==> oelt.unwrap().deepv() == self.get_elt(slice.i(data@), idx as int)
+        oelt is Some ==> oelt.unwrap().deepv() == self.get_elt(dslice.i(data@), idx as int)
     // TODO dfy has a default impl here
     ;   
 
-    exec fn exec_get_elt(&self, slice: &Slice, data: &Vec<u8>, idx: usize) -> (elt: Elt)
+    exec fn exec_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (elt: Elt)
     requires
         self.valid(),
-        slice.valid(data@),
+        self.gettable(dslice.i(data@), idx as int),
+        self.elt_parsable(dslice.i(data@), idx as int),
+        dslice.valid(data@),
     ensures
-        elt.deepv() == self.get_elt(slice.i(data@), idx as int)
+        elt.deepv() == self.get_elt(dslice.i(data@), idx as int)
     // TODO dfy has a default impl here
     ;   
 }
@@ -223,12 +225,14 @@ pub trait UniformSizedElementSeqMarshallingObligations<DVElt, Elt: Deepview<DVEl
         ;
 }
 
-spec fn slice_length<DVElt, Elt: Deepview<DVElt>, USES: UniformSizedElementSeqMarshallingObligations<DVElt, Elt>>(selff: &USES, slice: Slice) -> int
-recommends selff.valid(), slice.wf(),
+spec fn slice_length<DVElt, Elt: Deepview<DVElt>, USES: UniformSizedElementSeqMarshallingObligations<DVElt, Elt>>(selff: &USES, dslice: Slice) -> int
+recommends selff.valid(), dslice.wf(),
 {
-    slice.spec_len() / (selff.uniform_size() as int)
+    dslice.spec_len() / (selff.uniform_size() as int)
 }
 
+//////////////////////////////////////////////////////////////////////////////
+// TODO(jonh): extract to a math library
 #[verifier(nonlinear)]
 proof fn div_mul_order(a: int, b: int)
 requires 0 < b
@@ -242,6 +246,17 @@ proof fn mul_le(a: int, b: int)
     ensures a <= a*b
 {
 }
+
+#[verifier(nonlinear)]
+proof fn pos_mul_preserves_order(x: int, y: int, m: int)
+    requires 0<= x < y, 0 < m
+    ensures x*m < y*m
+{}
+
+#[verifier(nonlinear)]
+proof fn distribute_left(a: int, b: int, c: int)
+    ensures (a+b)*c == a*c + b*c {}
+//////////////////////////////////////////////////////////////////////////////
 
 proof fn length_ensures
     <DVElt, Elt: Deepview<DVElt>, USES: UniformSizedElementSeqMarshallingObligations<DVElt, Elt>>
@@ -261,10 +276,14 @@ ensures (
     mul_le(selff.length(data), selff.uniform_size() as int);
 }
 
+proof fn nat_mul_nat_is_nat(x: int, y: int)
+    requires 0 <= x, 0 <= y
+    ensures 0 <= x*y {}
+
 proof fn index_bounds_facts
     <DVElt, Elt: Deepview<DVElt>, USES: UniformSizedElementSeqMarshallingObligations<DVElt, Elt>>
     (selff: &USES, slice: Slice, idx: int)
-requires selff.valid(), slice.wf(), idx < slice.spec_len() / (selff.uniform_size() as int)
+requires selff.valid(), slice.wf(), 0 <= idx, idx < slice.spec_len() / (selff.uniform_size() as int)
 ensures
     0
         <= idx * (selff.uniform_size() as int)
@@ -272,6 +291,14 @@ ensures
         == (idx+1) * (selff.uniform_size() as int)
         <= slice.spec_len()
 {
+    selff.uniform_size_ensures();   // TODO(verus): lament of the spec ensures
+    nat_mul_nat_is_nat(idx, selff.uniform_size() as int);
+    pos_mul_preserves_order(idx, idx+1, selff.uniform_size() as int);
+    distribute_left(idx, 1, selff.uniform_size() as int);
+    div_mul_order(slice.spec_len(), selff.uniform_size() as int);
+    if idx + 1 < slice_length(selff, slice) {
+        pos_mul_preserves_order(idx + 1, slice_length(selff, slice), selff.uniform_size() as int);
+    }
 }
 
 // I can't say anything about USES<M> because I haven't told you about M?
@@ -292,18 +319,18 @@ impl<DVElt, Elt: Deepview<DVElt>, USES: UniformSizedElementSeqMarshallingObligat
         (data.len() as int) / (self.uniform_size() as int)
     }
 
-    exec fn try_length(&self, slice: &Slice, data: &Vec<u8>) -> (out: Option<usize>)
+    exec fn try_length(&self, dslice: &Slice, data: &Vec<u8>) -> (out: Option<usize>)
     {
         proof { self.uniform_size_ensures() }
-        Some(slice.exec_len() / self.exec_uniform_size())
+        Some(dslice.exec_len() / self.exec_uniform_size())
     }
 
-    exec fn exec_lengthable(&self, slice: &Slice, data: &Vec<u8>) -> (l: bool) { true }
+    exec fn exec_lengthable(&self, dslice: &Slice, data: &Vec<u8>) -> (l: bool) { true }
 
-    exec fn exec_length(&self, slice: &Slice, data: &Vec<u8>) -> (len: usize)
+    exec fn exec_length(&self, dslice: &Slice, data: &Vec<u8>) -> (len: usize)
     {
         proof { self.uniform_size_ensures() }   // 0 < denom
-        slice.exec_len() / self.exec_uniform_size()
+        dslice.exec_len() / self.exec_uniform_size()
     }
 
     /////////////////////////////////////////////////////////////////////////
@@ -312,7 +339,7 @@ impl<DVElt, Elt: Deepview<DVElt>, USES: UniformSizedElementSeqMarshallingObligat
 
     open spec fn gettable(&self, data: Seq<u8>, idx: int) -> bool
     {
-        idx < self.length(data)
+        0 <= idx < self.length(data)
     }
 
     open spec fn get(&self, dslice: Slice, data: Seq<u8>, idx: int) -> (eslice: Slice)
@@ -325,6 +352,8 @@ impl<DVElt, Elt: Deepview<DVElt>, USES: UniformSizedElementSeqMarshallingObligat
 
     proof fn get_ensures(&self, dslice: Slice, data: Seq<u8>, idx: int)
     {
+        index_bounds_facts(self, dslice, idx as int);
+        assert( self.get(dslice, data, idx).valid(data) );
     }
 
     open spec fn get_data(&self, data: Seq<u8>, idx: int) -> (edata: Seq<u8>)
@@ -349,6 +378,7 @@ impl<DVElt, Elt: Deepview<DVElt>, USES: UniformSizedElementSeqMarshallingObligat
     {
         let len = self.exec_length(dslice, data);
         if idx < len {
+            proof { index_bounds_facts(self, *dslice, idx as int); }
             Some( dslice.exec_sub(
                     (idx as usize) * self.exec_uniform_size(),
                     (idx as usize) * self.exec_uniform_size() + self.exec_uniform_size()) )
@@ -357,33 +387,34 @@ impl<DVElt, Elt: Deepview<DVElt>, USES: UniformSizedElementSeqMarshallingObligat
         }
     }
     
-    exec fn exec_gettable(&self, slice: &Slice, data: &Vec<u8>, idx: usize) -> (g: bool)
+    exec fn exec_gettable(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (g: bool)
     {
-        let len = self.exec_length(slice, data);
+        let len = self.exec_length(dslice, data);
         idx < len
     }
 
-    exec fn exec_get(&self, slice: &Slice, data: &Vec<u8>, idx: usize) -> (eslice: Slice)
+    exec fn exec_get(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (eslice: Slice)
     {
-        slice.exec_sub(
+        proof { index_bounds_facts(self, *dslice, idx as int); }
+        dslice.exec_sub(
             (idx as usize) * self.exec_uniform_size(),
             (idx as usize) * self.exec_uniform_size() + self.exec_uniform_size())
     }
 
-    exec fn try_get_elt(&self, slice: &Slice, data: &Vec<u8>, idx: usize) -> (oelt: Option<Elt>)
+    exec fn try_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oelt: Option<Elt>)
     // TODO factor out this common impl
     {
         proof { self.spec_elt_marshalling_ensures() };  // :v(
 
-        let oeslice = self.try_get(slice, data, idx);
+        let oeslice = self.try_get(dslice, data, idx);
         match oeslice {
             None => None,
             Some(eslice) => {
                 proof {
-                    self.get_ensures(*slice, data@, idx as int);   // And another 20 minutes wasted
-                    index_bounds_facts(self, *slice, idx as int);
-                    let edslice = self.get(Slice::all(slice.i(data@)), slice.i(data@), idx as int);
-                    assert( edslice.i(slice.i(data@)) == eslice.i(data@));   // trigger
+                    self.get_ensures(*dslice, data@, idx as int);   // TODO(verus): lament of spec ensures
+                    index_bounds_facts(self, *dslice, idx as int);
+                    let edslice = self.get(Slice::all(dslice.i(data@)), dslice.i(data@), idx as int);
+                    assert( edslice.i(dslice.i(data@)) == eslice.i(data@));   // trigger
                 }
                 let oelt = self.exec_elt_marshalling().try_parse(&eslice, data);
                 oelt
@@ -391,10 +422,16 @@ impl<DVElt, Elt: Deepview<DVElt>, USES: UniformSizedElementSeqMarshallingObligat
         }
     }
 
-    exec fn exec_get_elt(&self, slice: &Slice, data: &Vec<u8>, idx: usize) -> (elt: Elt)
+    exec fn exec_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (elt: Elt)
     // TODO factor out this common impl
     {
-        let eslice = self.exec_get(slice, data, idx);
+        let eslice = self.exec_get(dslice, data, idx);
+        proof { // duplicated from try_get_elt
+            self.get_ensures(*dslice, data@, idx as int);   // TODO(verus): lament of spec ensures
+            index_bounds_facts(self, *dslice, idx as int);
+            let edslice = self.get(Slice::all(dslice.i(data@)), dslice.i(data@), idx as int);
+            assert( edslice.i(dslice.i(data@)) == eslice.i(data@));   // trigger
+        }
         self.exec_elt_marshalling().exec_parse(&eslice, data)
     }
 }
