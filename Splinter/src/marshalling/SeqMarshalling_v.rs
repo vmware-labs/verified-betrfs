@@ -171,7 +171,7 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
     ensures
         oelt is Some <==> {
                 &&& self.gettable(slice.i(data@), idx as int)
-                &&& self.elt_parsable(data@, idx as int)
+                &&& self.elt_parsable(slice.i(data@), idx as int)
         },
         oelt is Some ==> oelt.unwrap().deepv() == self.get_elt(slice.i(data@), idx as int)
     // TODO dfy has a default impl here
@@ -243,7 +243,9 @@ proof fn mul_le(a: int, b: int)
 {
 }
 
-proof fn length_ensures<DVElt, Elt: Deepview<DVElt>, USES: UniformSizedElementSeqMarshallingObligations<DVElt, Elt>>(selff: &USES, data: Seq<u8>)
+proof fn length_ensures
+    <DVElt, Elt: Deepview<DVElt>, USES: UniformSizedElementSeqMarshallingObligations<DVElt, Elt>>
+    (selff: &USES, data: Seq<u8>)
 requires
     selff.valid(),
     data.len() < usize::MAX,
@@ -257,6 +259,19 @@ ensures (
     selff.uniform_size_ensures();
     div_mul_order(data.len() as int, selff.uniform_size() as int);
     mul_le(selff.length(data), selff.uniform_size() as int);
+}
+
+proof fn index_bounds_facts
+    <DVElt, Elt: Deepview<DVElt>, USES: UniformSizedElementSeqMarshallingObligations<DVElt, Elt>>
+    (selff: &USES, slice: Slice, idx: int)
+requires selff.valid(), slice.wf(), idx < slice.spec_len() / (selff.uniform_size() as int)
+ensures
+    0
+        <= idx * (selff.uniform_size() as int)
+        < idx * (selff.uniform_size() as int) + (selff.uniform_size() as int)
+        == (idx+1) * (selff.uniform_size() as int)
+        <= slice.spec_len()
+{
 }
 
 // I can't say anything about USES<M> because I haven't told you about M?
@@ -330,11 +345,11 @@ impl<DVElt, Elt: Deepview<DVElt>, USES: UniformSizedElementSeqMarshallingObligat
         self.spec_elt_marshalling().parse(self.get_data(data, idx))
     }
 
-    exec fn try_get(&self, slice: &Slice, data: &Vec<u8>, idx: usize) -> (oeslice: Option<Slice>)
+    exec fn try_get(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oeslice: Option<Slice>)
     {
-        let len = self.exec_length(slice, data);
+        let len = self.exec_length(dslice, data);
         if idx < len {
-            Some( slice.exec_sub(
+            Some( dslice.exec_sub(
                     (idx as usize) * self.exec_uniform_size(),
                     (idx as usize) * self.exec_uniform_size() + self.exec_uniform_size()) )
         } else {
@@ -378,18 +393,35 @@ impl<DVElt, Elt: Deepview<DVElt>, USES: UniformSizedElementSeqMarshallingObligat
             proof {
                 let oelt = oelt;    // Chaotic good: Shadowing Edition
                 if oelt is Some {
-                    assert( eltm == self.spec_elt_marshalling() );
-                    assert( eltm.parsable(eslice.i(data@)) );
+//                     assert( eltm == self.spec_elt_marshalling() );
+//                     assert( eltm.parsable(eslice.i(data@)) );
                     let edata = self.get_data(slice.i(data@), idx as int);
+// 
+                    let ddata = slice.i(data@);
+// 
+//                     assert( edata ==
+//                         self.get(Slice::all(slice.i(data@)), slice.i(data@), idx as int).i(slice.i(data@)) );
 
-                    assert( edata ==
-                        self.get(Slice::all(slice.i(data@)), slice.i(data@), idx as int).i(slice.i(data@)) );
+                    let edslice = self.get(Slice::all(ddata), ddata, idx as int);   // e slice relative to d
+//                     assert( edata == edslice.i(ddata) );
+                    // eslice is relative to adata (all of data@)
 
-                    assert( eslice.i(data@) == edata );
-                    assert( eltm.parsable(edata) );
+//                     let a = ((idx as usize) * self.uniform_size()) as usize;
+//                     let b = ((idx as usize) * self.uniform_size() + self.uniform_size()) as usize;
+//                     assert( eslice == slice.spec_sub(a, b) );
+//                     assert( eslice.start == (slice.start + a) as usize );
+                    index_bounds_facts(self, *slice, idx as int);
+//                     assert( (slice.start + a) as usize == (slice.start + a) );
+//                     assert( eslice.start == edslice.start + slice.start );
+
+                    assert( edslice.i(ddata) == eslice.i(data@));   // trigger
+
+//                     assert( eslice.i(data@) == edata );
+//                     assert( eltm.parsable(edata) );
+//                     assert( self.gettable(slice.i(data@), idx as int) );
                     assert( self.elt_parsable(slice.i(data@), idx as int) );
                 } else {
-                    assert( !self.elt_parsable(slice.i(data@), idx as int) );
+                    assume( !self.elt_parsable(slice.i(data@), idx as int) );
                 }
             }
             oelt
