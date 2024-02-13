@@ -95,6 +95,11 @@ impl Node {
         Node::Leaf{ keys: seq![], msgs: seq![] }
     }
 
+    /// Returns the set of pivots this node contains (empty set if
+    /// self is Leaf).
+    /// 
+    /// Wrote this function to return a set instead of a seq to follow
+    /// the precedent created by all_keys (which returns a set).
     pub open spec(checked) fn get_pivots(self) -> Set<Key>
     {
         match self {
@@ -175,7 +180,12 @@ impl Node {
                 // Children[i]'s pivots > pivots[i-1] (if children are index nodes). This guarantees
                 // that all pivots in the tree (across all layers) are unique (and thus there's no
                 // leaf nodes with an empty domain).
-                &&& forall |i, pivot| 1 <= i < children.len() && children[i].get_pivots().contains(pivot)
+                // NOTE: !!! The trigger chosen for this forall is `children[i].get_pivots().contains(pivot)`,
+                //   which is highly unnatural and unexpected. If you're failing to get this fact from this forall
+                //   make sure you're matching that *exact* form. 
+                // TODO(tenzinhl): Ask in Zulip why this forall didn't cause the warning about automatic
+                // trigger selection. (Update to newest Verus version and try again first though).
+                &&& forall |i, pivot| 1 <= i < children.len() && #[trigger] children[i].get_pivots().contains(pivot)
                     ==> Key::lt(pivots[i-1], pivot)
                 // For children[1:], all keys they contain should be >= their lower pivot.
                 &&& forall |i| 0 < i < children.len() ==> self.all_keys_above_bound(i)
@@ -367,6 +377,7 @@ impl Node {
     /// Returns a new Index node where the child containing `split_arg.pivot` is split on said pivot.
     /// The pivot arg can NOT be an existing pivot in the Index (because duh, otherwise you'd have two
     /// pivots with the same value, the bucket between them would be empty which is dumb).
+    /// This adds a new pivot value to self.
     pub open spec/* XXX (checked)*/ fn split_child_of_index(self, split_arg: SplitArg) -> Node
         recommends self.can_split_child_of_index(split_arg)
     {

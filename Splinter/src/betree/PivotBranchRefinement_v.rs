@@ -45,12 +45,16 @@ pub open spec(checked) fn get_keys_or_pivots(node: Node) -> Seq<Key>
     if node is Leaf { node.get_Leaf_keys() } else { node.get_Index_pivots() }
 }
 
+/// Simple bool spec fn, returns: 0 <= i < node.route(key)
+/// (i.e.: if the index i is less than or equal to index key gets routed to).
 pub open spec(checked) fn lte_route(node: Node, key: Key, i: int) -> bool
     recommends node.wf()
 {
     0 <= i <= node.route(key)
 }
 
+/// Simple bool spec fn, returns: node.route(key) < i < pivots.len()
+/// (i.e.: if index i is gt the child index key gets routed to).
 pub open spec(checked) fn gt_route(node: Node, key: Key, i: int) -> bool
     recommends node.wf()
 {
@@ -58,6 +62,18 @@ pub open spec(checked) fn gt_route(node: Node, key: Key, i: int) -> bool
     node.route(key) < i < s.len()
 }
 
+/// Ensures clause for `Node::route()` method.
+/// 
+/// NOTE: if you're ever trying to derive that other pivots in the pivots
+/// array are <= or > the pivot that's routed to by `route()`, be aware that
+/// the trigger is somewhat unintuitive. You can't just try and compare the
+/// pivots directly, instead the trigger in the ensures of this lemma are the
+/// `lte_route` and `gt_route` functions.
+/// 
+/// (tenzinhl): We tried switching the trigger to just be `Key::lte` in the
+/// past however this caused previously verifying lemmas to fail (most likely
+/// due to proof instability caused by changing how things are triggered). For
+/// now we'll stick with this scheme and just be aware of it.
 pub proof fn lemma_route_ensures(node: Node, key: Key)
     requires node.wf()
     ensures ({
@@ -854,7 +870,6 @@ pub proof fn append_refines(pre: Node, lbl: AppendLabel)
 
     // Goal 1 - WF is preserved
     lemma_append_preserves_wf(pre, lbl.keys, lbl.msgs, lbl.path);
-    // assume(false);
 
     let post = pre.append(lbl.keys, lbl.msgs, lbl.path);
 
@@ -902,8 +917,6 @@ pub proof fn append_refines(pre: Node, lbl: AppendLabel)
             // GOAL 1
             assert(post_i.map.dom() =~~= pre_i_then_append.map.dom());
 
-            // assume(false);
-
             // GOAL 2
             assert(forall |k| post_i.map.contains_key(k) ==>
                 (#[trigger] post_i.map[k]) =~~= (#[trigger] pre_i_then_append.map[k]));
@@ -924,19 +937,22 @@ requires
     path.valid(),
     path.node == pre,
     path.key == split_arg.get_pivot(),
+    // Asserts `split_arg.wf()`
     path.target().can_split_child_of_index(split_arg),
 ensures
     pre.split(path, split_arg).wf(),
 decreases
     path.depth
 {
-    assume(false);
     lemma_route_auto();
     let post = pre.split(path, split_arg);
 
     if (path.depth == 0) {
+        // `pre` is the parent node whose child is being split.
+
         assert(pre is Index);
         let children = pre.get_Index_children();
+        let pivot = split_arg.get_pivot();
         let pivots = pre.get_Index_pivots();
         let r = pre.route(split_arg.get_pivot());
 
@@ -948,15 +964,146 @@ decreases
         let post_pivots = post.get_Index_pivots();
 
         let target_child = children[r+1];
+        // Suppress recommends
+        assert(split_arg.wf(target_child));
         let (left_node, right_node) = target_child.split_node(split_arg);
 
+        // Assert pivots to the left of where new pivot was inserted are still sorted.
+        assert(0 <= r+1 <= post_pivots.len()); // suppress recommends
+        assert(Key::is_strictly_sorted(post_pivots.subrange(0, r+1)));
+
+        // Assert pivots to the right of where new pivot was inserted are still sorted.
+        assert(0 <= r+2 <= post_pivots.len()); // suppress recommends
+        assert(Key::is_strictly_sorted(post_pivots.subrange(r+2, post_pivots.len() as int)));
+
+        assert(post_pivots[r+1] == pivot);
+
+        if (r >= 0) {
+            // When the inserted pivot has an element to the left,
+            // assert that new pivot is strictly greater than pivot to
+            // the left.
+
+            assert(post =~~= pre.split_child_of_index(split_arg)); // VALID
+
+            lemma_route_ensures(pre, pivot);
+            assert(pivots[r] == post_pivots[r]);
+            assert(r == pre.route(pivot));
+
+            // This was necessary to trigger the fact that pivots[r] <= pivot,
+            // despite that seeming almost trivially true through.
+            assert(lte_route(pre, pivot, r));
+
+            // ========== ==========
+            // ========== WORKING HERE ==========
+            // ========== ==========
+            assert(split_arg.wf(children[r+1]));
+
+            // So this means that the pivot/key targeted by split_arg is one
+            // of the childs' keys.
+            if (children[r+1] is Leaf) {
+                // If the split child is Leaf, then the targeted key that's
+                // being split can NOT be one of the end indices.
+
+                // (x9du): `split_leaf` may have issues. We should hold off on
+                // working on this until x9du double checks split_leaf impl.
+                assume(pivot != pivots[r]);
+                assert(pivot != pivots[r]);
+            } else {
+                // If the split child is Index, then the targeted key can be one
+                // of the end indices, however by Node::wf() we're guaranteed that
+                // the targeted key (which is a pivot) must be *strictly between*
+                // parents' pivots.
+                assert(children[r+1] is Index);
+                assert(split_arg is SplitIndex);
+
+                let pivot_index = split_arg.get_SplitIndex_pivot_index();
+
+                let c_pivots = children[r+1].get_pivots();
+
+                // Trigger that pivot must be a key in the child's pivots.
+                // assert(c_pivots[pivot_index] == pivot);
+                // Trigger that child's pivots must be > parent's lower bounding pivot.
+                // (Weirdly the )
+                // (From Node::wf()).
+                assert(c_pivots.contains(pivot));
+
+                // GOAL
+                assert(pivot != pivots[r]);
+            }
+
+            // NEED:
+            assert(pivot != pivots[r]);
+
+            assert(Key::lte(pivots[r], pivot));
+            // assert(Key::lte(post_pivots[r], post_pivots[r+1]));
+            
+            assert(post_pivots[r+1] == pivot);
+
+            assert(Key::lt(post_pivots[r], post_pivots[r+1]));
+        }
+
+        if (r+2 < post_pivots.len()) {
+            // TODO(URGENT)
+            assume(Key::lt(pivot, post_pivots[r+2]));
+
+            // This should come from route ensures.
+            lemma_route_ensures(pre, pivot);
+            assert(0 <= r+1 < pivots.len()); // Suppress recommends.
+            assert(post_pivots[r+2] == pivots[r+1]);
+            assert(Key::lt(pivot, post_pivots[r+2]));
+        }
+
+        // Triggering forall to stitch the two ends together.
+        assert forall |i, j| 0 <= i < j < post_pivots.len()
+            implies Key::lt(post_pivots[i], post_pivots[j]) by
+        {
+            if (j < r+1) {
+                // Untouched section to the left of insert is still sorted.
+                assert(Key::lt(post_pivots[i], post_pivots[j]));
+            } else if (i > r+1) {
+                // Untouched section to the right of insert is still sorted.
+                assert(Key::lt(post_pivots[i], post_pivots[j]));
+            } else {
+                // Assert by lemma_route_ensures that
+
+                // We need the fact that post_pivots[r] < new_pivot < post_pivots[r+2]
+                // How do we get that? (Well at least one of these should come from route
+                // lemma).
+
+                if (j == r+1) {
+                    // Upper element is inserted element. (This one it should know
+                    // given that we')
+                    if (i < r) {
+                        // By is_strictly_sorted property (this is the key trigger to learn)
+                        assert(Key::lt(pivots[i], pivots[r]));
+                    }
+
+                    // GOAL
+                    assert(Key::lt(post_pivots[i], post_pivots[j]));
+                } else {
+                    // Upper element is beyond the inserted element.
+
+                    // TODO(URGENT)
+                    assume(false);
+                    assert(Key::lt(post_pivots[i], post_pivots[j]));
+                }
+
+                // i and j span the newly inserted area.
+                assert(Key::lt(post_pivots[i], post_pivots[j]));
+            }
+        }
+        
+        // CURR_GOAL WORK START (proving all of the wf conditions on post_children)
+        assert(post_pivots =~~= pivots.insert(r+1, pivot));
         assert(post_pivots.len() == post_children.len() - 1);
 
-        // CURR_GOAL WORK START
-        // assert(forall )
+
 
         // CURR GOAL
+        assert(post_pivots.len() == pivots.len() + 1);
+
         assert(Key::is_strictly_sorted(post_pivots)); // FAIL
+        assume(false);
 
         assert(forall |i| 0 <= i < post_children.len() ==> (#[trigger] post_children[i]).wf());
         // For post_children[0:-1], all keys they contain should be < their upper pivot.
