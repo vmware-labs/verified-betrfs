@@ -297,7 +297,7 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
         ;
 
     exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: Elt) -> (r: bool)
-    recommends
+    requires
         self.valid(),
         dslice.valid(data@),
         self.well_formed(data@),
@@ -307,7 +307,7 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
     ;
 
     exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: Elt)
-    recommends
+    requires
         self.valid(),
         dslice.valid(old(data)@),
         self.well_formed(old(data)@),
@@ -681,6 +681,25 @@ impl<DVElt, Elt: Deepview<DVElt>, USES: UniformSizedElementSeqMarshallingObligat
     exec fn exec_resizable(&self, dslice: &Slice, data: &Vec<u8>, newlen: usize) -> (r: bool) { false }
 
     exec fn resize(&self, dslice: &Slice, data: &mut Vec<u8>, newlen: usize) { }
+
+    /////////////////////////////////////////////////////////////////////////
+    // append
+    /////////////////////////////////////////////////////////////////////////
+
+    open spec fn well_formed(&self, data: Seq<u8>) -> bool { false }
+
+    proof fn well_formed_ensures(&self, data: Seq<u8>) {}
+
+    open spec fn appendable(&self, data: Seq<u8>, value: DVElt) -> bool { false }
+
+    open spec fn appends(&self, data: Seq<u8>, value: DVElt, newdata: Seq<u8>) -> bool { false }
+
+
+    exec fn exec_well_formed(&self, dslice: &Slice, data: &Vec<u8>) -> (w: bool) { false }
+
+    exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: Elt) -> (r: bool) { false }
+
+    exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: Elt) {}
 }
 
 
