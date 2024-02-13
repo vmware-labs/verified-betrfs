@@ -189,7 +189,7 @@ impl<T: Deepview<int> + builtin::Integer + Copy, O: IntObligations<T>> Marshalli
 //////////////////////////////////////////////////////////////////////////////
 
 // Empty struct to name this implementation
-struct IntMarshalling<T> {
+pub struct IntMarshalling<T> {
     _p: std::marker::PhantomData<(T,)>,
 }
 

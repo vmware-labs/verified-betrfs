@@ -48,6 +48,11 @@ impl Slice {
         Slice{start: 0, end: data.len() as usize}
     }
 
+    pub exec fn exec_all<T>(data: &Vec<T>) -> Slice
+    {
+        Slice{start: 0, end: data.len() as usize}
+    }
+
     pub open spec fn agree_beyond_slice<T>(&self, data: Seq<T>, new_data: Seq<T>) -> bool
     {
         &&& data.len() == new_data.len()

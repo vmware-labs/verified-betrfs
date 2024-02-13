@@ -320,6 +320,10 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
         self.appends(old(data)@, value.deepv(), data@)
     ;
 
+    /////////////////////////////////////////////////////////////////////////
+    // parse (entire sequence)
+    /////////////////////////////////////////////////////////////////////////
+    // left off for now; not needed until IntegerSeqMarshalling   
 }
 
 pub trait UniformSizedElementSeqMarshallingObligations<DVElt, Elt: Deepview<DVElt>> {
@@ -700,7 +704,26 @@ impl<DVElt, Elt: Deepview<DVElt>, USES: UniformSizedElementSeqMarshallingObligat
     exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: Elt) -> (r: bool) { false }
 
     exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: Elt) {}
+
 }
 
+pub struct IntegerSeqMarshalling<T: Deepview<int> + builtin::Integer, IO: IntObligations<T>> {
+    _p: std::marker::PhantomData<(T,IO,)>,
+}
+
+// This impl causes IntegerSeqMarshalling to be SeqMarshalling<T, int> by above impl
+impl
+<T: Deepview<int> + builtin::Integer, IO: IntObligations<T>>
+    
+    UniformSizedElementSeqMarshallingObligations<int, T>
+    for IntegerSeqMarshalling<T, IO>
+{
+}
+
+// Convince myself that IntegerSeqMarshalling is indeed SeqMarshalling<T, int>
+fn test(t: IntegerSeqMarshalling<u64, IntMarshalling<u64>>, data: &Vec<u8>) {
+    let dslice = Slice::exec_all(data);
+    let oelt = t.try_get_elt(&dslice, data, 0);
+}
 
 }
