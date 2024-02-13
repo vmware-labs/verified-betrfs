@@ -307,6 +307,13 @@ proof fn pos_mul_preserves_order(x: int, y: int, m: int)
 #[verifier(nonlinear)]
 proof fn distribute_left(a: int, b: int, c: int)
     ensures (a+b)*c == a*c + b*c {}
+
+#[verifier(nonlinear)]
+proof fn mul_preserves_le(a: int, b: int, c: int)
+    requires 0 <= a <= b, 0 <= c
+    ensures a * c <= b * c
+{ }
+
 //////////////////////////////////////////////////////////////////////////////
 
 proof fn length_ensures
@@ -548,7 +555,27 @@ impl<DVElt, Elt: Deepview<DVElt>, USES: UniformSizedElementSeqMarshallingObligat
         assert forall |i: int| i != idx as int && self.gettable(dslice.i(old(data)@), i)
             implies self.get_data(dslice.i(data@), i) == self.get_data(dslice.i(old(data)@), i) by
         {
-            // lotsa proof in here
+            index_bounds_facts(self, *dslice, i);
+
+            lemma_seq_slice_slice(data@,
+                dslice.start as int,
+                dslice.end as int,
+                i * self.uniform_size() as int,
+                i * self.uniform_size() as int + self.uniform_size() as int);
+            lemma_seq_slice_slice(old(data)@,
+                dslice.start as int,
+                dslice.end as int,
+                i * self.uniform_size() as int,
+                i * self.uniform_size() as int + self.uniform_size() as int);
+            
+            if i < idx as int {
+                mul_preserves_le(i + 1, idx as int, self.uniform_size() as int);
+            } else {
+                mul_preserves_le(idx as int + 1, i, self.uniform_size() as int);
+            }
+
+            // TODO(verus): shouldn't assert-by conclusion give us this trigger for free?
+            assert( self.get_data(dslice.i(data@), i) == self.get_data(dslice.i(old(data)@), i) );
         }
 
         proof {
