@@ -262,6 +262,64 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
             forall |i| dslice.end <= i < data.len() ==> data[i] == old(data)@[i],
             self.resizes(dslice.i(old(data)@), newlen as int, dslice.i(data@)),
     ;
+
+    /////////////////////////////////////////////////////////////////////////
+    // append
+    /////////////////////////////////////////////////////////////////////////
+    spec fn well_formed(&self, data: Seq<u8>) -> bool
+        recommends self.valid()
+        ;
+
+    proof fn well_formed_ensures(&self, data: Seq<u8>)
+        requires self.valid()
+        ensures self.well_formed(data) ==> self.lengthable(data)
+        ;
+
+    spec fn appendable(&self, data: Seq<u8>, value: DVElt) -> bool
+        recommends self.valid(), self.well_formed(data), self.elt_marshallable(value)
+        ;
+
+    spec fn appends(&self, data: Seq<u8>, value: DVElt, newdata: Seq<u8>) -> bool
+    recommends
+        self.valid(),
+        self.well_formed(data),
+        self.elt_marshallable(value),
+        self.appendable(data, value)
+    // TODO dfy has a default impl here
+        ;
+
+
+    exec fn exec_well_formed(&self, dslice: &Slice, data: &Vec<u8>) -> (w: bool)
+    requires
+        self.valid(),
+    ensures
+            w == self.well_formed(dslice.i(data@))
+        ;
+
+    exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: Elt) -> (r: bool)
+    recommends
+        self.valid(),
+        dslice.valid(data@),
+        self.well_formed(data@),
+        self.elt_marshallable(value.deepv()),
+    ensures
+        r == self.appendable(data@, value.deepv())
+    ;
+
+    exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: Elt)
+    recommends
+        self.valid(),
+        dslice.valid(old(data)@),
+        self.well_formed(old(data)@),
+        self.elt_marshallable(value.deepv()),
+        self.appendable(old(data)@, value.deepv()),
+    ensures
+        data@.len() == old(data)@.len(),
+        forall |i: int| 0 <= i < dslice.start as int ==> data@[i] == old(data)@[i],
+        forall |i: int| dslice.end as int <= i < data.len() ==> data@[i] == old(data)@[i],
+        self.appends(old(data)@, value.deepv(), data@)
+    ;
+
 }
 
 pub trait UniformSizedElementSeqMarshallingObligations<DVElt, Elt: Deepview<DVElt>> {
