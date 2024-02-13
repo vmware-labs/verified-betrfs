@@ -187,6 +187,57 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
         elt.deepv() == self.get_elt(dslice.i(data@), idx as int)
     // TODO dfy has a default impl here
     ;   
+
+    /////////////////////////////////////////////////////////////////////////
+    // setting individual elements
+    /////////////////////////////////////////////////////////////////////////
+    spec fn elt_marshallable(&self, elt: DVElt) -> bool
+        ;
+
+    spec fn settable(&self, data: Seq<u8>, idx: int, value: DVElt) -> bool
+    recommends
+        self.valid(),
+        self.elt_marshallable(value)
+    ;
+
+    spec fn preserves_entry(&self, data: Seq<u8>, idx: int, new_data: Seq<u8>) -> bool
+    recommends
+        self.valid()
+    // TODO dfy has a default impl here
+    ;
+
+    // proof fn preserves_entry_transitive
+
+    spec fn sets(&self, data: Seq<u8>, idx: int, value: DVElt, new_data: Seq<u8>) -> bool
+    recommends
+        self.valid(),
+        self.elt_marshallable(value),
+        self.settable(data, idx, value)
+    // TODO dfy has a default impl here
+    ;
+    
+    exec fn exec_settable(&self, dslice: &Slice, data: &Vec<u8>, idx: usize, value: &Elt) -> (s: bool)
+    requires
+        self.valid(),
+        dslice.valid(data@),
+        self.elt_marshallable(value.deepv()),
+    ensures
+        s == self.settable(dslice.i(data@), idx as int, value.deepv())
+    ;
+    
+    exec fn exec_set(&self, dslice: &Slice, data: &mut Vec<u8>, idx: usize, value: &Elt)
+    requires
+        self.valid(),
+        dslice.valid(old(data)@),
+        self.elt_marshallable(value.deepv()),
+        self.settable(dslice.i(old(data)@), idx as int, value.deepv()),
+    ensures
+        dslice.agree_beyond_slice(old(data)@, data@),
+        self.sets(dslice.i(old(data)@), idx as int, value.deepv(), dslice.i(data@))
+    ;
+
+    
+    
 }
 
 pub trait UniformSizedElementSeqMarshallingObligations<DVElt, Elt: Deepview<DVElt>> {
@@ -299,6 +350,13 @@ ensures
     if idx + 1 < slice_length(selff, slice) {
         pos_mul_preserves_order(idx + 1, slice_length(selff, slice), selff.uniform_size() as int);
     }
+}
+
+proof fn lemma_seq_slice_slice<T>(s: Seq<T>, i: int, j: int, k: int, l: int)
+    requires 0 <= i <= j <= s.len(),
+        0 <= k <= l <= j-i
+    ensures s.subrange(i,j).subrange(k,l) =~= s.subrange(i+k, i+l)
+{
 }
 
 // I can't say anything about USES<M> because I haven't told you about M?
@@ -433,6 +491,74 @@ impl<DVElt, Elt: Deepview<DVElt>, USES: UniformSizedElementSeqMarshallingObligat
             assert( edslice.i(dslice.i(data@)) == eslice.i(data@));   // trigger
         }
         self.exec_elt_marshalling().exec_parse(&eslice, data)
+    }
+
+    /////////////////////////////////////////////////////////////////////////
+    // setting individual elements
+    /////////////////////////////////////////////////////////////////////////
+
+    open spec fn elt_marshallable(&self, elt: DVElt) -> bool
+    {
+        self.spec_elt_marshalling().marshallable(elt)
+    }
+
+    open spec fn settable(&self, data: Seq<u8>, idx: int, value: DVElt) -> bool
+    {
+        &&& 0 <= idx < self.length(data)
+        &&& self.elt_marshallable(value)
+        &&& self.spec_elt_marshalling().spec_size(value) == self.uniform_size()
+    }
+
+    open spec fn preserves_entry(&self, data: Seq<u8>, idx: int, new_data: Seq<u8>) -> bool
+    {
+        &&& self.gettable(data, idx) ==> self.gettable(new_data, idx)
+        &&& (self.gettable(data, idx) && self.elt_parsable(new_data, idx)) ==> {
+            &&& self.elt_parsable(new_data, idx)
+            &&& self.get_elt(new_data, idx) == self.get_elt(new_data, idx)
+            }
+    }
+
+    open spec fn sets(&self, data: Seq<u8>, idx: int, value: DVElt, new_data: Seq<u8>) -> bool
+    {
+        &&& new_data.len() == data.len()
+        &&& self.lengthable(data) ==> {
+            &&& self.lengthable(new_data)
+            &&& self.length(new_data) == self.length(data)
+            }
+        &&& forall |i| i!=idx ==> self.preserves_entry(data, i, new_data)
+        &&& self.gettable(new_data, idx)
+        &&& self.elt_parsable(new_data, idx)
+        &&& self.get_elt(new_data, idx) == value
+    }
+
+    exec fn exec_settable(&self, dslice: &Slice, data: &Vec<u8>, idx: usize, value: &Elt) -> (s: bool)
+    {
+        let len = self.exec_length(dslice, data);
+        let sz = self.exec_elt_marshalling().exec_size(value);
+        idx < len && sz == self.exec_uniform_size()
+    }
+
+    exec fn exec_set(&self, dslice: &Slice, data: &mut Vec<u8>, idx: usize, value: &Elt)
+    {
+        proof {
+            index_bounds_facts(self, *dslice, idx as int);
+            self.uniform_size_ensures();
+        }
+        let newend = self.exec_elt_marshalling().marshall(value, data, dslice.start + idx * self.exec_uniform_size());
+        assert forall |i: int| i != idx as int && self.gettable(dslice.i(old(data)@), i)
+            implies self.get_data(dslice.i(data@), i) == self.get_data(dslice.i(old(data)@), i) by
+        {
+            // lotsa proof in here
+        }
+
+        proof {
+            lemma_seq_slice_slice(
+                data@,
+                dslice.start as int,
+                dslice.end as int,
+                idx as int * self.uniform_size() as int,
+                idx as int * self.uniform_size() as int + self.uniform_size() as int);
+        }
     }
 }
 
