@@ -237,7 +237,31 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
     ;
 
     
+    /////////////////////////////////////////////////////////////////////////
+    // resizing
+    /////////////////////////////////////////////////////////////////////////
     
+    spec fn resizable(&self, data: Seq<u8>, newlen: int) -> bool
+        recommends self.valid()
+        ;
+
+    spec fn resizes(&self, data: Seq<u8>, newlen: int, newdata: Seq<u8>) -> bool
+        recommends self.valid(), self.resizable(data, newlen)
+    // TODO dfy has a default impl here
+        ;
+
+    exec fn exec_resizable(&self, dslice: &Slice, data: &Vec<u8>, newlen: usize) -> (r: bool)
+        requires self.valid()
+        ensures r == self.resizable(dslice.i(data@), newlen as int)
+        ;
+
+    exec fn resize(&self, dslice: &Slice, data: &mut Vec<u8>, newlen: usize)
+        requires self.valid(), dslice.valid(old(data)@), self.resizable(dslice.i(old(data)@), newlen as int)
+        ensures data@.len() == old(data)@.len(),
+            forall |i| 0 <= i < dslice.start ==> data[i] == old(data)@[i],
+            forall |i| dslice.end <= i < data.len() ==> data[i] == old(data)@[i],
+            self.resizes(dslice.i(old(data)@), newlen as int, dslice.i(data@)),
+    ;
 }
 
 pub trait UniformSizedElementSeqMarshallingObligations<DVElt, Elt: Deepview<DVElt>> {
@@ -587,6 +611,18 @@ impl<DVElt, Elt: Deepview<DVElt>, USES: UniformSizedElementSeqMarshallingObligat
                 idx as int * self.uniform_size() as int + self.uniform_size() as int);
         }
     }
+
+    /////////////////////////////////////////////////////////////////////////
+    // resizing
+    /////////////////////////////////////////////////////////////////////////
+
+    open spec fn resizable(&self, data: Seq<u8>, newlen: int) -> bool { false }
+
+    open spec fn resizes(&self, data: Seq<u8>, newlen: int, newdata: Seq<u8>) -> bool { false }
+
+    exec fn exec_resizable(&self, dslice: &Slice, data: &Vec<u8>, newlen: usize) -> (r: bool) { false }
+
+    exec fn resize(&self, dslice: &Slice, data: &mut Vec<u8>, newlen: usize) { }
 }
 
 
