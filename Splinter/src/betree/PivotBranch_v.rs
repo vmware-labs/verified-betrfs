@@ -172,7 +172,9 @@ impl Node {
                 // For children[0:-1], all keys they contain should be < their upper pivot.
                 // This also gives us that children[i]'s pivots are < pivots[i] (if children are index nodes)
                 &&& forall |i| 0 <= i < children.len() - 1 ==> self.all_keys_below_bound(i)
-                // Children[i]'s pivots > pivots[i-1] (if children are index nodes)
+                // Children[i]'s pivots > pivots[i-1] (if children are index nodes). This guarantees
+                // that all pivots in the tree (across all layers) are unique (and thus there's no
+                // leaf nodes with an empty domain).
                 &&& forall |i, pivot| 1 <= i < children.len() && children[i].get_pivots().contains(pivot)
                     ==> Key::lt(pivots[i-1], pivot)
                 // For children[1:], all keys they contain should be >= their lower pivot.

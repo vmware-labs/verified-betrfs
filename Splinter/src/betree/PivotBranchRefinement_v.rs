@@ -511,9 +511,20 @@ pub proof fn lemma_insert_preserves_wf(node: Node, key: Key, msg: Message, path:
             // Subgoal 4: the children's pivots are different from the parent's pivots
             // assert(forall |i| 1 <= i < children.len() ==> 0 <=)
             assert(post_pivots == pivots);
+
             assert forall |i, pivot| 1 <= i < post_children.len() && post_children[i].get_pivots().contains(pivot)
             implies Key::lt(post_pivots[i-1], pivot) by {
                 if (children[i] is Leaf) {
+                    lemma_path_target_is_wf(path);
+
+                    // This whole section seems to be brittle. Commenting out seemingly meaningless asserts
+                    // causes proof to fail in weird ways (i.e.: commenting out a later assert can cause an
+                    // earlier one to fail).
+                    if (i == r+1) {
+                        assert(post_children[r+1] == children[r+1].insert_leaf(key, msg));
+                        assert(post_children[r+1] is Leaf);
+                    }
+
                     assert(post_children[i] is Leaf);
                     assert(post_children[i].get_pivots().is_empty());
                     assert(children[i].get_pivots().is_empty());
@@ -716,7 +727,7 @@ pub proof fn lemma_append_preserves_wf(pre: Node, keys: Seq<Key>, msgs: Seq<Mess
         let post_pivots = post.get_Index_pivots();
         let post_children = post.get_Index_children();
 
-        let r = pre.route(keys[0]);
+        let r = pre.route(path.key);
         lemma_append_keys_are_path_equiv(keys, path);
         lemma_route_auto();
         assert(0 <= r+1 < children.len()); // For recommends
@@ -769,7 +780,51 @@ pub proof fn lemma_append_preserves_wf(pre: Node, keys: Seq<Key>, msgs: Seq<Mess
             assert(pre.all_keys_above_bound(i));
         }
 
-        assume(false);
+        // Presumably it's just complaining about changed child.
+        // assert(forall |pivot| post_children[])
+
+        match children[r+1] {
+            Node::Leaf{ keys: c_keys, msgs: c_msgs } => {
+                assert(post =~~= pre.append(keys, msgs, path));
+                assert(post =~~= path.substitute(Node::Leaf{ keys, msgs }));
+                assert(post_children =~~= path.replaced_children(Node::Leaf{ keys, msgs }));
+                assert(children[r+1] is Leaf);
+
+
+                // Proof by contradiction: if children[r+1] is leaf then it must be path target, otherwise everything is
+                // malformed (because if depth == 0, then we're targeting a non-child, and if dept > 1, then
+                // path is malformed as tree doesn't go past leaf)
+                if (path.subpath().depth > 0) {
+                    let subp = path.subpath();
+                    // Then children r+1 would have to be an index
+                    // Seems because recursive fuel is only 1 we need to unroll one
+                    // more layer by directly invoking `subp.valid` (super cool).
+                    // TODO(tenzinhl): figure out if increasing fuel would improve this.
+                    assert(subp.valid());
+                    assert(children[r+1] is Index);
+                    // assert(false);
+                }
+
+                // bridging between top and bottom
+                assert(post_children[r+1] =~~= path.subpath().substitute(Node::Leaf{ keys, msgs }));
+                // By the time you've subpathed to post_children[r+1] you should be at target.
+                assert(path.subpath().depth == 0);
+
+                // Fails here
+                assert(post_children[r+1] =~~= Node::Leaf{ keys, msgs });
+                assert(post_children[r+1] is Leaf);
+                // assert(post_children[r+1] =~~= children[r+1].append())
+                assert(children[r+1].get_pivots() =~~= post_children[r+1].get_pivots());
+            },
+            Node::Index{ pivots: c_pivots, children: c_children } => {
+                assert(children[r+1].get_pivots() =~~= post_children[r+1].get_pivots());
+            },
+        }
+    
+        assert(children[r+1].get_pivots() =~~= post_children[r+1].get_pivots());
+        // Assert the wf condition we added
+        assert(forall |i, pivot| 1 <= i < post_children.len() && post_children[i].get_pivots().contains(pivot)
+            ==> Key::lt(pivots[i-1], pivot));
         assert(post.wf());
     }
 }
