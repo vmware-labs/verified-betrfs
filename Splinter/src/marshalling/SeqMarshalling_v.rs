@@ -376,55 +376,18 @@ impl<DVElt, Elt: Deepview<DVElt>, USES: UniformSizedElementSeqMarshallingObligat
         proof { self.spec_elt_marshalling_ensures() };  // :v(
 
         let oeslice = self.try_get(slice, data, idx);
-        if oeslice.is_none() {
-            assert( !self.gettable(slice.i(data@), idx as int) );
-            None
-        }
-        else {
-            assert( self.gettable(slice.i(data@), idx as int) );
-            proof { self.get_ensures(*slice, data@, idx as int); }   // And another 20 minutes wasted
-
-            let eslice = oeslice.unwrap();
-            assert( eslice.valid(data@) );
-            assert( eslice == self.get(*slice, data@, idx as int) );
-
-            let eltm = self.exec_elt_marshalling();
-            let oelt = eltm.try_parse(&eslice, data);
-            proof {
-                let oelt = oelt;    // Chaotic good: Shadowing Edition
-                if oelt is Some {
-//                     assert( eltm == self.spec_elt_marshalling() );
-//                     assert( eltm.parsable(eslice.i(data@)) );
-                    let edata = self.get_data(slice.i(data@), idx as int);
-// 
-                    let ddata = slice.i(data@);
-// 
-//                     assert( edata ==
-//                         self.get(Slice::all(slice.i(data@)), slice.i(data@), idx as int).i(slice.i(data@)) );
-
-                    let edslice = self.get(Slice::all(ddata), ddata, idx as int);   // e slice relative to d
-//                     assert( edata == edslice.i(ddata) );
-                    // eslice is relative to adata (all of data@)
-
-//                     let a = ((idx as usize) * self.uniform_size()) as usize;
-//                     let b = ((idx as usize) * self.uniform_size() + self.uniform_size()) as usize;
-//                     assert( eslice == slice.spec_sub(a, b) );
-//                     assert( eslice.start == (slice.start + a) as usize );
+        match oeslice {
+            None => None,
+            Some(eslice) => {
+                proof {
+                    self.get_ensures(*slice, data@, idx as int);   // And another 20 minutes wasted
                     index_bounds_facts(self, *slice, idx as int);
-//                     assert( (slice.start + a) as usize == (slice.start + a) );
-//                     assert( eslice.start == edslice.start + slice.start );
-
-                    assert( edslice.i(ddata) == eslice.i(data@));   // trigger
-
-//                     assert( eslice.i(data@) == edata );
-//                     assert( eltm.parsable(edata) );
-//                     assert( self.gettable(slice.i(data@), idx as int) );
-                    assert( self.elt_parsable(slice.i(data@), idx as int) );
-                } else {
-                    assume( !self.elt_parsable(slice.i(data@), idx as int) );
+                    let edslice = self.get(Slice::all(slice.i(data@)), slice.i(data@), idx as int);
+                    assert( edslice.i(slice.i(data@)) == eslice.i(data@));   // trigger
                 }
+                let oelt = self.exec_elt_marshalling().try_parse(&eslice, data);
+                oelt
             }
-            oelt
         }
     }
 
