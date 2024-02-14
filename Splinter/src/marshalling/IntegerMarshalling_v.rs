@@ -18,6 +18,10 @@ verus! {
 pub trait IntObligations<T: Deepview<int> + builtin::Integer> {
     spec fn o_spec_size() -> usize;
 
+    proof fn o_spec_size_ensures()
+        ensures 0 < Self::o_spec_size()
+    ;
+
     exec fn o_exec_size() -> (s: usize)
         ensures s == Self::o_spec_size()
     ;
@@ -201,6 +205,9 @@ impl Deepview<int> for u32 {
 impl IntObligations<u32> for IntMarshalling<u32> {
     open spec fn o_spec_size() -> usize { 4 } 
 
+    // TODO(verus): Too bad this proof-free obligation can't be handled in the trait
+    proof fn o_spec_size_ensures() {}
+
     exec fn o_exec_size() -> usize { 4 } 
 
     closed spec fn spec_from_le_bytes(s: Seq<u8>) -> u32
@@ -254,6 +261,8 @@ impl Deepview<int> for u64 {
 
 impl IntObligations<u64> for IntMarshalling<u64> {
     open spec fn o_spec_size() -> usize { 8 } 
+
+    proof fn o_spec_size_ensures() {}
 
     exec fn o_exec_size() -> usize { 8 } 
 

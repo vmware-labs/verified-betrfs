@@ -48,7 +48,8 @@ impl Slice {
         Slice{start: 0, end: data.len() as usize}
     }
 
-    pub exec fn exec_all<T>(data: &Vec<T>) -> Slice
+    pub exec fn exec_all<T>(data: &Vec<T>) -> (sl: Slice)
+        ensures sl == Self::all(data@)
     {
         Slice{start: 0, end: data.len() as usize}
     }
