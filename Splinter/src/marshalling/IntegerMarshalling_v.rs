@@ -172,7 +172,7 @@ impl<T: Deepview<int> + builtin::Integer + Copy, O: IntObligations<T>> Marshalli
         Self::from_le_bytes(sr)
     }
 
-    exec fn marshall(&self, value: &T, data: &mut Vec<u8>, start: usize) -> (end: usize)
+    exec fn exec_marshall(&self, value: &T, data: &mut Vec<u8>, start: usize) -> (end: usize)
     {
         proof { Self::as_int_ensures(); }
 

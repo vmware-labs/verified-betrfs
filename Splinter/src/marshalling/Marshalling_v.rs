@@ -93,7 +93,7 @@ pub trait Marshalling<DV, U: Deepview<DV>> {
     // jonh skipping translation of Parse -- does it ever save more than
     // a cheap if condition?
 
-    exec fn marshall(&self, value: &U, data: &mut Vec<u8>, start: usize) -> (end: usize)
+    exec fn exec_marshall(&self, value: &U, data: &mut Vec<u8>, start: usize) -> (end: usize)
     requires 
         self.valid(),
         self.marshallable(value.deepv()),

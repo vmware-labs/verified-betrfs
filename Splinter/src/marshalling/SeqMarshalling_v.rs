@@ -323,8 +323,116 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
     /////////////////////////////////////////////////////////////////////////
     // parse (entire sequence)
     /////////////////////////////////////////////////////////////////////////
-    // left off for now; not needed until IntegerSeqMarshalling
+    spec fn gettable_to_len(&self, data: Seq<u8>, len: int) -> bool
+    recommends self.valid()
+    {
+        forall |i: int| 0<=i<len ==> self.gettable(data, i)
+    }
+
+    spec fn elt_parsable_to_len(&self, data: Seq<u8>, len: int) -> bool
+    recommends self.valid(), self.gettable_to_len(data, len)
+    {
+        forall |i: int| 0<=i<len ==> self.elt_parsable(data, i)
+    }
+
+    // TODO(robj): why switch to usize in spec land here?
+    spec fn parsable_to_len(&self, data: Seq<u8>, len: usize) -> bool
+    recommends self.valid()
+    {
+        &&& self.gettable_to_len(data, len as int)
+        &&& self.elt_parsable_to_len(data, len as int)
+    }
+
+    spec fn parse_to_len(&self, data: Seq<u8>, len: usize) -> Seq<DVElt>
+    recommends self.valid(), self.parsable_to_len(data, len)
+    {
+        Seq::new(len as nat, |i: int| self.get_elt(data, i))
+    }
 }
+
+impl<DVElt, Elt: Deepview<DVElt>, SM: SeqMarshalling<DVElt, Elt>>
+    Marshalling<Seq<DVElt>, Vec<Elt>> for SM
+{
+    open spec fn valid(&self) -> bool { self.valid() }
+
+    exec fn exec_parsable(&self, dslice: &Slice, data: &Vec<u8>) -> (p: bool)
+    {
+        // TODO factor this into Marshalling trait default method
+        let ovalue = self.try_parse(dslice, data);
+        ovalue.is_some()
+    }
+
+    open spec fn marshallable(&self, value: Seq<DVElt>) -> bool { false }
+
+    open spec fn spec_size(&self, value: Seq<DVElt>) -> usize { 0 }
+
+    exec fn exec_size(&self, value: &Vec<Elt>) -> (sz: usize) { 0 }
+
+    // TODO these implementations are common to all SeqMarshallings; factor out
+    open spec fn parsable(&self, data: Seq<u8>) -> bool
+    {
+        &&& self.valid()
+        &&& self.lengthable(data)
+        &&& self.length(data) <= usize::MAX
+        &&& self.parsable_to_len(data, self.length(data) as usize)
+    }
+
+    open spec fn parse(&self, data: Seq<u8>) -> Seq<DVElt>
+    {
+        self.parse_to_len(data, self.length(data) as usize)
+    }
+
+    exec fn try_parse(&self, dslice: &Slice, data: &Vec<u8>) -> (ovalue: Option<Vec<Elt>>)
+    {
+        match self.try_length(dslice, data) {
+            None => {
+                return None;
+            },
+            Some(len) => {
+                assert( len as int == self.length(dslice.i(data@)) );
+                assert( len <= usize::MAX );
+                let mut i: usize = 0;
+                let mut result:Vec<Elt> = Vec::with_capacity(len);
+                while i < len
+                    invariant i <= len,
+                    self.valid(),   // TODO(verus #984): waste of my debugging time
+                    dslice.valid(data@),   // TODO(verus #984): waste of my debugging time
+                    len == self.length(dslice.i(data@)) as usize, // TODO(verus #984): waste of my debugging time
+                        result.len() == i,
+                        forall |j| 0<=j<i as nat ==> self.gettable(dslice.i(data@), j),
+                        forall |j| 0<=j<i as nat ==> self.elt_parsable(dslice.i(data@), j),
+                        forall |j| #![auto] 0<=j<i as nat ==> result[j].deepv() == self.get_elt(dslice.i(data@), j),
+                {
+                    let ghost idata = dslice.i(data@);
+                    let oelt = self.try_get_elt(dslice, data, i);
+                    if oelt.is_none() {
+                        return None;
+                    }
+                    result.push(oelt.unwrap());
+                    i += 1;
+                }
+                // Looks like this wants extensionality, but no ~! Not sure why it's needed.
+                // Oh maybe it's the trait-ensures-don't-trigger bug?
+                assert( result.deepv() == self.parse(dslice.i(data@)) );    // trigger.
+                return Some(result);
+            }
+        }
+    }
+
+    exec fn exec_parse(&self, dslice: &Slice, data: &Vec<u8>) -> (value: Vec<Elt>)
+    {
+        assume(false);
+        Vec::new()
+        // TODO factor this into Marshalling trait default method
+    }
+
+    exec fn exec_marshall(&self, value: &Vec<Elt>, data: &mut Vec<u8>, start: usize) -> (end: usize)
+    {
+        0
+    }
+}
+
+
 
 pub trait UniformSizedElementSeqMarshallingObligations<DVElt, Elt: Deepview<DVElt>> {
     spec fn valid(&self) -> bool;
@@ -637,7 +745,7 @@ impl<DVElt, Elt: Deepview<DVElt>, USES: UniformSizedElementSeqMarshallingObligat
             index_bounds_facts(self, *dslice, idx as int);
             self.uniform_size_ensures();
         }
-        let newend = self.exec_elt_marshalling().marshall(value, data, dslice.start + idx * self.exec_uniform_size());
+        let newend = self.exec_elt_marshalling().exec_marshall(value, data, dslice.start + idx * self.exec_uniform_size());
         assert forall |i: int| i != idx as int && self.gettable(dslice.i(old(data)@), i)
             implies self.get_data(dslice.i(data@), i) == self.get_data(dslice.i(old(data)@), i) by
         {
@@ -704,7 +812,6 @@ impl<DVElt, Elt: Deepview<DVElt>, USES: UniformSizedElementSeqMarshallingObligat
     exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: Elt) -> (r: bool) { false }
 
     exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: Elt) {}
-
 }
 
 pub struct IntegerSeqMarshalling<T: Deepview<int> + builtin::Integer, IO: IntObligations<T>> {
@@ -759,9 +866,12 @@ impl
 }
 
 // Convince myself that IntegerSeqMarshalling is indeed SeqMarshalling<T, int>
+fn foo<M: Marshalling<Seq<int>, Vec<u64>>>(m: M) {
+}
 fn test(t: IntegerSeqMarshalling<u64, IntMarshalling<u64>>, data: &Vec<u8>) {
     let dslice = Slice::exec_all(data);
     let oelt = t.try_get_elt(&dslice, data, 0);
+    foo(t);
 }
 
 }
