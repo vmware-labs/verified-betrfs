@@ -995,7 +995,7 @@ decreases
                     // The index that child will be split on is index of where split_arg.pivot
                     // would be inserted into child's keys.
                     let c_keys = children[r+1].get_Leaf_keys();
-                    let split_index = Key::largest_lt(children[r+1].get_Leaf_keys(), pivot) + 1;
+                    let split_index = Key::largest_lt(c_keys, pivot) + 1;
 
                     assert(0 < split_index < c_keys.len());
 
@@ -1031,12 +1031,27 @@ decreases
 
                 assert(0 <= r+1 < pivots.len()); // Suppress recommends.
 
+                assert(pre.all_keys_below_bound(r+1));
+
                 if (children[r+1] is Leaf) {
-                    // TODO
+                    let c_keys = children[r+1].get_Leaf_keys();
+                    let split_index = Key::largest_lt(c_keys, pivot) + 1;
+
+                    assert(0 < split_index < c_keys.len());
+
+                    assert(children[r+1].wf()); // suppress recommends
+                    Key::strictly_sorted_implies_sorted(c_keys); // suppress recommends
+                    Key::largest_lt_ensures(c_keys, pivot, Key::largest_lt(c_keys, pivot));
+                    assert(Key::lte(pivot, c_keys.last()));
+
+                    assert(children[r+1].all_keys().contains(c_keys.last()));
+                    // by all_keys_below_bound
+                    assert(Key::lt(c_keys.last(), pivots[r+1]));
+
                     assert(Key::lt(pivot, pivots[r+1]));
                 } else {
-                    assert(pre.all_keys_below_bound(r+1));
                     assert(children[r+1].all_keys().contains(pivot));
+                    // by all_keys_below_bound
                     assert(Key::lt(pivot, pivots[r+1]));
                 }
             }

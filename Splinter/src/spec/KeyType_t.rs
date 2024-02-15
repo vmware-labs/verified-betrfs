@@ -143,6 +143,21 @@ impl Key {
             Self::largest_lte_ensures(run.subrange(1, run.len() as int), needle, out - 1);
         }
     }
+
+    pub proof fn largest_lt_ensures(run: Seq<Key>, needle: Key, out: int)
+        requires
+            Key::is_sorted(run),
+            out == Key::largest_lt(run, needle)
+        ensures
+            -1 <= out < run.len(),
+            forall |i| 0 <= i <= out ==> Key::lt(#[trigger] run[i], needle),
+            forall |i| out < i < run.len() ==> Key::lte(needle, #[trigger] run[i]),
+            run.contains(needle) ==> out + 1 < run.len() && run[out + 1] == needle
+        decreases run.len()
+    {
+        // TODO(x9du): dangerous :L haven't proven this before
+        assume(false);
+    }
 }
 
 impl Element {
