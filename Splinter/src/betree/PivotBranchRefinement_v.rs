@@ -525,7 +525,6 @@ pub proof fn lemma_insert_preserves_wf(node: Node, key: Key, msg: Message, path:
             }
 
             // Subgoal 4: the children's pivots are different from the parent's pivots
-            // assert(forall |i| 1 <= i < children.len() ==> 0 <=)
             assert(post_pivots == pivots);
 
             assert forall |i, pivot| 1 <= i < post_children.len() && post_children[i].get_pivots().contains(pivot)
@@ -537,6 +536,10 @@ pub proof fn lemma_insert_preserves_wf(node: Node, key: Key, msg: Message, path:
                     // causes proof to fail in weird ways (i.e.: commenting out a later assert can cause an
                     // earlier one to fail).
                     if (i == r+1) {
+                        assert(path.subpath().node == children[r+1]);
+                        assert(path.subpath().depth == 0);
+                        assert(children[r+1] == path.target());
+                        assert(post_children[r+1] == path.target().insert_leaf(key, msg));
                         assert(post_children[r+1] == children[r+1].insert_leaf(key, msg));
                         assert(post_children[r+1] is Leaf);
                     }
@@ -944,144 +947,99 @@ ensures
 decreases
     path.depth
 {
-    lemma_route_auto();
+    let children = pre.get_Index_children();
+    let pivots = pre.get_Index_pivots();
+    let pivot = split_arg.get_pivot();
+    let r = pre.route(pivot);
     let post = pre.split(path, split_arg);
+    let post_children = post.get_Index_children();
+    let post_pivots = post.get_Index_pivots();
+
+    // Suppress recommends
+    assert(pre is Index);
+    assert(post is Index);
+    lemma_route_auto();
+    lemma_route_ensures(pre, pivot);
+    assert(0 <= r + 1 < children.len());
 
     if (path.depth == 0) {
-        // `pre` is the parent node whose child is being split.
+        // Suppress recommends
+        assert(split_arg.wf(children[r+1]));
+        assert(post_pivots.len() == pivots.len() + 1);
+        assert(0 <= r + 2 <= post_pivots.len());
+        assert(post_pivots[r+1] == pivot);
 
-        assert(pre is Index);
-        let children = pre.get_Index_children();
-        let pivot = split_arg.get_pivot();
-        let pivots = pre.get_Index_pivots();
-        let r = pre.route(split_arg.get_pivot());
-
-        assert(0 <= r + 1 < children.len());
         lemma_split_node_preserves_wf(children[r+1], split_arg);
 
-        assert(post is Index);
-        let post_children = post.get_Index_children();
-        let post_pivots = post.get_Index_pivots();
-
-        let target_child = children[r+1];
-        // Suppress recommends
-        assert(split_arg.wf(target_child));
-        let (left_node, right_node) = target_child.split_node(split_arg);
+        assert(post =~~= pre.split_child_of_index(split_arg));
 
         // Assert pivots to the left of where new pivot was inserted are still sorted.
-        assert(0 <= r+1 <= post_pivots.len()); // suppress recommends
         assert(Key::is_strictly_sorted(post_pivots.subrange(0, r+1)));
 
         // Assert pivots to the right of where new pivot was inserted are still sorted.
-        assert(0 <= r+2 <= post_pivots.len()); // suppress recommends
         assert(Key::is_strictly_sorted(post_pivots.subrange(r+2, post_pivots.len() as int)));
 
-        assert(post_pivots[r+1] == pivot);
-
+        // When the inserted pivot has an element to the left, assert that new pivot is strictly
+        // greater than pivot to the left.
         if (r >= 0) {
-            // When the inserted pivot has an element to the left,
-            // assert that new pivot is strictly greater than pivot to
-            // the left.
+            assert(Key::lt(post_pivots[r], post_pivots[r+1])) by {
+                assert(pivots[r] == post_pivots[r]);
+                assert(post_pivots[r+1] == pivot);
 
-            assert(post =~~= pre.split_child_of_index(split_arg)); // VALID
+                if (children[r+1] is Leaf) {
+                    // If the split child is Leaf, then the targeted key that's
+                    // being split can NOT be one of the end indices of the child's keys,
+                    // because otherwise one of the partitions would be empty, and that
+                    // contradicts the split_arg wf() precondition.
 
-            lemma_route_ensures(pre, pivot);
-            assert(pivots[r] == post_pivots[r]);
-            assert(r == pre.route(pivot));
+                    // The index that child will be split on is index of where split_arg.pivot
+                    // would be inserted into child's keys.
+                    let c_keys = children[r+1].get_Leaf_keys();
+                    let split_index = Key::largest_lt(children[r+1].get_Leaf_keys(), pivot) + 1;
 
-            // This was necessary to trigger the fact that pivots[r] <= pivot,
-            // despite that seeming almost trivially true through.
-            assert(lte_route(pre, pivot, r));
+                    assert(0 < split_index < c_keys.len());
 
-            // ========== ==========
-            // ========== WORKING HERE ==========
-            // ========== ==========
-            assert(split_arg.wf(children[r+1]));
+                    // By definition of Key::largest_lt, we know that:
+                    assert(Key::lt(c_keys[0], pivot));
 
-            // So this means that the pivot/key targeted by split_arg is one
-            // of the childs' keys.
-            if (children[r+1] is Leaf) {
-                // If the split child is Leaf, then the targeted key that's
-                // being split can NOT be one of the end indices of the child's keys,
-                // because otherwise one of the partitions would be empty, and that
-                // contradicts the split_arg wf() precondition.
+                    assert(pre.all_keys_above_bound(r+1));
+                    assert(children[r+1].all_keys().contains(c_keys[0]));
+                    // TODO(x9du): Needs this weird r+1-1 in order to trigger
+                    assert(Key::lte(pivots[r+1-1], c_keys[0]));
 
-                // The index that child will be split on is index of where split_arg.pivot
-                // would be inserted into child's keys.
-                let c_keys = children[r+1].get_Leaf_keys();
-                let split_index = Key::largest_lt(children[r+1].get_Leaf_keys(), pivot) + 1;
+                    // And then combined with transitivity we should get:
+                    assert(Key::lt(pivots[r], pivot));
+                } else {
+                    // If the split child is Index, then the targeted key can be one
+                    // of the end indices, however by Node::wf() we're guaranteed that
+                    // the targeted key (which is a pivot) must be *strictly between*
+                    // parents' pivots.
+                    let c_pivots = children[r+1].get_pivots();
 
-                assert(0 < split_index < c_keys.len());
-
-                // By definition of Key::largest_lt, we know that:
-                assert(Key::lt(c_keys[0], pivot));
-
-                // =========== =========== ===========
-                // =========== WORKING AREA
-                // =========== =========== ===========
-
-                // So, given that it's Node::wf again, this is probably just requiring some
-                // weird trigger that's on the left side of an implication.
-                
-                // This should come from all_keys_above_bound call in Node::wf()
-                assert(pre.all_keys_above_bound(r+1));
-
-                assert(forall |i| 0 < i < children.len() ==> pre.all_keys_above_bound(i));
-
-                assert forall |k| children[r+1].all_keys().contains(k) implies Key::lte(pivots[r], k) by
-                {
-                    // 
+                    // Trigger that child's pivots must be > parent's lower bounding pivot.
+                    // Comes from `Node::wf()` but requires a strange trigger.
+                    assert(c_pivots.contains(pivot));
+                    assert(Key::lt(pivots[r], pivot));
                 }
-
-                assert(pre.get_Index_children()[r+1].all_keys().contains(c_keys[0]));
-                assert(Key::lte(pre.get_Index_pivots()[r], c_keys[0]));
-
-                // GOAL == By definition of Betree wf():
-                assert(Key::lte(pivots[r], c_keys[0]));
-
-                // And then combined with transitivity we should get:
-                assert(Key::lt(pivots[r], pivot));
-
-                // (x9du): `split_leaf` may have issues. We should hold off on
-                // working on this until x9du double checks split_leaf impl.
-                // assume(pivot != pivots[r]);
-                assert(pivot != pivots[r]);
-            } else {
-                // If the split child is Index, then the targeted key can be one
-                // of the end indices, however by Node::wf() we're guaranteed that
-                // the targeted key (which is a pivot) must be *strictly between*
-                // parents' pivots.
-                let c_pivots = children[r+1].get_pivots();
-
-                // Trigger that child's pivots must be > parent's lower bounding pivot.
-                // Comes from `Node::wf()` but requires a strange trigger.
-                // Learns: `Key::lt(pivots[pivot_index - 1], pivot)`
-                assert(c_pivots.contains(pivot));
-
-                // GOAL
-                // assert(pivot != pivots[r]);
             }
-
-            // NEED:
-            assert(pivot != pivots[r]);
-
-            assert(Key::lte(pivots[r], pivot));
-            // assert(Key::lte(post_pivots[r], post_pivots[r+1]));
-            
-            assert(post_pivots[r+1] == pivot);
-
-            assert(Key::lt(post_pivots[r], post_pivots[r+1]));
         }
 
         if (r+2 < post_pivots.len()) {
-            // TODO(URGENT)
-            assume(Key::lt(pivot, post_pivots[r+2]));
+            assert(Key::lt(post_pivots[r+1], post_pivots[r+2])) by {
+                assert(post_pivots[r+2] == pivots[r+1]);
+                assert(post_pivots[r+1] == pivot);
 
-            // This should come from route ensures.
-            lemma_route_ensures(pre, pivot);
-            assert(0 <= r+1 < pivots.len()); // Suppress recommends.
-            assert(post_pivots[r+2] == pivots[r+1]);
-            assert(Key::lt(pivot, post_pivots[r+2]));
+                assert(0 <= r+1 < pivots.len()); // Suppress recommends.
+
+                if (children[r+1] is Leaf) {
+                    // TODO
+                    assert(Key::lt(pivot, pivots[r+1]));
+                } else {
+                    assert(pre.all_keys_below_bound(r+1));
+                    assert(children[r+1].all_keys().contains(pivot));
+                    assert(Key::lt(pivot, pivots[r+1]));
+                }
+            }
         }
 
         // Triggering forall to stitch the two ends together.
@@ -1131,7 +1089,6 @@ decreases
 
 
         // CURR GOAL
-        assert(post_pivots.len() == pivots.len() + 1);
 
         assert(Key::is_strictly_sorted(post_pivots)); // FAIL
         assume(false);
