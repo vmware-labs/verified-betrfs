@@ -1002,33 +1002,64 @@ decreases
             // of the childs' keys.
             if (children[r+1] is Leaf) {
                 // If the split child is Leaf, then the targeted key that's
-                // being split can NOT be one of the end indices.
+                // being split can NOT be one of the end indices of the child's keys,
+                // because otherwise one of the partitions would be empty, and that
+                // contradicts the split_arg wf() precondition.
+
+                // The index that child will be split on is index of where split_arg.pivot
+                // would be inserted into child's keys.
+                let c_keys = children[r+1].get_Leaf_keys();
+                let split_index = Key::largest_lt(children[r+1].get_Leaf_keys(), pivot) + 1;
+
+                assert(0 < split_index < c_keys.len());
+
+                // By definition of Key::largest_lt, we know that:
+                assert(Key::lt(c_keys[0], pivot));
+
+                // =========== =========== ===========
+                // =========== WORKING AREA
+                // =========== =========== ===========
+
+                // So, given that it's Node::wf again, this is probably just requiring some
+                // weird trigger that's on the left side of an implication.
+                
+                // This should come from all_keys_above_bound call in Node::wf()
+                assert(pre.all_keys_above_bound(r+1));
+
+                assert(forall |i| 0 < i < children.len() ==> pre.all_keys_above_bound(i));
+
+                assert forall |k| children[r+1].all_keys().contains(k) implies Key::lte(pivots[r], k) by
+                {
+                    // 
+                }
+
+                assert(pre.get_Index_children()[r+1].all_keys().contains(c_keys[0]));
+                assert(Key::lte(pre.get_Index_pivots()[r], c_keys[0]));
+
+                // GOAL == By definition of Betree wf():
+                assert(Key::lte(pivots[r], c_keys[0]));
+
+                // And then combined with transitivity we should get:
+                assert(Key::lt(pivots[r], pivot));
 
                 // (x9du): `split_leaf` may have issues. We should hold off on
                 // working on this until x9du double checks split_leaf impl.
-                assume(pivot != pivots[r]);
+                // assume(pivot != pivots[r]);
                 assert(pivot != pivots[r]);
             } else {
                 // If the split child is Index, then the targeted key can be one
                 // of the end indices, however by Node::wf() we're guaranteed that
                 // the targeted key (which is a pivot) must be *strictly between*
                 // parents' pivots.
-                assert(children[r+1] is Index);
-                assert(split_arg is SplitIndex);
-
-                let pivot_index = split_arg.get_SplitIndex_pivot_index();
-
                 let c_pivots = children[r+1].get_pivots();
 
-                // Trigger that pivot must be a key in the child's pivots.
-                // assert(c_pivots[pivot_index] == pivot);
                 // Trigger that child's pivots must be > parent's lower bounding pivot.
-                // (Weirdly the )
-                // (From Node::wf()).
+                // Comes from `Node::wf()` but requires a strange trigger.
+                // Learns: `Key::lt(pivots[pivot_index - 1], pivot)`
                 assert(c_pivots.contains(pivot));
 
                 // GOAL
-                assert(pivot != pivots[r]);
+                // assert(pivot != pivots[r]);
             }
 
             // NEED:
