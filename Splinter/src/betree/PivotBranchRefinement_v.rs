@@ -527,6 +527,7 @@ pub proof fn lemma_insert_preserves_wf(node: Node, key: Key, msg: Message, path:
             // Subgoal 4: the children's pivots are different from the parent's pivots
             assert(post_pivots == pivots);
 
+            // All pivots contained in post_children[i] should be strictly > the lower bound pivot[i-1] of post_parent.
             assert forall |i, pivot| 1 <= i < post_children.len() && post_children[i].get_pivots().contains(pivot)
             implies Key::lt(post_pivots[i-1], pivot) by {
                 if (children[i] is Leaf) {
@@ -536,6 +537,8 @@ pub proof fn lemma_insert_preserves_wf(node: Node, key: Key, msg: Message, path:
                     // causes proof to fail in weird ways (i.e.: commenting out a later assert can cause an
                     // earlier one to fail).
                     if (i == r+1) {
+                        // Our path has routed us to a leaf. We must be at the target.
+                        assert(path.subpath().valid());
                         assert(path.subpath().node == children[r+1]);
                         assert(path.subpath().depth == 0);
                         assert(children[r+1] == path.target());
@@ -614,6 +617,7 @@ pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
             assert(post_children.len() == children.len()); 
             assert(forall |i| 0 <= i < post_children.len() ==> (#[trigger] post_children[i]).wf());
 
+            // TODO(x9du): This assert forall also seems to be flaky.
             // Required to trigger the route ensures for each of the children.
             assert forall |i| 0 <= i < children.len() && children[i] is Index
             implies (forall |key| 0 <= #[trigger] children[i].route(key) + 1 < children[i].get_Index_children().len()) by {
@@ -1004,7 +1008,8 @@ decreases
 
                     assert(pre.all_keys_above_bound(r+1));
                     assert(children[r+1].all_keys().contains(c_keys[0]));
-                    // TODO(x9du): Needs this weird r+1-1 in order to trigger
+                    // Needs this weird r+1-1 in order to trigger the postcondition of
+                    // all_keys_above_bound (because quantified `i` appears as `i-1` in trigger).
                     assert(Key::lte(pivots[r+1-1], c_keys[0]));
 
                     // And then combined with transitivity we should get:
