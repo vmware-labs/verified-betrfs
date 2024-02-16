@@ -9,6 +9,7 @@ use vstd::prelude::*;
 use crate::marshalling::Slice_v::*;
 use crate::marshalling::Marshalling_v::*;
 use crate::marshalling::IntegerMarshalling_v::*;
+use crate::marshalling::math_v::*;
 
 verus! {
 
@@ -500,51 +501,6 @@ pub struct UniformSizedElementSeqMarshalling<DVElt, Elt: Deepview<DVElt>, O: Uni
     pub oblinfo: O,
     _p: std::marker::PhantomData<(DVElt,Elt,)>,
 }
-
-//////////////////////////////////////////////////////////////////////////////
-// TODO(jonh): extract to a math library
-#[verifier(nonlinear)]
-proof fn div_mul_order(a: int, b: int)
-requires 0 < b
-ensures (a/b) * b <= a
-{
-}
-
-#[verifier(nonlinear)]
-proof fn mul_le(a: int, b: int)
-    requires 0<=a, 1<=b
-    ensures a <= a*b
-{
-}
-
-#[verifier(nonlinear)]
-proof fn pos_mul_preserves_order(x: int, y: int, m: int)
-    requires 0<= x < y, 0 < m
-    ensures x*m < y*m
-{}
-
-#[verifier(nonlinear)]
-proof fn distribute_left(a: int, b: int, c: int)
-    ensures (a+b)*c == a*c + b*c {}
-
-#[verifier(nonlinear)]
-proof fn mul_preserves_le(a: int, b: int, c: int)
-    requires 0 <= a <= b, 0 <= c
-    ensures a * c <= b * c
-{ }
-
-proof fn nat_mul_nat_is_nat(x: int, y: int)
-    requires 0 <= x, 0 <= y
-    ensures 0 <= x*y {}
-
-proof fn lemma_seq_slice_slice<T>(s: Seq<T>, i: int, j: int, k: int, l: int)
-    requires 0 <= i <= j <= s.len(),
-        0 <= k <= l <= j-i
-    ensures s.subrange(i,j).subrange(k,l) =~= s.subrange(i+k, i+l)
-{
-}
-
-//////////////////////////////////////////////////////////////////////////////
 
 impl <DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>> UniformSizedElementSeqMarshalling<DVElt, Elt, O> {
     spec fn slice_length(&self, dslice: Slice) -> int
