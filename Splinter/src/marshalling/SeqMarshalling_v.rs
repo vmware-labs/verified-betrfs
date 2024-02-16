@@ -416,7 +416,7 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
 //     ;
 }
 
-pub trait UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt: Deepview<DVElt>> {
+pub trait UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt: Deepview<DVElt>, EltM: Marshalling<DVElt, Elt>> {
     spec fn valid(&self) -> bool
         ;
 
@@ -432,23 +432,23 @@ pub trait UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt: Deepview<DVElt>> 
     requires self.valid(),
     ensures sz == self.uniform_size()
     ;
-
-    type EltMarshalling : Marshalling<DVElt, Elt>;
-
-    spec fn spec_elt_marshalling(&self) -> Self::EltMarshalling
-        ;
-
-    // PLEASE PLEASE CAN I HAVE SPEC ENSURES
-    proof fn spec_elt_marshalling_ensures(&self)
-    requires self.valid()
-    ensures self.spec_elt_marshalling().valid()
-    ;
-
-    exec fn exec_elt_marshalling(&self) -> (eltm: &Self::EltMarshalling)
-    requires self.valid()
-    ensures eltm.valid(),
-        eltm == self.spec_elt_marshalling()
-        ;
+// 
+//     type EltMarshalling : Marshalling<DVElt, Elt>;
+// 
+//     spec fn spec_elt_marshalling(&self) -> Self::EltMarshalling
+//         ;
+// 
+//     // PLEASE PLEASE CAN I HAVE SPEC ENSURES
+//     proof fn spec_elt_marshalling_ensures(&self)
+//     requires self.valid()
+//     ensures self.spec_elt_marshalling().valid()
+//     ;
+// 
+//     exec fn exec_elt_marshalling(&self) -> (eltm: &Self::EltMarshalling)
+//     requires self.valid()
+//     ensures eltm.valid(),
+//         eltm == self.spec_elt_marshalling()
+//         ;
 }
 
 pub struct IntegerSeqMarshallingOblinfo<Elt: Deepview<int> + builtin::Integer, IO: IntObligations<Elt>> {
@@ -457,7 +457,7 @@ pub struct IntegerSeqMarshallingOblinfo<Elt: Deepview<int> + builtin::Integer, I
 }
 
 impl<Elt: Deepview<int> + builtin::Integer + Copy, IO: IntObligations<Elt>>
-    UniformSizedElementSeqMarshallingOblinfo<int, Elt>
+    UniformSizedElementSeqMarshallingOblinfo<int, Elt, IO>
     for IntegerSeqMarshallingOblinfo<Elt, IO>
 {
     open spec fn valid(&self) -> bool
@@ -478,31 +478,17 @@ impl<Elt: Deepview<int> + builtin::Integer + Copy, IO: IntObligations<Elt>>
     {
         IO::o_exec_size()
     }
-
-    type EltMarshalling = IO;
-
-    open spec fn spec_elt_marshalling(&self) -> Self::EltMarshalling
-    {
-        self.int_marshalling
-    }
-
-    // PLEASE PLEASE CAN I HAVE SPEC ENSURES
-    proof fn spec_elt_marshalling_ensures(&self)
-    {
-    }
-
-    exec fn exec_elt_marshalling(&self) -> (eltm: &Self::EltMarshalling)
-    {
-        &self.int_marshalling
-    }
 }
 
-pub struct UniformSizedElementSeqMarshalling<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>> {
+pub struct UniformSizedElementSeqMarshalling<DVElt, Elt: Deepview<DVElt>, EltM: Marshalling<DVElt, Elt>, O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt, EltM>> {
     pub oblinfo: O,
+    pub eltm: EltM,
     _p: std::marker::PhantomData<(DVElt,Elt,)>,
 }
 
-impl <DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>> UniformSizedElementSeqMarshalling<DVElt, Elt, O> {
+impl <DVElt, Elt: Deepview<DVElt>, EltM: Marshalling<DVElt, Elt>, O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt, EltM>>
+    UniformSizedElementSeqMarshalling<DVElt, Elt, EltM, O>
+{
     spec fn slice_length(&self, dslice: Slice) -> int
     recommends self.valid(), dslice.wf(),
     {
@@ -545,11 +531,14 @@ impl <DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<D
     }
 }
 
-impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>>
+impl <DVElt, Elt: Deepview<DVElt>, EltM: Marshalling<DVElt, Elt>, O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt, EltM>>
     SeqMarshalling<DVElt, Elt>
-    for UniformSizedElementSeqMarshalling<DVElt, Elt, O>
+    for UniformSizedElementSeqMarshalling<DVElt, Elt, EltM, O>
 {
-    open spec fn seq_valid(&self) -> bool { self.oblinfo.valid() }
+    open spec fn seq_valid(&self) -> bool {
+        &&& self.eltm.valid()
+        &&& self.oblinfo.valid()
+    }
 
     open spec fn lengthable(&self, data: Seq<u8>) -> bool { true }
 
@@ -604,13 +593,13 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
     open spec fn elt_parsable(&self, data: Seq<u8>, idx: int) -> bool
     // TODO factor out this common impl
     {
-        self.oblinfo.spec_elt_marshalling().parsable(self.get_data(data, idx))
+        self.eltm.parsable(self.get_data(data, idx))
     }
 
     open spec fn get_elt(&self, data: Seq<u8>, idx: int) -> (elt: DVElt)
     // TODO factor out this common impl
     {
-        self.oblinfo.spec_elt_marshalling().parse(self.get_data(data, idx))
+        self.eltm.parse(self.get_data(data, idx))
     }
 
     exec fn try_get(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oeslice: Option<Slice>)
@@ -643,7 +632,7 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
     exec fn try_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oelt: Option<Elt>)
     // TODO factor out this common impl
     {
-        proof { self.oblinfo.spec_elt_marshalling_ensures() };  // :v(
+        //proof { self.oblinfo.spec_elt_marshalling_ensures() };  // :v(
 
         let oeslice = self.try_get(dslice, data, idx);
         match oeslice {
@@ -655,7 +644,7 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
                     let edslice = self.get(Slice::all(dslice.i(data@)), dslice.i(data@), idx as int);
                     assert( edslice.i(dslice.i(data@)) == eslice.i(data@));   // trigger
                 }
-                let oelt = self.oblinfo.exec_elt_marshalling().try_parse(&eslice, data);
+                let oelt = self.eltm.try_parse(&eslice, data);
                 oelt
             }
         }
@@ -671,7 +660,7 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
             let edslice = self.get(Slice::all(dslice.i(data@)), dslice.i(data@), idx as int);
             assert( edslice.i(dslice.i(data@)) == eslice.i(data@));   // trigger
         }
-        self.oblinfo.exec_elt_marshalling().exec_parse(&eslice, data)
+        self.eltm.exec_parse(&eslice, data)
     }
 
     /////////////////////////////////////////////////////////////////////////
@@ -680,14 +669,14 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
 
     open spec fn elt_marshallable(&self, elt: DVElt) -> bool
     {
-        self.oblinfo.spec_elt_marshalling().marshallable(elt)
+        self.eltm.marshallable(elt)
     }
 
     open spec fn settable(&self, data: Seq<u8>, idx: int, value: DVElt) -> bool
     {
         &&& 0 <= idx < self.length(data)
         &&& self.elt_marshallable(value)
-        &&& self.oblinfo.spec_elt_marshalling().spec_size(value) == self.oblinfo.uniform_size()
+        &&& self.eltm.spec_size(value) == self.oblinfo.uniform_size()
     }
 
     open spec fn preserves_entry(&self, data: Seq<u8>, idx: int, new_data: Seq<u8>) -> bool
@@ -715,7 +704,7 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
     exec fn exec_settable(&self, dslice: &Slice, data: &Vec<u8>, idx: usize, value: &Elt) -> (s: bool)
     {
         let len = self.exec_length(dslice, data);
-        let sz = self.oblinfo.exec_elt_marshalling().exec_size(value);
+        let sz = self.eltm.exec_size(value);
         idx < len && sz == self.oblinfo.exec_uniform_size()
     }
 
@@ -725,7 +714,7 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
             self.index_bounds_facts(*dslice, idx as int);
             self.oblinfo.uniform_size_ensures();
         }
-        let newend = self.oblinfo.exec_elt_marshalling().exec_marshall(value, data, dslice.start + idx * self.oblinfo.exec_uniform_size());
+        let newend = self.eltm.exec_marshall(value, data, dslice.start + idx * self.oblinfo.exec_uniform_size());
         assert forall |i: int| i != idx as int && self.gettable(dslice.i(old(data)@), i)
             implies self.get_data(dslice.i(data@), i) == self.get_data(dslice.i(old(data)@), i) by
         {
@@ -814,8 +803,8 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
 //     exec fn seq_exec_parse(&self, dslice: &Slice, data: &Vec<u8>) -> (value: Vec<Elt>)
 }
 
-impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>>
-    UniformSizedElementSeqMarshalling<DVElt, Elt, O>
+impl<DVElt, Elt: Deepview<DVElt>, EltM: Marshalling<DVElt, Elt>, O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt, EltM>>
+    UniformSizedElementSeqMarshalling<DVElt, Elt, EltM, O>
 {
     pub open spec fn seq_parsable(&self, data: Seq<u8>) -> bool
     {
@@ -831,9 +820,9 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
     }
 }
 
-impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>>
+impl<DVElt, Elt: Deepview<DVElt>, EltM: Marshalling<DVElt, Elt>, O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt, EltM>>
     Marshalling<Seq<DVElt>, Vec<Elt>>
-    for UniformSizedElementSeqMarshalling<DVElt, Elt, O>
+    for UniformSizedElementSeqMarshalling<DVElt, Elt, EltM, O>
 {
     open spec fn valid(&self) -> bool { self.seq_valid() }
 
@@ -923,7 +912,7 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
 fn test_is_seq_marshalling<SM: SeqMarshalling<int, u64>>(sm: &SM) { }
 fn test_is_marshalling<M: Marshalling<Seq<int>, Vec<u64>>>(m: &M) { }
 
-type IntegerSeqMarshalling<IT> = UniformSizedElementSeqMarshalling<int, IT, IntegerSeqMarshallingOblinfo<IT, IntMarshalling<IT>>>;
+type IntegerSeqMarshalling<IT> = UniformSizedElementSeqMarshalling<int, IT, IntMarshalling<IT>, IntegerSeqMarshallingOblinfo<IT, IntMarshalling<IT>>>;
 
 fn test(t: IntegerSeqMarshalling<u64>, data: &Vec<u8>) {
     let dslice = Slice::exec_all(data);
@@ -931,5 +920,46 @@ fn test(t: IntegerSeqMarshalling<u64>, data: &Vec<u8>) {
     test_is_marshalling(&t);
     let oelt = t.try_get_elt(&dslice, data, 0);
 }
+
+// pub trait ResizableUniformSizedElementSeqMarshallingOblinfo<DVElt, Elt: Deepview<DVElt>, LenT, LenMarshalling: IntMarshalling<LenT>>
+//     : UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>
+// {
+// //     spec fn valid(&self) -> bool
+// //         ;
+// // 
+// //     spec fn uniform_size(&self) -> (sz: usize)
+// //         ;
+// // 
+// //     proof fn uniform_size_ensures(&self)
+// //     requires self.valid(),
+// //     ensures 0 < self.uniform_size()
+// //     ;
+// // 
+// //     exec fn exec_uniform_size(&self) -> (sz: usize)
+// //     requires self.valid(),
+// //     ensures sz == self.uniform_size()
+// //     ;
+// // 
+// //     type EltMarshalling : Marshalling<DVElt, Elt>;
+// // 
+// //     spec fn spec_elt_marshalling(&self) -> Self::EltMarshalling
+// //         ;
+// // 
+// //     // PLEASE PLEASE CAN I HAVE SPEC ENSURES
+// //     proof fn spec_elt_marshalling_ensures(&self)
+// //     requires self.valid()
+// //     ensures self.spec_elt_marshalling().valid()
+// //     ;
+// // 
+// //     exec fn exec_elt_marshalling(&self) -> (eltm: &Self::EltMarshalling)
+// //     requires self.valid()
+// //     ensures eltm.valid(),
+// //         eltm == self.spec_elt_marshalling()
+// //         ;
+// 
+//     spec fn spec_size_of_length_field() -> usize {
+//         LenMarshalling::o_spec_size()
+//     }
+// }
 
 }
