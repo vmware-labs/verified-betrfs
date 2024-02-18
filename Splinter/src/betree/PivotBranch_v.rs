@@ -383,7 +383,6 @@ impl Node {
     {
         // Need route ensures to restore checked
         let pivot = split_arg.get_pivot();
-        //
         let child_idx = self.route(pivot) + 1;
         let (left_node, right_node) = self.get_Index_children()[child_idx].split_node(split_arg);
         Node::Index{

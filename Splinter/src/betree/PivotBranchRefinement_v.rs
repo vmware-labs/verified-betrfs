@@ -976,6 +976,8 @@ decreases
         lemma_split_node_preserves_wf(children[r+1], split_arg);
 
         assert(post =~~= pre.split_child_of_index(split_arg));
+        assert(post_pivots.len() == post_children.len() - 1);
+        assert(post_pivots =~~= pivots.insert(r+1, pivot));
 
         // Assert pivots to the left of where new pivot was inserted are still sorted.
         assert(Key::is_strictly_sorted(post_pivots.subrange(0, r+1)));
@@ -983,8 +985,7 @@ decreases
         // Assert pivots to the right of where new pivot was inserted are still sorted.
         assert(Key::is_strictly_sorted(post_pivots.subrange(r+2, post_pivots.len() as int)));
 
-        // When the inserted pivot has an element to the left, assert that new pivot is strictly
-        // greater than pivot to the left.
+        // post_pivots[r] < pivot < post_pivots[r+2] (when r, r+2 exist)
         if (r >= 0) {
             assert(Key::lt(post_pivots[r], post_pivots[r+1])) by {
                 assert(pivots[r] == post_pivots[r]);
@@ -1062,7 +1063,7 @@ decreases
             }
         }
 
-        // Triggering forall to stitch the two ends together.
+        // Stitch the two ends together.
         assert forall |i, j| 0 <= i < j < post_pivots.len()
             implies Key::lt(post_pivots[i], post_pivots[j]) by
         {
@@ -1073,54 +1074,48 @@ decreases
                 // Untouched section to the right of insert is still sorted.
                 assert(Key::lt(post_pivots[i], post_pivots[j]));
             } else {
-                // Assert by lemma_route_ensures that
-
-                // We need the fact that post_pivots[r] < new_pivot < post_pivots[r+2]
-                // How do we get that? (Well at least one of these should come from route
-                // lemma).
-
-                if (j == r+1) {
-                    // Upper element is inserted element. (This one it should know
-                    // given that we')
-                    if (i < r) {
-                        // By is_strictly_sorted property (this is the key trigger to learn)
-                        assert(Key::lt(pivots[i], pivots[r]));
-                    }
-
-                    // GOAL
-                    assert(Key::lt(post_pivots[i], post_pivots[j]));
-                } else {
-                    // Upper element is beyond the inserted element.
-
-                    // TODO(URGENT)
-                    assume(false);
-                    assert(Key::lt(post_pivots[i], post_pivots[j]));
+                if (i < r) {
+                    assert(Key::lt(post_pivots[i], post_pivots[r]));
                 }
-
-                // i and j span the newly inserted area.
+                if (r+2 < j) {
+                    assert(Key::lt(post_pivots[r+2], post_pivots[j]));
+                }
                 assert(Key::lt(post_pivots[i], post_pivots[j]));
             }
         }
-        
-        // CURR_GOAL WORK START (proving all of the wf conditions on post_children)
-        assert(post_pivots =~~= pivots.insert(r+1, pivot));
-        assert(post_pivots.len() == post_children.len() - 1);
 
+        // Goal 1
+        assert(Key::is_strictly_sorted(post_pivots));
 
+        assert(post_children.len() == children.len() + 1);
 
-        // CURR GOAL
+        assert(forall |i| 0 <= i < r+1 ==> children[i] == post_children[i]);
+        assert(forall |i| 0 <= i < r+1 ==> pivots[i] == post_pivots[i]);
+        assert forall |i| 0 <= i < r+1 implies post.all_keys_below_bound(i) by {
+            assert(pre.all_keys_below_bound(i));
+        }
 
-        assert(Key::is_strictly_sorted(post_pivots)); // FAIL
+        assert(forall |i: int| r+2 < i < post_children.len() - 1 ==> children[i-1] == post_children[i]);
+        assert(forall |i: int| r+2 < i < post_children.len() - 1 ==> pivots[i-1] == post_pivots[i]);
+        assert forall |i: int| r+2 < i < post_children.len() - 1
+        implies post.all_keys_below_bound(i) by {
+            assert(pre.all_keys_below_bound(i - 1));
+        }
+
+        assert(post.all_keys_below_bound(r+1));
+        assert(r+2 < post_children.len() - 1 ==> post.all_keys_below_bound(r+2));
+
+        // Goal 2
+        assert(forall |i| 0 <= i < post_children.len() - 1 ==> post.all_keys_below_bound(i));
+
         assume(false);
 
-        assert(forall |i| 0 <= i < post_children.len() ==> (#[trigger] post_children[i]).wf());
-        // For post_children[0:-1], all keys they contain should be < their upper pivot.
-        assert(forall |i| 0 <= i < post_children.len() - 1 ==> post.all_keys_below_bound(i)); // FAIL
-        // For post_children[1:], all keys they contain should be >= their lower pivot.
-        assert(forall |i| 0 < i < post_children.len() ==> post.all_keys_above_bound(i)); // FAIL
+        // Goal 3
+        assert(forall |i| 0 < i < post_children.len() ==> post.all_keys_above_bound(i));
 
-        // assert()
-        assert(post.wf());
+        // Goal 4
+        assert(forall |i, p| 1 <= i < post_children.len() && #[trigger] post_children[i].get_pivots().contains(p)
+            ==> Key::lt(post_pivots[i-1], p));
     } else {
         assume(false);
         // lemma_split_preserves_wf()
