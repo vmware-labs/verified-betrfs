@@ -63,6 +63,7 @@ impl JournalRecord {
 //
 // TODO(jonh): Jialin suggests JournalStore to avoid the way "disk" brings in too
 // many other model assumptions.
+#[verifier::ext_equal]
 pub struct DiskView {
     pub boundary_lsn: LSN,
     pub entries: Map<Address, JournalRecord>,
@@ -703,6 +704,7 @@ impl DiskView {
     }
 }
 
+#[verifier::ext_equal]
 pub struct TruncatedJournal {
     pub freshest_rec: Pointer,  // root address of journal
     pub disk_view: DiskView,

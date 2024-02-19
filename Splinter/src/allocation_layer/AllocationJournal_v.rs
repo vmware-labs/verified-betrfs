@@ -18,6 +18,7 @@ use crate::journal::LinkedJournal_v::{DiskView, LinkedJournal, TruncatedJournal}
 
 verus! {
 
+#[verifier::ext_equal]
 pub struct JournalImage {
     pub tj: TruncatedJournal,
     pub first: AU,
@@ -37,11 +38,11 @@ impl JournalImage {
     }
 
     pub open spec(checked) fn valid_image(self) -> bool {
-        &&& self.tj.disk_view.wf_addrs()  // subsumed by decodable?
+        &&& self.tj.disk_view.wf_addrs()
 
         &&& self.tj.disk_view.pointer_is_upstream(self.tj.freshest_rec, self.first)
-        &&& self.tj.disk_view.domain_tight_wrt_index(self.tj.build_lsn_au_index(self.first))
-        &&& self.tj.disk_view.non_index_lsn_bounded(self.tj.build_lsn_au_index(self.first))
+        &&& self.tj.disk_view.domain_tight_wrt_index(self.tj.build_lsn_au_index(self.first), self.tj.freshest_rec)
+        &&& self.tj.disk_view.bounded_inactive_lsns(self.tj.build_lsn_au_index(self.first), self.tj.freshest_rec)
     }
 
     pub proof fn empty_is_valid_image()
@@ -131,19 +132,32 @@ pub open spec(checked) fn au_addrs_past_pointer(ptr: Pointer) -> Set<Address> {
 }
 
 impl DiskView {
-    pub open spec fn domain_tight_wrt_index(self, lsn_au_index: LsnAUIndex) -> bool {
-        forall|addr|
-            #[trigger]
-            self.entries.dom().contains(addr) ==> lsn_au_index.values().contains(addr.au)
+    pub open spec fn tight_domain(self, index: LsnAUIndex, root: Pointer) -> Set<Address>
+    {
+        Set::new( |addr: Address| {
+                &&& self.entries.contains_key(addr) 
+                &&& index.values().contains(addr.au) 
+                &&& !au_addrs_past_pointer(root).contains(addr)
+            }
+        )
     }
 
-    pub open spec fn non_index_lsn_bounded(self, lsn_au_index: LsnAUIndex) -> bool {
+    pub open spec fn domain_tight_wrt_index(self, index: LsnAUIndex, root: Pointer) -> bool {
+        forall|addr|
+            #[trigger] self.entries.dom().contains(addr) ==> {
+                &&& index.values().contains(addr.au)
+                &&& root is Some ==> !root.unwrap().after_page(addr)
+            }
+    }
+
+    pub open spec fn bounded_inactive_lsns(self, index: LsnAUIndex, root: Pointer) -> bool {
         forall|addr, lsn|
             ({
                 &&& self.entries.dom().contains(addr)
                 &&& self.entries[addr].message_seq.contains(lsn)
-                &&& lsn_au_index.values().contains(addr.au)
-                &&& !lsn_au_index.contains_key(lsn)
+                &&& index.values().contains(addr.au) 
+                &&& !index.contains_key(lsn)
+                &&& root is Some ==> !root.unwrap().after_page(addr)
             }) ==> lsn < self.boundary_lsn
     }
 
@@ -318,10 +332,7 @@ impl DiskView {
 
     pub proof fn build_lsn_au_index_equiv_page_walk(self, root: Pointer, first: AU)
         requires
-            self.pointer_is_upstream(root, first),
-            self.acyclic(),
-            self.internal_au_pages_fully_linked(),
-            root is Some ==> self.valid_first_au(first),
+            self.pointer_is_upstream(root, first)
         ensures
             self.build_lsn_au_index_au_walk(root, first) =~= self.build_lsn_au_index_page_walk(
                 root,
@@ -871,11 +882,38 @@ impl DiskView {
             self.lemma_aus_hold_contiguous_lsns_first_page(self.next(root), first);  // recurse!
         }
     }
+
+    pub proof fn addr_supports_lsn_consistent_with_index(self, index: LsnAUIndex, lsn: LSN, addr: Address)
+        requires
+            self.wf(),
+            self.wf_addrs(),
+            self.has_unique_lsns(),
+            self.index_keys_exist_valid_entries(index),
+            self.addr_supports_lsn(addr, lsn),
+            index.contains_key(lsn),
+        ensures
+            index[lsn] == addr.au
+    {
+        let _ = self.instantiate_index_keys_exist_valid_entries(index, lsn);
+    }
 }
 
 impl TruncatedJournal {
     pub open spec fn au_domain_valid(self, lsn_au_index: LsnAUIndex) -> bool {
         forall|lsn| lsn_au_index.contains_key(lsn) <==> (self.seq_start() <= lsn < self.seq_end())
+    }
+
+    pub open spec fn discard_old_tight(
+        self,
+        start_lsn: LSN,
+        keep_addrs: Set<Address>,
+        new: Self,
+    ) -> bool
+        recommends
+            self.wf(),
+    {
+        &&& self.discard_old_cond(start_lsn, keep_addrs, new)
+        &&& keep_addrs =~= new.disk_view.entries.dom()
     }
 
     #[verifier(recommends_by)]
@@ -914,11 +952,18 @@ impl TruncatedJournal {
                 &&& self.au_domain_valid(index)
                 &&& aus_hold_contiguous_lsns(index)
                 &&& self.disk_view.index_keys_exist_valid_entries(index)
+                &&& self.freshest_rec is Some ==> {
+                    &&& index.contains_key(self.seq_start())
+                    &&& index[self.seq_start()] == first
+                }
             }),
     {
         self.disk_view.lemma_aus_hold_contiguous_lsns(self.freshest_rec, first);
         self.disk_view.build_lsn_au_index_equiv_page_walk(self.freshest_rec, first);
         self.disk_view.build_lsn_au_index_page_walk_exist_valid_entries(self.freshest_rec);
+        if self.freshest_rec is Some {
+            self.disk_view.first_contains_boundary(self.freshest_rec, first);
+        }
     }
 
     pub proof fn sub_disk_build_sub_lsn_au_index(self, first: AU, big: Self, big_first: AU)
@@ -953,17 +998,242 @@ impl TruncatedJournal {
         }
     }
 
-    pub open spec fn discard_old_tight(
-        self,
-        start_lsn: LSN,
-        keep_addrs: Set<Address>,
-        new: Self,
-    ) -> bool
-        recommends
-            self.wf(),
+    pub open spec(checked) fn valid_structure(self, index: LsnAUIndex, first: AU) -> bool {
+        &&& self.wf()
+        &&& self.disk_view.wf_addrs()
+        &&& self.disk_view.pointer_is_upstream(self.freshest_rec, first)
+        &&& self.disk_view.bounded_inactive_lsns(index, self.freshest_rec)
+        &&& index == self.build_lsn_au_index(first)
+    }
+
+    pub open spec(checked) fn valid_subrange(self, index: LsnAUIndex, first: AU,
+        sub_start: LSN, sub_freshest_rec: Pointer, sub_first: AU) -> bool
+        recommends self.valid_structure(index, first)
     {
-        &&& self.discard_old_cond(start_lsn, keep_addrs, new)
-        &&& keep_addrs =~= new.disk_view.entries.dom()
+        let dv = self.disk_view;
+        let sub_tj = dv.tj_at(sub_freshest_rec);
+
+        &&& self.seq_start() <= sub_start
+        &&& dv.decodable(sub_freshest_rec)
+        &&& sub_freshest_rec is Some ==> sub_tj.seq_end() <= self.seq_end()
+        &&& sub_freshest_rec is Some ==> sub_start < sub_tj.seq_end()
+        &&& sub_freshest_rec is Some ==> {
+            &&& index.contains_key(sub_start) 
+            &&& index[sub_start] == sub_first
+        }
+    }
+
+    pub proof fn subrange_preserves_pointer_is_upstream(self: Self, index: LsnAUIndex, first: AU, 
+        sub_start: LSN, sub_freshest_rec: Pointer, sub_first: AU)
+    requires 
+        self.valid_structure(index, first),
+        self.valid_subrange(index, first, sub_start, sub_freshest_rec, sub_first),
+    ensures 
+        self.disk_view.discard_old(sub_start).pointer_is_upstream(sub_freshest_rec, sub_first)
+    {
+        let dv = self.disk_view;
+        let sub_dv = self.disk_view.discard_old(sub_start);
+
+        assert(sub_dv.decodable(sub_freshest_rec));
+        assert(sub_dv.valid_ranking(dv.the_ranking()));
+        assert(sub_dv.acyclic());
+
+        assert(sub_dv.internal_au_pages_fully_linked()) by {
+            reveal(DiskView::pages_allocated_in_lsn_order);
+        }
+
+        assert(sub_dv.has_unique_lsns()) by {
+            assert(forall|lsn, addr| sub_dv.addr_supports_lsn(addr, lsn) 
+                ==> dv.addr_supports_lsn(addr, lsn));
+        }
+
+        if sub_freshest_rec is Some {
+            self.build_lsn_au_index_ensures(first);
+            assert(index.contains_key(sub_start));
+            let first_addr = dv.instantiate_index_keys_exist_valid_entries(index, sub_start);
+            assert(sub_dv.addr_supports_lsn(first_addr, sub_start));
+        }
+    }
+
+    pub proof fn sub_disk_preserves_pointer_is_upstream(self: Self, index: LsnAUIndex, first: AU,
+        sub_start: LSN, sub_freshest_rec: Pointer, sub_first: AU) -> (sub_dv: DiskView)
+    requires 
+        self.valid_structure(index, first),
+        self.valid_subrange(index, first, sub_start, sub_freshest_rec, sub_first),
+    ensures
+        ({
+            let dv = self.disk_view;
+            let sub_end = dv.tj_at(sub_freshest_rec).seq_end();
+            let sub_lsns = Set::new(|lsn| sub_start <= lsn < sub_end);
+            let sub_domain = dv.tight_domain(index.restrict(sub_lsns), sub_freshest_rec);
+            &&& sub_dv == DiskView{boundary_lsn: sub_start, entries: dv.entries.restrict(sub_domain)}
+            &&& sub_dv.pointer_is_upstream(sub_freshest_rec, sub_first)
+            &&& sub_dv.build_lsn_au_index_au_walk(sub_freshest_rec, sub_first) == index.restrict(sub_lsns)
+        })
+    {
+        let dv = self.disk_view;
+        let sub_end = dv.tj_at(sub_freshest_rec).seq_end();
+        let sub_lsns = Set::new(|lsn| sub_start <= lsn < sub_end);
+        let sub_index = index.restrict(sub_lsns);
+
+        let sub_domain = dv.tight_domain(sub_index, sub_freshest_rec);
+        let sub_dv = DiskView{boundary_lsn: sub_start, entries: dv.entries.restrict(sub_domain)}; 
+
+        self.build_lsn_au_index_ensures(first);
+
+        reveal(DiskView::pages_allocated_in_lsn_order);
+        assert forall|addr| #[trigger] sub_dv.entries.contains_key(addr)
+        implies sub_dv.is_nondangling_pointer(
+            sub_dv.entries[addr].cropped_prior(sub_dv.boundary_lsn),
+        ) by {
+            let head = dv.entries[addr];
+            let prior_ptr = head.cropped_prior(sub_dv.boundary_lsn);
+            if prior_ptr is Some {
+                if addr.au == prior_ptr.unwrap().au {
+                    if addr.after_page(prior_ptr.unwrap()) {
+                        assert(false);
+                    }
+                } else {
+                    let lsn = head.message_seq.seq_start;
+                    // equivalent to dv.entries[prior_ptr.unwrap()].message_seq.seq_end
+                    let prior_lsn = (lsn - 1) as nat;
+                    assert(sub_dv.boundary_lsn < lsn);
+                    reveal(DiskView::index_keys_exist_valid_entries);
+
+                    if sub_index.contains_key(lsn) {
+                        assert(sub_index.contains_key(prior_lsn));
+                        assert(dv.addr_supports_lsn(prior_ptr.unwrap(), prior_lsn));
+                        assert(sub_dv.is_nondangling_pointer(prior_ptr));
+                    } else if index.contains_key(lsn) {
+                        assert(lsn >= sub_end);
+                        let in_range = choose |in_range| #[trigger] sub_index.contains_key(in_range) && sub_index[in_range] == addr.au;
+                        assert(in_range <= prior_lsn <= lsn);
+                        assert(index.contains_key(in_range));
+                        assert(index[in_range] == addr.au);
+                        assert(index[lsn] == addr.au);
+                        assert(index[prior_lsn] == addr.au); // prior_lsn also == next_ptr.unwrap().au
+                        assert(false);
+                    } else {
+                        assert(dv.entries[addr].message_seq.contains(lsn)); // trigger
+                        assert(lsn < sub_dv.boundary_lsn);
+                        assert(false);
+                    }
+                }
+            }
+        }
+
+        assert(sub_dv.nondangling_pointers());
+
+        if sub_freshest_rec is Some {
+            let last_lsn = (sub_end - 1) as nat;
+            assert(dv.addr_supports_lsn(sub_freshest_rec.unwrap(), last_lsn));
+            dv.addr_supports_lsn_consistent_with_index(index, last_lsn, sub_freshest_rec.unwrap());
+            assert(sub_index.contains_key(last_lsn)); // trigger
+            assert(sub_dv.is_nondangling_pointer(sub_freshest_rec));
+
+            // valid first_au
+            assert(index.contains_key(sub_start));
+            let first_addr = dv.instantiate_index_keys_exist_valid_entries(index, sub_start);
+            assert(first_addr.au == index[sub_start]);
+            assert(sub_index.contains_key(sub_start));
+            assert(sub_dv.addr_supports_lsn(first_addr, sub_start));
+            assert(sub_dv.valid_first_au(index[sub_start]));
+        }
+
+        assert(sub_dv.decodable(sub_freshest_rec));
+        assert(sub_dv.valid_ranking(dv.the_ranking()));
+        assert(sub_dv.acyclic());
+        assert(sub_dv.internal_au_pages_fully_linked());
+        assert(sub_dv.has_unique_lsns()) by {
+            assert(forall|lsn, addr|
+                sub_dv.addr_supports_lsn(addr, lsn) ==> dv.addr_supports_lsn(addr, lsn));
+        }
+
+        assert(sub_dv.pointer_is_upstream(sub_freshest_rec, sub_first));
+
+        let sub_tj = TruncatedJournal{disk_view: sub_dv, freshest_rec: sub_freshest_rec};
+        sub_tj.build_lsn_au_index_ensures(sub_first);
+        if sub_freshest_rec is Some {
+            sub_tj.sub_disk_build_sub_lsn_au_index(sub_first, self, first);
+            assert(sub_tj.build_lsn_au_index(sub_first).dom() =~= sub_index.dom());  
+        }
+        assert(sub_tj.build_lsn_au_index(sub_first) =~= sub_index);
+        sub_dv
+    }
+
+    pub proof fn sub_disk_preserves_bounded_inactive_lsns(self: Self, index: LsnAUIndex, first: AU,
+        sub_tj: Self, sub_first: AU)
+    requires
+        self.valid_structure(index, first),
+        sub_tj.disk_view.pointer_is_upstream(sub_tj.freshest_rec, sub_first),
+        self.seq_start() <= sub_tj.seq_start(),
+        sub_tj.seq_end() <= self.seq_end(),
+        sub_tj.disk_view.is_sub_disk_with_newer_lsn(self.disk_view),
+    ensures
+        sub_tj.disk_view.bounded_inactive_lsns(sub_tj.build_lsn_au_index(sub_first), sub_tj.freshest_rec)
+    {
+        let dv = self.disk_view;
+        let sub_dv = sub_tj.disk_view;
+        let sub_index = sub_tj.build_lsn_au_index(sub_first);
+    
+        assert(forall |addr| sub_dv.entries.contains_key(addr) ==> dv.entries.contains_key(addr));
+        assert(sub_dv.wf_addrs());
+
+        sub_tj.build_lsn_au_index_ensures(sub_first);
+        sub_tj.sub_disk_build_sub_lsn_au_index(sub_first, self, first);
+        assert(sub_index <= index);
+
+        assert forall|addr, lsn|
+            ({
+                &&& sub_dv.entries.dom().contains(addr)
+                &&& sub_dv.entries[addr].message_seq.contains(lsn)
+                &&& sub_index.values().contains(addr.au) 
+                &&& !sub_index.contains_key(lsn)
+                &&& sub_tj.freshest_rec is Some ==> !sub_tj.freshest_rec.unwrap().after_page(addr)
+            })
+        implies lsn < sub_dv.boundary_lsn
+        by {
+            let in_range_lsn = choose |in_range_lsn| sub_index.contains_key(in_range_lsn) 
+                && #[trigger] sub_index[in_range_lsn] == addr.au;
+            assert(index.contains_key(in_range_lsn));
+            assert(index[in_range_lsn] == addr.au);
+            assert(sub_tj.freshest_rec is Some);
+
+            if lsn >= sub_tj.seq_end() {
+                let last_lsn = (sub_tj.seq_end() - 1) as nat;
+                self.build_lsn_au_index_ensures(first);
+                assert(index.contains_key(last_lsn)); // trigger
+                assert(dv.entries.contains_key(sub_tj.freshest_rec.unwrap())); // trigger
+                dv.addr_supports_lsn_consistent_with_index(index, last_lsn, sub_tj.freshest_rec.unwrap());
+     
+                assert(addr.au != sub_tj.freshest_rec.unwrap().au) by {
+                    reveal(DiskView::pages_allocated_in_lsn_order);
+                }
+
+                if index.contains_key(lsn) {
+                    assert(dv.entries.contains_key(addr));
+                    assert(dv.entries[addr].contains_lsn(dv.boundary_lsn, lsn));
+                    dv.addr_supports_lsn_consistent_with_index(index, lsn, addr);
+                    assert(contiguous_lsns(index, in_range_lsn, last_lsn, lsn));
+                    assert(index[last_lsn] == addr.au);
+                    assert(false);
+                } else {
+                    assert(self.freshest_rec is Some);
+                    if self.freshest_rec.unwrap().after_page(addr) {
+                        let end = (self.seq_end() - 1) as nat;
+                        assert(index.contains_key(end));
+                        dv.addr_supports_lsn_consistent_with_index(index, end, self.freshest_rec.unwrap());
+                        assert(in_range_lsn <= last_lsn <= end);
+                        assert(contiguous_lsns(index, in_range_lsn, last_lsn, end));
+                        assert(index[last_lsn] == addr.au);
+                        assert(false);
+                    } 
+                    assert(dv.entries.dom().contains(addr)); // trigger
+                    assert(lsn < dv.boundary_lsn);
+                    assert(lsn < sub_dv.boundary_lsn);
+                }
+            }
+        }
     }
 }
 
@@ -1053,11 +1323,9 @@ state_machine!{ AllocationJournal {
         let post_discard = cropped_tj.discard_old(new_bdy);
         let frozen_lsns = Set::new(|lsn: LSN| new_bdy <= lsn && lsn < post_discard.seq_end());
         let frozen_index = pre.lsn_au_index.restrict(frozen_lsns);
-
         // we can leave in pages prior to first
         // but can't keep pages beyond freshest rec in our frozen domain
-        let frozen_addrs = Set::new(|addr: Address| cropped_tj.disk_view.entries.contains_key(addr) 
-            && frozen_index.values().contains(addr.au)) - au_addrs_past_pointer(frozen_journal.tj.freshest_rec);
+        let frozen_addrs = cropped_tj.disk_view.tight_domain(frozen_index, frozen_journal.tj.freshest_rec);
 
         require cropped_tj.discard_old_tight(new_bdy, frozen_addrs, frozen_journal.tj);
         require frozen_journal.first == Self::new_first(frozen_journal.tj, pre.lsn_au_index, new_bdy);
@@ -1077,7 +1345,7 @@ state_machine!{ AllocationJournal {
     // TODO old_first is really an abritrary value; remove the parameter (dependency)
     pub open spec(checked) fn new_first(tj: TruncatedJournal, lsn_au_index: LsnAUIndex, new_bdy: LSN) -> AU
     recommends
-        tj.wf(),
+        tj.disk_view.is_nondangling_pointer(tj.freshest_rec),
     {
         let post_freshest_rec = if tj.seq_end() == new_bdy { None } else { tj.freshest_rec }; // matches defn at TruncatedJournal::discard_old
         if post_freshest_rec is Some && lsn_au_index.contains_key(new_bdy) {
@@ -1184,30 +1452,30 @@ state_machine!{ AllocationJournal {
         self.journal.truncated_journal
     }
 
-    pub open spec(checked) fn mini_allocator_follows_freshest_rec(freshest_rec: Pointer, allocator: MiniAllocator) -> bool
+    pub open spec(checked) fn mini_allocator_follows_freshest_rec(root: Pointer, allocator: MiniAllocator) -> bool
     {
         allocator.curr.is_Some() ==> {
-            &&& freshest_rec.is_Some()
-            &&& freshest_rec.unwrap().au == allocator.curr.unwrap()
-            &&& forall |addr| freshest_rec.unwrap().after_page(addr) ==> #[trigger] allocator.can_allocate(addr)
+            &&& root.is_Some()
+            &&& root.unwrap().au == allocator.curr.unwrap()
+            // &&& forall |addr| freshest_rec.unwrap().after_page(addr) ==> #[trigger] allocator.can_allocate(addr)
         }
     }
 
     pub open spec(checked) fn disk_domain_not_free(dv: DiskView, allocator: MiniAllocator) -> bool
     {
-        forall |addr| #[trigger] dv.entries.dom().contains(addr)
-            ==> !allocator.can_allocate(addr)
+        forall |addr| #[trigger] dv.entries.dom().contains(addr) ==> {
+            &&& !allocator.can_allocate(addr)
+        }
     }
 
     #[invariant]
     pub open spec(checked) fn inv(self) -> bool {
         &&& self.wf()
+        &&& self.tj().disk_view.pointer_is_upstream(self.tj().freshest_rec, self.first)
+        &&& self.tj().disk_view.bounded_inactive_lsns(self.lsn_au_index, self.tj().freshest_rec)
         &&& self.lsn_au_index == self.tj().build_lsn_au_index(self.first)
 
-        &&& self.tj().disk_view.pointer_is_upstream(self.tj().freshest_rec, self.first)
-        &&& self.tj().disk_view.domain_tight_wrt_index(self.lsn_au_index)
-        &&& self.tj().disk_view.non_index_lsn_bounded(self.lsn_au_index)
-
+        &&& self.tj().disk_view.domain_tight_wrt_index(self.lsn_au_index, self.tj().freshest_rec)
         &&& Self::disk_domain_not_free(self.tj().disk_view, self.mini_allocator)
         &&& Self::mini_allocator_follows_freshest_rec(self.tj().freshest_rec, self.mini_allocator)
     }
@@ -1232,22 +1500,10 @@ state_machine!{ AllocationJournal {
 
     #[inductive(internal_mini_allocator_fill)]
     fn internal_mini_allocator_fill_inductive(pre: Self, post: Self, lbl: Label) {
-        if post.mini_allocator.curr is Some {
-            assert forall |addr| post.tj().freshest_rec.unwrap().after_page(addr)
-            implies #[trigger] post.mini_allocator.can_allocate(addr) by {
-                assert(pre.mini_allocator.can_allocate(addr)); // trigger
-            }
-        }
     }
 
     #[inductive(internal_mini_allocator_prune)]
     fn internal_mini_allocator_prune_inductive(pre: Self, post: Self, lbl: Label) {
-        if post.mini_allocator.curr is Some {
-            assert forall |addr| post.tj().freshest_rec.unwrap().after_page(addr)
-            implies #[trigger] post.mini_allocator.can_allocate(addr) by {
-                assert(pre.mini_allocator.can_allocate(addr)); // trigger
-            }
-        }
     }
 
     #[inductive(discard_old)]
@@ -1265,7 +1521,7 @@ state_machine!{ AllocationJournal {
         let pre_dv = pre.tj().disk_view;
         let post_dv = post.tj().disk_view;
 
-        assert( post_dv.non_index_lsn_bounded(post.lsn_au_index) );
+        assert( post_dv.bounded_inactive_lsns(post.lsn_au_index, post.tj().freshest_rec) );
         assert( post_dv.internal_au_pages_fully_linked() ) by {
             reveal(DiskView::pages_allocated_in_lsn_order);
         }
@@ -1302,16 +1558,6 @@ state_machine!{ AllocationJournal {
             post_dv.build_lsn_au_index_page_walk_sub_disk_with_newer_lsn(pre_dv, post.tj().freshest_rec); // index subset
         }
         assert( post.lsn_au_index =~= post.tj().build_lsn_au_index(post.first) ); // needs more proof
-
-        assert( Self::mini_allocator_follows_freshest_rec(post.tj().freshest_rec, post.mini_allocator) ) by {
-            if post.mini_allocator.curr is Some {
-                assert forall |addr| post.tj().freshest_rec.unwrap().after_page(addr)
-                implies #[trigger] post.mini_allocator.can_allocate(addr) by {
-                    assert(pre.mini_allocator.can_allocate(addr)); // trigger
-                }
-            }
-        }
-
         assert( post.inv() );
     }
 
@@ -1335,7 +1581,7 @@ state_machine!{ AllocationJournal {
         assert( update[msgs.seq_start] == addr.au );
         assert( post.lsn_au_index.contains_key(msgs.seq_start) );
 
-        assert(post_dv.domain_tight_wrt_index(post.lsn_au_index)) by {
+        assert(post_dv.domain_tight_wrt_index(post.lsn_au_index, post_root)) by {
             assert forall |addr| #[trigger] post_dv.entries.dom().contains(addr)
             implies post.lsn_au_index.values().contains(addr.au)
             by {
@@ -1347,7 +1593,7 @@ state_machine!{ AllocationJournal {
             }
         }
 
-        assert(post_dv.non_index_lsn_bounded(post.lsn_au_index));
+        assert(post_dv.bounded_inactive_lsns(post.lsn_au_index, post.tj().freshest_rec));
 
         assert( post_dv.valid_first_au(post.first) ) by {
             if pre_root is Some {
@@ -1364,15 +1610,10 @@ state_machine!{ AllocationJournal {
             implies addr1 == addr2 by {
                 if lsn < msgs.seq_start {
                     assert(pre_dv.addr_supports_lsn(addr1, lsn) && pre_dv.addr_supports_lsn(addr2, lsn));
-                } else {
-                    if pre_dv.addr_supports_lsn(addr1, lsn) {
-                        assert(pre_dv.entries[addr1].message_seq.contains(lsn));
-                        assert(false);
-                    }
-                    if pre_dv.addr_supports_lsn(addr2, lsn) {
-                        assert(pre_dv.entries[addr2].message_seq.contains(lsn));
-                        assert(false);
-                    }
+                } else if addr1 != addr2 {
+                    let pre_addr = if pre_dv.addr_supports_lsn(addr1, lsn) { addr1 } else { addr2 };
+                    assert(pre_dv.entries[pre_addr].message_seq.contains(lsn));
+                    assert(false);
                 }
             }
         }
@@ -1399,15 +1640,6 @@ state_machine!{ AllocationJournal {
             assert( post.lsn_au_index == post_dv.build_lsn_au_index_page_walk(post_root) );
             pre_dv.build_commutes_over_append_record(pre_root, msgs, addr);
             post_dv.build_lsn_au_index_equiv_page_walk(post_root, post.first);
-        }
-
-        assert( Self::mini_allocator_follows_freshest_rec(post.tj().freshest_rec, post.mini_allocator) ) by {
-            if post.mini_allocator.curr is Some {
-                assert forall |addr| post.tj().freshest_rec.unwrap().after_page(addr)
-                implies #[trigger] post.mini_allocator.can_allocate(addr) by {
-                    assert(pre.mini_allocator.can_allocate(addr)); // trigger
-                }
-            }
         }
 
         assert( post.inv() );
@@ -1459,6 +1691,8 @@ state_machine!{ AllocationJournal {
         }
     }
 
+    // utility functions for refinement layers below
+
     pub proof fn frozen_journal_is_valid_image(pre: Self, post: Self, lbl: AllocationJournal::Label)
     requires pre.inv(), post.inv(), lbl is FreezeForCommit, Self::next(pre, post, lbl)
     ensures
@@ -1469,127 +1703,39 @@ state_machine!{ AllocationJournal {
         reveal(AllocationJournal::State::next_by);
 
         let frozen_journal = lbl.get_FreezeForCommit_frozen_journal();
-        let frozen_dv = frozen_journal.tj.disk_view;
-        let frozen_root = frozen_journal.tj.freshest_rec;
-
         let step = choose |step| AllocationJournal::State::next_by(pre, post, lbl, step);
         let depth = step.get_freeze_for_commit_0();
-        let new_bdy = frozen_journal.tj.seq_start();
 
+        pre.tj().disk_view.pointer_after_crop_ensures(pre.tj().freshest_rec, depth);
         pre.tj().disk_view.pointer_after_crop_seq_end(pre.tj().freshest_rec, depth);
         assert(frozen_journal.tj.seq_end() <= pre.tj().seq_end());
 
-        let frozen_lsns = Set::new(|lsn: LSN| new_bdy <= lsn && lsn < frozen_journal.tj.seq_end());
-        let frozen_index = pre.lsn_au_index.restrict(frozen_lsns);
-        let addrs_past_new_end = au_addrs_past_pointer(frozen_journal.tj.freshest_rec);
-        let frozen_addrs = Set::new(|addr: Address| addr.wf() && frozen_index.values().contains(addr.au)) - addrs_past_new_end;
-
         pre.tj().build_lsn_au_index_ensures(pre.first);
-
-        assert(frozen_dv.decodable(frozen_root));
-        assert(frozen_dv.valid_ranking(pre.tj().disk_view.the_ranking()));
-        assert(frozen_dv.acyclic());
-
-        assert(frozen_dv.internal_au_pages_fully_linked()) by {
-            reveal(DiskView::pages_allocated_in_lsn_order);
-        }
-
-        assert(frozen_dv.has_unique_lsns()) by {
-            assert forall |lsn, addr1, addr2| frozen_dv.addr_supports_lsn(addr1, lsn) && frozen_dv.addr_supports_lsn(addr2, lsn)
-            implies addr1 == addr2 by {
-                assert(pre.tj().disk_view.addr_supports_lsn(addr1, lsn));
-                assert(pre.tj().disk_view.addr_supports_lsn(addr2, lsn));
-            }
-        }
-
-        if frozen_root is Some {
-            assert(pre.lsn_au_index.contains_key(new_bdy));
-            assert(frozen_dv.valid_first_au(frozen_journal.first)) by {
-                reveal(DiskView::index_keys_exist_valid_entries);
-                let addr = choose |addr: Address| addr.wf() && addr.au == pre.lsn_au_index[new_bdy]
-                    && #[trigger] pre.tj().disk_view.addr_supports_lsn(addr, new_bdy);
-
-                assert(frozen_lsns.contains(new_bdy));
-                assert(frozen_index.contains_key(new_bdy));
-                assert(frozen_index[new_bdy] == addr.au);
-
-                reveal(DiskView::pages_allocated_in_lsn_order);
-                assert(frozen_dv.entries.contains_key(addr));
-                assert(frozen_dv.addr_supports_lsn(addr, new_bdy));
-            }
-            assert(frozen_dv.upstream(frozen_journal.tj.freshest_rec.unwrap()));
-        }
-
-        assert(frozen_dv.pointer_is_upstream(frozen_root, frozen_journal.first));
-
-        let frozen_repr = frozen_journal.tj.build_lsn_au_index(frozen_journal.first);
-        if frozen_root is Some {
-            frozen_journal.tj.build_lsn_au_index_ensures(frozen_journal.first);
-            assert(frozen_repr.dom() =~= frozen_index.dom());
-            frozen_journal.tj.sub_disk_build_sub_lsn_au_index(frozen_journal.first, pre.tj(), pre.first);
-            assert(frozen_repr <= pre.lsn_au_index);
-        }
-        assert(frozen_repr =~= frozen_index);
-
-        assert(frozen_dv.domain_tight_wrt_index(frozen_index));
-
-        assert forall |addr, lsn| ({
-            &&& frozen_dv.entries.dom().contains(addr)
-            &&& frozen_dv.entries[addr].message_seq.contains(lsn)
-            &&& !frozen_index.contains_key(lsn)
-        }) implies lsn < new_bdy
-        by {
-            assert(pre.tj().disk_view.entries.dom().contains(addr));
-
-            if pre.lsn_au_index.contains_key(lsn) && lsn >= frozen_journal.tj.seq_end() {
-                assert(pre.tj().disk_view.addr_supports_lsn(addr, lsn));
-                reveal(DiskView::pages_allocated_in_lsn_order);
-
-                if addr.au == frozen_root.unwrap().au {
-                    assert(frozen_root.unwrap().after_page(addr));
-                    assert(addrs_past_new_end.contains(addr));
-                    assert(false);
-                } else {
-                    reveal(DiskView::index_keys_exist_valid_entries);
-
-                    let valid_lsn = choose |valid_lsn| #[trigger] frozen_index.contains_key(valid_lsn)
-                        && pre.lsn_au_index[valid_lsn] == addr.au;
-                    let valid_addr = choose |valid_addr: Address| valid_addr.wf() && valid_addr.au == pre.lsn_au_index[valid_lsn]
-                        && #[trigger] pre.tj().disk_view.addr_supports_lsn(valid_addr, valid_lsn);
-
-                    assert(valid_lsn < lsn);
-                    let last_frozen_lsn = (frozen_journal.tj.seq_end()-1) as nat;
-
-                    assert(pre.lsn_au_index.contains_key(last_frozen_lsn)); // trigger
-                    assert(pre.tj().disk_view.addr_supports_lsn(frozen_root.unwrap(), last_frozen_lsn));
-                    assert(pre.lsn_au_index[last_frozen_lsn] == frozen_root.unwrap().au) by {
-                        let last_frozen_addr = choose |last_frozen_addr: Address| last_frozen_addr.wf()
-                            && last_frozen_addr.au == pre.lsn_au_index[last_frozen_lsn]
-                            && #[trigger] pre.tj().disk_view.addr_supports_lsn(last_frozen_addr, last_frozen_lsn);
-                        assert(pre.tj().disk_view.has_unique_lsns());
-                        assert(last_frozen_addr == frozen_root.unwrap());
-                    }
-
-                    assert(contiguous_lsns(pre.lsn_au_index, valid_lsn, last_frozen_lsn, lsn));
-                    assert(valid_lsn <= last_frozen_lsn <= lsn);
-                    assert(pre.lsn_au_index[valid_lsn] == pre.lsn_au_index[last_frozen_lsn]);
-                    assert(false);
-                }
-            }
-        }
-        assert(frozen_dv.non_index_lsn_bounded(frozen_index));
+        let sub_dv = pre.tj().sub_disk_preserves_pointer_is_upstream(pre.lsn_au_index, pre.first, 
+            frozen_journal.tj.seq_start(), frozen_journal.tj.freshest_rec, frozen_journal.first);
+        assert(sub_dv =~= frozen_journal.tj.disk_view);
+        pre.tj().sub_disk_preserves_bounded_inactive_lsns(pre.lsn_au_index, pre.first, 
+            frozen_journal.tj, frozen_journal.first);
     }
 
-    // lemmas used by other refinements
-    // pub proof fn discard_old_accessible_aus(pre: Self, post: Self, lbl: Label)
-    // requires
-    //     Self::next(pre, post, lbl),
-    //     lbl.is_DiscardOld(),
-    // ensures
-    //     post.accessible_aus() == pre.accessible_aus() - lbl.get_DiscardOld_deallocs(),
-    // {
-    //     assume(false);  // left off
-    // }
+    pub proof fn subrange_preserves_valid_structure(self: Self, sub_start: LSN, sub_freshest_rec: Pointer, sub_first: AU)
+    requires 
+        self.tj().valid_structure(self.lsn_au_index, self.first),
+        self.tj().valid_subrange(self.lsn_au_index, self.first, sub_start, sub_freshest_rec, sub_first),
+    ensures ({
+        let sub_dv = self.tj().disk_view.discard_old(sub_start);
+        let sub_tj = sub_dv.tj_at(sub_freshest_rec);
+        &&& sub_dv.pointer_is_upstream(sub_freshest_rec, sub_first)
+        &&& sub_dv.bounded_inactive_lsns(sub_tj.build_lsn_au_index(sub_first), sub_freshest_rec)
+    })
+    {
+        let sub_dv = self.tj().disk_view.discard_old(sub_start);
+        let sub_tj = sub_dv.tj_at(sub_freshest_rec);
+        self.tj().subrange_preserves_pointer_is_upstream(self.lsn_au_index, self.first, sub_start, sub_freshest_rec, sub_first);
+        if sub_freshest_rec is Some {
+            self.tj().sub_disk_preserves_bounded_inactive_lsns(self.lsn_au_index, self.first, sub_tj, sub_first);
+        }
+    }
 
 //     #[verifier::spinoff_prover]  // flaky proof
 //     pub proof fn discard_old_helper4(pre: Self, post: Self, lbl: Label, new_journal: LinkedJournal::State, xaddr: Address, zaddr: Address)

@@ -58,7 +58,7 @@ impl ImageState {
     pub open spec(checked) fn i(self, dv: DiskView) -> JournalImage
         recommends self.valid_image(dv)
     {
-        let tight_jdv = self.tight_dv(dv).to_JournalDiskView(self.boundary_lsn);
+        let tight_jdv = self.tight_dv(dv).to_jdv(self.boundary_lsn);
         JournalImage {
             tj: TruncatedJournal{
                 disk_view: tight_jdv,
@@ -101,15 +101,11 @@ impl ImageState {
         // 1. show index dv and big_dv are the same
         let index = self.to_tj(dv).build_lsn_au_index(self.first);
         let post_index = self.to_tj(big_dv).build_lsn_au_index(self.first);
-
-        let jdv = self.to_tj(dv).disk_view;
-        let big_jdv = self.to_tj(big_dv).disk_view;
-
-        jdv.build_lsn_au_index_page_walk_sub_disk(big_jdv, self.freshest_rec);
-        jdv.build_lsn_au_index_equiv_page_walk(self.freshest_rec, self.first);
-        big_jdv.build_lsn_au_index_equiv_page_walk(self.freshest_rec, self.first);
-
-        assert(index == post_index);
+        assert(index == post_index) by {
+            self.to_tj(dv).disk_view.build_lsn_au_index_page_walk_sub_disk(self.to_tj(big_dv).disk_view, self.freshest_rec);
+            self.to_tj(dv).disk_view.build_lsn_au_index_equiv_page_walk(self.freshest_rec, self.first);
+            self.to_tj(big_dv).disk_view.build_lsn_au_index_equiv_page_walk(self.freshest_rec, self.first);
+        }
 
         // 2. show big.freshest_rec does not meet tight_domain condition
         let addr = big.freshest_rec.unwrap();
@@ -125,24 +121,25 @@ impl ImageState {
             self.to_tj(dv).build_lsn_au_index_ensures(self.first);
             big.to_tj(big_dv).build_lsn_au_index_ensures(big.first);
 
-            if self.freshest_rec.unwrap().au == addr.au {
-                assert(addr.page < self.freshest_rec.unwrap().page);
+            let head = self.freshest_rec.unwrap();
+            if head.au == addr.au {
+                assert(addr.page < head.page);
                 reveal(LinkedJournal_v::DiskView::pages_allocated_in_lsn_order);
                 assert(false);
             }
 
             let lsn1 = choose |lsn1| #[trigger] index.contains_key(lsn1) && index[lsn1] == addr.au;
-            let lsn2 = self.last_lsn(dv);
-            let lsn3 = big.last_lsn(big_dv);
+            let lsn2 = (self.seq_end(dv) - 1) as nat;
+            let lsn3 = (big.seq_end(big_dv) - 1) as nat;
 
-            assert(big_index.contains_key(lsn2));
-            assert(big_index[lsn2] == self.freshest_rec.unwrap().au);
+            big.to_tj(big_dv).disk_view.addr_supports_lsn_consistent_with_index(big_index, lsn2, head);
+            big.to_tj(big_dv).disk_view.addr_supports_lsn_consistent_with_index(big_index, lsn3, addr);
+            assert(big_index[lsn2] == head.au);
+            assert(big_index[lsn3] == addr.au);
 
             assert(lsn1 <= lsn2 <= lsn3);
             assert(big_index.contains_key(lsn1));
             assert(big_index[lsn1] == addr.au);
-            assert(big_index.contains_key(lsn3));
-            assert(big_index[lsn3] == addr.au);
 
             assert(AllocationJournal_v::contiguous_lsns(big_index, lsn1, lsn2, lsn3));
             assert(big_index[lsn2] == addr.au);
@@ -188,8 +185,6 @@ impl UnifiedCrashAwareJournal::State {
             ),
     {
         reveal(AllocationCrashAwareJournal::State::next_by);
-        reveal(AllocationJournal::State::init_by);
-
         ImageState::i_valid_auto();
 
         let i_pre_dv = self.i().persistent.tj.disk_view;
@@ -328,8 +323,8 @@ impl UnifiedCrashAwareJournal::State {
         let post_index = post.persistent.to_tj(post.dv).build_lsn_au_index(first);
 
         assert(index == post_index) by {
-            let pre_jdv = self.dv.to_JournalDiskView(bdy);
-            let post_jdv = post.dv.to_JournalDiskView(bdy);
+            let pre_jdv = self.dv.to_jdv(bdy);
+            let post_jdv = post.dv.to_jdv(bdy);
             pre_jdv.build_lsn_au_index_equiv_page_walk(root, first);
             post_jdv.build_lsn_au_index_equiv_page_walk(root, first);
             post_jdv.build_lsn_au_index_page_walk_sub_disk(pre_jdv, root);
@@ -343,8 +338,8 @@ impl UnifiedCrashAwareJournal::State {
         assert(index.dom() <= post_v.lsn_au_index.dom());
         assert(index.values() <= post_v.lsn_au_index.values());
 
-        let tight_pre_jdv = post.persistent.tight_dv(self.dv).to_JournalDiskView(bdy);
-        let tight_post_jdv = post.persistent.tight_dv(post.dv).to_JournalDiskView(bdy);
+        let tight_pre_jdv = post.persistent.tight_dv(self.dv).to_jdv(bdy);
+        let tight_post_jdv = post.persistent.tight_dv(post.dv).to_jdv(bdy);
 
         assert(tight_post_jdv.entries.dom() =~= tight_pre_jdv.entries.dom());
         assert(tight_pre_jdv.entries =~= tight_post_jdv.entries);
