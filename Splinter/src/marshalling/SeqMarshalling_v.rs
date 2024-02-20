@@ -434,21 +434,6 @@ pub trait UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt: Deepview<DVElt>> 
     ;
 
     type EltMarshalling : Marshalling<DVElt, Elt>;
-
-//     spec fn spec_elt_marshalling(&self) -> Self::EltMarshalling
-//         ;
-// 
-//     // PLEASE PLEASE CAN I HAVE SPEC ENSURES
-//     proof fn spec_elt_marshalling_ensures(&self)
-//     requires self.valid()
-//     ensures self.spec_elt_marshalling().valid()
-//     ;
-// 
-//     exec fn exec_elt_marshalling(&self) -> (eltm: &Self::EltMarshalling)
-//     requires self.valid()
-//     ensures eltm.valid(),
-//         eltm == self.spec_elt_marshalling()
-//         ;
 }
 
 pub struct IntegerSeqMarshallingOblinfo<Elt: Deepview<int> + builtin::Integer, IO: IntObligations<Elt>> {
@@ -910,18 +895,68 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
     }
 }
 
-// Convince myself that IntegerSeqMarshalling is indeed SeqMarshalling<T, int>
-fn test_is_seq_marshalling<SM: SeqMarshalling<int, u64>>(sm: &SM) { }
-fn test_is_marshalling<M: Marshalling<Seq<int>, Vec<u64>>>(m: &M) { }
-
-type IntegerSeqMarshalling<IT> = UniformSizedElementSeqMarshalling<int, IT, IntegerSeqMarshallingOblinfo<IT, IntMarshalling<IT>>>;
-
-fn test(t: IntegerSeqMarshalling<u64>, data: &Vec<u8>) {
-    let dslice = Slice::exec_all(data);
-    test_is_seq_marshalling(&t);
-    test_is_marshalling(&t);
-    let oelt = t.try_get_elt(&dslice, data, 0);
+// DVElt, Elt are the innermost types
+// We should be able to marshall a Seq of Seq of (something) if the inner something is
+// uniform-sized. So I guess we need a Uniform-sized trait?
+// But we'll also need USESM<DVElt, Elt, O> to implement Marshalling.
+// We already know it does for O: USESMO. That's SO!
+pub struct SeqSeqMarshallingOblinfo
+        <DVElt, Elt: Deepview<DVElt>, SO: UniformSizedElementSeqMarshallingOblinfo<Seq<DVElt>, Vec<Elt>>> {
+    pub subseq_marshalling: UniformSizedElementSeqMarshalling<Seq<DVElt>, Vec<Elt>, SO>,
+    _p: std::marker::PhantomData<(DVElt,Elt,)>,
 }
+
+fn is_marshalling<M: Marshalling<int, u32>>(m: M) { }
+fn is_s_marshalling<M: Marshalling<Seq<int>, Vec<u32>>>(m: M) { }
+fn is_ss_marshalling<M: Marshalling<Seq<Seq<int>>, Vec<Vec<u32>>>>(m: M) { }
+
+fn foo<
+    SO: UniformSizedElementSeqMarshallingOblinfo<int, u32>,
+    SSO: UniformSizedElementSeqMarshallingOblinfo<Seq<int>, Vec<u32>>
+>(
+    r:  IntMarshalling<u32>,
+    s:  UniformSizedElementSeqMarshalling<int, u32, IntegerSeqMarshallingOblinfo<u32, IntMarshalling<u32>>>,
+    s2: UniformSizedElementSeqMarshalling<int, u32, SO>,
+    t:  UniformSizedElementSeqMarshalling<Seq<int>, Vec<u32>, SSO>
+    ) {
+    is_marshalling(r);
+
+    is_s_marshalling(s);
+//     is_marshalling(s);
+
+    is_s_marshalling(s2);
+    is_marshalling(s2);
+// 
+//     is_ss_marshalling(t);
+//     is_s_marshalling(t);
+//     is_marshalling(t);
+}
+
+// impl<DVElt, Elt: Deepview<DVElt>, SO: UniformSizedElementSeqMarshallingOblinfo<Seq<DVElt>, Vec<Elt>>>
+//     UniformSizedElementSeqMarshallingOblinfo<Seq<DVElt>, Vec<Elt>>
+//     for SeqSeqMarshallingOblinfo<DVElt, Elt, SO>
+// {
+//     type EltMarshalling = UniformSizedElementSeqMarshalling<Seq<DVElt>, Vec<Elt>, SO>;
+// 
+//     open spec fn valid(&self) -> bool
+//     {
+//         self.subseq_marshalling.valid()
+//     }
+// 
+//     open spec fn uniform_size(&self) -> (sz: usize)
+//     {
+//         self.subseq_marshalling.uniform_size()
+//     }
+// 
+//     proof fn uniform_size_ensures(&self) {
+//         self.subseq_marshalling.uniform_size_ensures()
+//     }
+// 
+//     exec fn exec_uniform_size(&self) -> (sz: usize)
+//     {
+//         self.subseq_marshalling.exec_uniform_size()
+//     }
+// }
 
 // pub trait ResizableUniformSizedElementSeqMarshallingOblinfo<DVElt, Elt: Deepview<DVElt>, LenT, LenMarshalling: IntMarshalling<LenT>>
 //     : UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>
@@ -963,5 +998,20 @@ fn test(t: IntegerSeqMarshalling<u64>, data: &Vec<u8>) {
 //         LenMarshalling::o_spec_size()
 //     }
 // }
+
+//////////////////////////////////////////////////////////////////////////////
+// Convince myself that IntegerSeqMarshalling is indeed SeqMarshalling<T, int>
+
+fn test_is_seq_marshalling<SM: SeqMarshalling<int, u64>>(sm: &SM) { }
+fn test_is_marshalling<M: Marshalling<Seq<int>, Vec<u64>>>(m: &M) { }
+
+type IntegerSeqMarshalling<IT> = UniformSizedElementSeqMarshalling<int, IT, IntegerSeqMarshallingOblinfo<IT, IntMarshalling<IT>>>;
+
+fn test(t: IntegerSeqMarshalling<u64>, data: &Vec<u8>) {
+    let dslice = Slice::exec_all(data);
+    test_is_seq_marshalling(&t);
+    test_is_marshalling(&t);
+    let oelt = t.try_get_elt(&dslice, data, 0);
+}
 
 }
