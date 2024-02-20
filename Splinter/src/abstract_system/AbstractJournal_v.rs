@@ -6,8 +6,8 @@ use builtin::*;
 use builtin_macros::*;
 use state_machines_macros::state_machine;
 
-use crate::abstract_system::MsgHistory_v::*;
 use crate::abstract_system::StampedMap_v::*;
+use crate::abstract_system::MsgHistory_v::*;
 
 verus! {
 
@@ -40,7 +40,7 @@ state_machine!{ AbstractJournal {
         self.journal.seq_end == lsn
     }
 
-    init!{
+    init!{ 
         initialize(persistent_journal: MsgHistory) {
             require persistent_journal.wf();
             init journal = persistent_journal;
@@ -104,4 +104,4 @@ state_machine!{ AbstractJournal {
     }
 }}
 
-} // verus!
+}

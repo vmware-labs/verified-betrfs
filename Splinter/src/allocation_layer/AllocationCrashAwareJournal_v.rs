@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: BSD-2-Clause
 // #![allow(unused_imports)]
 use builtin::*;
-use state_machines_macros::state_machine;
 use vstd::prelude::*;
+use state_machines_macros::state_machine;
 
 use crate::abstract_system::MsgHistory_v::*;
 use crate::abstract_system::StampedMap_v::LSN;
-use crate::disk::GenericDisk_v::AU;
+use crate::disk::GenericDisk_v::{AU};
 use crate::journal::LinkedJournal_v::{LinkedJournal};
 use crate::allocation_layer::AllocationJournal_v::*;
 use crate::allocation_layer::MiniAllocator_v::*;
@@ -15,14 +15,16 @@ use crate::allocation_layer::MiniAllocator_v::*;
 verus! {
 
 #[is_variant]
-pub enum Ephemeral {
+pub enum Ephemeral
+{
     Unknown,
-    Known { v: AllocationJournal::State },
+    Known{v: AllocationJournal::State}
 }
 
 impl Ephemeral {
-    pub open spec(checked) fn wf(self) -> bool {
-        self is Known ==> self.get_Known_v().wf()
+    pub open spec(checked) fn wf(self) -> bool
+    {
+      self is Known ==> self.get_Known_v().wf()
     }
 }
 
@@ -96,8 +98,8 @@ state_machine!{AllocationCrashAwareJournal{
             require lbl is ReadForRecovery;
             require pre.ephemeral is Known;
             require AllocationJournal::State::next(
-                pre.ephemeral.get_Known_v(),
-                pre.ephemeral.get_Known_v(),
+                pre.ephemeral.get_Known_v(), 
+                pre.ephemeral.get_Known_v(), 
                 AllocationJournal::Label::ReadForRecovery{ messages: lbl.get_ReadForRecovery_records() }
             );
         }
@@ -108,8 +110,8 @@ state_machine!{AllocationCrashAwareJournal{
             require lbl is QueryEndLsn;
             require pre.ephemeral is Known;
             require AllocationJournal::State::next(
-                pre.ephemeral.get_Known_v(),
-                pre.ephemeral.get_Known_v(),
+                pre.ephemeral.get_Known_v(), 
+                pre.ephemeral.get_Known_v(), 
                 AllocationJournal::Label::QueryEndLsn{ end_lsn: lbl.get_QueryEndLsn_end_lsn() },
             );
         }
@@ -120,8 +122,8 @@ state_machine!{AllocationCrashAwareJournal{
             require lbl is Put;
             require pre.ephemeral is Known;
             require AllocationJournal::State::next(
-                pre.ephemeral.get_Known_v(),
-                new_journal,
+                pre.ephemeral.get_Known_v(), 
+                new_journal, 
                 AllocationJournal::Label::Put{ messages: lbl.get_Put_records() },
             );
             update ephemeral = Ephemeral::Known{ v: new_journal };
@@ -134,8 +136,8 @@ state_machine!{AllocationCrashAwareJournal{
             require pre.ephemeral is Known;
             require pre.fresh_label(lbl);
             require AllocationJournal::State::next(
-                pre.ephemeral.get_Known_v(),
-                new_journal,
+                pre.ephemeral.get_Known_v(), 
+                new_journal, 
                 AllocationJournal::Label::InternalAllocations{ allocs: lbl.get_Internal_allocs(), deallocs: lbl.get_Internal_deallocs() }
             );
             update ephemeral = Ephemeral::Known{ v: new_journal };
@@ -163,7 +165,7 @@ state_machine!{AllocationCrashAwareJournal{
             // There should be no way for the frozen journal to have passed the ephemeral map!
             require frozen_journal.tj.seq_start() <= lbl.get_CommitStart_max_lsn();
             require AllocationJournal::State::next(
-                pre.ephemeral.get_Known_v(),
+                pre.ephemeral.get_Known_v(), 
                 pre.ephemeral.get_Known_v(),
                 AllocationJournal::Label::FreezeForCommit{frozen_journal},
             );
@@ -177,25 +179,25 @@ state_machine!{AllocationCrashAwareJournal{
             require pre.ephemeral is Known;
             require pre.inflight is Some;
 
-            // upon a successful write to super block, we truncate ephemeral
+            // upon a successful write to super block, we truncate ephemeral 
             // journal to line up with the beginning of the newly persisted journal
-            // another option would be to truncate the ephemeral journal to the
+            // another option would be to truncate the ephemeral journal to the 
             // end of persitent journal, but this means that to reason about the
             // full system, we will need to reason about persistent tree,
             // persistent journal stitched at the front of the ephemeral journal.
-            // since there's no runtime cost to track ephemeral journal as a
+            // since there's no runtime cost to track ephemeral journal as a 
             // superset of persistent journal, that's what we do
             require AllocationJournal::State::next(
-                pre.ephemeral.get_Known_v(),
+                pre.ephemeral.get_Known_v(), 
                 new_journal,
                 AllocationJournal::Label::DiscardOld{
-                    start_lsn: pre.inflight.unwrap().tj.seq_start(),
+                    start_lsn: pre.inflight.unwrap().tj.seq_start(), 
                     require_end: lbl.get_CommitComplete_require_end(),
                     // where do we specify which aus are in deallocs?
                     deallocs: lbl.get_CommitComplete_discarded(),
                 },
             );
-
+            
             // Watch the `update` keyword!
             update persistent = pre.inflight.unwrap();
             update ephemeral = Ephemeral::Known{ v: new_journal };
@@ -223,38 +225,38 @@ state_machine!{AllocationCrashAwareJournal{
     fn initialize_inductive(post: Self) {
         JournalImage::empty_is_valid_image();
     }
-
+   
     #[inductive(load_ephemeral_from_persistent)]
-    fn load_ephemeral_from_persistent_inductive(pre: Self, post: Self, lbl: Label, new_journal: AllocationJournal::State)
+    fn load_ephemeral_from_persistent_inductive(pre: Self, post: Self, lbl: Label, new_journal: AllocationJournal::State) 
     {
     }
-
+   
     #[inductive(read_for_recovery)]
-    fn read_for_recovery_inductive(pre: Self, post: Self, lbl: Label)
-    {
+    fn read_for_recovery_inductive(pre: Self, post: Self, lbl: Label) 
+    { 
     }
-
+   
     #[inductive(query_end_lsn)]
-    fn query_end_lsn_inductive(pre: Self, post: Self, lbl: Label)
-    {
+    fn query_end_lsn_inductive(pre: Self, post: Self, lbl: Label) 
+    { 
     }
-
+   
     #[inductive(put)]
-    fn put_inductive(pre: Self, post: Self, lbl: Label, new_journal: AllocationJournal::State)
+    fn put_inductive(pre: Self, post: Self, lbl: Label, new_journal: AllocationJournal::State) 
     {
         let aj_lbl = AllocationJournal::Label::Put{messages: lbl.get_Put_records()};
         AllocationJournal::State::inv_next(pre.ephemeral.get_Known_v(), new_journal, aj_lbl);
     }
-
+   
     #[inductive(internal)]
-    fn internal_inductive(pre: Self, post: Self, lbl: Label, new_journal: AllocationJournal::State)
+    fn internal_inductive(pre: Self, post: Self, lbl: Label, new_journal: AllocationJournal::State) 
     {
         let aj_lbl = AllocationJournal::Label::InternalAllocations{ allocs: lbl.get_Internal_allocs(), deallocs: lbl.get_Internal_deallocs() };
         AllocationJournal::State::inv_next(pre.ephemeral.get_Known_v(), post.ephemeral.get_Known_v(), aj_lbl);
     }
-
+   
     #[inductive(query_lsn_persistence)]
-    fn query_lsn_persistence_inductive(pre: Self, post: Self, lbl: Label)
+    fn query_lsn_persistence_inductive(pre: Self, post: Self, lbl: Label) 
     {
     }
 
@@ -265,13 +267,13 @@ state_machine!{AllocationCrashAwareJournal{
         let aj_lbl = AllocationJournal::Label::FreezeForCommit{frozen_journal};
         AllocationJournal::State::frozen_journal_is_valid_image(pre_ephemeral, pre_ephemeral, aj_lbl);
     }
-
+   
     #[inductive(commit_complete)]
     fn commit_complete_inductive(pre: Self, post: Self, lbl: Label, new_journal: AllocationJournal::State)
     {
         assert(post.ephemeral is Known ==> post.ephemeral.get_Known_v().inv()) by {
-            let alloc_lbl = AllocationJournal::Label::DiscardOld{
-                start_lsn: pre.inflight.unwrap().tj.seq_start(),
+            let alloc_lbl = AllocationJournal::Label::DiscardOld{ 
+                start_lsn: pre.inflight.unwrap().tj.seq_start(), 
                 require_end: lbl.get_CommitComplete_require_end(),
                 deallocs: lbl.get_CommitComplete_discarded(),
             };
@@ -279,14 +281,11 @@ state_machine!{AllocationCrashAwareJournal{
                 post.ephemeral.get_Known_v(), alloc_lbl);
         }
     }
-
+   
     #[inductive(crash)]
-    fn crash_inductive(pre: Self, post: Self, lbl: Label)
+    fn crash_inductive(pre: Self, post: Self, lbl: Label) 
     {
     }
 
-  }}  // state_machine
-
-
-} // verus!
-  // verus
+  }} // state_machine
+} // verus

@@ -4,6 +4,10 @@
 use builtin_macros::*;
 use state_machines_macros::state_machine;
 
+use vstd::map::*;
+use vstd::map_lib::*;
+use vstd::prelude::*;
+
 use crate::abstract_system::MsgHistory_v::*;
 use crate::abstract_system::StampedMap_v::LSN;
 use crate::allocation_layer::AllocationJournal_v::{AllocationJournal as AJ, *};
@@ -13,9 +17,6 @@ use crate::disk::GenericDisk_v::*;
 use crate::journal::LinkedJournal_v;
 use crate::journal::LinkedJournal_v::JournalRecord;
 use crate::journal::LinkedJournal_v::LinkedJournal;
-use vstd::map::*;
-use vstd::map_lib::*;
-use vstd::prelude::*;
 
 verus! {
 

@@ -8,21 +8,22 @@ use vstd::prelude::*;
 use builtin_macros::*;
 use state_machines_macros::state_machine;
 
-use crate::abstract_system::MsgHistory_v::*;
-use crate::abstract_system::StampedMap_v::LSN;
-use crate::disk::GenericDisk_v::*;
+use vstd::prelude::*;
 use vstd::map::*;
 use vstd::math;
-use vstd::prelude::*;
+use crate::abstract_system::StampedMap_v::LSN;
+use crate::abstract_system::MsgHistory_v::*;
+use crate::disk::GenericDisk_v::*;
 
 // Needed for pieces of proof pulled in here.
 use crate::journal::PagedJournal_v;
 use crate::journal::PagedJournal_v::PagedJournal;
 
-verus! {
+verus!{
 
 pub struct JournalRecord {
     pub message_seq: MsgHistory,
+
     // Never read priorRec directly; only reference it through CroppedPrior.
     // A Pointer only has meaning if its referent isn't rendered irrelevant by
     // some boundaryLSN.
@@ -42,16 +43,11 @@ impl JournalRecord {
     }
 
     pub open spec(checked) fn cropped_prior(self, boundary_lsn: LSN) -> Pointer {
-        if boundary_lsn < self.message_seq.seq_start {
-            self.prior_rec
-        } else {
-            None
-        }
+        if boundary_lsn < self.message_seq.seq_start { self.prior_rec } else { None }
     }
 
     pub open spec(checked) fn contains_lsn(self, boundary_lsn: LSN, lsn: LSN) -> bool {
-        math::max(self.message_seq.seq_start as int, boundary_lsn as int) as nat <= lsn
-            < self.message_seq.seq_end
+        math::max(self.message_seq.seq_start as int, boundary_lsn as int) as nat <= lsn < self.message_seq.seq_end
     }
 }
 
@@ -71,7 +67,7 @@ pub struct DiskView {
 
 impl DiskView {
     pub open spec(checked) fn entries_wf(self) -> bool {
-        forall|addr| #[trigger] self.entries.contains_key(addr) ==> self.entries[addr].wf()
+        forall |addr| #[trigger] self.entries.contains_key(addr) ==> self.entries[addr].wf()
     }
 
     pub open spec(checked) fn is_nondangling_pointer(self, ptr: Pointer) -> bool {
@@ -79,46 +75,44 @@ impl DiskView {
     }
 
     pub open spec(checked) fn nondangling_pointers(self) -> bool {
-        forall|addr|
-            #[trigger]
-            self.entries.contains_key(addr) ==> self.is_nondangling_pointer(
-                self.entries[addr].cropped_prior(self.boundary_lsn),
-            )
+        forall |addr| #[trigger] self.entries.contains_key(addr)
+            ==> self.is_nondangling_pointer(self.entries[addr].cropped_prior(self.boundary_lsn))
     }
 
     pub open spec(checked) fn this_block_can_concat(self, addr: Address) -> bool
-        recommends
-            self.entries_wf(),
-            self.nondangling_pointers(),
-            self.entries.contains_key(addr),
+    recommends
+        self.entries_wf(),
+        self.nondangling_pointers(),
+        self.entries.contains_key(addr),
     {
         let head = self.entries[addr];
         let next_ptr = head.cropped_prior(self.boundary_lsn);
-        next_ptr.is_Some() ==> self.entries[next_ptr.unwrap()].message_seq.can_concat(
-            head.message_seq,
-        )
+        next_ptr.is_Some() ==> self.entries[next_ptr.unwrap()].message_seq.can_concat(head.message_seq)
     }
 
     pub open spec(checked) fn blocks_can_concat(self) -> bool
-        recommends
-            self.entries_wf(),
-            self.nondangling_pointers(),
+    recommends
+        self.entries_wf(),
+        self.nondangling_pointers(),
     {
-        forall|addr| #[trigger] self.entries.contains_key(addr) ==> self.this_block_can_concat(addr)
+        forall |addr| #[trigger] self.entries.contains_key(addr)
+            ==> self.this_block_can_concat(addr)
     }
 
-    pub open spec(checked) fn blocks_each_have_link(self) -> bool {
-        forall|addr|
-            #[trigger]
-            self.entries.contains_key(addr) ==> self.entries[addr].has_link(self.boundary_lsn)
+    pub open spec(checked) fn blocks_each_have_link(self) -> bool
+    {
+        forall |addr| #[trigger] self.entries.contains_key(addr)
+            ==> self.entries[addr].has_link(self.boundary_lsn)
     }
 
-    pub open spec(checked) fn block_in_bounds(self, ptr: Pointer) -> bool {
+    pub open spec(checked) fn block_in_bounds(self, ptr: Pointer) -> bool
+    {
         &&& self.is_nondangling_pointer(ptr)
         &&& (ptr.is_Some() ==> self.boundary_lsn < self.entries[ptr.unwrap()].message_seq.seq_end)
     }
 
-    pub open spec(checked) fn wf(self) -> bool {
+    pub open spec(checked) fn wf(self) -> bool
+    {
         &&& self.entries_wf()
         &&& self.nondangling_pointers()
         &&& self.blocks_can_concat()
@@ -126,34 +120,32 @@ impl DiskView {
     }
 
     pub open spec(checked) fn valid_ranking(self, ranking: Ranking) -> bool
-        recommends
-            self.wf(),
+    recommends
+        self.wf(),
     {
         &&& self.entries.dom().subset_of(ranking.dom())
-        &&& (forall|addr|
-            #[trigger]
-            self.entries.contains_key(addr) && self.entries[addr].cropped_prior(
-                self.boundary_lsn,
-            ).is_Some() ==> ranking[self.entries[addr].cropped_prior(self.boundary_lsn).unwrap()]
-                < ranking[addr])
+        &&& (forall |addr| #[trigger] self.entries.contains_key(addr) && self.entries[addr].cropped_prior(self.boundary_lsn).is_Some()
+                ==> ranking[self.entries[addr].cropped_prior(self.boundary_lsn).unwrap()] < ranking[addr]
+            )
     }
 
     pub open spec(checked) fn acyclic(self) -> bool
-        recommends
-            self.wf(),
+    recommends
+        self.wf(),
     {
-        exists|ranking| self.valid_ranking(ranking)
+        exists |ranking| self.valid_ranking(ranking)
     }
 
     pub open spec(checked) fn the_ranking(self) -> Ranking
-        recommends
-            self.wf(),
-            self.acyclic(),
+    recommends
+        self.wf(),
+        self.acyclic(),
     {
-        choose|ranking| self.valid_ranking(ranking)
+        choose |ranking| self.valid_ranking(ranking)
     }
 
-    pub open spec(checked) fn decodable(self, ptr: Pointer) -> bool {
+    pub open spec(checked) fn decodable(self, ptr: Pointer) -> bool
+    {
         &&& self.wf()
         &&& self.is_nondangling_pointer(ptr)
     }
@@ -162,14 +154,13 @@ impl DiskView {
     // around so it can reuse and reconstruct them, but the journal can
     // always get away with using some random old CHOOSEn ranking.
     pub open spec(checked) fn the_rank_of(self, ptr: Pointer) -> nat
-        recommends
-            self.decodable(ptr),
+    recommends
+        self.decodable(ptr),
     {
-        if ptr.is_Some() && self.acyclic() {
-            self.the_ranking()[ptr.unwrap()] + 1
-        } else {
-            0
-        }
+        if ptr.is_Some() && self.acyclic()
+            { self.the_ranking()[ptr.unwrap()] + 1 }
+        else
+            { 0 }
     }
 
     pub open spec(checked) fn seq_start(self) -> LSN {
@@ -177,71 +168,60 @@ impl DiskView {
     }
 
     pub open spec(checked) fn seq_end(self, root: Pointer) -> LSN
-        recommends
-            self.is_nondangling_pointer(root),  // why not just wf()?
-
+    recommends
+        self.is_nondangling_pointer(root),   // why not just wf()?
     {
-        if root.is_None() {
-            self.boundary_lsn
-        } else {
-            self.entries[root.unwrap()].message_seq.seq_end
-        }
+        if root.is_None()
+            { self.boundary_lsn }
+        else
+            { self.entries[root.unwrap()].message_seq.seq_end }
     }
 
     // Simply advance the boundary LSN
     pub open spec(checked) fn discard_old(self, new_boundary: LSN) -> (out: Self)
-        recommends
-            self.boundary_lsn <= new_boundary,
+    recommends
+        self.boundary_lsn <= new_boundary
     {
-        Self { boundary_lsn: new_boundary, ..self }
+        Self{boundary_lsn: new_boundary, ..self}
     }
 
-    pub open spec(checked) fn is_sub_disk(self, bigger: Self) -> bool {
+    pub open spec(checked) fn is_sub_disk(self, bigger: Self) -> bool
+    {
         &&& bigger.boundary_lsn == self.boundary_lsn
         &&& self.entries <= bigger.entries
     }
 
     // TODO: should probably promote to maps::le_transitive_auto
     pub proof fn sub_disk_transitive_auto()
-        ensures
-            forall|a: Self, b: Self, c: Self|
-                #[trigger]
-                a.is_sub_disk(b) && #[trigger]
-                b.is_sub_disk(c) ==> a.is_sub_disk(c),
+    ensures forall |a:Self, b:Self, c: Self| #[trigger] a.is_sub_disk(b) && #[trigger] b.is_sub_disk(c) ==> a.is_sub_disk(c)
     {
-        assert forall|a: Self, b: Self, c: Self|
-            #[trigger]
-            a.is_sub_disk(b) && #[trigger]
-            b.is_sub_disk(c) implies a.is_sub_disk(c) by {
-            assert forall|k: Address| #[trigger] a.entries.dom().contains(k) implies #[trigger]
-            c.entries.dom().contains(k) && a.entries[k] == c.entries[k] by {
-                assert(b.entries.dom().contains(k));
-                assert(c.entries.dom().contains(k));
+        assert forall |a:Self, b:Self, c: Self| #[trigger] a.is_sub_disk(b) && #[trigger] b.is_sub_disk(c) implies a.is_sub_disk(c) by {
+            assert forall|k: Address| #[trigger] a.entries.dom().contains(k) implies
+                #[trigger] c.entries.dom().contains(k) && a.entries[k] == c.entries[k] by {
+                assert( b.entries.dom().contains(k) );
+                assert( c.entries.dom().contains(k) );
             }
         }
     }
 
-    pub open spec(checked) fn is_sub_disk_with_newer_lsn(self, bigger: Self) -> bool {
+    pub open spec(checked) fn is_sub_disk_with_newer_lsn(self, bigger: Self) -> bool
+    {
         &&& bigger.boundary_lsn <= self.boundary_lsn
         &&& self.entries <= bigger.entries
     }
 
     pub open spec(checked) fn build_tight(self, root: Pointer) -> (out: Self)
-        recommends
-            self.decodable(root),  // TODO want ensures here
-
-        decreases self.the_rank_of(root),
-        when self.decodable(root)
+    recommends
+        self.decodable(root),
+        // TODO want ensures here
+    decreases self.the_rank_of(root) when self.decodable(root)
     {
-        if !self.acyclic()  {
-            Self { boundary_lsn: 0, entries: map![] }
-        }  // silly
-         else if root.is_None() {
-            Self { boundary_lsn: self.boundary_lsn, entries: map![] }
-        } else {
+        if !self.acyclic() { Self{boundary_lsn: 0, entries: map![]} } // silly
+        else if root.is_None() { Self{boundary_lsn: self.boundary_lsn, entries: map![]} }
+        else {
             let addr = root.unwrap();
             let tail = self.build_tight(self.next(root));
-            Self {
+            Self{
                 boundary_lsn: self.boundary_lsn,
                 entries: tail.entries.insert(addr, self.entries[addr]),
             }
@@ -249,135 +229,110 @@ impl DiskView {
     }
 
     // TODO auto-generate please
-    pub proof fn build_tight_ensures(
-        self,
-        root: Pointer,
-    )  // TODO(chris): really want the `let` that scopes around requires, ensures, and body here!
-        requires
-            self.decodable(root),
-        ensures
-            forall|addr|
-                #[trigger]
-                self.build_tight(root).entries.contains_key(addr) ==> self.entries.contains_key(
-                    addr,
-                ),
-            self.acyclic() ==> self.build_tight(root).is_sub_disk(self),
-        decreases self.the_rank_of(root),
+    pub proof fn build_tight_ensures(self, root: Pointer)
+        // TODO(chris): really want the `let` that scopes around requires, ensures, and body here!
+    requires
+        self.decodable(root)
+    ensures
+        forall |addr| #[trigger] self.build_tight(root).entries.contains_key(addr) ==> self.entries.contains_key(addr),
+        self.acyclic() ==> self.build_tight(root).is_sub_disk(self),
+    decreases
+        self.the_rank_of(root),
     {
-        if !self.acyclic()  {
-        } else if root.is_None() {
-        } else {
+        if !self.acyclic() { }
+        else if root.is_None() { }
+        else {
             self.build_tight_ensures(self.next(root));
         }
     }
 
     // TODO please for the love of Z3 automate
     pub proof fn build_tight_auto(self)
-        ensures
-            forall|root: Pointer|
-                #[trigger self.build_tight(root)]
-                self.decodable(root) ==> ({
-                    &&& (forall|addr|
-                        #[trigger]
-                        self.build_tight(root).entries.contains_key(addr)
-                            ==> self.entries.contains_key(addr))
-                    &&& self.acyclic() ==> self.build_tight(root).is_sub_disk(self)
-                }),
+    ensures
+        forall |root:Pointer| #[trigger self.build_tight(root)]
+            self.decodable(root) ==> ({
+                &&& (forall |addr| #[trigger] self.build_tight(root).entries.contains_key(addr) ==> self.entries.contains_key(addr))
+                &&& self.acyclic() ==> self.build_tight(root).is_sub_disk(self)
+        })
     {
-        assert forall|root: Pointer|
-            #[trigger self.build_tight(root)]
+        assert forall |root:Pointer| #[trigger self.build_tight(root)]
             self.decodable(root) implies ({
-            &&& (forall|addr|
-                #[trigger]
-                self.build_tight(root).entries.contains_key(addr) ==> self.entries.contains_key(
-                    addr,
-                ))
-            &&& self.acyclic() ==> self.build_tight(root).is_sub_disk(self)
+                &&& (forall |addr| #[trigger] self.build_tight(root).entries.contains_key(addr) ==> self.entries.contains_key(addr))
+                &&& self.acyclic() ==> self.build_tight(root).is_sub_disk(self)
         }) by {
             self.build_tight_ensures(root);
         }
     }
 
     pub open spec(checked) fn can_crop(self, root: Pointer, depth: nat) -> bool
-        recommends
-            self.decodable(root),
-            self.block_in_bounds(root),
-        decreases depth,
+    recommends
+        self.decodable(root),
+        self.block_in_bounds(root),
+    decreases depth
     {
         0 < depth ==> {
             &&& root.is_Some()
-            &&& self.can_crop(self.next(root), (depth - 1) as nat)
+            &&& self.can_crop(self.next(root), (depth-1) as nat)
         }
     }
 
     pub open spec(checked) fn pointer_after_crop(self, root: Pointer, depth: nat) -> (out: Pointer)
-        recommends
-            self.decodable(root),
-            self.block_in_bounds(root),
-            self.can_crop(root, depth),
-        decreases depth,
+    recommends
+        self.decodable(root),
+        self.block_in_bounds(root),
+        self.can_crop(root, depth),
+    decreases depth
     {
-        if depth == 0 {
-            root
-        } else {
-            self.pointer_after_crop(self.next(root), (depth - 1) as nat)
-        }
+        if depth==0 { root }
+        else { self.pointer_after_crop(self.next(root), (depth-1) as nat) }
     }
 
     pub proof fn pointer_after_crop_ensures(self, root: Pointer, depth: nat)
-        requires
-            self.decodable(root),
-            self.block_in_bounds(root),
-            self.can_crop(root, depth),
-        ensures
-            self.is_nondangling_pointer(self.pointer_after_crop(root, depth)),
-            self.block_in_bounds(self.pointer_after_crop(root, depth)),
-        decreases depth,
+    requires
+        self.decodable(root),
+        self.block_in_bounds(root),
+        self.can_crop(root, depth),
+    ensures
+        self.is_nondangling_pointer(self.pointer_after_crop(root, depth)),
+        self.block_in_bounds(self.pointer_after_crop(root, depth)),
+    decreases depth
     {
         if depth > 0 {
-            self.pointer_after_crop_ensures(self.next(root), (depth - 1) as nat)
+            self.pointer_after_crop_ensures(self.next(root), (depth-1) as nat)
         }
     }
 
     pub proof fn pointer_after_crop_seq_end(self, root: Pointer, depth: nat)
-        requires
-            self.decodable(root),
-            self.block_in_bounds(root),
-            self.can_crop(root, depth),
-        ensures
-            self.seq_end(self.pointer_after_crop(root, depth)) <= self.seq_end(root),
-        decreases depth,
+    requires
+        self.decodable(root),
+        self.block_in_bounds(root),
+        self.can_crop(root, depth),
+    ensures
+        self.seq_end(self.pointer_after_crop(root, depth)) <= self.seq_end(root)
+    decreases depth
     {
         if depth > 0 {
-            self.pointer_after_crop_seq_end(self.next(root), (depth - 1) as nat)
+            self.pointer_after_crop_seq_end(self.next(root), (depth-1) as nat)
         }
     }
 
     pub proof fn pointer_after_crop_auto(self)
-        ensures
-            forall|root, depth|
-                {
-                    &&& self.decodable(root)
-                    &&& self.block_in_bounds(root)
-                    &&& self.can_crop(root, depth)
-                } ==> {
-                    &&& self.is_nondangling_pointer(
-                        #[trigger]
-                        self.pointer_after_crop(root, depth),
-                    )
-                    &&& self.block_in_bounds(self.pointer_after_crop(root, depth))
-                },
+    ensures
+        forall |root, depth| {
+            &&& self.decodable(root)
+            &&& self.block_in_bounds(root)
+            &&& self.can_crop(root, depth)
+        } ==> {
+            &&& self.is_nondangling_pointer(#[trigger] self.pointer_after_crop(root, depth))
+            &&& self.block_in_bounds(self.pointer_after_crop(root, depth))
+        },
     {
-        assert forall|root, depth|
-            {
-                &&& self.decodable(root)
-                &&& self.block_in_bounds(root)
-                &&& self.can_crop(root, depth)
-            } implies {
-            &&& self.is_nondangling_pointer(
-                #[trigger]
-                self.pointer_after_crop(root, depth),
-            )
+        assert forall |root, depth| {
+            &&& self.decodable(root)
+            &&& self.block_in_bounds(root)
+            &&& self.can_crop(root, depth)
+        } implies {
+            &&& self.is_nondangling_pointer(#[trigger] self.pointer_after_crop(root, depth))
             &&& self.block_in_bounds(self.pointer_after_crop(root, depth))
         } by {
             self.pointer_after_crop_ensures(root, depth);
@@ -388,61 +343,56 @@ impl DiskView {
     // Proof-y stuff, pulled in here because it's required by the invariant
     // proofs which the state machine macro demands we put inline.
     //////////////////////////////////////////////////////////////////////////
-    pub open spec(checked) fn iptr(self, ptr: Pointer) -> (out: Option<
-        PagedJournal_v::JournalRecord,
-    >)
-        recommends
-            self.decodable(ptr),
-            self.acyclic(),  //     ensures
-    //         self.block_in_bounds(ptr),
-    //         out.is_Some() ==> out.unwrap().valid(self.boundary_lsn)
 
-        decreases self.the_rank_of(ptr),
-        when self.decodable(ptr) && self.acyclic()
+    pub open spec(checked) fn iptr(self, ptr: Pointer) -> (out: Option<PagedJournal_v::JournalRecord>)
+    recommends
+        self.decodable(ptr),
+        self.acyclic(),
+//     ensures
+//         self.block_in_bounds(ptr),
+//         out.is_Some() ==> out.unwrap().valid(self.boundary_lsn)
+    decreases self.the_rank_of(ptr) when self.decodable(ptr) && self.acyclic()
     {
-        if ptr.is_None() {
-            None
-        } else {
+        if ptr.is_None() { None }
+        else {
             let jr = self.entries[ptr.unwrap()];
-            Some(
-                PagedJournal_v::JournalRecord {
-                    message_seq: jr.message_seq,
-                    prior_rec: Box::new(self.iptr(jr.cropped_prior(self.boundary_lsn))),
-                },
-            )
+            Some(PagedJournal_v::JournalRecord{
+                message_seq: jr.message_seq,
+                prior_rec: Box::new(self.iptr(jr.cropped_prior(self.boundary_lsn))),
+            })
         }
     }
 
     pub proof fn iptr_ignores_extra_blocks(self, ptr: Pointer, big: DiskView)
-        requires
-            self.wf(),
-            self.is_nondangling_pointer(ptr),
-            big.wf(),
-            big.acyclic(),
-            self.is_sub_disk(big),
-        ensures
-            self.acyclic(),
-            self.iptr(ptr) == big.iptr(ptr),
-        decreases big.the_rank_of(ptr),
+    requires
+        self.wf(),
+        self.is_nondangling_pointer(ptr),
+        big.wf(),
+        big.acyclic(),
+        self.is_sub_disk(big),
+    ensures
+        self.acyclic(),
+        self.iptr(ptr) == big.iptr(ptr),
+    decreases big.the_rank_of(ptr)
     {
         // TODO(verus,chris): map.le should broadcast-ensures dom.subset_of(dom)
-        assert(self.entries.dom().subset_of(big.entries.dom()));
-        assert(self.valid_ranking(big.the_ranking()));  // witness to acyclic
+        assert( self.entries.dom().subset_of(big.entries.dom()) );
+
+        assert( self.valid_ranking(big.the_ranking()) ); // witness to acyclic
         if ptr.is_Some() {
-            assert(big.the_rank_of(self.next(ptr)) < big.the_rank_of(ptr));
+            assert( big.the_rank_of(self.next(ptr)) < big.the_rank_of(ptr) );
             self.iptr_ignores_extra_blocks(self.next(ptr), big);
         }
     }
 
-    pub open spec   /*XXX (checked)*/
-    fn next(self, ptr: Pointer) -> Pointer
-        recommends
-            self.wf(),
-            ptr.is_Some(),
+    pub open spec /*XXX (checked)*/ fn next(self, ptr: Pointer) -> Pointer
+    recommends
+        self.wf(),
+        ptr.is_Some(),
     {
-        //         let _ = spec_affirm( self.entries.contains_key(ptr.unwrap()) );
-        //         let _ = spec_affirm( self.entries.dom().contains(ptr.unwrap()) );
-        //         XXX These affirms aren't triggering.
+//         let _ = spec_affirm( self.entries.contains_key(ptr.unwrap()) );
+//         let _ = spec_affirm( self.entries.dom().contains(ptr.unwrap()) );
+//         XXX These affirms aren't triggering.
         self.entries[ptr.unwrap()].cropped_prior(self.boundary_lsn)
     }
 
@@ -451,194 +401,174 @@ impl DiskView {
     // The trigger (the if line) was needed here whereas not in Dafny; Dafny must have chosen
     // a more-generous trigger for the ensures forall?
     pub proof fn build_tight_ranks(self, ptr: Pointer)
-        requires
-            self.decodable(ptr),
-            self.acyclic(),
-            ptr.is_Some(),
-        ensures
-            ({
-                forall|addr: Address|
-                    #[trigger]
-                    self.build_tight(self.next(ptr)).entries.contains_key(addr) ==> {
-                        &&& self.the_ranking().contains_key(addr)
-                        &&& self.the_ranking()[addr] < self.the_ranking()[ptr.unwrap()]
-                    }
-            }),
-        decreases self.the_rank_of(ptr),
+    requires
+        self.decodable(ptr),
+        self.acyclic(),
+        ptr.is_Some(),
+    ensures ({
+        forall |addr: Address| #[trigger] self.build_tight(self.next(ptr)).entries.contains_key(addr) ==> {
+            &&& self.the_ranking().contains_key(addr)
+            &&& self.the_ranking()[addr] < self.the_ranking()[ptr.unwrap()]
+        }
+    })
+    decreases self.the_rank_of(ptr)
     {
         let next = self.next(ptr);
         if next.is_Some() {
             self.build_tight_ranks(next);
-            assert forall|addr: Address|
-                #[trigger]
-                self.build_tight(self.next(ptr)).entries.contains_key(addr) implies {
+
+            assert forall |addr: Address| #[trigger] self.build_tight(self.next(ptr)).entries.contains_key(addr) implies {
                 &&& self.the_ranking().contains_key(addr)
                 &&& self.the_ranking()[addr] < self.the_ranking()[ptr.unwrap()]
             } by {
-                if self.build_tight(self.next(next)).entries.contains_key(addr) {
-                }  // trigger
-
+                if self.build_tight(self.next(next)).entries.contains_key(addr) { } // trigger
             }
         }
     }
 
     pub proof fn build_tight_shape(self, root: Pointer)
-        requires
-            root.is_Some(),
-            self.decodable(root),
-            self.acyclic(),
-        ensures
-            (self.build_tight(self.next(root)) == Self {
-                entries: self.build_tight(root).entries.remove(root.unwrap()),
-                ..self
-            }),
+    requires
+        root.is_Some(),
+        self.decodable(root),
+        self.acyclic(),
+    ensures (
+        self.build_tight(self.next(root))
+        == Self{entries: self.build_tight(root).entries.remove(root.unwrap()), ..self})
     {
         if self.next(root).is_Some() {
-            self.build_tight_ranks(root);  // proves root.value !in self.build_tight(next, ranking).entries;
+            self.build_tight_ranks(root);   // proves root.value !in self.build_tight(next, ranking).entries;
         }
+
         assert_maps_equal!(
             self.build_tight(self.entries[root.unwrap()].cropped_prior(self.boundary_lsn)).entries,
             self.build_tight(root).entries.remove(root.unwrap())
             );
     }
 
-    pub open spec(checked) fn is_tight(self, root: Pointer) -> bool {
+    pub open spec(checked) fn is_tight(self, root: Pointer) -> bool
+    {
         &&& self.decodable(root)
         &&& self.acyclic()
-        &&& forall|other: Self|
-            {
-                ({
-                    &&& other.decodable(root)
-                    &&& other.acyclic()
-                    &&& self.iptr(root) == other.iptr(root)
-                    &&& #[trigger]
-                    other.is_sub_disk(self)
-                }) ==> other == self
-            }
+        &&& forall |other: Self| {
+            ({
+                &&& other.decodable(root)
+                &&& other.acyclic()
+                &&& self.iptr(root) == other.iptr(root)
+                &&& #[trigger] other.is_sub_disk(self)
+            }) ==> other == self
+        }
     }
 
     #[verifier::spinoff_prover]  // flaky proof
     pub proof fn build_tight_builds_sub_disks(self, root: Pointer)
-        requires
-            self.decodable(root),
-            self.acyclic(),
-        ensures
-            self.build_tight(root).is_sub_disk(self),
-        decreases self.the_rank_of(root),
+    requires
+        self.decodable(root),
+        self.acyclic(),
+    ensures
+        self.build_tight(root).is_sub_disk(self),
+    decreases self.the_rank_of(root)
     {
         if root.is_Some() {
             self.build_tight_builds_sub_disks(self.next(root));
-        }  //         assert( self.build_tight(root).is_sub_disk(self) ); // This line shouldn't be necessary
-
+        }
+//         assert( self.build_tight(root).is_sub_disk(self) ); // This line shouldn't be necessary
     }
 
     // Dafny didn't need this proof
     pub proof fn tight_empty_disk(self)
-        requires
-            self.decodable(None),
-        ensures
-            self.build_tight(None).is_tight(None),
+    requires
+        self.decodable(None),
+    ensures
+        self.build_tight(None).is_tight(None),
     {
         let tight = self.build_tight(None);
+
         //XXX need a callout to build_tight_is_awesome?
-        assert(tight.wf());
-        assert(tight.valid_ranking(map![]));  // new witness; not needed in Dafny
-        assert forall|other: Self|
-            ({
-                &&& other.decodable(None)
-                &&& other.acyclic()
-                &&& tight.iptr(None) == other.iptr(None)
-                &&& #[trigger]
-                other.is_sub_disk(tight)
-            }) implies other =~= tight by {
+        assert( tight.wf() );
+
+        assert( tight.valid_ranking(map![]) ); // new witness; not needed in Dafny
+        assert forall |other: Self|
+        ({
+            &&& other.decodable(None)
+            &&& other.acyclic()
+            &&& tight.iptr(None) == other.iptr(None)
+            &&& #[trigger] other.is_sub_disk(tight)
+        }) implies other =~= tight by {
             //assert( tight.wf() );   // new trigger when we perturb DiskView::can_crop
             //assert( forall |addr| !tight.entries.dom().contains(addr) );    // added to fight the flake
-            assert(tight.entries.dom() =~~= other.entries.dom());
-            assert(other.entries =~~= tight.entries);  // flaky
+            assert( tight.entries.dom() =~~= other.entries.dom() );
+            assert( other.entries =~~= tight.entries );  // flaky
         }
     }
 
     pub proof fn tight_sub_disk(self, root: Pointer, tight: Self)
-        requires
-            self.decodable(root),
-            tight == self.build_tight(root),
-            self.acyclic(),
-            tight.is_sub_disk(self),
-        ensures
-            tight.is_tight(root),
-        decreases self.the_rank_of(root),
+    requires
+        self.decodable(root),
+        tight == self.build_tight(root),
+        self.acyclic(),
+        tight.is_sub_disk(self),
+    ensures
+        tight.is_tight(root),
+    decreases self.the_rank_of(root)
     {
         // Yikes. Dafny proof was 15 lines; this "minimized" Verus proof is 73 lines.
-        self.build_tight_ensures(root);  //new because not auto
+        self.build_tight_ensures(root); //new because not auto
         //assert(tight.wf());
         if root.is_Some() {
             let next = self.next(root);
             let inner = self.build_tight(next);
             self.build_tight_shape(root);
             self.tight_sub_disk(next, inner);
-            assert(tight.valid_ranking(self.the_ranking()));  // witness
-            assert(tight.is_tight(root)) by {
-                assert forall|other: Self|
-                    {
-                        &&& other.decodable(root)
-                        &&& other.acyclic()
-                        &&& tight.iptr(root) == other.iptr(root)
-                        &&& #[trigger]
-                        other.is_sub_disk(tight)
-                    } implies other == tight by {
+            assert( tight.valid_ranking(self.the_ranking()) ); // witness
+            assert( tight.is_tight(root) ) by {
+                assert forall |other: Self| {
+                    &&& other.decodable(root)
+                    &&& other.acyclic()
+                    &&& tight.iptr(root) == other.iptr(root)
+                    &&& #[trigger] other.is_sub_disk(tight)
+                } implies other == tight by {
                     // any other tighter disk implies an "other_inner" disk tighter than inner, but inner.IsTight(next).
-                    let other_inner = DiskView {
-                        entries: other.entries.remove(root.unwrap()),
-                        ..other
-                    };
-                    assert(other_inner.entries_wf());
+                    let other_inner = DiskView{ entries: other.entries.remove(root.unwrap()), ..other };
+
+                    assert( other_inner.entries_wf() );
+
                     Self::sub_disk_transitive_auto();
-                    assert forall|addr|
-                        #[trigger]
-                        other_inner.entries.contains_key(
-                            addr,
-                        ) implies other_inner.is_nondangling_pointer(
-                        other_inner.entries[addr].cropped_prior(other_inner.boundary_lsn),
-                    ) by {
+
+                    assert forall |addr| #[trigger] other_inner.entries.contains_key(addr)
+                        implies other_inner.is_nondangling_pointer(other_inner.entries[addr].cropped_prior(other_inner.boundary_lsn)) by {
                         let aprior = self.entries[addr].cropped_prior(self.boundary_lsn);
-                        assert(self.entries.contains_key(addr));
-                        assert(self.is_nondangling_pointer(aprior));
-                        assert(other.wf());
+                        assert( self.entries.contains_key(addr) );
+                        assert( self.is_nondangling_pointer(aprior) );
+                        assert( other.wf() );
                         if aprior == root {
                             if tight.entries[addr].cropped_prior(tight.boundary_lsn) == root {
-                                assert(tight.entries.contains_key(addr));  // dayyum
-                                assert(tight.the_ranking()[tight.entries[addr].cropped_prior(
-                                    tight.boundary_lsn,
-                                ).unwrap()] > tight.the_ranking()[root.unwrap()]);  // from valid_ranking
-                                assert(tight.the_ranking()[tight.entries[addr].cropped_prior(
-                                    tight.boundary_lsn,
-                                ).unwrap()] < tight.the_ranking()[root.unwrap()]);  // from build_tight_ranks
+                                assert( tight.entries.contains_key(addr) );  // dayyum
+                                assert( tight.the_ranking()[tight.entries[addr].cropped_prior(tight.boundary_lsn).unwrap()] > tight.the_ranking()[root.unwrap()] ); // from valid_ranking
+                                assert( tight.the_ranking()[tight.entries[addr].cropped_prior(tight.boundary_lsn).unwrap()] < tight.the_ranking()[root.unwrap()] ); // from build_tight_ranks
                             }
-                            assert(tight.entries[addr].cropped_prior(tight.boundary_lsn) != root);
-                            assert(other_inner.is_sub_disk(tight));
-                        }// frustrating, considering this is the just a repitition of the assert-forall-by
+                            assert( tight.entries[addr].cropped_prior(tight.boundary_lsn) != root );
+                            assert( other_inner.is_sub_disk(tight) );
+                        }
+                        // frustrating, considering this is the just a repitition of the assert-forall-by
                         // conclusion
-
-                        assert(other_inner.is_nondangling_pointer(aprior));
+                        assert( other_inner.is_nondangling_pointer(aprior) );
                     }
-                    assert(other_inner.is_nondangling_pointer(next));  //new
-                    assert(other_inner.wf());  // wait, we needed this as a trigger?
-                    assert(other_inner.is_sub_disk(inner));  // new
+                
+                    assert( other_inner.is_nondangling_pointer(next) );    //new
+                    assert(other_inner.wf());   // wait, we needed this as a trigger?
+                    assert(other_inner.is_sub_disk(inner)); // new
                     // we know by here Dafny knowns other_inner.wf()
                     other_inner.iptr_ignores_extra_blocks(next, inner);
                     // every line below here is both new and necessary
-                    assert(inner.is_tight(next));  // new trigger holy crap how did we not get this
-                    // calling tight_sub_disk!!!??
-                    assert(forall|a|
-                        inner.entries.contains_key(a) ==> #[trigger]
-                        other_inner.entries.contains_key(a) && other_inner.entries[a]
-                            == inner.entries[a]);
-                    assert(other_inner =~= inner);
-                    assert(other.entries =~= tight.entries);
-                    assert(other =~= tight);
+                    assert( inner.is_tight(next) ); // new trigger holy crap how did we not get this
+                                                    // calling tight_sub_disk!!!??
+                    assert( forall |a| inner.entries.contains_key(a) ==> #[trigger] other_inner.entries.contains_key(a) && other_inner.entries[a] == inner.entries[a] );
+                    assert( other_inner =~= inner );
+                    assert( other.entries =~= tight.entries );
+                    assert( other =~= tight );
                 }
-                assert(tight.decodable(root));
-                assert(tight.acyclic());  // new trigger
+                assert( tight.decodable(root) );
+                assert( tight.acyclic() );  // new trigger
             }
         } else {
             self.tight_empty_disk()
@@ -646,16 +576,16 @@ impl DiskView {
     }
 
     pub proof fn tight_interp(big: Self, root: Pointer, tight: Self)
-        requires
-            big.decodable(root),
-            tight == big.build_tight(root),
-            big.acyclic(),
-        ensures
-            tight.is_sub_disk(big),
-            tight.is_tight(root),
-            tight.iptr(root) == big.iptr(root),
-            tight.acyclic(),
-        decreases big.the_rank_of(root),
+    requires
+        big.decodable(root),
+        tight == big.build_tight(root),
+        big.acyclic(),
+    ensures
+        tight.is_sub_disk(big),
+        tight.is_tight(root),
+        tight.iptr(root) == big.iptr(root),
+        tight.acyclic(),
+    decreases big.the_rank_of(root)
     {
         if root.is_None() {
             big.tight_empty_disk()
@@ -665,8 +595,7 @@ impl DiskView {
             // Dafny could trigger just on valid_ranking, but we seem to need to poke at
             // contains_key. How many of these problems would go away with an axiom tying
             // dom.contains to contains_key?
-            assert(forall|addr|
-                tight.entries.contains_key(addr) ==> big.entries.contains_key(addr));
+            assert( forall |addr| tight.entries.contains_key(addr) ==> big.entries.contains_key(addr) );
             tight.iptr_ignores_extra_blocks(root, big);
         }
     }
@@ -677,27 +606,26 @@ impl DiskView {
     }
 
     pub open spec fn lsn_has_entry(self, lsn: LSN) -> bool {
-        exists|addr| self.lsn_has_entry_at(lsn, addr)
+        exists |addr| self.lsn_has_entry_at(lsn, addr)
     }
 
     pub open spec fn lsns_have_entries(self, root: Pointer) -> bool {
-        forall|lsn| self.boundary_lsn <= lsn < self.seq_end(root) ==> self.lsn_has_entry(lsn)
+        forall |lsn| self.boundary_lsn <= lsn < self.seq_end(root) ==> self.lsn_has_entry(lsn)
     }
 
     pub proof fn decodable_implies_lsns_have_entries(self, root: Pointer)
-        requires
-            self.decodable(root),
-            self.acyclic(),
-        ensures
-            self.lsns_have_entries(root),
-        decreases self.the_rank_of(root),
+    requires
+        self.decodable(root),
+        self.acyclic(),
+    ensures
+        self.lsns_have_entries(root),
+    decreases self.the_rank_of(root)
     {
         if root.is_Some() {
             self.decodable_implies_lsns_have_entries(self.next(root));
-            assert forall|lsn|
-                self.seq_start() <= lsn < self.seq_end(root) implies self.lsn_has_entry(lsn) by {
+            assert forall |lsn| self.seq_start() <= lsn < self.seq_end(root) implies self.lsn_has_entry(lsn) by {
                 if self.entries[root.unwrap()].message_seq.seq_start <= lsn {
-                    assert(self.lsn_has_entry_at(lsn, root.unwrap()));
+                    assert( self.lsn_has_entry_at(lsn, root.unwrap()) );
                 }
             }
         }
@@ -706,7 +634,7 @@ impl DiskView {
 
 #[verifier::ext_equal]
 pub struct TruncatedJournal {
-    pub freshest_rec: Pointer,  // root address of journal
+    pub freshest_rec: Pointer, // root address of journal
     pub disk_view: DiskView,
 }
 
@@ -722,103 +650,91 @@ impl TruncatedJournal {
     }
 
     pub open spec(checked) fn seq_end(self) -> LSN
-        recommends
-            self.disk_view.is_nondangling_pointer(
-                self.freshest_rec,
-            ),  // why not just wf()?
-
+    recommends
+        self.disk_view.is_nondangling_pointer(self.freshest_rec),   // why not just wf()?
     {
         self.disk_view.seq_end(self.freshest_rec)
     }
 
     pub open spec(checked) fn can_discard_to(self, lsn: LSN) -> bool
-        recommends
-            self.wf(),
+    recommends
+        self.wf(),
     {
         self.seq_start() <= lsn <= self.seq_end()
     }
 
     pub open spec(checked) fn discard_old(self, lsn: LSN) -> Self
-        recommends
-            self.wf(),
-            self.can_discard_to(lsn),
+    recommends
+        self.wf(),
+        self.can_discard_to(lsn),
     {
-        // Simply advances the boundary LSN of the diskView
-        TruncatedJournal {
-            freshest_rec: if self.seq_end() == lsn {
-                None
-            } else {
-                self.freshest_rec
-            },
-            disk_view: self.disk_view.discard_old(lsn),
-        }
+      // Simply advances the boundary LSN of the diskView
+       TruncatedJournal{
+           freshest_rec: if self.seq_end() == lsn { None } else { self.freshest_rec },
+           disk_view: self.disk_view.discard_old(lsn),
+       }
     }
 
     pub open spec(checked) fn valid_discard_old(self, lsn: LSN, new: Self) -> bool
-        recommends
-            self.wf(),
-            self.can_discard_to(lsn),
+    recommends
+        self.wf(),
+        self.can_discard_to(lsn)
     {
         let post_discard = self.discard_old(lsn);
         let post_tight = post_discard.build_tight();
+
         &&& new.wf()
         &&& new.freshest_rec == post_discard.freshest_rec
-        &&& new.disk_view.is_sub_disk(
-            post_discard.disk_view,
-        )  // new must be a subset of original
-
-        &&& post_tight.disk_view.is_sub_disk(
-            new.disk_view,
-        )  // tight must be fully contained by new
-
+        &&& new.disk_view.is_sub_disk(post_discard.disk_view) // new must be a subset of original
+        &&& post_tight.disk_view.is_sub_disk(new.disk_view)   // tight must be fully contained by new
     }
 
-    pub open spec(checked) fn decodable(self) -> bool {
+    pub open spec(checked) fn decodable(self) -> bool
+    {
         &&& self.wf()
         &&& self.disk_view.acyclic()
     }
 
-    pub open spec(checked) fn can_crop(self, depth: nat) -> bool {
+    pub open spec(checked) fn can_crop(self, depth: nat) -> bool
+    {
         &&& self.decodable()
         &&& self.disk_view.can_crop(self.freshest_rec, depth)
     }
 
     pub open spec(checked) fn crop(self, depth: nat) -> Self
-        recommends
-            self.can_crop(depth),
+    recommends
+        self.can_crop(depth),
     {
         let ptr = self.disk_view.pointer_after_crop(self.freshest_rec, depth);
-        TruncatedJournal { freshest_rec: ptr, ..self }
+        TruncatedJournal{ freshest_rec: ptr, ..self }
     }
 
     pub proof fn crop_ensures(self, depth: nat)
-        requires
-            self.can_crop(depth),
-        ensures
-            self.crop(depth).wf(),
+    requires
+        self.can_crop(depth),
+    ensures
+        self.crop(depth).wf(),
     {
         self.disk_view.pointer_after_crop_auto();
     }
 
     pub proof fn crop_auto(self)
-        ensures
-            forall|depth|
-                self.can_crop(depth) ==> #[trigger]
-                self.crop(depth).wf(),
+    ensures
+        forall |depth| self.can_crop(depth) ==> #[trigger] self.crop(depth).wf(),
     {
-        assert forall|depth| self.can_crop(depth) implies #[trigger]
-        self.crop(depth).wf() by {
+        assert forall |depth| self.can_crop(depth) implies #[trigger] self.crop(depth).wf() by {
             self.disk_view.pointer_after_crop_auto();
         }
     }
 
-    pub open spec(checked) fn append_record(self, addr: Address, msgs: MsgHistory) -> (out: Self) {
-        Self {
+    pub open spec(checked) fn append_record(self, addr: Address, msgs: MsgHistory) -> (out: Self)
+    {
+        Self{
             disk_view: DiskView {
-                entries: self.disk_view.entries.insert(
-                    addr,
-                    JournalRecord { message_seq: msgs, prior_rec: self.freshest_rec },
-                ),
+                entries: self.disk_view.entries.insert(addr, JournalRecord {
+                    message_seq: msgs,
+                    prior_rec: self.freshest_rec,
+                }),
                 ..self.disk_view
             },
             freshest_rec: Some(addr),
@@ -826,10 +742,13 @@ impl TruncatedJournal {
     }
 
     pub open spec(checked) fn build_tight(self) -> (out: Self)
-        recommends
-            self.disk_view.decodable(self.freshest_rec),
+    recommends
+        self.disk_view.decodable(self.freshest_rec),
     {
-        TruncatedJournal { disk_view: self.disk_view.build_tight(self.freshest_rec), ..self }
+        TruncatedJournal{
+            disk_view: self.disk_view.build_tight(self.freshest_rec),
+            ..self
+        }
     }
 
     // pub open spec(checked) fn representation(self) -> (out: Set<Address>)
@@ -839,7 +758,8 @@ impl TruncatedJournal {
     // {
     //     self.disk_view.representation(self.freshest_rec)
     // }
-    // // Yeah re-exporting this is annoying. Gonna just ask others to call
+
+    // // Yeah re-exporting this is annoying. Gonna just ask others to call 
     // // self.disk_view.representation_auto();
     // pub proof fn representation_ensures(self)
     // requires
@@ -851,6 +771,7 @@ impl TruncatedJournal {
     // {
     //     self.disk_view.representation_auto();
     // }
+
     // pub open spec(checked) fn disk_is_tight_wrt_representation(self) -> bool
     // recommends
     //     self.disk_view.decodable(self.freshest_rec),
@@ -858,15 +779,20 @@ impl TruncatedJournal {
     // {
     //     self.disk_view.entries.dom() == self.representation()
     // }
-    pub open spec(checked) fn mkfs() -> (out: Self) {
-        Self { freshest_rec: None, disk_view: DiskView { boundary_lsn: 0, entries: map![] } }
+
+    pub open spec(checked) fn mkfs() -> (out: Self)
+    {
+        Self{
+            freshest_rec: None,
+            disk_view: DiskView { boundary_lsn: 0, entries: map![] },
+        }
     }
 
     pub proof fn mkfs_ensures()
-        ensures
-            Self::mkfs().decodable(),
+    ensures
+        Self::mkfs().decodable(),
     {
-        assert(Self::mkfs().disk_view.valid_ranking(map![]));
+        assert( Self::mkfs().disk_view.valid_ranking(map![]) );
     }
 
     pub open spec fn lsns_have_entries(self) -> bool {
@@ -874,10 +800,10 @@ impl TruncatedJournal {
     }
 
     pub proof fn decodable_implies_lsns_have_entries(self)
-        requires
-            self.decodable(),
-        ensures
-            self.lsns_have_entries(),
+    requires
+        self.decodable(),
+    ensures
+        self.lsns_have_entries(),
     {
         self.disk_view.decodable_implies_lsns_have_entries(self.freshest_rec);
     }
@@ -886,37 +812,33 @@ impl TruncatedJournal {
     // TODO(chris): Rather than open, how about spec ensures?
     // TODO(chris): When (checked), I get a recommendation-not-met here, even though a
     // corresponding proof fn completes without further triggering (see below).
-    pub open spec   /*(checked)*/
-    fn marshal_ranking(self, addr: Address) -> Ranking
-        recommends
-            self.decodable(),
+    pub open spec/*(checked)*/ fn marshal_ranking(self, addr: Address) -> Ranking
+    recommends
+        self.decodable(),
     {
         let pre_rank = self.disk_view.the_ranking();
-        pre_rank.insert(
-            addr,
-            if self.freshest_rec is None {
-                0
-            } else {
-                pre_rank[self.freshest_rec.unwrap()] + 1
-            },
-        )
-    }//     pub proof fn no_trigger_needed(self, addr: Address)
-    //     requires
-    //         self.decodable(),
-    //     {
-    //         let pre_rank = self.disk_view.the_ranking();
-    //         if self.freshest_rec is Some {
-    //             assert( pre_rank.contains_key(self.freshest_rec.unwrap()) );
-    //         }
-    //     }
+        pre_rank.insert(addr,
+                            if self.freshest_rec is None { 0 }
+                            else {pre_rank[self.freshest_rec.unwrap()] + 1 })
+    }
 
+//     pub proof fn no_trigger_needed(self, addr: Address)
+//     requires
+//         self.decodable(),
+//     {
+//         let pre_rank = self.disk_view.the_ranking();
+//         if self.freshest_rec is Some {
+//             assert( pre_rank.contains_key(self.freshest_rec.unwrap()) );
+//         }
+//     }
 }
 
 impl MsgHistory {
-    pub open spec(checked) fn bounded_discard(self, new_bdy: LSN) -> Self {
-        if self.seq_start <= new_bdy {
-            self.discard_old(new_bdy)
-        } else {
+    pub open spec(checked) fn bounded_discard(self, new_bdy: LSN) -> Self
+    {
+        if self.seq_start <= new_bdy { 
+            self.discard_old(new_bdy) 
+        } else { 
             self
         }
     }
@@ -947,7 +869,7 @@ state_machine!{ LinkedJournal {
     {
         self.unmarshalled_tail.seq_end
     }
-
+    
     pub open spec(checked) fn unused_addr(self, addr: Address) -> bool
     {
         // TODO reaching into truncatedJournal to find the diskView feels skeezy
@@ -1111,7 +1033,6 @@ state_machine!{ LinkedJournal {
     #[inductive(initialize)]
     fn initialize_inductive(post: Self, truncated_journal: TruncatedJournal) { }
 
-} }  // state_machine!
-
+} } // state_machine!
 
 } // verus!

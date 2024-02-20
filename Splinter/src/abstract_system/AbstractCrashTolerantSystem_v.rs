@@ -4,20 +4,21 @@
 /// Coordinates a map and a journal to present a unified map once abstracted.
 ///
 /// This is the final refinement layer before the top level trusted spec.
+
 use builtin::*;
 
 use builtin_macros::*;
 use state_machines_macros::state_machine;
 use vstd::prelude::*;
 
+use crate::spec::Messages_t::*;
 use crate::spec::MapSpec_t;
 use crate::spec::MapSpec_t::*;
-use crate::spec::Messages_t::*;
 
 use crate::abstract_system::AbstractCrashAwareJournal_v::*;
 use crate::abstract_system::AbstractCrashAwareMap_v::*;
-use crate::abstract_system::MsgHistory_v::{KeyedMessage, MsgHistory};
 use crate::abstract_system::StampedMap_v::*;
+use crate::abstract_system::MsgHistory_v::{MsgHistory, KeyedMessage};
 
 // TODO (jonh): Rename all of the labels in all files to exclude "Op" or "Label" since it's redundant
 // as enums are already namespaced under "Label", so it's like saying "Label Label"
@@ -35,13 +36,12 @@ type SyncReqs = Map<SyncReqId, LSN>;
 
 /// The ephemeral state of the Coordination Layer (when known).
 pub struct Known {
-    /// Tracks the set of outstanding client requests and undelivered replies. See MapSpec_t::EphemeralState.
-    pub progress: MapSpec_t::EphemeralState,
-    /// The set of outstanding sync requests.
-    pub sync_reqs: SyncReqs,
-    /// The LSN one past the end of
-    pub map_lsn: LSN  // invariant: agrees with mapadt.stampedMap.seqEnd
-    ,
+  /// Tracks the set of outstanding client requests and undelivered replies. See MapSpec_t::EphemeralState.
+  pub progress: MapSpec_t::EphemeralState,
+  /// The set of outstanding sync requests.
+  pub sync_reqs: SyncReqs,
+  /// The LSN one past the end of 
+  pub map_lsn: LSN  // invariant: agrees with mapadt.stampedMap.seqEnd
 }
 
 /// Ephemeral state for coordination layer can be known or unknown. The ephemeral
@@ -106,7 +106,7 @@ state_machine!{ CoordinationSystem {
       map_lsn: LSN,
     ) {
       require let Label::Label{ ctam_label: CrashTolerantAsyncMap::Label::Noop } = label;
-
+      
       require CrashTolerantJournal::State::next(
         pre.journal,
         new_journal,
@@ -170,7 +170,7 @@ state_machine!{ CoordinationSystem {
       );
 
       update journal = new_journal;
-      update mapadt = new_mapadt;
+      update mapadt = new_mapadt; 
     }
   }
 
@@ -329,7 +329,7 @@ state_machine!{ CoordinationSystem {
       require req.id == reply.id;
       require !pre_ephemeral.progress.replies.contains(reply);
 
-      // TODO: let keyed_message =
+      // TODO: let keyed_message = 
       let keyed_message = KeyedMessage{
         key: key,
         message: Message::Define { value: value },
@@ -368,11 +368,11 @@ state_machine!{ CoordinationSystem {
     deliver_reply(label: Label) {
       require pre.ephemeral.is_Some();
       let pre_ephemeral = pre.ephemeral.get_Some_0();
-
+      
       let ctam_label = label.get_Label_ctam_label();
 
       require ctam_label.is_OperateOp();
-
+      
       let base_op = ctam_label.get_OperateOp_base_op();
       require base_op.is_ReplyOp();
 
@@ -446,7 +446,7 @@ state_machine!{ CoordinationSystem {
 
       let sync_req_id = ctam_label.get_ReqSyncOp_sync_req_id();
       require !pre_ephemeral.sync_reqs.dom().contains(sync_req_id);
-
+      
       require CrashTolerantJournal::State::next(
         pre.journal,
         new_journal,
@@ -596,5 +596,4 @@ state_machine!{ CoordinationSystem {
 }
 
 }
-
-} // verus!
+}
