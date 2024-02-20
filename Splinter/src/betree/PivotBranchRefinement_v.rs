@@ -1102,7 +1102,42 @@ decreases
             assert(pre.all_keys_below_bound(i - 1));
         }
 
+        // TODO(x9du): try using lemma_split_leaf_all_keys to shorten this?
+        // Note: (post_children[r+1], post_children[r+2]) = children[r+1].split_node(split_arg);
+
+        assert forall |key| post_children[r+1].all_keys().contains(key)
+        implies #[trigger] Key::lt(key, post_pivots[r+1]) by {
+            assert(post_pivots[r+1] == pivot);
+            if (children[r+1] is Leaf) {
+                assert(children[r+1].wf());
+                assert(Key::is_strictly_sorted(children[r+1]->keys));
+                Key::strictly_sorted_implies_sorted(children[r+1]->keys);
+                Key::largest_lt_ensures(children[r+1]->keys, pivot, Key::largest_lt(children[r+1]->keys, pivot));
+                assert(Key::lt(key, pivot));
+            } else {
+                assert(post_children[r+1] is Index);
+                let pivot_index = split_arg->pivot_index;
+                assert(post_children[r+1] == children[r+1].sub_index(0, pivot_index + 1));
+                lemma_split_index_preserves_wf(children[r+1], split_arg);
+                assert(post_children[r+1].wf());
+                if (post_children[r+1]->pivots.contains(key)) {
+                    assert(Key::lt(key, pivot));
+                } else {
+                    let i = choose |i| 0 <= i < post_children[r+1]->children.len()
+                        && (#[trigger] post_children[r+1]->children[i]).all_keys().contains(key);
+                    assert(post_children[r+1]->children[i] == children[r+1]->children[i]);
+                    assert(children[r+1].all_keys_below_bound(i));
+                    // if i == pivot_index, then:
+                    assert(post_children[r+1]->children[pivot_index] == children[r+1]->children[pivot_index]);
+                    assert(children[r+1].all_keys_below_bound(pivot_index));
+                    assert(Key::lt(key, pivot));
+                }
+            }
+        }
         assert(post.all_keys_below_bound(r+1));
+
+        assume(false);
+
         assert(r+2 < post_children.len() - 1 ==> post.all_keys_below_bound(r+2));
 
         // Goal 2
