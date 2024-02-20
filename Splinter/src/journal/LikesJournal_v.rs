@@ -130,7 +130,6 @@ impl DiskView {
         &&& self.entries[addr].contains_lsn(self.boundary_lsn, lsn)
     }
 
-    // ahhh this seems hacky, but just gonna shove the ensures here for now
     #[verifier::spinoff_prover]
     pub proof fn cropped_ptr_build_sub_index(self, root: Pointer, cropped: Pointer, depth: nat)
         requires
@@ -144,14 +143,24 @@ impl DiskView {
     {
         reveal(TruncatedJournal::index_domain_valid);
 
+        let cropped_index = self.build_lsn_addr_index(cropped);
+        let index = self.build_lsn_addr_index(root);
+
         if depth > 0 {
             self.build_lsn_addr_index_domain_valid(root);
             self.cropped_ptr_build_sub_index(self.next(root), cropped, (depth-1) as nat);
+            assert(self.build_lsn_addr_index(cropped) <= self.build_lsn_addr_index(self.next(root)));
+
             if self.next(root) is Some {
                 self.build_lsn_addr_index_domain_valid(self.next(root));
-                assert(self.build_lsn_addr_index(self.next(root)) 
-                    <= self.build_lsn_addr_index(root));
             }
+
+            let curr_msgs = self.entries[root.unwrap()].message_seq;
+            let start_lsn = math::max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
+            let update = singleton_index(start_lsn, curr_msgs.seq_end, root.unwrap());
+    
+            assert(update.dom().disjoint(self.build_lsn_addr_index(self.next(root)).dom()));
+            assert(self.build_lsn_addr_index(self.next(root)) <= self.build_lsn_addr_index(root));
         }
     }
 

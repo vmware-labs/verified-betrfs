@@ -93,7 +93,7 @@ impl DiskView {
     ensures
         self.acyclic(),
         self.iptr(ptr) == big.iptr(ptr),
-    decreases if ptr.is_Some() { self.the_ranking()[ptr.unwrap()]+1 } else { 0 }
+    decreases if ptr.is_Some() { big.the_ranking()[ptr.unwrap()]+1 } else { 0 } 
     {
         assert( big.valid_ranking(big.the_ranking()) ); // witness; new in Verus
         self.sub_disk_ranking(big);
@@ -332,7 +332,7 @@ impl TruncatedJournal {
 //    {I(x)} (may loop with "I(g(x))")
 //    {I(g(x))} (more specific than {g(x)})
 
-    pub proof fn commute_transitivity<L, H>(I: FnSpec(L)->H, f: FnSpec(L)->L, F: FnSpec(H)->H, g: FnSpec(L)->L, G: FnSpec(H)->H)
+    pub proof fn commute_transitivity<L, H>(I: spec_fn(L)->H, f: spec_fn(L)->L, F: spec_fn(H)->H, g: spec_fn(L)->L, G: spec_fn(H)->H)
     requires
         // TODO(verus): Verus refused to guess a trigger here. I had to go run Dafny to see what it
         // chose. I wanted that automated experience so desperately I *went back to Dafny to get it*

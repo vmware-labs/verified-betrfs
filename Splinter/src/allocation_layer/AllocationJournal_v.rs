@@ -980,16 +980,17 @@ impl TruncatedJournal {
     {
         let index = self.build_lsn_au_index(first);
         let big_index = big.build_lsn_au_index(big_first);
-        assert forall|addr|
-            self.disk_view.entries.contains_key(addr) ==> big.disk_view.entries.contains_key(
-                addr,
-            ) by {}
+
+        assert forall|addr| self.disk_view.entries.contains_key(addr) 
+            ==> big.disk_view.entries.contains_key(addr) by {}
         assert(self.disk_view.wf_addrs());
+
         self.build_lsn_au_index_ensures(first);
         big.build_lsn_au_index_ensures(big_first);
         assert(index.dom() <= big_index.dom());
-        assert forall|lsn| index.contains_key(lsn) implies #[trigger]
-        index[lsn] == big_index[lsn] by {
+
+        assert forall|lsn| index.contains_key(lsn) 
+        implies #[trigger] index[lsn] == big_index[lsn] by {
             reveal(DiskView::index_keys_exist_valid_entries);
             let addr = choose|addr: Address|
                 addr.wf() && addr.au == index[lsn] && #[trigger]
