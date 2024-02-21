@@ -1109,10 +1109,7 @@ decreases
         implies #[trigger] Key::lt(key, post_pivots[r+1]) by {
             assert(post_pivots[r+1] == pivot);
             if (children[r+1] is Leaf) {
-                assert(children[r+1].wf());
-                assert(Key::is_strictly_sorted(children[r+1]->keys));
-                Key::strictly_sorted_implies_sorted(children[r+1]->keys);
-                Key::largest_lt_ensures(children[r+1]->keys, pivot, Key::largest_lt(children[r+1]->keys, pivot));
+                lemma_split_leaf_all_keys(children[r+1], split_arg);
                 assert(Key::lt(key, pivot));
             } else {
                 assert(post_children[r+1] is Index);
