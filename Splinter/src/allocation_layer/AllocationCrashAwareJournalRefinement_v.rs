@@ -1,29 +1,17 @@
 // Copyright 2018-2023 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 //
-#![allow(unused_imports)]
-use builtin::*;
 use vstd::prelude::*;
-use vstd::math;
 
-use builtin_macros::*;
-use state_machines_macros::state_machine;
-
-use vstd::prelude::*;
-use vstd::map::*;
-use vstd::map_lib::*;
-use crate::abstract_system::StampedMap_v::LSN;
-use crate::abstract_system::MsgHistory_v::*;
-use crate::abstract_system::AbstractJournal_v::{AbstractJournal};
 use crate::abstract_system::AbstractCrashAwareJournal_v;
-use crate::abstract_system::AbstractCrashAwareJournal_v::{CrashTolerantJournal};
-use crate::disk::GenericDisk_v::*;
-use crate::disk::GenericDisk_v::AU;
-use crate::journal::PagedJournal_v::{JournalRecord};
-use crate::journal::LinkedJournal_v::{LinkedJournal, TruncatedJournal};
-use crate::journal::LikesJournal_v::{LikesJournal};
-use crate::allocation_layer::AllocationJournal_v::{AllocationJournal, JournalImage};
+use crate::abstract_system::AbstractCrashAwareJournal_v::CrashTolerantJournal;
+use crate::abstract_system::AbstractJournal_v::AbstractJournal;
+use crate::abstract_system::MsgHistory_v::*;
 use crate::allocation_layer::AllocationCrashAwareJournal_v::*;
+use crate::allocation_layer::AllocationJournal_v::{AllocationJournal, JournalImage};
+use crate::journal::LikesJournal_v::LikesJournal;
+use crate::journal::LinkedJournal_v::{LinkedJournal, TruncatedJournal};
+use crate::journal::PagedJournal_v::JournalRecord;
 
 // Refines Allocation Journal => Abstract Journal
 // Refines Allocation Crash Aware Journal => Abstract Crash Aware Journal
@@ -164,7 +152,6 @@ impl AllocationCrashAwareJournal::State{
         CrashTolerantJournal::State::next_by(self.i(), post.i(), lbl.i(), 
             CrashTolerantJournal::Step::load_ephemeral_from_persistent(new_journal.i_abstract()))
     {
-        reveal(AllocationJournal::State::init_by);
         reveal(CrashTolerantJournal::State::next_by);
         reveal(AbstractJournal::State::init_by);
 
@@ -240,7 +227,7 @@ impl AllocationCrashAwareJournal::State{
     }
 
     pub proof fn commit_start_refines(self, post: Self, lbl: AllocationCrashAwareJournal::Label, 
-        frozen_journal: StoreImage)
+        frozen_journal: JournalImage)
     requires
         self.inv(),
         post.inv(),

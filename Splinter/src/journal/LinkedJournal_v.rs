@@ -51,15 +51,15 @@ impl JournalRecord {
     }
 }
 
-  // The DiskView in this module is a tightly-populated mapping:
-  // every record the journal needs is present in the mapping,
-  // and every address is "important" to the journal.
-  // The boundaryLSN enables us to ignore "cropped" pointers.
-  // The values in this DiskView are typed, unlike GenericDisk.DiskView.
-  //
-  // TODO(jonh): Jialin suggests JournalStore to avoid the way "disk" brings in too
-  // many other model assumptions.
-
+// The DiskView in this module is a tightly-populated mapping:
+// every record the journal needs is present in the mapping,
+// and every address is "important" to the journal.
+// The boundaryLSN enables us to ignore "cropped" pointers.
+// The values in this DiskView are typed, unlike GenericDisk.DiskView.
+//
+// TODO(jonh): Jialin suggests JournalStore to avoid the way "disk" brings in too
+// many other model assumptions.
+#[verifier::ext_equal]
 pub struct DiskView {
     pub boundary_lsn: LSN,
     pub entries: Map<Address, JournalRecord>,
@@ -247,22 +247,22 @@ impl DiskView {
     }
 
     // TODO please for the love of Z3 automate
-    pub proof fn build_tight_auto(self)
-    ensures
-        forall |root:Pointer| #[trigger self.build_tight(root)]
-            self.decodable(root) ==> ({
-                &&& (forall |addr| #[trigger] self.build_tight(root).entries.contains_key(addr) ==> self.entries.contains_key(addr))
-                &&& self.acyclic() ==> self.build_tight(root).is_sub_disk(self)
-        })
-    {
-        assert forall |root:Pointer| #[trigger self.build_tight(root)]
-            self.decodable(root) implies ({
-                &&& (forall |addr| #[trigger] self.build_tight(root).entries.contains_key(addr) ==> self.entries.contains_key(addr))
-                &&& self.acyclic() ==> self.build_tight(root).is_sub_disk(self)
-        }) by {
-            self.build_tight_ensures(root);
-        }
-    }
+    // pub proof fn build_tight_auto(self)
+    // ensures
+    //     forall |root:Pointer| #[trigger self.build_tight(root)]
+    //         self.decodable(root) ==> ({
+    //             &&& (forall |addr| #[trigger] self.build_tight(root).entries.contains_key(addr) ==> self.entries.contains_key(addr))
+    //             &&& self.acyclic() ==> self.build_tight(root).is_sub_disk(self)
+    //     })
+    // {
+    //     assert forall |root:Pointer| #[trigger self.build_tight(root)]
+    //         self.decodable(root) implies ({
+    //             &&& (forall |addr| #[trigger] self.build_tight(root).entries.contains_key(addr) ==> self.entries.contains_key(addr))
+    //             &&& self.acyclic() ==> self.build_tight(root).is_sub_disk(self)
+    //     }) by {
+    //         self.build_tight_ensures(root);
+    //     }
+    // }
 
     pub open spec(checked) fn can_crop(self, root: Pointer, depth: nat) -> bool
     recommends
@@ -317,7 +317,6 @@ impl DiskView {
     }
 
     pub proof fn pointer_after_crop_auto(self)
-    requires
     ensures
         forall |root, depth| {
             &&& self.decodable(root)
@@ -460,20 +459,20 @@ impl DiskView {
         }
     }
 
-    #[verifier::spinoff_prover]  // flaky proof
-    pub proof fn build_tight_builds_sub_disks(self, root: Pointer)
-    requires
-        self.decodable(root),
-        self.acyclic(),
-    ensures
-        self.build_tight(root).is_sub_disk(self),
-    decreases self.the_rank_of(root)
-    {
-        if root.is_Some() {
-            self.build_tight_builds_sub_disks(self.next(root));
-        }
-//         assert( self.build_tight(root).is_sub_disk(self) ); // This line shouldn't be necessary
-    }
+    // #[verifier::spinoff_prover]  // flaky proof
+    // pub proof fn build_tight_builds_sub_disks(self, root: Pointer)
+    // requires
+    //     self.decodable(root),
+    //     self.acyclic(),
+    // ensures
+    //     self.build_tight(root).is_sub_disk(self),
+    // decreases self.the_rank_of(root)
+    // {
+    //     if root.is_Some() {
+    //         self.build_tight_builds_sub_disks(self.next(root));
+    //     }
+    //     assert( self.build_tight(root).is_sub_disk(self) ); // This line shouldn't be necessary
+    // }
 
     // Dafny didn't need this proof
     pub proof fn tight_empty_disk(self)
@@ -576,30 +575,30 @@ impl DiskView {
         }
     }
 
-    pub proof fn tight_interp(big: Self, root: Pointer, tight: Self)
-    requires
-        big.decodable(root),
-        tight == big.build_tight(root),
-        big.acyclic(),
-    ensures
-        tight.is_sub_disk(big),
-        tight.is_tight(root),
-        tight.iptr(root) == big.iptr(root),
-        tight.acyclic(),
-    decreases big.the_rank_of(root)
-    {
-        if root.is_None() {
-            big.tight_empty_disk()
-        } else {
-            big.build_tight_builds_sub_disks(root);
-            big.tight_sub_disk(root, tight);
-            // Dafny could trigger just on valid_ranking, but we seem to need to poke at
-            // contains_key. How many of these problems would go away with an axiom tying
-            // dom.contains to contains_key?
-            assert( forall |addr| tight.entries.contains_key(addr) ==> big.entries.contains_key(addr) );
-            tight.iptr_ignores_extra_blocks(root, big);
-        }
-    }
+    // pub proof fn tight_interp(big: Self, root: Pointer, tight: Self)
+    // requires
+    //     big.decodable(root),
+    //     tight == big.build_tight(root),
+    //     big.acyclic(),
+    // ensures
+    //     tight.is_sub_disk(big),
+    //     tight.is_tight(root),
+    //     tight.iptr(root) == big.iptr(root),
+    //     tight.acyclic(),
+    // decreases big.the_rank_of(root)
+    // {
+    //     if root.is_None() {
+    //         big.tight_empty_disk()
+    //     } else {
+    //         big.build_tight_builds_sub_disks(root);
+    //         big.tight_sub_disk(root, tight);
+    //         // Dafny could trigger just on valid_ranking, but we seem to need to poke at
+    //         // contains_key. How many of these problems would go away with an axiom tying
+    //         // dom.contains to contains_key?
+    //         assert( forall |addr| tight.entries.contains_key(addr) ==> big.entries.contains_key(addr) );
+    //         tight.iptr_ignores_extra_blocks(root, big);
+    //     }
+    // }
 
     pub open spec fn lsn_has_entry_at(self, lsn: LSN, addr: Address) -> bool {
         &&& self.entries.contains_key(addr)
@@ -633,6 +632,7 @@ impl DiskView {
     }
 }
 
+#[verifier::ext_equal]
 pub struct TruncatedJournal {
     pub freshest_rec: Pointer, // root address of journal
     pub disk_view: DiskView,

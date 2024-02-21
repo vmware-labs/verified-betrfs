@@ -130,78 +130,45 @@ impl DiskView {
         &&& self.entries[addr].contains_lsn(self.boundary_lsn, lsn)
     }
 
+    #[verifier::spinoff_prover]
     pub proof fn cropped_ptr_build_sub_index(self, root: Pointer, cropped: Pointer, depth: nat)
-    requires
-        self.buildable(root),
-        self.buildable(cropped),
-        self.can_crop(root, depth),
-        cropped == self.pointer_after_crop(root, depth)
-    ensures
-        self.build_lsn_addr_index(cropped) <= self.build_lsn_addr_index(root)
-    decreases self.the_rank_of(root)
+        requires
+            self.buildable(root),
+            self.buildable(cropped),
+            self.can_crop(root, depth),
+            cropped == self.pointer_after_crop(root, depth),
+        ensures
+            self.build_lsn_addr_index(cropped) <= self.build_lsn_addr_index(root),
+        decreases self.the_rank_of(root),
     {
         reveal(TruncatedJournal::index_domain_valid);
+
+        let cropped_index = self.build_lsn_addr_index(cropped);
+        let index = self.build_lsn_addr_index(root);
+
         if depth > 0 {
             self.build_lsn_addr_index_domain_valid(root);
             self.cropped_ptr_build_sub_index(self.next(root), cropped, (depth-1) as nat);
+            assert(self.build_lsn_addr_index(cropped) <= self.build_lsn_addr_index(self.next(root)));
+
             if self.next(root) is Some {
                 self.build_lsn_addr_index_domain_valid(self.next(root));
-                assert(self.build_lsn_addr_index(self.next(root)) <= self.build_lsn_addr_index(root));
             }
+
+            let curr_msgs = self.entries[root.unwrap()].message_seq;
+            let start_lsn = math::max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
+            let update = singleton_index(start_lsn, curr_msgs.seq_end, root.unwrap());
+    
+            assert(update.dom().disjoint(self.build_lsn_addr_index(self.next(root)).dom()));
+            assert(self.build_lsn_addr_index(self.next(root)) <= self.build_lsn_addr_index(root));
         }
     }
 
-    // proof fn build_lsn_addr_index_ignores_build_tight(self, bt_root: Pointer, repr_root: Pointer)
-    // requires
-    //     self.buildable(repr_root),
-    //     self.decodable(bt_root),
-    //     self.build_tight(bt_root).decodable(repr_root),
-    // ensures
-    //     self.build_tight(bt_root).wf(),
-    //     self.build_tight(bt_root).acyclic(),
-    //     repr_root.is_Some() ==> self.boundary_lsn < self.build_tight(bt_root).entries[repr_root.unwrap()].message_seq.seq_end,
-    //     self.build_lsn_addr_index(repr_root) == self.build_tight(bt_root).build_lsn_addr_index(repr_root),
-    // decreases self.the_rank_of(repr_root)
-    // {
-    //     self.build_tight_is_awesome(bt_root);
-    //     if repr_root.is_Some() {
-    //         self.build_lsn_addr_index_ignores_build_tight(bt_root, self.next(repr_root));
-    //     }
-    // }
-
-    // proof fn representation_ignores_build_tight(self, bt_root: Pointer, repr_root: Pointer)
-    // requires
-    //     self.decodable(bt_root),
-    //     self.decodable(repr_root),
-    //     self.acyclic(),
-    //     self.build_tight(bt_root).decodable(repr_root),
-    // ensures
-    //     self.build_tight(bt_root).wf(),
-    //     self.build_tight(bt_root).acyclic(),
-    //     self.build_tight(bt_root).representation(repr_root) == self.representation(repr_root)
-    // decreases self.the_rank_of(repr_root)
-    // {
-    //     self.build_tight_is_awesome(bt_root);
-    //     if repr_root.is_Some() {
-    //         self.representation_ignores_build_tight(bt_root, self.next(repr_root));
-    //     }
-    // }
-
-    // proof fn build_tight_gives_representation(self, root: Pointer)
-    // requires
-    //     self.decodable(root),
-    //     self.acyclic(),
-    // ensures
-    //     self.build_tight(root).entries.dom() == self.representation(root),
-    // decreases self.the_rank_of(root)
-    // {
-    //     if root.is_Some() {
-    //         self.build_tight_gives_representation(self.next(root));
-    //     }
-    // }
-
-    spec(checked) fn cropped_msg_seq_contains_lsn(boundary: LSN, message_seq: MsgHistory, lsn: LSN) -> bool
-    {
+    spec(checked) fn cropped_msg_seq_contains_lsn(
+        boundary: LSN,
+        message_seq: MsgHistory,
+        lsn: LSN,
+    ) -> bool {
         max(boundary as int, message_seq.seq_start as int) <= lsn < message_seq.seq_end
     }
 
@@ -319,7 +286,6 @@ impl DiskView {
                 }
             }
         }
-//         assert( self.build_lsn_addr_index(root).values() =~= self.representation(root) );    // TODO remove
     }
 
     pub proof fn sub_disk_with_newer_lsn_repr_index(self, big: DiskView, ptr: Pointer)

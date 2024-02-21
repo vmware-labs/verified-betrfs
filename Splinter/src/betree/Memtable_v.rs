@@ -88,10 +88,6 @@ impl Memtable {
 
     pub open spec(checked) fn is_empty(self) -> bool {
         self.buffer == Buffer::empty()
-        // Note(Jialin): not suited here bc if map is not finite len has no meaning
-        // we can write it as the following
-        // &&& self.buffer.map.dom().finite()
-        // &&& self.buffer.map.dom().len() == 0 
     }
 
 } // end impl Memtable

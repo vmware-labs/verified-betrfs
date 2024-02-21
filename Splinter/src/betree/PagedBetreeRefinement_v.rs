@@ -357,7 +357,8 @@ impl PagedBetree::State {
         let sub_map_b = puts.discard_recent(puts.seq_start).apply_to_stamped_map(self.i().stamped_map).value;
         assert(map_b == sub_map_b.insert(key, sub_map_b[key].merge(message)));
 
-        assert(map_a =~= map_b);
+        assert(map_a.dom() =~= map_b.dom());
+        assert(map_a =~= map_b); 
         assert(post.i().stamped_map.value == map_a);
         assert(MsgHistory::map_plus_history(self.i().stamped_map, puts).value == map_b);
     }

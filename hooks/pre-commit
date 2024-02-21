@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+import os
+import subprocess
+import sys
+import glob
+
+EXPECTED_VERSION="verusfmt 0.1.6"
+ACTUAL_VERSION=subprocess.check_output(["verusfmt", "--version"]).strip().decode("utf-8")
+
+if EXPECTED_VERSION != ACTUAL_VERSION:
+    sys.stderr.write(f"Expected {EXPECTED_VERSION}, found {ACTUAL_VERSION}. Update verusfmt with:\n")
+    sys.stderr.write(f"cargo install verusfmt\n")
+    sys.exit(1)
+
+cwd = os.getcwd()
+
+rustpaths = glob.glob("**/*.rs", recursive=True)
+
+fmt_cmd = ["verusfmt"] + rustpaths
+pwhatever = subprocess.Popen(fmt_cmd, stdout=subprocess.PIPE)
+rc = pwhatever.wait()
+if rc == 0:
+    sys.exit(0)
+
+# Otherwise command failed, print command
+sys.stderr.write(f"verusfmt failed. Format all source with:\n")
+cmd = (" ".join(fmt_cmd))
+sys.stderr.write(cmd+"\n")

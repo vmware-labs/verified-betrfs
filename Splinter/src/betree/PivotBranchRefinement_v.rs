@@ -337,10 +337,12 @@ pub proof fn lemma_split_leaf_all_keys(old_leaf: Node, split_arg: SplitArg)
 
 /// (x9du): not sure if this is correct or useful
 pub proof fn lemma_interpretation(node: Node)
-    requires node.wf()
-    ensures node.i().map.dom().subset_of(node.all_keys())
-    // maybe a hassle to prove
-    // forall |key| node.all_keys().contains(key) ==> node.query(lbl.key) == node.i().map[key]
+    requires
+        node.wf(),
+    ensures
+        node.i().map.dom().subset_of(
+            node.all_keys(),
+        ),  // maybe a hassle to prove  // forall |key| node.all_keys().contains(key) ==> node.query(lbl.key) == node.i().map[key]
 {
     assume(false);
 }

@@ -481,7 +481,7 @@ impl BetreeNode {
         ensures self.i().split_parent(request).get_Node_buffer() == self.split_parent(request).i().get_Node_buffer()
     {
         //TODO(JL): timeout again after updating verus
-        assume(false);
+        // assume(false);
 
         self.split_parent_wf(request);
         self.i().split_parent_wf(request);
@@ -846,6 +846,7 @@ impl BetreeNode {
         assert(result.i().get_Node_buffer() =~= self.i().get_Node_buffer());
     }
 } // end impl BetreeNode
+
 
 // TODO(jialin): Why isn't this just impl StampedBetree { fn i() }?
 pub open spec(checked) fn i_stamped_betree(stamped: StampedBetree) -> PivotBetree_v::StampedBetree

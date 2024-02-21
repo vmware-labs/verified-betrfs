@@ -1,0 +1,18 @@
+#!/usr/bin/python3
+## Run this once in a freshly cloned repository to install team hooks
+
+import os
+import shutil
+
+scriptdir=os.path.dirname(__file__)
+gitdir = os.path.join(scriptdir, "../.git")
+os.chdir(gitdir)
+# Remove .git default hooks dir
+try:
+    shutil.rmtree("hooks")
+except: pass
+# Remove a prior symlink, which rmtree won't do (so this script is idempotent)
+try:
+    os.remove("hooks")
+except: pass
+os.symlink("../hooks", "hooks")

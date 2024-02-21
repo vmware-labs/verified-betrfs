@@ -2,10 +2,9 @@
 // SPDX-License-Identifier: BSD-2-Clause
 // TODO _t and _s enforcement in the build system? Gasp, don't know how to thing about
 // approaching/modifying/enhancing crate build...?
-
-use builtin_macros::*;
 use builtin::*;
-use vstd::{*,map::*,set::*};
+use builtin_macros::*;
+use vstd::{map::*, set::*};
 
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;

@@ -1,8 +1,8 @@
 // Copyright 2018-2023 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
-use builtin_macros::*;
 use builtin::*;
-use vstd::{*,seq::*};
+use builtin_macros::*;
+use vstd::{seq::*};
 use crate::spec::MapSpec_t::Version;
 
 verus!{
@@ -32,7 +32,7 @@ impl<T> FloatingSeq<T> {
     /// Returns a new FloatingSeq with active indices in the range [start, length). The entries
     /// in the active indices are populated using a caller-provided lambda, which should map
     /// active indices to the element that should populate that index.
-    pub open spec(checked) fn new(start: nat, length: nat, f: FnSpec(int) -> T) -> FloatingSeq<T>
+    pub open spec(checked) fn new(start: nat, length: nat, f: spec_fn(int) -> T) -> FloatingSeq<T>
         recommends start <= length
     {
         FloatingSeq{start: start, entries: Seq::new((length-start) as nat, |i: int| f(i+start))}

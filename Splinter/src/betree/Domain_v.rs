@@ -24,8 +24,8 @@ impl Domain {
     {
         &&& self.is_Domain() ==> {
             &&& Element::lt(self.get_Domain_start(), self.get_Domain_end())
-            &&& self.get_Domain_start().is_Elem()
-            // Note(Jialin): skipping elementIsKey since we are integrating element to contain key sized elements
+            &&& self.get_Domain_start().is_Elem()  // Note(Jialin): skipping elementIsKey since we are integrating element to contain key sized elements
+
         }
     }
 
