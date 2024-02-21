@@ -335,6 +335,58 @@ pub proof fn lemma_split_leaf_all_keys(old_leaf: Node, split_arg: SplitArg)
     assume(false);
 }
 
+pub proof fn lemma_split_index_all_keys(old_index: Node, split_arg: SplitArg)
+    requires
+        old_index.wf(),
+        old_index is Index,
+        split_arg.wf(old_index),
+        ({
+            let (left_index, right_index) = old_index.split_index(split_arg);
+            &&& left_index.wf()
+            &&& right_index.wf()
+        })
+    ensures ({
+        let (left_index, right_index) = old_index.split_index(split_arg);
+        &&& old_index.all_keys() == left_index.all_keys() + right_index.all_keys()
+        &&& forall |key| left_index.all_keys().contains(key)
+            <==> (Key::lt(key, split_arg.get_pivot()) && old_index.all_keys().contains(key))
+        &&& forall |key| right_index.all_keys().contains(key)
+            <==> (Key::lte(split_arg.get_pivot(), key) && old_index.all_keys().contains(key))
+    })
+{
+    let (left_index, right_index) = old_index.split_index(split_arg);
+    assert(old_index.all_keys() == left_index.all_keys() + right_index.all_keys());
+    assert(forall |key| left_index.all_keys().contains(key)
+        <==> (Key::lt(key, split_arg.get_pivot()) && old_index.all_keys().contains(key)));
+    assert(forall |key| right_index.all_keys().contains(key)
+        <==> (Key::lte(split_arg.get_pivot(), key) && old_index.all_keys().contains(key)));
+}
+
+pub proof fn lemma_split_node_all_keys(old_node: Node, split_arg: SplitArg)
+    requires
+        old_node.wf(),
+        split_arg.wf(old_node),
+        ({
+            let (left_node, right_node) = old_node.split_node(split_arg);
+            &&& left_node.wf()
+            &&& right_node.wf()
+        })
+    ensures ({
+        let (left_node, right_node) = old_node.split_node(split_arg);
+        &&& old_node.all_keys() == left_node.all_keys() + right_node.all_keys()
+        &&& forall |key| left_node.all_keys().contains(key)
+            <==> (Key::lt(key, split_arg.get_pivot()) && old_node.all_keys().contains(key))
+        &&& forall |key| right_node.all_keys().contains(key)
+            <==> (Key::lte(split_arg.get_pivot(), key) && old_node.all_keys().contains(key))
+    })
+{
+    if (old_node is Leaf) {
+        lemma_split_leaf_all_keys(old_node, split_arg);
+    } else {
+        lemma_split_index_all_keys(old_node, split_arg);
+    }
+}
+
 /// (x9du): not sure if this is correct or useful
 pub proof fn lemma_interpretation(node: Node)
     requires
@@ -1104,40 +1156,19 @@ decreases
             assert(pre.all_keys_below_bound(i - 1));
         }
 
-        // TODO(x9du): try using lemma_split_leaf_all_keys to shorten this?
-        // Note: (post_children[r+1], post_children[r+2]) = children[r+1].split_node(split_arg);
+        let (left_node, right_node) = children[r+1].split_node(split_arg);
+        assert(left_node == post_children[r+1]);
+        assert(right_node == post_children[r+2]);
 
-        assert forall |key| post_children[r+1].all_keys().contains(key)
-        implies #[trigger] Key::lt(key, post_pivots[r+1]) by {
-            assert(post_pivots[r+1] == pivot);
-            if (children[r+1] is Leaf) {
-                lemma_split_leaf_all_keys(children[r+1], split_arg);
-                assert(Key::lt(key, pivot));
-            } else {
-                assert(post_children[r+1] is Index);
-                let pivot_index = split_arg->pivot_index;
-                assert(post_children[r+1] == children[r+1].sub_index(0, pivot_index + 1));
-                lemma_split_index_preserves_wf(children[r+1], split_arg);
-                assert(post_children[r+1].wf());
-                if (post_children[r+1]->pivots.contains(key)) {
-                    assert(Key::lt(key, pivot));
-                } else {
-                    let i = choose |i| 0 <= i < post_children[r+1]->children.len()
-                        && (#[trigger] post_children[r+1]->children[i]).all_keys().contains(key);
-                    assert(post_children[r+1]->children[i] == children[r+1]->children[i]);
-                    assert(children[r+1].all_keys_below_bound(i));
-                    // if i == pivot_index, then:
-                    assert(post_children[r+1]->children[pivot_index] == children[r+1]->children[pivot_index]);
-                    assert(children[r+1].all_keys_below_bound(pivot_index));
-                    assert(Key::lt(key, pivot));
-                }
-            }
-        }
+        lemma_split_node_all_keys(children[r+1], split_arg);
         assert(post.all_keys_below_bound(r+1));
-
+        // TODO(x9du)
         assume(false);
-
-        assert(r+2 < post_children.len() - 1 ==> post.all_keys_below_bound(r+2));
+        if (r+2 < post_children.len() - 1) {
+            // lemma_split_node_all_keys only talks about the pivot we're splitting on
+            // but this assertion is talking about the pivot to the right of the right child
+            assert(post.all_keys_below_bound(r+2));
+        }
 
         // Goal 2
         assert(forall |i| 0 <= i < post_children.len() - 1 ==> post.all_keys_below_bound(i));
