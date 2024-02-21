@@ -910,11 +910,17 @@ fn is_marshalling<M: Marshalling<int, u32>>(m: M) { }
 fn is_s_marshalling<M: Marshalling<Seq<int>, Vec<u32>>>(m: M) { }
 fn is_ss_marshalling<M: Marshalling<Seq<Seq<int>>, Vec<Vec<u32>>>>(m: M) { }
 
+
+fn is_usesmo<O: UniformSizedElementSeqMarshallingOblinfo<int, u32>>(o: &O) {}
+fn is_io<O: IntObligations<u32>>(o: &O) {}
+fn is_ismo<IO: IntObligations<u32>>(o: &IntegerSeqMarshallingOblinfo<u32, IO>) {}
+
 fn foo<
     SO: UniformSizedElementSeqMarshallingOblinfo<int, u32>,
     SSO: UniformSizedElementSeqMarshallingOblinfo<Seq<int>, Vec<u32>>
 >(
     r:  IntMarshalling<u32>,
+    o: IntegerSeqMarshallingOblinfo<u32, IntMarshalling<u32>>,
     s:  UniformSizedElementSeqMarshalling<int, u32, IntegerSeqMarshallingOblinfo<u32, IntMarshalling<u32>>>,
     s2: UniformSizedElementSeqMarshalling<int, u32, SO>,
     t:  UniformSizedElementSeqMarshalling<Seq<int>, Vec<u32>, SSO>
@@ -922,12 +928,20 @@ fn foo<
     is_marshalling(r);
 
     is_s_marshalling(s);
-//     is_marshalling(s);
 
-    is_s_marshalling(s2);
-    is_marshalling(s2);
+    is_usesmo(&o);
+    is_ismo(&o);
+    // s can be Marshalling if s is UniformSizedElementSeqMarshalling<DVElt, Elt, O>
+    // where O is UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>
+    // In reality O is IntegerSeqMarshallingOblinfo<u32, IntMarshalling<u32>>,
+    // but that can be used to give UniformSizedElementSeqMarshallingOblinfo<int, u32>.  (446)
+     // is_marshalling(s); // Of course not; s can't marshall a u32. It's for Vec<u32>
+     is_s_marshalling(s);
+
+//    is_s_marshalling(s2);
+//    is_marshalling(s2);
 // 
-//     is_ss_marshalling(t);
+     is_ss_marshalling(t);
 //     is_s_marshalling(t);
 //     is_marshalling(t);
 }
