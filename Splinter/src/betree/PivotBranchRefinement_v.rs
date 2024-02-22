@@ -335,6 +335,8 @@ pub proof fn lemma_split_leaf_all_keys(old_leaf: Node, split_arg: SplitArg)
     assume(false);
 }
 
+/// Prove that the `all_keys` of the left and right child after splitting an index node 
+/// maintain certain wf properties.
 pub proof fn lemma_split_index_all_keys(old_index: Node, split_arg: SplitArg)
     requires
         old_index.wf(),
@@ -347,7 +349,7 @@ pub proof fn lemma_split_index_all_keys(old_index: Node, split_arg: SplitArg)
         })
     ensures ({
         let (left_index, right_index) = old_index.split_index(split_arg);
-        &&& old_index.all_keys() == left_index.all_keys() + right_index.all_keys()
+        &&& old_index.all_keys() == left_index.all_keys() + right_index.all_keys() + set![split_arg.get_pivot()]
         &&& forall |key| left_index.all_keys().contains(key)
             <==> (Key::lt(key, split_arg.get_pivot()) && old_index.all_keys().contains(key))
         &&& forall |key| right_index.all_keys().contains(key)
@@ -355,9 +357,30 @@ pub proof fn lemma_split_index_all_keys(old_index: Node, split_arg: SplitArg)
     })
 {
     let (left_index, right_index) = old_index.split_index(split_arg);
-    assert(old_index.all_keys() == left_index.all_keys() + right_index.all_keys());
+
+    
+    assert(left_index.wf());
+    assert(right_index.wf());
+    
+    // Assert that old index's pivots and children are related to left and right indices by concatenation.
+    // It's surprising (in a good way) that Verus is able to get these facts just through assertion (probably
+    // through triggering seq axioms).
+    assert(old_index->pivots == left_index->pivots + seq![split_arg.get_pivot()] + right_index->pivots);
+    assert(old_index->children == left_index->children + right_index->children);
+
+    // Ensures GOAL 1
+    assert(old_index.all_keys() =~~= left_index.all_keys() + right_index.all_keys() + set![split_arg.get_pivot()]);
+
+    // ========= ========= =========
+    // CURRENT WORK
+    // ========= ========= =========
+
+    // Ensures Goal 2
     assert(forall |key| left_index.all_keys().contains(key)
         <==> (Key::lt(key, split_arg.get_pivot()) && old_index.all_keys().contains(key)));
+
+    // TODO(URGENT): Remove assume.
+    assume(false);
     assert(forall |key| right_index.all_keys().contains(key)
         <==> (Key::lte(split_arg.get_pivot(), key) && old_index.all_keys().contains(key)));
 }
@@ -373,7 +396,11 @@ pub proof fn lemma_split_node_all_keys(old_node: Node, split_arg: SplitArg)
         })
     ensures ({
         let (left_node, right_node) = old_node.split_node(split_arg);
-        &&& old_node.all_keys() == left_node.all_keys() + right_node.all_keys()
+        &&& if (old_node is Leaf) {
+                old_node.all_keys() == left_node.all_keys() + right_node.all_keys()
+            } else {
+                old_node.all_keys() == left_node.all_keys() + right_node.all_keys() + set![split_arg.get_pivot()]
+            }
         &&& forall |key| left_node.all_keys().contains(key)
             <==> (Key::lt(key, split_arg.get_pivot()) && old_node.all_keys().contains(key))
         &&& forall |key| right_node.all_keys().contains(key)
@@ -671,7 +698,7 @@ pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
             assert(post_children.len() == children.len()); 
             assert(forall |i| 0 <= i < post_children.len() ==> (#[trigger] post_children[i]).wf());
 
-            // TODO(x9du): This assert forall also seems to be flaky.
+            // TODO(x9du): This assert forall is known to be flaky (can fail as you modify/add other lemmas).
             // Required to trigger the route ensures for each of the children.
             assert forall |i| 0 <= i < children.len() && children[i] is Index
             implies (forall |key| 0 <= #[trigger] children[i].route(key) + 1 < children[i].get_Index_children().len()) by {
