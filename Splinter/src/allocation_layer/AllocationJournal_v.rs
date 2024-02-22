@@ -203,15 +203,12 @@ impl DiskView {
             self.decodable(root),
             self.acyclic(),
         decreases
-                self.the_rank_of(
-                    root,
-                ),  // TODO(chris): this when clause isn't working!
-
+            self.the_rank_of(root),  // TODO(chris): this when clause isn't working!
         when {
-        // TODO(chris): oh look, &&&s not ,s! Let's run with that!
-        &&& self.decodable(root)
-        &&& self.acyclic()
-    }
+            // TODO(chris): oh look, &&&s not ,s! Let's run with that!
+            &&& self.decodable(root)
+            &&& self.acyclic()
+        }
     {
         if root.is_None() {
             Map::empty()
@@ -410,8 +407,7 @@ impl DiskView {
         assert(self.valid_ranking(big.the_ranking()));
         if root is Some {
             self.build_lsn_au_index_page_walk_sub_disk_with_newer_lsn(big, self.next(root));
-            assert(self.build_lsn_au_index_page_walk(self.next(root))
-                <= big.build_lsn_au_index_page_walk(self.next(root)));
+            self.build_lsn_au_index_page_walk_domain(self.next(root));
         }
     }
 
@@ -1812,7 +1808,7 @@ state_machine!{ AllocationJournal {
 //                 assert( contiguous_lsns(post.lsn_au_index, y0lsn, post_dv.boundary_lsn, ylsn) );
 //                 assert( y0lsn <= post_dv.boundary_lsn <= ylsn );
 
-//                 assume(false);  // THIS PROOF IS HELLA FLAKY; address later
+// THIS PROOF IS HELLA FLAKY; address later
 //                 assert( post_dv.entries[yaddr].message_seq.contains(y0lsn) );   //trigger
 
 //                 // assert( post.journal.lsn_addr_index.contains_key(y0lsn) );

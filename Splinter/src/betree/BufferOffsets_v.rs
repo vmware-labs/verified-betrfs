@@ -5,7 +5,7 @@ use builtin_macros::*;
 use vstd::seq::*;
 
 verus! {
-
+#[verifier::ext_equal]
 pub struct BufferOffsets {
     pub offsets: Seq<nat>
 }

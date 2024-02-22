@@ -801,7 +801,7 @@ impl LinkedBetree{
 
         assert forall |i| request.is_SplitLeaf() && new_right_child.valid_child_index(i) ==> old_child.valid_child_index(i) by {} // trigger
         assert forall |i| request.is_SplitIndex() && new_right_child.valid_child_index(i) ==> 
-            old_child.valid_child_index(i + request.get_SplitIndex_child_pivot_idx()) by {} // trigger
+            old_child.valid_child_index(i + request->child_pivot_idx) by {} // trigger
         // assert(result.dv.node_children_respects_rank(new_ranking, new_addrs.right));
 
         assert forall |i| #[trigger] result.root().valid_child_index(i) ==> 
@@ -830,7 +830,6 @@ impl LinkedBetree{
             self.split_parent(request, new_addrs).i() == self.i().split_parent(request)
     {
         // TODO(JL): fix
-        // assume(false);
         let result = self.split_parent(request, new_addrs);
         let new_ranking = self.split_new_ranking(request, new_addrs, self.the_ranking());
 
@@ -891,7 +890,7 @@ impl LinkedBetree{
                     assert(new_right_child.root().valid_child_index(j as nat));
 
                     if request.is_SplitIndex() {
-                        let pivot_idx = request.get_SplitIndex_child_pivot_idx();
+                        let pivot_idx = request->child_pivot_idx;
                         assert(old_child.root().valid_child_index((j + pivot_idx)  as nat));
 
                         let old_grand_child = old_child.child_at_idx((j + pivot_idx)  as nat);

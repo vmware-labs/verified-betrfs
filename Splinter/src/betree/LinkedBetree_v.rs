@@ -116,7 +116,7 @@ impl BetreeNode {
 
     pub open spec(checked) fn is_index(self) -> bool
     {
-        forall |i| #![auto] self.valid_child_index(i) ==> self.children[i as int].is_Some()
+        forall |i| #[trigger] self.valid_child_index(i) ==> self.children[i as int].is_Some()
     }
 
     pub open spec(checked) fn can_split_leaf(self, split_key: Key) -> bool
@@ -124,7 +124,7 @@ impl BetreeNode {
         &&& self.wf()
         &&& self.is_leaf()
         &&& self.my_domain().contains(split_key)
-        &&& self.my_domain().get_Domain_start() != to_element(split_key)
+        &&& self.my_domain()->start != to_element(split_key)
     }
 
     pub open spec(checked) fn split_leaf(self, split_key: Key) -> (BetreeNode, BetreeNode)
@@ -176,7 +176,7 @@ impl BetreeNode {
     }
 
     pub open spec(checked) fn empty_root(domain: Domain) -> BetreeNode
-        recommends domain.wf(), domain.is_Domain()
+        recommends domain.wf(), domain is Domain
     {
         BetreeNode{
             buffers: BufferSeq::empty(),

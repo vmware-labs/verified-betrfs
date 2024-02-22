@@ -197,7 +197,6 @@ impl MiniAllocator {
     ensures
         self.allocate_and_observe(addr).wf(),
     {
-//         assume( false );
 //         let alloc = self.allocs[addr.au];
 //         let addrs = set![addr];
 //         assert forall |addr| #[trigger] addrs.contains(addr) implies addr.wf() && addr.au == alloc.au by {

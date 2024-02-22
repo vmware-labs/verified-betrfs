@@ -957,7 +957,6 @@ verus! {
         );
 
         // END - Goal is below, CrashTolerant
-        // assume(CrashTolerantAsyncMap::State::optionally_append_version(v.i().versions, vp.i().versions));
         // assert(v.i().versions.ext_equal(vp.i().versions.drop_last()));
         assert(CrashTolerantAsyncMap::State::next_by(v.i(), vp.i(), label.get_Label_ctam_label(), ctam_step));
         assert(CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label.get_Label_ctam_label()));
