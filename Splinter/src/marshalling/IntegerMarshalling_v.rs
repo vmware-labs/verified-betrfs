@@ -194,7 +194,15 @@ impl<T: Deepview<int> + builtin::Integer + Copy, O: IntObligations<T>> Marshalli
 
 // Empty struct to name this implementation
 pub struct IntMarshalling<T> {
-    _p: std::marker::PhantomData<(T,)>,
+    pub _p: std::marker::PhantomData<(T,)>,
+}
+
+impl<T> IntMarshalling<T> {
+    // TODO(verus): modify Verus to allow constructing default phantomdata fields
+    #[verifier(external_body)]
+    pub fn new() -> Self {
+        Self{ _p: Default::default() }
+    }
 }
 
 impl Deepview<int> for u32 {
@@ -247,6 +255,9 @@ impl IntObligations<u32> for IntMarshalling<u32> {
 
     proof fn as_int_ensures() { }
 
+    // TODO(delete): duplicate of trait default method (verus issue #1006)
+    open spec fn spec_this_fits_in_usize(v: int) -> bool { v <= usize::MAX as int }
+
     exec fn exec_this_fits_in_usize(v: u32) -> (rc: bool) {
         if u32::BITS <= usize::BITS { true } else { v < usize::MAX as u32  }
     }
@@ -294,6 +305,9 @@ impl IntObligations<u64> for IntMarshalling<u64> {
     open spec fn as_int(t: u64) -> int { t as int }
 
     proof fn as_int_ensures() { }
+
+    // TODO(delete): duplicate of trait default method (verus issue #1006)
+    open spec fn spec_this_fits_in_usize(v: int) -> bool { v <= usize::MAX as int }
 
     exec fn exec_this_fits_in_usize(v: u64) -> (rc: bool) {
         if u64::BITS <= usize::BITS { true } else { v <= usize::MAX as u64 }

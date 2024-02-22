@@ -441,6 +441,14 @@ pub struct IntegerSeqMarshallingOblinfo<Elt: Deepview<int> + builtin::Integer, I
     _p: std::marker::PhantomData<(Elt,)>,
 }
 
+impl<Elt: Deepview<int> + builtin::Integer, IO: IntObligations<Elt>> IntegerSeqMarshallingOblinfo<Elt, IO> {
+    // TODO(verus): modify Verus to allow constructing default phantomdata fields
+    #[verifier(external_body)]
+    pub fn new(int_marshalling: IO) -> Self {
+        Self{ int_marshalling, _p: Default::default() }
+    }
+}
+
 impl<Elt: Deepview<int> + builtin::Integer + Copy, IO: IntObligations<Elt>>
     UniformSizedElementSeqMarshallingOblinfo<int, Elt>
     for IntegerSeqMarshallingOblinfo<Elt, IO>
@@ -476,6 +484,12 @@ pub struct UniformSizedElementSeqMarshalling<DVElt, Elt: Deepview<DVElt>, O: Uni
 impl <DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>>
     UniformSizedElementSeqMarshalling<DVElt, Elt, O>
 {
+    // TODO(verus): modify Verus to allow constructing default phantomdata fields
+    #[verifier(external_body)]
+    pub fn new(oblinfo: O, eltm: O::EltMarshalling) -> Self {
+        Self{ oblinfo, eltm, _p: Default::default() }
+    }
+
     spec fn slice_length(&self, dslice: Slice) -> int
     recommends self.valid(), dslice.wf(),
     {
@@ -768,6 +782,32 @@ impl <DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<D
     exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: Elt) -> (r: bool) { false }
 
     exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: Elt) {}
+
+
+    // TODO(delete): duplicate of trait default method (verus issue #1006)
+    open spec fn gettable_to_len(&self, data: Seq<u8>, len: int) -> bool
+    {
+        forall |i: int| 0<=i<len ==> self.gettable(data, i)
+    }
+
+    // TODO(delete): duplicate of trait default method (verus issue #1006)
+    open spec fn elt_parsable_to_len(&self, data: Seq<u8>, len: int) -> bool
+    {
+        forall |i: int| 0<=i<len ==> self.elt_parsable(data, i)
+    }
+
+    // TODO(delete): duplicate of trait default method (verus issue #1006)
+    open spec fn parsable_to_len(&self, data: Seq<u8>, len: usize) -> bool
+    {
+        &&& self.gettable_to_len(data, len as int)
+        &&& self.elt_parsable_to_len(data, len as int)
+    }
+
+    // TODO(delete): duplicate of trait default method (verus issue #1006)
+    open spec fn parse_to_len(&self, data: Seq<u8>, len: usize) -> Seq<DVElt>
+    {
+        Seq::new(len as nat, |i: int| self.get_elt(data, i))
+    }
 
 //     /////////////////////////////////////////////////////////////////////////
 //     // marshall
