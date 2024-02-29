@@ -684,9 +684,6 @@ impl<T: QueryableDisk> LinkedBetree<T> {
         recommends self.acyclic()
     {
         self.reachable_buffer_addrs() <= self.buffer_dv.repr()
-        // let addrs = self.reachable_betree_addrs();
-        // forall |addr| self.dv.entries.contains_key(addr) && addrs.contains(addr) ==> 
-        //     #[trigger] self.dv.entries[addr].buffers.valid(buffer_dv)
     }
 
     pub open spec(checked) fn valid_buffer_dv(self) -> bool
@@ -1109,43 +1106,40 @@ state_machine!{ LinkedBetreeVars {
    
     #[inductive(internal_flush_memtable)]
     fn internal_flush_memtable_inductive(pre: Self, post: Self, lbl: Label, new_addrs: TwoAddrs) {
+        let ranking = pre.linked.the_ranking();
         let pushed = pre.linked.push_memtable(pre.memtable, new_addrs);
-        assert(pushed.acyclic()) by {
-            let ranking = pre.linked.the_ranking();
-            let _ = pre.linked.push_memtable_new_ranking(pre.memtable, new_addrs, ranking);
-        }
+        let pushed_ranking = pre.linked.push_memtable_new_ranking(pre.memtable, new_addrs, ranking);
 
-        // new buffer
-        
-        assume(false);
-        // non danglingly buffer ptr
-
+        assert(pushed.acyclic());
         assert(pushed.buffer_dv.wf());
-        assert forall |addr| pushed.dv.entries.contains_key(addr)
-        implies #[trigger] pushed.dv.entries[addr].buffers.valid(pushed.buffer_dv)
-        by {
-            if addr == pushed.root.unwrap() && pre.linked.has_root() {
-                let node = pushed.root();
-                assert(node.buffers.len() == pre.linked.root().buffers.len() + 1);
-                assert(pre.linked.root().buffers.valid(pre.linked.buffer_dv));
+        assert(pushed.dv.is_fresh(pushed.buffer_dv.repr()));
 
-                assert forall |i| 0 <= i < node.buffers.len()
-                implies #[trigger] pushed.buffer_dv.repr().contains(node.buffers[i])
-                by {
-                    if i < node.buffers.len() - 1 {
-                        assert(pre.linked.root().buffers[i] == node.buffers[i]);
-                        assert(pre.linked.buffer_dv.repr().contains(node.buffers[i]));
-                        assert(pushed.buffer_dv.repr().contains(node.buffers[i]));
-                    } else {
-                        assert(node.buffers[i] == new_addrs.addr2);
-                    }
-                }
-            } else if addr != pushed.root.unwrap() {
-                assert(pushed.dv.entries[addr].buffers.valid(pre.linked.buffer_dv)); //  trigger
+        let buffer_addrs = pre.linked.reachable_buffer_addrs();
+        let pushed_buffer_addrs = pushed.reachable_buffer_addrs();
+
+        assert forall |addr| pushed_buffer_addrs.contains(addr) && addr != new_addrs.addr2
+        implies #[trigger] buffer_addrs.contains(addr)
+        by {
+            let tree_addr = choose |tree_addr| pushed.reachable_buffer(tree_addr, addr);
+            if Some(tree_addr) == pushed.root {
+                assert(pre.linked.has_root());
+                assert(pre.linked.root().buffers.repr().contains(addr));
+                pre.linked.reachable_betree_addrs_using_ranking_closed(ranking);
+                assert(pre.linked.reachable_buffer(pre.linked.root.unwrap(), addr));
+            } else {
+                pushed.reachable_betree_addrs_using_ranking_closed(pushed.the_ranking());
+                let i = pushed.get_child_idx_given_reachable_addr(pushed.the_ranking(), tree_addr, 0);
+
+                let child = pre.linked.child_at_idx(i);
+                let pushed_child = pushed.child_at_idx(i);
+
+                pre.linked.same_child_same_reachable_addrs(pushed, i, i, pushed_ranking);
+                pre.linked.child_at_idx_reachable_addrs_ensures(i);
+                pushed_child.reachable_betree_addrs_ignore_ranking(pushed.the_ranking(), pushed_child.the_ranking());
+                assert(pre.linked.reachable_buffer(tree_addr, addr));
             }
         }
         assert(pushed.no_dangling_buffer_ptr());
-        assert(pushed.valid_buffer_dv());
     }
    
     #[inductive(internal_grow)]
