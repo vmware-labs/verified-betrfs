@@ -406,19 +406,28 @@ impl BetreeNode {
     {
         self.split_parent_wf(request);
         let (left_keys, right_keys) = self.split_keys(request);
+        assert(self.split_parent(request).my_domain() == self.my_domain());
 
-        assert forall |k: Key| self.my_domain().contains(k)
-        implies (#[trigger] self.i().split(left_keys, right_keys)->children.map[k]) == self.split_parent(request).i_children().map[k]
+        let parent_i = self.split_parent(request).i();
+        let i_parent = self.i().split(left_keys, right_keys);
+
+        assert forall |k: Key| true
+        implies i_parent->children.map[k] == parent_i->children.map[k]
         by {
-            if left_keys.contains(k) {
-                self.split_commutes_with_i_left(request, k);
-            } else if right_keys.contains(k) {
-                self.split_commutes_with_i_right(request, k);
+            if self.my_domain().contains(k) {
+                if left_keys.contains(k) {
+                    self.split_commutes_with_i_left(request, k);
+                } else if right_keys.contains(k) {
+                    self.split_commutes_with_i_right(request, k);
+                } else {
+                    self.split_commutes_with_i_nonsplit(request, k);
+                }
             } else {
-                self.split_commutes_with_i_nonsplit(request, k);
+                assert(i_parent->children.map[k] is Nil);
+                assert(parent_i->children.map[k] is Nil);
             }
         }
-        assert(self.i().split(left_keys, right_keys)->children.map =~= self.split_parent(request).i_children().map);
+        assert(i_parent->children.map =~= parent_i->children.map);
     }
 
     proof fn promote_and_merge_wf(self, domain: Domain, buffer: Buffer)

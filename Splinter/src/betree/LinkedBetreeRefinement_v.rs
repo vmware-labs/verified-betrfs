@@ -35,59 +35,40 @@ impl DiskView{
         &&& forall |addr| #![auto] !r1.contains_key(addr) && r2.contains_key(addr) ==> !self.entries.contains_key(addr)
     }
 
-    pub proof fn subdisk_implies_ranking_validity(self, big: DiskView, ranking: Ranking)
-        requires self.wf(), self.is_subdisk(big), big.valid_ranking(ranking)
-        ensures self.valid_ranking(ranking)
-    {
-        assert forall |addr| self.entries.contains_key(addr) && #[trigger] ranking.contains_key(addr)
-        implies self.node_children_respects_rank(ranking, addr)
-        by {
-            assert(big.entries.dom().contains(addr)); // trigger
-            assert(self.entries.dom().contains(addr));
-        }
-    }
-
     pub open spec(checked) fn ranking_is_tight(self, ranking: Ranking) -> bool
     {
         ranking.dom().subset_of(self.entries.dom())
     }
-
-    pub proof fn tight_ranking_is_finite(self, ranking: Ranking)
-        requires self.wf(), self.ranking_is_tight(ranking)
-        ensures ranking.dom().finite()
-    {
-        lemma_len_subset(ranking.dom(), self.entries.dom());
-    }
 }
 
-pub proof fn get_max_rank(ranking: Ranking) -> (max: nat)
-    requires ranking.dom().finite()
-    ensures forall |addr| #[trigger] ranking.contains_key(addr) ==> ranking[addr] <= max
-    decreases ranking.dom().len()
-{
-    if ranking.dom().is_empty() {
-        assert forall |addr| #[trigger] ranking.contains_key(addr) 
-        implies ranking[addr] <= 0 by { assert(false); }
-        0
-    } else {
-        let curr_addr = ranking.dom().choose();
-        let other_max = get_max_rank(ranking.remove(curr_addr));
+// pub proof fn get_max_rank(ranking: Ranking) -> (max: nat)
+//     requires ranking.dom().finite()
+//     ensures forall |addr| #[trigger] ranking.contains_key(addr) ==> ranking[addr] <= max
+//     decreases ranking.dom().len()
+// {
+//     if ranking.dom().is_empty() {
+//         assert forall |addr| #[trigger] ranking.contains_key(addr) 
+//         implies ranking[addr] <= 0 by { assert(false); }
+//         0
+//     } else {
+//         let curr_addr = ranking.dom().choose();
+//         let other_max = get_max_rank(ranking.remove(curr_addr));
 
-        if ranking[curr_addr] > other_max {
-            ranking[curr_addr]
-        } else {
-            assert(ranking[curr_addr] <= other_max);
-            assert forall |addr| #[trigger] ranking.contains_key(addr)
-            implies ranking[addr] <= other_max 
-            by {
-                if addr != curr_addr {
-                    assert(ranking.remove(curr_addr).contains_key(addr)); // trigger
-                }
-            }
-            other_max
-        }
-    }
-}
+//         if ranking[curr_addr] > other_max {
+//             ranking[curr_addr]
+//         } else {
+//             assert(ranking[curr_addr] <= other_max);
+//             assert forall |addr| #[trigger] ranking.contains_key(addr)
+//             implies ranking[addr] <= other_max 
+//             by {
+//                 if addr != curr_addr {
+//                     assert(ranking.remove(curr_addr).contains_key(addr)); // trigger
+//                 }
+//             }
+//             other_max
+//         }
+//     }
+// }
 
 impl LinkedBetree{
     pub open spec(checked) fn disk_tight_wrt_reachable_betree_addrs(self) -> bool
@@ -321,8 +302,8 @@ impl LinkedBetree{
         requires 
             self.wf(), big.wf(),
             self.root == big.root,
-            self.dv.is_subdisk(big.dv),
-            self.buffer_dv.is_subdisk(big.buffer_dv),
+            self.dv.is_sub_disk(big.dv),
+            self.buffer_dv.is_sub_disk(big.buffer_dv),
             big.valid_ranking(ranking),
         ensures
             self.valid_ranking(ranking),
@@ -358,27 +339,21 @@ impl LinkedBetree{
         }
     }
 
-    pub proof fn reachable_addrs_using_ranking_recur_body_lemma(self, ranking: Ranking, child_idx: nat)
-        requires self.can_recurse_for_reachable(ranking, child_idx)
-        ensures 
-            forall |i| child_idx <= i < self.child_count() ==>
-                (#[trigger]self.child_at_idx(i).reachable_addrs_using_ranking(ranking)
-                ).subset_of(self.reachable_addrs_using_ranking_recur(ranking, child_idx))
-        decreases self.child_count() - child_idx
-    {
-        if child_idx < self.child_count() {
-            assert(self.root().valid_child_index(child_idx)); // trigger
-            self.reachable_addrs_using_ranking_recur_body_lemma(ranking, child_idx+1);
-        }
-    }
+    // pub proof fn reachable_addrs_using_ranking_recur_body_lemma(self, ranking: Ranking, child_idx: nat)
+    //     requires self.can_recurse_for_reachable(ranking, child_idx)
+    //     ensures 
+    //         forall |i| child_idx <= i < self.child_count() ==>
+    //             (#[trigger]self.child_at_idx(i).reachable_addrs_using_ranking(ranking)
+    //             ).subset_of(self.reachable_addrs_using_ranking_recur(ranking, child_idx))
+    //     decreases self.child_count() - child_idx
+    // {
+    //     if child_idx < self.child_count() {
+    //         assert(self.root().valid_child_index(child_idx)); // trigger
+    //         self.reachable_addrs_using_ranking_recur_body_lemma(ranking, child_idx+1);
+    //     }
+    // }
 
-    pub open spec(checked) fn child_subtree_contains_addr(self, ranking: Ranking, addr: Address, start: nat, i: nat) -> bool
-        recommends self.wf(), self.valid_ranking(ranking)
-    {
-        &&& start <= i < self.child_count()
-        &&& self.child_at_idx(i).valid_ranking(ranking)
-        &&& self.child_at_idx(i).reachable_addrs_using_ranking(ranking).contains(addr)
-    }
+
 
     pub proof fn reachable_addrs_using_ranking_recur_closed(self, ranking: Ranking, child_idx: nat)
         requires self.can_recurse_for_reachable(ranking, child_idx)
@@ -513,10 +488,10 @@ impl LinkedBetree{
         result.i_node_ignores_ranking(ranking, result.the_ranking());
     }
 
-    pub open spec(checked) fn build_tight_ranking(self, ranking: Ranking) -> Ranking
-    {
-        ranking.restrict(self.dv.entries.dom())
-    }
+    // pub open spec(checked) fn build_tight_ranking(self, ranking: Ranking) -> Ranking
+    // {
+    //     ranking.restrict(self.dv.entries.dom())
+    // }
 
     pub proof fn identical_children_commutes_with_i(self, idx: nat, other: LinkedBetree, other_idx: nat, ranking: Ranking)
         requires 
@@ -526,8 +501,8 @@ impl LinkedBetree{
             other.root().valid_child_index(other_idx),
             self.valid_ranking(ranking),
             other.valid_ranking(ranking),
-            self.dv.is_subdisk(other.dv),
-            self.buffer_dv.is_subdisk(other.buffer_dv),
+            self.dv.is_sub_disk(other.dv),
+            self.buffer_dv.is_sub_disk(other.buffer_dv),
             self.root().children[idx as int] == other.root().children[other_idx as int]
         ensures 
             self.i().get_Node_children()[idx as int] == other.i().get_Node_children()[other_idx as int]
@@ -549,84 +524,84 @@ impl LinkedBetree{
 
     // operations
 
-    pub proof fn push_memtable_wf(self, memtable: Memtable, new_addrs: TwoAddrs)
-        requires 
-            self.wf(), 
-            new_addrs.no_duplicates(),
-            self.is_fresh(new_addrs.repr()),
-        ensures
-            self.push_memtable(memtable, new_addrs).wf()
-    {
-        let result = self.push_memtable(memtable, new_addrs);
+    // pub proof fn push_memtable_wf(self, memtable: Memtable, new_addrs: TwoAddrs)
+    //     requires 
+    //         self.wf(), 
+    //         new_addrs.no_duplicates(),
+    //         self.is_fresh(new_addrs.repr()),
+    //     ensures
+    //         self.push_memtable(memtable, new_addrs).wf()
+    // {
+    //     let result = self.push_memtable(memtable, new_addrs);
 
-        if self.has_root() {
-            assert forall |i| result.root().valid_child_index(i) ==> self.root().valid_child_index(i) by {} // trigger
-            assert(result.dv.node_has_nondangling_child_ptrs(result.root()));
-            assert(result.dv.node_has_linked_children(result.root()));
-        }
-        assert(result.dv.healthy_child_ptrs());
-        assert(result.dv.wf());
+    //     if self.has_root() {
+    //         assert forall |i| result.root().valid_child_index(i) ==> self.root().valid_child_index(i) by {} // trigger
+    //         assert(result.dv.node_has_nondangling_child_ptrs(result.root()));
+    //         assert(result.dv.node_has_linked_children(result.root()));
+    //     }
+    //     assert(result.dv.healthy_child_ptrs());
+    //     assert(result.dv.wf());
 
-        assert forall |addr| result.dv.entries.contains_key(addr)
-        implies #[trigger] result.dv.entries[addr].buffers.valid(result.buffer_dv)
-        by {
-            if addr == result.root.unwrap() && self.has_root() {
-                let node = result.root();
-                assert(node.buffers.len() == self.root().buffers.len() + 1);
-                assert(self.root().buffers.valid(self.buffer_dv));
+    //     assert forall |addr| result.dv.entries.contains_key(addr)
+    //     implies #[trigger] result.dv.entries[addr].buffers.valid(result.buffer_dv)
+    //     by {
+    //         if addr == result.root.unwrap() && self.has_root() {
+    //             let node = result.root();
+    //             assert(node.buffers.len() == self.root().buffers.len() + 1);
+    //             assert(self.root().buffers.valid(self.buffer_dv));
 
-                assert forall |i| 0 <= i < node.buffers.len()
-                implies #[trigger] result.buffer_dv.repr().contains(node.buffers[i])
-                by {
-                    if i < node.buffers.len() - 1 {
-                        assert(self.root().buffers[i] == node.buffers[i]);
-                        assert(self.buffer_dv.repr().contains(node.buffers[i]));
-                        assert(result.buffer_dv.repr().contains(node.buffers[i]));
-                    } else {
-                        assert(node.buffers[i] == new_addrs.addr2);
-                    }
-                }
-            } else if addr != result.root.unwrap() {
-                assert(result.dv.entries[addr].buffers.valid(self.buffer_dv)); //  trigger
-            }
-        }
-        assert(result.dv.no_dangling_buffer_ptr(result.buffer_dv));
-        assert(result.wf());
-    }
+    //             assert forall |i| 0 <= i < node.buffers.len()
+    //             implies #[trigger] result.buffer_dv.repr().contains(node.buffers[i])
+    //             by {
+    //                 if i < node.buffers.len() - 1 {
+    //                     assert(self.root().buffers[i] == node.buffers[i]);
+    //                     assert(self.buffer_dv.repr().contains(node.buffers[i]));
+    //                     assert(result.buffer_dv.repr().contains(node.buffers[i]));
+    //                 } else {
+    //                     assert(node.buffers[i] == new_addrs.addr2);
+    //                 }
+    //             }
+    //         } else if addr != result.root.unwrap() {
+    //             assert(result.dv.entries[addr].buffers.valid(self.buffer_dv)); //  trigger
+    //         }
+    //     }
+    //     assert(result.dv.no_dangling_buffer_ptr(result.buffer_dv));
+    //     assert(result.wf());
+    // }
 
-    #[verifier::spinoff_prover]
-    pub proof fn push_memtable_new_ranking(self, memtable: Memtable, new_addrs: TwoAddrs, old_ranking: Ranking) -> (new_ranking: Ranking)
-        requires 
-            self.wf(), 
-            new_addrs.no_duplicates(),
-            self.is_fresh(new_addrs.repr()),
-            self.valid_ranking(old_ranking),
-            self.dv.ranking_is_tight(old_ranking)
-        ensures 
-            self.push_memtable(memtable, new_addrs).valid_ranking(new_ranking),
-            self.push_memtable(memtable, new_addrs).build_tight_tree().wf(),
-            self.push_memtable(memtable, new_addrs).build_tight_tree().valid_ranking(new_ranking),
-            new_ranking.dom() == old_ranking.dom().insert(new_addrs.addr1)
-    {
-        let result = self.push_memtable(memtable, new_addrs);
-        self.push_memtable_wf(memtable, new_addrs);
+    // #[verifier::spinoff_prover]
+    // pub proof fn push_memtable_new_ranking(self, memtable: Memtable, new_addrs: TwoAddrs, old_ranking: Ranking) -> (new_ranking: Ranking)
+    //     requires 
+    //         self.wf(), 
+    //         new_addrs.no_duplicates(),
+    //         self.is_fresh(new_addrs.repr()),
+    //         self.valid_ranking(old_ranking),
+    //         self.dv.ranking_is_tight(old_ranking)
+    //     ensures 
+    //         self.push_memtable(memtable, new_addrs).valid_ranking(new_ranking),
+    //         self.push_memtable(memtable, new_addrs).build_tight_tree().wf(),
+    //         self.push_memtable(memtable, new_addrs).build_tight_tree().valid_ranking(new_ranking),
+    //         new_ranking.dom() == old_ranking.dom().insert(new_addrs.addr1)
+    // {
+    //     let result = self.push_memtable(memtable, new_addrs);
+    //     self.push_memtable_wf(memtable, new_addrs);
 
-        let new_rank = if self.has_root() { old_ranking[self.root.unwrap()]+1 } else { 0 };
-        let new_ranking = old_ranking.insert(new_addrs.addr1, new_rank);
+    //     let new_rank = if self.has_root() { old_ranking[self.root.unwrap()]+1 } else { 0 };
+    //     let new_ranking = old_ranking.insert(new_addrs.addr1, new_rank);
 
-        if self.has_root() {
-            // Add this to suppress "recommends" warning for `result.root()` call.
-            assert(result.has_root());
-            assert forall |i| result.root().valid_child_index(i) ==> self.root().valid_child_index(i) by {} // trigger
-        }
+    //     if self.has_root() {
+    //         // Add this to suppress "recommends" warning for `result.root()` call.
+    //         assert(result.has_root());
+    //         assert forall |i| result.root().valid_child_index(i) ==> self.root().valid_child_index(i) by {} // trigger
+    //     }
 
-        // tenzinhl: Adding this assertion caused the proof to go through. Unsure what it's triggering.
-        assert(result.dv.valid_ranking(new_ranking));
+    //     // tenzinhl: Adding this assertion caused the proof to go through. Unsure what it's triggering.
+    //     assert(result.dv.valid_ranking(new_ranking));
 
-        assert(result.valid_ranking(new_ranking));
-        result.build_tight_preserves_wf(new_ranking);
-        new_ranking
-    }
+    //     assert(result.valid_ranking(new_ranking));
+    //     result.build_tight_preserves_wf(new_ranking);
+    //     new_ranking
+    // }
 
     pub proof fn push_memtable_commutes_with_i(self, memtable: Memtable, new_addrs: TwoAddrs)
         requires 
@@ -702,7 +677,7 @@ impl LinkedBetree{
             self.root == other.root,
             self.valid_ranking(ranking),
             other.valid_ranking(ranking),
-            self.dv.is_subdisk(other.dv),
+            self.dv.is_sub_disk(other.dv),
             self.dv.entries.dom().insert(new_addr) =~= other.dv.entries.dom(),
             self.buffer_dv == other.buffer_dv,
             self.is_fresh(Set::empty().insert(new_addr)),
@@ -757,65 +732,56 @@ impl LinkedBetree{
         assert(result.i().get_Node_buffers() =~= self.i().grow().get_Node_buffers());
     }
 
-    pub open spec(checked) fn split_element(self, request: SplitRequest) -> Element
-        recommends self.can_split_parent(request)
-    {
-        // let child = self.child_at_idx(request.get_child_idx()).root(); // TODO(verus): false recommendation note met
-        match request {
-            SplitRequest::SplitLeaf{child_idx, split_key} => to_element(split_key),
-            SplitRequest::SplitIndex{child_idx, child_pivot_idx} => self.child_at_idx(request.get_child_idx()).root().pivots.pivots[child_pivot_idx as int]
-        }
-    }
 
-    pub proof fn split_new_ranking(self, request: SplitRequest, new_addrs: SplitAddrs, ranking: Ranking) -> (new_ranking: Ranking)
-        requires 
-            self.wf(), self.has_root(),
-            self.valid_ranking(ranking),
-            self.can_split_parent(request),
-            new_addrs.no_duplicates(),
-            self.is_fresh(new_addrs.repr()),
-        ensures 
-            self.valid_ranking(new_ranking),
-            self.split_parent(request, new_addrs).valid_ranking(new_ranking),
-            new_ranking.dom() == ranking.dom() + new_addrs.repr()
-    {
-        let child_idx = request.get_child_idx();
-        let old_child_addr = self.root().children[child_idx as int].unwrap();
+    // pub proof fn split_new_ranking(self, request: SplitRequest, new_addrs: SplitAddrs, ranking: Ranking) -> (new_ranking: Ranking)
+    //     requires 
+    //         self.wf(), self.has_root(),
+    //         self.valid_ranking(ranking),
+    //         self.can_split_parent(request),
+    //         new_addrs.no_duplicates(),
+    //         self.is_fresh(new_addrs.repr()),
+    //     ensures 
+    //         self.valid_ranking(new_ranking),
+    //         self.split_parent(request, new_addrs).valid_ranking(new_ranking),
+    //         new_ranking.dom() == ranking.dom() + new_addrs.repr()
+    // {
+    //     let child_idx = request.get_child_idx();
+    //     let old_child_addr = self.root().children[child_idx as int].unwrap();
 
-        let old_parent_rank = ranking[self.root.unwrap()];
-        let old_child_rank = ranking[old_child_addr];
+    //     let old_parent_rank = ranking[self.root.unwrap()];
+    //     let old_child_rank = ranking[old_child_addr];
 
-        let new_ranking = ranking.insert(new_addrs.left, old_child_rank).insert(new_addrs.right, old_child_rank).insert(new_addrs.parent, old_parent_rank);
-        assert(self.dv.valid_ranking(new_ranking));
+    //     let new_ranking = ranking.insert(new_addrs.left, old_child_rank).insert(new_addrs.right, old_child_rank).insert(new_addrs.parent, old_parent_rank);
+    //     assert(self.dv.valid_ranking(new_ranking));
 
-        let result = self.split_parent(request, new_addrs);
-        self.root().pivots.insert_wf(child_idx as int + 1, self.split_element(request));
-        assert(result.root().wf());
+    //     let result = self.split_parent(request, new_addrs);
+    //     self.root().pivots.insert_wf(child_idx as int + 1, self.split_element(request));
+    //     assert(result.root().wf());
 
-        let old_child = self.dv.entries[self.root().children[child_idx as int].unwrap()];
-        let new_left_child = result.dv.entries[new_addrs.left];
-        let new_right_child = result.dv.entries[new_addrs.right];
+    //     let old_child = self.dv.entries[self.root().children[child_idx as int].unwrap()];
+    //     let new_left_child = result.dv.entries[new_addrs.left];
+    //     let new_right_child = result.dv.entries[new_addrs.right];
 
-        assert forall |i| new_left_child.valid_child_index(i) ==> old_child.valid_child_index(i) by {} // trigger
-        // assert(result.dv.node_children_respects_rank(new_ranking, new_addrs.left));
+    //     assert forall |i| new_left_child.valid_child_index(i) ==> old_child.valid_child_index(i) by {} // trigger
+    //     // assert(result.dv.node_children_respects_rank(new_ranking, new_addrs.left));
 
-        assert forall |i| request.is_SplitLeaf() && new_right_child.valid_child_index(i) ==> old_child.valid_child_index(i) by {} // trigger
-        assert forall |i| request.is_SplitIndex() && new_right_child.valid_child_index(i) ==> 
-            old_child.valid_child_index(i + request->child_pivot_idx) by {} // trigger
-        // assert(result.dv.node_children_respects_rank(new_ranking, new_addrs.right));
+    //     assert forall |i| request.is_SplitLeaf() && new_right_child.valid_child_index(i) ==> old_child.valid_child_index(i) by {} // trigger
+    //     assert forall |i| request.is_SplitIndex() && new_right_child.valid_child_index(i) ==> 
+    //         old_child.valid_child_index(i + request->child_pivot_idx) by {} // trigger
+    //     // assert(result.dv.node_children_respects_rank(new_ranking, new_addrs.right));
 
-        assert forall |i| #[trigger] result.root().valid_child_index(i) ==> 
-        ({
-            &&& i < child_idx ==> self.root().valid_child_index(i) 
-            &&& i > child_idx + 1 ==> self.root().valid_child_index((i-1) as nat)
-        }) by {}
-        // assert(result.dv.node_children_respects_rank(new_ranking, new_addrs.parent));
+    //     assert forall |i| #[trigger] result.root().valid_child_index(i) ==> 
+    //     ({
+    //         &&& i < child_idx ==> self.root().valid_child_index(i) 
+    //         &&& i > child_idx + 1 ==> self.root().valid_child_index((i-1) as nat)
+    //     }) by {}
+    //     // assert(result.dv.node_children_respects_rank(new_ranking, new_addrs.parent));
 
-        assert(result.dv.valid_ranking(new_ranking));
-        assert(new_ranking.dom() =~= ranking.dom() + new_addrs.repr());
+    //     assert(result.dv.valid_ranking(new_ranking));
+    //     assert(new_ranking.dom() =~= ranking.dom() + new_addrs.repr());
 
-        new_ranking
-    }
+    //     new_ranking
+    // }
 
     #[verifier::spinoff_prover]
     pub proof fn split_parent_commutes_with_i(self, request: SplitRequest, new_addrs: SplitAddrs)
@@ -1229,32 +1195,32 @@ impl QueryReceipt{
     }
 }
 
-pub proof fn path_addrs_to_set_additive(path_addrs: PathAddrs)
-    requires path_addrs.len() > 0
-    ensures path_addrs.to_set() == set![path_addrs[0]] + path_addrs.subrange(1, path_addrs.len() as int).to_set()
-{
-    let sub_path_addrs = path_addrs.subrange(1, path_addrs.len() as int);
-    let a = set![path_addrs[0]] + sub_path_addrs.to_set();
-    let b = path_addrs.to_set();
+// pub proof fn path_addrs_to_set_additive(path_addrs: PathAddrs)
+//     requires path_addrs.len() > 0
+//     ensures path_addrs.to_set() == set![path_addrs[0]] + path_addrs.subrange(1, path_addrs.len() as int).to_set()
+// {
+//     let sub_path_addrs = path_addrs.subrange(1, path_addrs.len() as int);
+//     let a = set![path_addrs[0]] + sub_path_addrs.to_set();
+//     let b = path_addrs.to_set();
 
-    // TODO(verus): lack additive seq to set lemma
-    assert forall |addr| a.contains(addr) <==> b.contains(addr)
-    by {
-        if a.contains(addr) {
-            if sub_path_addrs.contains(addr) {
-                let idx = choose |idx| 0 <= idx < sub_path_addrs.len() && sub_path_addrs[idx] == addr;
-                assert(sub_path_addrs[idx] == path_addrs[idx + 1]);
-            }
-        }
-        if b.contains(addr) {
-            let idx = choose |idx| 0 <= idx < path_addrs.len() && path_addrs[idx] == addr;
-            if idx > 0 {
-                assert(sub_path_addrs[idx-1] == path_addrs[idx]);
-            }
-        }
-    }
-    assert(a =~= b);
-}
+//     // TODO(verus): lack additive seq to set lemma
+//     assert forall |addr| a.contains(addr) <==> b.contains(addr)
+//     by {
+//         if a.contains(addr) {
+//             if sub_path_addrs.contains(addr) {
+//                 let idx = choose |idx| 0 <= idx < sub_path_addrs.len() && sub_path_addrs[idx] == addr;
+//                 assert(sub_path_addrs[idx] == path_addrs[idx + 1]);
+//             }
+//         }
+//         if b.contains(addr) {
+//             let idx = choose |idx| 0 <= idx < path_addrs.len() && path_addrs[idx] == addr;
+//             if idx > 0 {
+//                 assert(sub_path_addrs[idx-1] == path_addrs[idx]);
+//             }
+//         }
+//     }
+//     assert(a =~= b);
+// }
 
 impl Path{
     pub open spec(checked) fn i(self) -> FilteredBetree_v::Path
@@ -1263,17 +1229,7 @@ impl Path{
         FilteredBetree_v::Path{node: self.linked.i(), key: self.key, depth: self.depth}
     }
 
-    pub proof fn valid_ranking_throughout(self, ranking: Ranking)
-        requires self.valid(), self.linked.valid_ranking(ranking)
-        ensures 0 < self.depth ==> self.subpath().linked.valid_ranking(ranking),
-            self.target().valid_ranking(ranking)
-        decreases self.depth
-    {
-        if 0 < self.depth {
-            self.linked.child_for_key_valid_index(self.key);
-            self.subpath().valid_ranking_throughout(ranking);
-        }
-    }
+
 
     pub proof fn subpath_commutes_with_i(self)
         requires 0 < self.depth, self.valid()
@@ -1347,8 +1303,8 @@ impl Path{
             &&& result.wf()
             &&& result.has_root()
             &&& result.root().my_domain() == self.linked.root().my_domain()
-            &&& self.linked.dv.is_subdisk(result.dv)
-            &&& self.linked.buffer_dv.is_subdisk(result.buffer_dv)
+            &&& self.linked.dv.is_sub_disk(result.dv)
+            &&& self.linked.buffer_dv.is_sub_disk(result.buffer_dv)
             &&& result.dv.entries.dom() =~= (self.linked.dv.entries.dom() + replacement.dv.entries.dom() + path_addrs.to_set())
         })
         decreases self.depth, 1nat
@@ -1533,12 +1489,12 @@ impl Path{
     pub proof fn fresh_substitution_implies_subdisk(self, replacement: LinkedBetree, path_addrs: PathAddrs)
         requires 
             self.can_substitute(replacement, path_addrs),
-            self.linked.dv.is_subdisk(replacement.dv),
-            self.linked.buffer_dv.is_subdisk(replacement.buffer_dv),
+            self.linked.dv.is_sub_disk(replacement.dv),
+            self.linked.buffer_dv.is_sub_disk(replacement.buffer_dv),
             self.linked.is_fresh(path_addrs.to_set())
         ensures 
-            self.linked.dv.is_subdisk(self.substitute(replacement, path_addrs).dv),
-            self.linked.buffer_dv.is_subdisk(self.substitute(replacement, path_addrs).buffer_dv)
+            self.linked.dv.is_sub_disk(self.substitute(replacement, path_addrs).dv),
+            self.linked.buffer_dv.is_sub_disk(self.substitute(replacement, path_addrs).buffer_dv)
         decreases
             self.depth
     {
