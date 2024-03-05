@@ -75,6 +75,13 @@ impl Slice {
     {
         Slice{start: self.start + a, end: self.start + b}
     }
+
+    pub proof fn sub_valid<T>(&self, a: usize, b: usize, data: Seq<T>)
+    requires self.valid(data),
+        a <= b <= self.end - self.start
+    ensures self.spec_sub(a, b).valid(data)
+    {
+    }
 }
 
 } //verus!
