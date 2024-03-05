@@ -130,40 +130,20 @@ impl <
         if (dslice.exec_len() as usize) < self.total_size {
             return None;    // lengthable first conjunct is false
         }
-        assert( self.total_size <= dslice.spec_len() );
-        assert( self.seq_valid() );
-        assert( self.size_of_length_field() <= self.total_size );   // valid
-        assert( LengthIntObligations::o_spec_size() <= self.total_size );
-        assert( LengthIntObligations::o_spec_size() <= dslice.spec_len() );
-        proof { dslice.sub_valid(0, LengthIntObligations::o_spec_size(), data@); }
-        assert( dslice.spec_sub(0, LengthIntObligations::o_spec_size()).valid(data@) );
-        assert( 0 <= LengthIntObligations::o_spec_size() );
+
         let parsed_len = self.length_int.exec_parse(&dslice.exec_sub(0, LengthIntObligations::o_exec_size()), data);
 
         proof {
-            // Took way too long to track down. Decent automation would have been nice.
+            // Took way too long to track down this lemma call. Decent automation would have been nice.
             LengthIntObligations::as_int_ensures();
+
             assert( dslice.spec_sub(0, LengthIntObligations::o_spec_size()).i(data@)
                     == dslice.i(data@).subrange(0, self.size_of_length_field() as int) );   // subrange trigger
         }
 
         if !LengthIntObligations::exec_this_fits_in_usize(parsed_len) {
-//             assert( parsed_len.deepv() == LengthIntObligations::as_int(parsed_len) );
-
-
-//             assert( parsed_len.deepv() ==
-//                     self.length_int.parse(dslice.i(data@).subrange(0, self.size_of_length_field() as int)) );
-//             assert( !LengthIntObligations::spec_this_fits_in_usize(
-//                 self.length_int.parse(dslice.i(data@).subrange(0, self.size_of_length_field() as int))
-//                     ) );
-//             assert( !LengthIntObligations::spec_this_fits_in_usize(self.length(dslice.i(data@))) );
-            assert( !self.lengthable(dslice.i(data@)) );
             return None;
         }
-        assert( self.total_size <= dslice.i(data@).len() );
-        assert( self.lengthable(dslice.i(data@)) );
-        assert( LengthIntObligations::as_int(parsed_len) == self.length(dslice.i(data@)) );
-
         Some(LengthIntObligations::to_usize(parsed_len))
     }
 
