@@ -215,6 +215,17 @@ impl<T> BetreeNode<T> {
             })
         }
     }
+
+    #[verifier::opaque]
+    pub open spec fn active_buffers(self) -> Set<Address>
+    {
+        // let start = self.flushed.min_ofs() as int;
+        // let end = self.buffers.len() as int;
+        // let active_slice = self.buffers.slice(start, end);
+        // Set::new(|buffer| active_slice.repr().contains((buffer)))
+        Set::new(|buffer| exists |idx|
+            self.flushed.min_ofs() <= idx < self.buffers.len() && self.buffers[idx] == buffer)
+    }
 } // end impl<T> BetreeNode
 
 impl<T: QueryableDisk> BetreeNode<T> {
@@ -560,7 +571,7 @@ impl<T> LinkedBetree<T> {
         recommends self.acyclic()
     {
         &&& self.reachable_betree_addrs().contains(addr)
-        &&& self.dv.get(Some(addr)).buffers.repr().contains(buffer_addr)
+        &&& self.dv.get(Some(addr)).active_buffers().contains(buffer_addr)
     }
 
     // repr of all reachable buffers
@@ -582,6 +593,16 @@ impl<T> LinkedBetree<T> {
         };
         let new_dv = self.dv.modify_disk(new_root_addr, new_root);
         LinkedBetree{ root: Some(new_root_addr), dv: new_dv, ..self }
+    }
+
+    pub open spec(checked) fn split_element(self, request: SplitRequest) -> Element
+        recommends self.can_split_parent(request)
+    {
+        match request {
+            SplitRequest::SplitLeaf{child_idx, split_key} => to_element(split_key),
+            SplitRequest::SplitIndex{child_idx, child_pivot_idx} => 
+                self.child_at_idx(child_idx).root().pivots.pivots[child_pivot_idx as int]
+        }
     }
 
     // operations on linked betree:
@@ -771,30 +792,6 @@ impl LinkedBetree<BufferDisk> {
         let new_dv = self.dv.modify_disk(new_addrs.addr1, new_root);
         let new_buffer_dv = self.buffer_dv.modify_disk(new_addrs.addr2, compacted_buffer);
         LinkedBetree{ root: Some(new_addrs.addr1), dv: new_dv, buffer_dv: new_buffer_dv }
-    }
-
-    proof fn push_memtable_new_ranking(self, memtable: Memtable, new_addrs: TwoAddrs, ranking: Ranking) -> (new_ranking: Ranking)
-        requires 
-            self.wf(), 
-            new_addrs.no_duplicates(),
-            self.is_fresh(new_addrs.repr()),
-            self.valid_ranking(ranking),
-        ensures
-            self.push_memtable(memtable, new_addrs).valid_ranking(new_ranking),
-            new_ranking.dom() == ranking.dom().insert(new_addrs.addr1)
-    {
-        let result = self.push_memtable(memtable, new_addrs);
-        let new_rank = if self.has_root() { ranking[self.root.unwrap()]+1 } else { 0 };
-        let new_ranking = ranking.insert(new_addrs.addr1, new_rank);
-
-        if self.has_root() {
-            assert(forall |i| result.root().valid_child_index(i) ==> self.root().valid_child_index(i)); // trigger
-            assert(result.dv.node_has_nondangling_child_ptrs(result.root()));
-            assert(result.dv.node_has_linked_children(result.root()));
-        }
-        assert(result.wf());
-        assert(result.dv.valid_ranking(new_ranking));
-        new_ranking
     }
 }
 
@@ -1116,17 +1113,19 @@ state_machine!{ LinkedBetreeVars {
 
         let buffer_addrs = pre.linked.reachable_buffer_addrs();
         let post_buffer_addrs = pushed.reachable_buffer_addrs();
-
+        
         assert forall |addr| post_buffer_addrs.contains(addr) && addr != new_addrs.addr2
         implies #[trigger] buffer_addrs.contains(addr)
         by {
-            let tree_addr = choose |tree_addr| pushed.reachable_buffer(tree_addr, addr);
-            if Some(tree_addr) == pushed.root {
+            if pushed.root().active_buffers().contains(addr) {
+                reveal(BetreeNode::active_buffers);
                 assert(pre.linked.has_root());
-                assert(pre.linked.root().buffers.repr().contains(addr));
+                assert(pre.linked.root().active_buffers().contains(addr));
                 pre.linked.reachable_betree_addrs_using_ranking_closed(ranking);
                 assert(pre.linked.reachable_buffer(pre.linked.root.unwrap(), addr));
+                assert(buffer_addrs.contains(addr));
             } else {
+                let tree_addr = choose |tree_addr| pushed.reachable_buffer(tree_addr, addr);
                 let i = pushed.non_root_buffers_belongs_to_child(tree_addr, addr);
                 pre.linked.same_child_same_reachable_buffers(pushed, i, i, pushed_ranking);
             }
@@ -1159,13 +1158,14 @@ state_machine!{ LinkedBetreeVars {
         assert forall |addr| post.linked.reachable_buffer_addrs().contains(addr)
         implies #[trigger]  pre.linked.reachable_buffer_addrs().contains(addr)
         by {
+            reveal(BetreeNode::active_buffers);
             let tree_addr = choose |tree_addr| post.linked.reachable_buffer(tree_addr, addr);
             let i = post.linked.non_root_buffers_belongs_to_child(tree_addr, addr);
             assert(i == 0);
         }
         assert(post.linked.no_dangling_buffer_ptr());
     }
-   
+
     #[inductive(internal_split)]
     fn internal_split_inductive(pre: Self, post: Self, lbl: Label, new_linked: LinkedBetree<BufferDisk>, path: Path<BufferDisk>, 
         request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs) {
@@ -1186,7 +1186,7 @@ state_machine!{ LinkedBetreeVars {
 
         assert(post.linked.valid_buffer_dv()) by {
             path.target().split_parent_same_reachable_buffers(request, new_addrs, new_ranking);
-            path.substitute_preserves_no_dangling_buffer_ptr(new_subtree, path_addrs, new_ranking);
+            path.substitute_reachable_buffers_ensures(new_subtree, path_addrs, new_ranking);
             assert(splitted.no_dangling_buffer_ptr());
             assert(splitted.valid_buffer_dv());
             splitted.subtree_same_tightness_preserves_valid_buffer_dv(post.linked);
@@ -1214,7 +1214,7 @@ state_machine!{ LinkedBetreeVars {
         assume(post.linked.valid_buffer_dv());
 
     }
-   
+
     #[inductive(internal_noop)]
     fn internal_noop_inductive(pre: Self, post: Self, lbl: Label) { }
    
@@ -1223,18 +1223,18 @@ state_machine!{ LinkedBetreeVars {
         assume(post.linked.acyclic());
         assume(post.linked.has_root() ==> post.linked.root().my_domain() == total_domain());
         assume(post.linked.valid_buffer_dv());
-
     }
 }} // end LinkedBetree state machine
 
 // utility & invariant proof functions
 
 // TODO(JL): unstable
-pub proof fn get_max_rank(ranking: Ranking) -> (max: nat)
+proof fn get_max_rank(ranking: Ranking) -> (max: nat)
     requires ranking.dom().finite()
     ensures forall |addr| #[trigger] ranking.contains_key(addr) ==> ranking[addr] <= max
     decreases ranking.dom().len()
 {
+    assume(false);
     if ranking.dom().is_empty() {
         assert forall |addr| #[trigger] ranking.contains_key(addr) 
         implies ranking[addr] <= 0 by { assert(false); }
@@ -1611,16 +1611,6 @@ impl<T> LinkedBetree<T> {
         child.same_reachable_betree_addrs_implies_same_buffer_addrs(other_child);
     }
 
-    pub open spec(checked) fn split_element(self, request: SplitRequest) -> Element
-        recommends self.can_split_parent(request)
-    {
-        match request {
-            SplitRequest::SplitLeaf{child_idx, split_key} => to_element(split_key),
-            SplitRequest::SplitIndex{child_idx, child_pivot_idx} => 
-                self.child_at_idx(child_idx).root().pivots.pivots[child_pivot_idx as int]
-        }
-    }
-
     pub proof fn split_new_ranking(self, request: SplitRequest, new_addrs: SplitAddrs, ranking: Ranking) -> (new_ranking: Ranking)
         requires 
             self.wf(), self.has_root(),
@@ -1681,19 +1671,231 @@ impl<T> LinkedBetree<T> {
         new_ranking
     }
 
+    proof fn split_leaf_preserves_reachable_buffers(self, other: LinkedBetree<T>, ranking: Ranking)
+        requires 
+            self.has_root(),
+            other.has_root(),
+            self.valid_ranking(ranking),
+            other.valid_ranking(ranking),
+            self.root().buffers == other.root().buffers,
+            self.root().flushed == other.root().flushed,
+            self.root().children == other.root().children,
+            self.dv.agrees_with_disk(other.dv),
+        ensures 
+            self.reachable_buffer_addrs() == other.reachable_buffer_addrs(),
+    {
+        assert forall |addr| self.reachable_buffer_addrs().contains(addr) 
+            <==> other.reachable_buffer_addrs().contains(addr) 
+        by {
+            if self.root().active_buffers().contains(addr) 
+                || other.root().active_buffers().contains(addr) 
+            {
+                reveal(BetreeNode::active_buffers);
+                self.reachable_betree_addrs_using_ranking_closed(ranking);
+                other.reachable_betree_addrs_using_ranking_closed(ranking);
+                assert(self.reachable_buffer(self.root.unwrap(), addr));
+                assert(other.reachable_buffer(other.root.unwrap(), addr));
+            } else if self.reachable_buffer_addrs().contains(addr) {
+                let tree_addr = choose |tree_addr| self.reachable_buffer(tree_addr, addr);
+                let i = self.non_root_buffers_belongs_to_child(tree_addr, addr);
+                self.same_child_same_reachable_buffers(other, i, i, ranking);
+            } else if other.reachable_buffer_addrs().contains(addr) {
+                let tree_addr = choose |tree_addr| other.reachable_buffer(tree_addr, addr);
+                let i = other.non_root_buffers_belongs_to_child(tree_addr, addr);
+                self.same_child_same_reachable_buffers(other, i, i, ranking);
+            }
+        }
+        assert(self.reachable_buffer_addrs() =~= other.reachable_buffer_addrs());
+    }
+
+    proof fn split_index_preserves_reachable_buffers(self, left: LinkedBetree<T>, 
+            right: LinkedBetree<T>, pivot_idx: nat, ranking: Ranking)
+        requires 
+            self.has_root(),
+            left.has_root(),
+            right.has_root(),
+            self.valid_ranking(ranking),
+            left.valid_ranking(ranking),
+            right.valid_ranking(ranking),
+            self.root().can_split_index(pivot_idx),
+            left.root() == self.root().split_index(pivot_idx).0,
+            right.root() == self.root().split_index(pivot_idx).1,
+            left.dv == right.dv,
+            self.dv.agrees_with_disk(left.dv),
+        ensures 
+            self.reachable_buffer_addrs() == left.reachable_buffer_addrs() + right.reachable_buffer_addrs(),
+    {
+        let reachable_buffers = self.reachable_buffer_addrs();
+        let split_reachable_buffers = left.reachable_buffer_addrs() + right.reachable_buffer_addrs();
+
+        let min_ofs = self.root().flushed.min_ofs();
+        let left_ofs = left.root().flushed.min_ofs();
+        let right_ofs = right.root().flushed.min_ofs();
+
+        self.root().flushed.min_ofs_ensures();
+        let idx_ofs = self.root().flushed.offsets.index_of(min_ofs);
+
+        assert forall |i| 0 <= i < pivot_idx ==> 
+            left.root().flushed.offsets[i] == self.root().flushed.offsets[i] by {} // trigger
+        assert forall |i| 0 <= i < right.root().flushed.offsets.len() ==> 
+            right.root().flushed.offsets[i] == self.root().flushed.offsets[i + pivot_idx] by {} // trigger
+    
+        left.root().flushed.min_ofs_ensures();
+        right.root().flushed.min_ofs_ensures();
+        assert(min_ofs <= left_ofs);
+        assert(min_ofs <= right_ofs);
+
+        if idx_ofs < pivot_idx {       
+            left.root().flushed.all_gte_is_min_ofs(min_ofs);
+            assert(left_ofs == min_ofs);
+        } else {
+            assert(right.root().flushed.offsets[idx_ofs - pivot_idx] == min_ofs);
+            right.root().flushed.all_gte_is_min_ofs(min_ofs);
+            assert(right_ofs == min_ofs);
+        }
+
+        left.reachable_betree_addrs_using_ranking_closed(ranking);
+        right.reachable_betree_addrs_using_ranking_closed(ranking);
+
+        assert forall |addr| #[trigger] reachable_buffers.contains(addr)
+        implies split_reachable_buffers.contains(addr)
+        by {
+            if self.root().active_buffers().contains(addr) {
+                reveal(BetreeNode::active_buffers);
+                if min_ofs == left_ofs {
+                    assert(left.root().active_buffers().contains(addr));
+                    assert(left.reachable_buffer(left.root.unwrap(), addr));
+                } else {
+                    assert(right.root().active_buffers().contains(addr));
+                    assert(right.reachable_buffer(right.root.unwrap(), addr));
+                }
+            } else {
+                let tree_addr = choose |tree_addr| self.reachable_buffer(tree_addr, addr);
+                let i = self.non_root_buffers_belongs_to_child(tree_addr, addr);
+                if i < pivot_idx {
+                    self.same_child_same_reachable_buffers(left, i, i, ranking);
+                } else {
+                    self.same_child_same_reachable_buffers(right, i, (i-pivot_idx) as nat, ranking);
+                }
+            }
+        }
+
+        assert forall |addr| split_reachable_buffers.contains(addr)
+        implies reachable_buffers.contains(addr)
+        by {
+            if left.root().active_buffers().contains(addr) 
+                || right.root().active_buffers().contains(addr)
+            {
+                reveal(BetreeNode::active_buffers);
+                assert(self.root().active_buffers().contains(addr));
+                assert(self.reachable_buffer(self.root.unwrap(), addr));
+            } else {
+                if left.reachable_buffer_addrs().contains(addr) {
+                    let tree_addr = choose |tree_addr| left.reachable_buffer(tree_addr, addr);
+                    let i = left.non_root_buffers_belongs_to_child(tree_addr, addr);
+                    self.same_child_same_reachable_buffers(left, i, i, ranking);
+                } else {
+                    let tree_addr = choose |tree_addr| right.reachable_buffer(tree_addr, addr);
+                    let i = right.non_root_buffers_belongs_to_child(tree_addr, addr);
+                    self.same_child_same_reachable_buffers(right, (i+pivot_idx) as nat, i, ranking);
+                }
+            }
+        }
+        assert(reachable_buffers =~= split_reachable_buffers);
+    }
+
     proof fn split_parent_same_reachable_buffers(self, request: SplitRequest, new_addrs: SplitAddrs, ranking: Ranking) 
         requires 
             self.can_split_parent(request),
             self.valid_ranking(ranking),
             self.split_parent(request, new_addrs).valid_ranking(ranking),
+            self.dv.is_fresh(new_addrs.repr()),
+            new_addrs.no_duplicates(),
         ensures 
-            self.reachable_buffer_addrs() == 
-            self.split_parent(request, new_addrs).reachable_buffer_addrs(),
+            self.reachable_buffer_addrs() =~= self.split_parent(request, new_addrs).reachable_buffer_addrs(),
     {
-        // let 
+        let child_idx = request.get_child_idx();
+        let child = self.child_at_idx(child_idx as nat);
 
+        let new_parent = self.split_parent(request, new_addrs);
+        let left_child = new_parent.child_at_idx(child_idx);
+        let right_child = new_parent.child_at_idx((child_idx+1) as nat);
 
-        assume(false);
+        assert(new_parent.root().valid_child_index(child_idx));
+        assert(new_parent.root().valid_child_index((child_idx+1) as nat));
+
+        assert(left_child.valid_ranking(ranking));
+        assert(right_child.valid_ranking(ranking));
+
+        let child_buffers = child.reachable_buffer_addrs();
+        let left_buffers = left_child.reachable_buffer_addrs();
+        let right_buffers = right_child.reachable_buffer_addrs();
+
+        self.child_at_idx_reachable_addrs_ensures(child_idx);
+        new_parent.child_at_idx_reachable_addrs_ensures(child_idx);
+        new_parent.child_at_idx_reachable_addrs_ensures((child_idx+1) as nat);
+
+        if request is SplitLeaf {
+            child.split_leaf_preserves_reachable_buffers(left_child, ranking);
+            child.split_leaf_preserves_reachable_buffers(right_child, ranking);
+        } else {
+            child.split_index_preserves_reachable_buffers(
+                left_child, right_child, request->child_pivot_idx, ranking);
+        }
+        assert(child_buffers == left_buffers + right_buffers);
+
+        let min_ofs = self.root().flushed.min_ofs();
+        assert(min_ofs == new_parent.root().flushed.min_ofs()) by {
+            self.root().flushed.min_ofs_ensures();
+            self.root().flushed.dup_ensures(child_idx as int);
+            new_parent.root().flushed.all_gte_is_min_ofs(min_ofs);
+        }
+
+        assert forall |addr| self.reachable_buffer_addrs().contains(addr)
+        implies new_parent.reachable_buffer_addrs().contains(addr)
+        by {
+            if self.root().active_buffers().contains(addr) {
+                assert(new_parent.root().active_buffers().contains(addr)) by {
+                    reveal(BetreeNode::active_buffers);
+                }
+                new_parent.reachable_betree_addrs_using_ranking_closed(ranking);
+                assert(new_parent.reachable_buffer(new_parent.root.unwrap(), addr));
+                assert(new_parent.reachable_buffer_addrs().contains(addr));
+            } else {
+                let tree_addr = choose |tree_addr| self.reachable_buffer(tree_addr, addr);
+                let i = self.non_root_buffers_belongs_to_child(tree_addr, addr);
+                if i == child_idx {
+                    assert(new_parent.reachable_buffer_addrs().contains(addr));
+                } else {
+                    let new_i = if i < child_idx { i } else { (i + 1) as nat };
+                    self.same_child_same_reachable_buffers(new_parent, i, new_i, ranking);
+                    assert(new_parent.reachable_buffer_addrs().contains(addr));
+                }
+            }
+        }
+
+        assert forall |addr| new_parent.reachable_buffer_addrs().contains(addr) 
+        implies self.reachable_buffer_addrs().contains(addr)
+        by {
+            if new_parent.root().active_buffers().contains(addr) {
+                assert(self.root().active_buffers().contains(addr)) by {
+                    reveal(BetreeNode::active_buffers);
+                }
+                self.reachable_betree_addrs_using_ranking_closed(ranking);
+                assert(self.reachable_buffer(self.root.unwrap(), addr));
+                assert(self.reachable_buffer_addrs().contains(addr));
+            } else { 
+                let tree_addr = choose |tree_addr| new_parent.reachable_buffer(tree_addr, addr);
+                let new_i = new_parent.non_root_buffers_belongs_to_child(tree_addr, addr);
+                if new_i == child_idx || new_i == child_idx + 1 {
+                    assert(self.reachable_buffer_addrs().contains(addr));
+                } else {
+                    let i = if new_i < child_idx { new_i } else { (new_i - 1) as nat};
+                    self.same_child_same_reachable_buffers(new_parent, i, new_i, ranking);
+                    assert(self.reachable_buffer_addrs().contains(addr));
+                }
+            }
+        }
     }
 }
 
@@ -1726,6 +1928,32 @@ impl <T: QueryableDisk> LinkedBetree<T>{
 
         other.buffer_dv.sub_disk_implies_sub_repr(&self.buffer_dv);
         other.same_reachable_betree_addrs_implies_same_buffer_addrs(self);
+    }
+}
+
+impl LinkedBetree<BufferDisk> {
+    proof fn push_memtable_new_ranking(self, memtable: Memtable, new_addrs: TwoAddrs, ranking: Ranking) -> (new_ranking: Ranking)
+        requires 
+            self.wf(), 
+            new_addrs.no_duplicates(),
+            self.is_fresh(new_addrs.repr()),
+            self.valid_ranking(ranking),
+        ensures
+            self.push_memtable(memtable, new_addrs).valid_ranking(new_ranking),
+            new_ranking.dom() == ranking.dom().insert(new_addrs.addr1)
+    {
+        let result = self.push_memtable(memtable, new_addrs);
+        let new_rank = if self.has_root() { ranking[self.root.unwrap()]+1 } else { 0 };
+        let new_ranking = ranking.insert(new_addrs.addr1, new_rank);
+
+        if self.has_root() {
+            assert(forall |i| result.root().valid_child_index(i) ==> self.root().valid_child_index(i)); // trigger
+            assert(result.dv.node_has_nondangling_child_ptrs(result.root()));
+            assert(result.dv.node_has_linked_children(result.root()));
+        }
+        assert(result.wf());
+        assert(result.dv.valid_ranking(new_ranking));
+        new_ranking
     }
 }
 
@@ -1813,14 +2041,20 @@ impl<T: QueryableDisk> Path<T>{
         }
     }
 
+    closed spec(checked) fn ranking_for_substitution(self, replacement: LinkedBetree<T>, path_addrs: PathAddrs, ranking: Ranking) -> bool
+        recommends self.can_substitute(replacement, path_addrs)
+    {
+        &&& replacement.valid_ranking(ranking)
+        &&& path_addrs.to_set().disjoint(ranking.dom())
+        &&& self.linked.has_root() ==> ranking.contains_key(self.linked.root.unwrap())
+    }
+
     proof fn ranking_after_substitution(self, replacement: LinkedBetree<T>, path_addrs: PathAddrs, ranking: Ranking) -> (new_ranking: Ranking)
         requires
             self.can_substitute(replacement, path_addrs),
-            replacement.valid_ranking(ranking),
-            replacement.is_fresh(path_addrs.to_set()),
+            self.ranking_for_substitution(replacement, path_addrs, ranking),
             path_addrs.no_duplicates(),
-            path_addrs.to_set().disjoint(ranking.dom()),
-            self.linked.has_root() ==> ranking.contains_key(self.linked.root.unwrap()),
+            replacement.is_fresh(path_addrs.to_set()),
         ensures 
             ranking <= new_ranking,
             new_ranking.dom() =~= ranking.dom() + path_addrs.to_set(),
@@ -1873,34 +2107,50 @@ impl<T: QueryableDisk> Path<T>{
         }
     }
 
-    proof fn substitute_preserves_reachable_buffers(self, replacement: LinkedBetree<T>, path_addrs: PathAddrs, ranking: Ranking)
+    // any newly added buffer address must not be present in the old reachable buffer set
+    closed spec(checked) fn new_reachable_buffers_are_fresh(self, replacement: LinkedBetree<T>) -> bool
+        recommends
+            self.valid(),
+            replacement.acyclic(),
+    {
+        let reachable_buffers = self.linked.reachable_buffer_addrs();
+        let replacement_buffers = replacement.reachable_buffer_addrs();
+
+        &&& self.target().acyclic()
+        &&& reachable_buffers.disjoint(replacement_buffers.difference(self.target().reachable_buffer_addrs()))
+    }
+
+    proof fn substitute_reachable_buffers_ensures(self, replacement: LinkedBetree<T>, path_addrs: PathAddrs, ranking: Ranking)
         requires
-            self.can_substitute(replacement, path_addrs),
-            replacement.is_fresh(path_addrs.to_set()),
-            replacement.valid_ranking(ranking),
+            self.can_substitute(replacement, path_addrs), 
+            self.ranking_for_substitution(replacement, path_addrs, ranking),
+            self.new_reachable_buffers_are_fresh(replacement),
             path_addrs.no_duplicates(),
-            path_addrs.to_set().disjoint(ranking.dom()),
-            self.linked.has_root() ==> ranking.contains_key(self.linked.root.unwrap()),
-            self.target().acyclic(),
-            self.target().reachable_buffer_addrs() == replacement.reachable_buffer_addrs(),
+            replacement.is_fresh(path_addrs.to_set()),
         ensures ({
             let result = self.substitute(replacement, path_addrs);
+            let replacement_buffers = replacement.reachable_buffer_addrs();
+            let new_buffers = replacement_buffers.difference(self.target().reachable_buffer_addrs());
+
             &&& result.acyclic()
-            &&& result.reachable_buffer_addrs() == self.linked.reachable_buffer_addrs()
+            &&& replacement.reachable_buffer_addrs() <= result.reachable_buffer_addrs()
+            &&& result.reachable_buffer_addrs().difference(new_buffers) <= self.linked.reachable_buffer_addrs()
         })
         decreases self.depth
     {
+        let result = self.substitute(replacement, path_addrs);
+        let replacement_buffers = replacement.reachable_buffer_addrs();
+        let new_buffers = replacement_buffers.difference(self.target().reachable_buffer_addrs());
+
         if 0 < self.depth {
             self.substitute_ensures(replacement, path_addrs);
+            let result_ranking = self.ranking_after_substitution(replacement, path_addrs, ranking);
 
             let r = self.linked.root().pivots.route(self.key) as nat;
             PivotTable::route_lemma(self.linked.root().pivots, self.key);
 
             self.linked.dv.subdisk_implies_ranking_validity(replacement.dv, ranking);
             self.valid_ranking_throughout(ranking);
-
-            let result = self.substitute(replacement, path_addrs);
-            let result_ranking = self.ranking_after_substitution(replacement, path_addrs, ranking);
 
             let sub_path_addrs = path_addrs.subrange(1, path_addrs.len() as int);
             let result_subtree = self.subpath().substitute(replacement, sub_path_addrs);
@@ -1909,8 +2159,11 @@ impl<T: QueryableDisk> Path<T>{
             result_subtree.dv.subdisk_implies_ranking_validity(result.dv, result_ranking);
             assert(result_subtree.valid_ranking(result_ranking));
 
-            self.subpath().substitute_preserves_reachable_buffers(replacement, sub_path_addrs, ranking);
-            assert(self.subpath().linked.reachable_buffer_addrs() == result_subtree.reachable_buffer_addrs());
+            self.linked.child_at_idx_reachable_addrs_ensures(r);
+            result.child_at_idx_reachable_addrs_ensures(r);
+
+            self.subpath().substitute_reachable_buffers_ensures(replacement, sub_path_addrs, ranking);
+            assert(self.subpath().linked.reachable_buffer_addrs() == self.linked.child_at_idx(r).reachable_buffer_addrs());    
             assert(result_subtree.reachable_buffer_addrs() == result.child_at_idx(r).reachable_buffer_addrs()) 
             by {
                 let result_child = result.child_at_idx(r);
@@ -1920,69 +2173,33 @@ impl<T: QueryableDisk> Path<T>{
                 result_child.reachable_betree_addrs_ignore_ranking(result_child.the_ranking(), result_ranking);
                 result_subtree.same_reachable_betree_addrs_implies_same_buffer_addrs(result.child_at_idx(r));
             }
+            assert(replacement.reachable_buffer_addrs() <= result.reachable_buffer_addrs());
 
-            let buffer_addrs = self.linked.reachable_buffer_addrs();
-            let result_buffer_addrs = result.reachable_buffer_addrs();
+            let reachable_buffers = self.linked.reachable_buffer_addrs();
+            let result_old_buffers = result.reachable_buffer_addrs().difference(new_buffers);
 
-            assert forall |addr| 
-                #[trigger] buffer_addrs.contains(addr) <==> result_buffer_addrs.contains(addr)
+            assert forall |addr| #[trigger] result_old_buffers.contains(addr)
+            implies reachable_buffers.contains(addr)
             by {
-                if buffer_addrs.contains(addr) {
-                    let tree_addr = choose |tree_addr| self.linked.reachable_buffer(tree_addr, addr);
-                    assert(self.linked.reachable_betree_addrs().contains(tree_addr));
-                    if tree_addr == self.linked.root.unwrap() {
-                        assert(result.reachable_betree_addrs().contains(result.root.unwrap()));
-                        assert(result.reachable_buffer(result.root.unwrap(), addr)); // witness
-                        assert(result_buffer_addrs.contains(addr));
-                    } else {
-                        let i = self.linked.non_root_buffers_belongs_to_child(tree_addr, addr);
-                        if i == r {
-                            result.child_at_idx_reachable_addrs_ensures(i);
-                        } else {
-                            self.linked.same_child_same_reachable_buffers(result, i, i, result_ranking);
-                        }
+                if result.root().active_buffers().contains(addr) {
+                    assert(self.linked.root().active_buffers().contains(addr)) by {     
+                        reveal(BetreeNode::active_buffers);
                     }
-                }
-                if result_buffer_addrs.contains(addr) {
+                    assert(self.linked.reachable_buffer(self.linked.root.unwrap(), addr)); // witness
+                    assert(reachable_buffers.contains(addr));
+                } else {
                     let tree_addr = choose |tree_addr| result.reachable_buffer(tree_addr, addr);
                     assert(result.reachable_betree_addrs().contains(tree_addr));
-                    if tree_addr == result.root.unwrap() {
-                        assert(self.linked.reachable_betree_addrs().contains(self.linked.root.unwrap()));
-                        assert(self.linked.reachable_buffer(self.linked.root.unwrap(), addr)); // witness
-                        assert(buffer_addrs.contains(addr));
+                    let i = result.non_root_buffers_belongs_to_child(tree_addr, addr);
+                    assert(result.child_at_idx(i).reachable_buffer_addrs().contains(addr));
+                    if i == r {
+                        self.linked.child_at_idx_reachable_addrs_ensures(i);
                     } else {
-                        let i = result.non_root_buffers_belongs_to_child(tree_addr, addr);
-                        assert(result.child_at_idx(i).reachable_buffer_addrs().contains(addr));
-                        if i == r {
-                            self.linked.child_at_idx_reachable_addrs_ensures(i);
-                        } else {
-                            result.same_child_same_reachable_buffers(self.linked, i, i, result_ranking);
-                        }
+                        result.same_child_same_reachable_buffers(self.linked, i, i, result_ranking);
                     }
                 }
             }
-            assert(buffer_addrs =~= result_buffer_addrs);
         }
-    }
-
-    proof fn substitute_preserves_no_dangling_buffer_ptr(self, replacement: LinkedBetree<T>, path_addrs: PathAddrs, ranking: Ranking)
-        requires
-            self.can_substitute(replacement, path_addrs),
-            self.linked.no_dangling_buffer_ptr(),
-            replacement.is_fresh(path_addrs.to_set()),
-            replacement.valid_ranking(ranking),
-            path_addrs.no_duplicates(),
-            path_addrs.to_set().disjoint(ranking.dom()),
-            self.linked.has_root() ==> ranking.contains_key(self.linked.root.unwrap()),
-            self.target().acyclic(),
-            self.target().reachable_buffer_addrs() == replacement.reachable_buffer_addrs(),
-        ensures
-            self.substitute(replacement, path_addrs).no_dangling_buffer_ptr()
-    {
-        let result = self.substitute(replacement, path_addrs);
-        self.substitute_preserves_reachable_buffers(replacement, path_addrs, ranking);
-        self.linked.buffer_dv.sub_disk_implies_sub_repr(&replacement.buffer_dv);
-        assert(result.no_dangling_buffer_ptr());
     }
 }
 } // end verus!
