@@ -357,7 +357,8 @@ pub proof fn lemma_split_index_all_keys(old_index: Node, split_arg: SplitArg)
     })
 {
     let (left_index, right_index) = old_index.split_index(split_arg);
-
+    let pivot = split_arg.get_pivot();
+    let pivot_index = split_arg->pivot_index;
     
     assert(left_index.wf());
     assert(right_index.wf());
@@ -365,24 +366,68 @@ pub proof fn lemma_split_index_all_keys(old_index: Node, split_arg: SplitArg)
     // Assert that old index's pivots and children are related to left and right indices by concatenation.
     // It's surprising (in a good way) that Verus is able to get these facts just through assertion (probably
     // through triggering seq axioms).
-    assert(old_index->pivots == left_index->pivots + seq![split_arg.get_pivot()] + right_index->pivots);
+    assert(old_index->pivots == left_index->pivots + seq![pivot] + right_index->pivots);
     assert(old_index->children == left_index->children + right_index->children);
 
     // Ensures GOAL 1
-    assert(old_index.all_keys() =~~= left_index.all_keys() + right_index.all_keys() + set![split_arg.get_pivot()]);
+    assert(old_index.all_keys() =~~= left_index.all_keys() + right_index.all_keys() + set![pivot]);
 
     // ========= ========= =========
     // CURRENT WORK
     // ========= ========= =========
 
+    assert(left_index == old_index.sub_index(0, pivot_index + 1));
+    assert(left_index->pivots == old_index->pivots.subrange(0, pivot_index));
+    assert(left_index->children == old_index->children.subrange(0, pivot_index + 1));
+
     // Ensures Goal 2
-    assert(forall |key| left_index.all_keys().contains(key)
-        <==> (Key::lt(key, split_arg.get_pivot()) && old_index.all_keys().contains(key)));
+    assert forall |key| left_index.all_keys().contains(key)
+    implies #[trigger] Key::lt(key, pivot) && old_index.all_keys().contains(key) by {
+        if (left_index->pivots.contains(key)) {
+            assert(Key::lt(key, pivot));
+        } else {
+            let i = choose |i| 0 <= i < left_index->children.len()
+                && (#[trigger] left_index->children[i]).all_keys().contains(key);
+            assert(left_index->children[i] == old_index->children[i]);
+            assert(old_index.all_keys_below_bound(i));
+            assert(Key::lt(key, old_index->pivots[i]));
+            if (i < left_index->children.len() - 1) {
+                assert(Key::lt(old_index->pivots[i], pivot));
+                assert(left_index->pivots[i] == old_index->pivots[i]);
+            } else {
+                assert(old_index->pivots[i] == pivot);
+            }
+            assert(Key::lt(key, pivot));
+        }
+    }
+
+    assert forall |key| #[trigger] Key::lt(key, pivot) && old_index.all_keys().contains(key)
+    implies left_index.all_keys().contains(key) by {
+        if (old_index->pivots.contains(key)) {
+            let i = choose |i| 0 <= i < old_index->pivots.len() && old_index->pivots[i] == key;
+            if (i >= pivot_index) { // proof by contradiction
+                assert(Key::lt(pivot, key));
+            }
+            assert(i < pivot_index == left_index->pivots.len());
+            assert(left_index->pivots.contains(key));
+        } else {
+            let i = choose |i| 0 <= i < old_index->children.len()
+                && (#[trigger] old_index->children[i]).all_keys().contains(key);
+            if (i >= pivot_index + 1) { // proof by contradiction
+                assert(old_index.all_keys_above_bound(i));
+                assert(Key::lte(old_index->pivots[i-1], key));
+                Key::strictly_sorted_implies_sorted(old_index->pivots);
+                assert(Key::lte(pivot, old_index->pivots[i-1]));
+            }
+            assert(i < pivot_index + 1 == left_index->children.len());
+            assert(left_index->children[i].all_keys().contains(key));
+        }
+    }
 
     // TODO(URGENT): Remove assume.
     assume(false);
     assert(forall |key| right_index.all_keys().contains(key)
-        <==> (Key::lte(split_arg.get_pivot(), key) && old_index.all_keys().contains(key)));
+        <==> (#[trigger] Key::lte(pivot, key) && old_index.all_keys().contains(key)));
 }
 
 pub proof fn lemma_split_node_all_keys(old_node: Node, split_arg: SplitArg)
