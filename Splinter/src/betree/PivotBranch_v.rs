@@ -334,6 +334,17 @@ impl Node {
     /// 
     /// Returns two new index nodes that partition `self.children` such that the left node only contains
     /// children with keys < split_arg.key, and right node only contains children with keys >= split_arg.key.
+    /// 
+    /// Example:
+    /// pivots =     [p0  p1  p2]
+    /// children = [c0  c1  c2  c3]
+    /// pivot index = 2
+    /// 
+    /// left pivots =     [p0  p1]
+    /// left children = [c0  c1  c2]
+    /// 
+    /// right pivots =        []
+    /// right children =    [c3]
     pub open spec/*XXX (checked)*/ fn split_index(self, split_arg: SplitArg) -> (Node, Node)
         recommends
             self is Index,
