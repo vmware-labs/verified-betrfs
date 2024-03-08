@@ -181,52 +181,7 @@ impl <
 
     proof fn get_ensures(&self, dslice: Slice, data: Seq<u8>, idx: int)
     {
-        // The argument should go like this:
-        // self.total_size bytes fit inside dslice, that is,
-        // dslice.start + self.total_size <= dslice.end <= usize::MAX.
-//         assert( dslice.start + self.total_size <= dslice.end );
-        //assert(self.seq_valid());
-//         assert(dslice.valid(data));
-//         assert( self.gettable(dslice.i(data), idx) );
-//         assert( 0 <= idx < self.length(dslice.i(data)) );
-//         assert( idx < self.max_length() );
         self.index_bounds_facts(idx as int);
-
-        // these three asserts are needed to silence recommends, for no good reason. :v/
-        assert( dslice.valid(data) );
-        assert( self.seq_valid() );
-        assert( self.gettable(dslice.i(data), idx) );
-
-        let gslice = self.get(dslice, data, idx);
-
-        let gstart = ((idx as usize) * self.oblinfo.uniform_size()) as usize;
-        let gend = ((idx as usize) * self.oblinfo.uniform_size() + self.oblinfo.uniform_size()) as usize;
-        assert( gslice == dslice.spec_sub(gstart, gend) );
-
-        assert( self.lengthable(dslice.i(data)) );
-        assert( self.total_size <= dslice.i(data).len() );
-        assert( self.total_size <= dslice.spec_len() );
-
-        assert( self.size_of_length_field() as int + idx * (self.oblinfo.uniform_size() as int)
-                <= self.total_size );
-
-        assert( gend <= dslice.spec_len() );
-
-        assert( gslice.start <= gslice.end );
-        assert( gslice.end <= data.len() );
-
-
-        assert( (dslice.start + ((idx as usize) * self.oblinfo.uniform_size())  + self.oblinfo.uniform_size()) <= usize::MAX );
-
-        assert( gslice.start == (dslice.start + ((idx as usize) * self.oblinfo.uniform_size()) as usize) as usize );
-        assert( gslice.end == (dslice.start + ((idx as usize) * self.oblinfo.uniform_size() + self.oblinfo.uniform_size()) as usize) as usize );
-
-        assert( gslice.start <= gslice.end );
-        assert( gslice.start as int <= gslice.end as int );
-        assert( 0 <= (gslice.start as int) );
-        assert( (gslice.start as int) <= (gslice.end as int) );
-        assert( (gslice.end as int) <= data.len() );
-        assert( gslice.valid(data) );
     }
 
     open spec fn get_data(&self, data: Seq<u8>, idx: int) -> (edata: Seq<u8>)
