@@ -66,9 +66,23 @@ impl <
         (self.total_size - self.size_of_length_field()) as usize / self.oblinfo.uniform_size()
     }
 
+    exec fn exec_max_length(&self) -> (out: usize)
+        requires self.valid()
+        ensures out == self.max_length()
+    {
+        proof { self.oblinfo.uniform_size_ensures(); };
+        (self.total_size - self.exec_size_of_length_field()) as usize / self.oblinfo.exec_uniform_size()
+    }
+
     pub open spec fn size_of_length_field(&self) -> usize
     {
         LengthIntObligations::o_spec_size()
+    }
+
+    exec fn exec_size_of_length_field(&self) -> (out: usize)
+    ensures out == self.size_of_length_field()
+    {
+        LengthIntObligations::o_exec_size()
     }
 
     proof fn index_bounds_facts(&self, idx: int)
@@ -174,8 +188,10 @@ impl <
     open spec fn get(&self, dslice: Slice, data: Seq<u8>, idx: int) -> (eslice: Slice)
     {
         dslice.spec_sub(
-            ((idx as usize) * self.oblinfo.uniform_size()) as usize,
-            ((idx as usize) * self.oblinfo.uniform_size() + self.oblinfo.uniform_size()) as usize
+            (self.size_of_length_field() + 
+                ((idx as usize) * self.oblinfo.uniform_size())) as usize,
+            (self.size_of_length_field() + 
+                (idx as usize) * self.oblinfo.uniform_size() + self.oblinfo.uniform_size()) as usize
         )
     }
 
@@ -204,12 +220,15 @@ impl <
 
     exec fn try_get(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oeslice: Option<Slice>)
     {
-        let len = self.exec_length(dslice, data);
-        if idx < len {
+        let olen = self.try_length(dslice, data);
+        if olen.is_none() { return None; }
+
+        if idx < self.exec_max_length() {
             proof { self.index_bounds_facts(idx as int); }
-            Some( dslice.exec_sub(
-                    (idx as usize) * self.oblinfo.exec_uniform_size(),
-                    (idx as usize) * self.oblinfo.exec_uniform_size() + self.oblinfo.exec_uniform_size()) )
+            let eslice = dslice.exec_sub(
+                    self.exec_size_of_length_field() + (idx as usize) * self.oblinfo.exec_uniform_size(),
+                    self.exec_size_of_length_field() + (idx as usize) * self.oblinfo.exec_uniform_size() + self.oblinfo.exec_uniform_size());
+            Some( eslice )
         } else {
             None
         }
