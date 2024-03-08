@@ -66,6 +66,8 @@ impl <
         (self.total_size - self.size_of_length_field()) as usize / self.oblinfo.uniform_size()
     }
 
+    // TODO(jonh): this should probably be a const field (with a valid() invariant relating it to
+    // total_size, etc) rather than computing it every time.
     exec fn exec_max_length(&self) -> (out: usize)
         requires self.valid()
         ensures out == self.max_length()
@@ -322,9 +324,16 @@ impl <
 
     exec fn exec_settable(&self, dslice: &Slice, data: &Vec<u8>, idx: usize, value: &Elt) -> (s: bool)
     {
-        let len = self.exec_length(dslice, data);
+        let olen = self.try_length(dslice, data);
         let sz = self.eltm.exec_size(value);
-        idx < len && sz == self.oblinfo.exec_uniform_size()
+
+        let s = {
+            &&& olen.is_some()
+            &&& idx < self.exec_max_length()
+            &&& sz == self.oblinfo.exec_uniform_size()
+        };
+        assert( s == self.settable(dslice.i(data@), idx as int, value.deepv()) );
+        s
     }
 
     exec fn exec_set(&self, dslice: &Slice, data: &mut Vec<u8>, idx: usize, value: &Elt)
