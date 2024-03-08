@@ -59,7 +59,7 @@ impl <
         &&& self.eltm.valid()
     }
 
-    spec fn max_length(&self) -> usize
+    pub open spec fn max_length(&self) -> usize
     recommends self.valid()
     {
         // Why does subtraction of usizes produce an int?
@@ -147,21 +147,28 @@ impl <
         Some(LengthIntObligations::to_usize(parsed_len))
     }
 
-    exec fn exec_lengthable(&self, dslice: &Slice, data: &Vec<u8>) -> (l: bool) { true }
+    exec fn exec_lengthable(&self, dslice: &Slice, data: &Vec<u8>) -> (l: bool) {
+        self.try_length(dslice, data).is_some()
+    }
 
     exec fn exec_length(&self, dslice: &Slice, data: &Vec<u8>) -> (len: usize)
     {
-        proof { self.oblinfo.uniform_size_ensures() }   // 0 < denom
-        dslice.exec_len() / self.oblinfo.exec_uniform_size()
+        self.try_length(dslice, data).unwrap()
     }
 
     /////////////////////////////////////////////////////////////////////////
     // getting individual elements
     /////////////////////////////////////////////////////////////////////////
 
+    // NB: gettable doesn't care about the stored length field! You can store
+    // a too-long value; doesn't matter, if there's not enough data we won't let
+    // you index it. Or you can access a field past the stored length field;
+    // it's a sign, not a cop.
     open spec fn gettable(&self, data: Seq<u8>, idx: int) -> bool
     {
-        0 <= idx < self.length(data)
+        // This conjunct forces data (and hence the slice arg to get) to be at least total_size
+        &&& self.lengthable(data)
+        &&& 0 <= idx < self.max_length()
     }
 
     open spec fn get(&self, dslice: Slice, data: Seq<u8>, idx: int) -> (eslice: Slice)
@@ -174,8 +181,52 @@ impl <
 
     proof fn get_ensures(&self, dslice: Slice, data: Seq<u8>, idx: int)
     {
+        // The argument should go like this:
+        // self.total_size bytes fit inside dslice, that is,
+        // dslice.start + self.total_size <= dslice.end <= usize::MAX.
+//         assert( dslice.start + self.total_size <= dslice.end );
+        //assert(self.seq_valid());
+//         assert(dslice.valid(data));
+//         assert( self.gettable(dslice.i(data), idx) );
+//         assert( 0 <= idx < self.length(dslice.i(data)) );
+//         assert( idx < self.max_length() );
         self.index_bounds_facts(idx as int);
-        assert( self.get(dslice, data, idx).valid(data) );
+
+        // these three asserts are needed to silence recommends, for no good reason. :v/
+        assert( dslice.valid(data) );
+        assert( self.seq_valid() );
+        assert( self.gettable(dslice.i(data), idx) );
+
+        let gslice = self.get(dslice, data, idx);
+
+        let gstart = ((idx as usize) * self.oblinfo.uniform_size()) as usize;
+        let gend = ((idx as usize) * self.oblinfo.uniform_size() + self.oblinfo.uniform_size()) as usize;
+        assert( gslice == dslice.spec_sub(gstart, gend) );
+
+        assert( self.lengthable(dslice.i(data)) );
+        assert( self.total_size <= dslice.i(data).len() );
+        assert( self.total_size <= dslice.spec_len() );
+
+        assert( self.size_of_length_field() as int + idx * (self.oblinfo.uniform_size() as int)
+                <= self.total_size );
+
+        assert( gend <= dslice.spec_len() );
+
+        assert( gslice.start <= gslice.end );
+        assert( gslice.end <= data.len() );
+
+
+        assert( (dslice.start + ((idx as usize) * self.oblinfo.uniform_size())  + self.oblinfo.uniform_size()) <= usize::MAX );
+
+        assert( gslice.start == (dslice.start + ((idx as usize) * self.oblinfo.uniform_size()) as usize) as usize );
+        assert( gslice.end == (dslice.start + ((idx as usize) * self.oblinfo.uniform_size() + self.oblinfo.uniform_size()) as usize) as usize );
+
+        assert( gslice.start <= gslice.end );
+        assert( gslice.start as int <= gslice.end as int );
+        assert( 0 <= (gslice.start as int) );
+        assert( (gslice.start as int) <= (gslice.end as int) );
+        assert( (gslice.end as int) <= data.len() );
+        assert( gslice.valid(data) );
     }
 
     open spec fn get_data(&self, data: Seq<u8>, idx: int) -> (edata: Seq<u8>)
