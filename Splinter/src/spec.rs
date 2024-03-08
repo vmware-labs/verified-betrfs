@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 // pub mod Option_t;
 pub mod FloatingSeq_t;
-pub mod MapSpec_t;
-pub mod TotalKMMap_t;
-pub mod Messages_t;
 pub mod KeyType_t;
+pub mod MapSpec_t;
+pub mod Messages_t;
+pub mod TotalKMMap_t;
