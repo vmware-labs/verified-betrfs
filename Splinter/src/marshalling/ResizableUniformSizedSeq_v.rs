@@ -225,10 +225,11 @@ impl <
 
         if idx < self.exec_max_length() {
             proof { self.index_bounds_facts(idx as int); }
-            let eslice = dslice.exec_sub(
-                    self.exec_size_of_length_field() + (idx as usize) * self.oblinfo.exec_uniform_size(),
-                    self.exec_size_of_length_field() + (idx as usize) * self.oblinfo.exec_uniform_size() + self.oblinfo.exec_uniform_size());
-            Some( eslice )
+            Some( self.exec_get(dslice, data, idx) )
+//             let eslice = dslice.exec_sub(
+//                     self.exec_size_of_length_field() + (idx as usize) * self.oblinfo.exec_uniform_size(),
+//                     self.exec_size_of_length_field() + (idx as usize) * self.oblinfo.exec_uniform_size() + self.oblinfo.exec_uniform_size());
+//             Some( eslice )
         } else {
             None
         }
@@ -236,16 +237,15 @@ impl <
 
     exec fn exec_gettable(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (g: bool)
     {
-        let len = self.exec_length(dslice, data);
-        idx < len
+        self.try_length(dslice, data).is_some() && idx < self.exec_max_length()
     }
 
     exec fn exec_get(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (eslice: Slice)
     {
         proof { self.index_bounds_facts(idx as int); }
         dslice.exec_sub(
-            (idx as usize) * self.oblinfo.exec_uniform_size(),
-            (idx as usize) * self.oblinfo.exec_uniform_size() + self.oblinfo.exec_uniform_size())
+            self.exec_size_of_length_field() + (idx as usize) * self.oblinfo.exec_uniform_size(),
+            self.exec_size_of_length_field() + (idx as usize) * self.oblinfo.exec_uniform_size() + self.oblinfo.exec_uniform_size())
     }
 
     exec fn try_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oelt: Option<Elt>)
