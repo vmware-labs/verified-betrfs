@@ -617,7 +617,6 @@ state_machine!{ LikesJournal {
         pub lsn_addr_index: LsnAddrIndex,
     }
 
-    #[is_variant]
     pub enum Label
     {
         ReadForRecovery{messages: MsgHistory},

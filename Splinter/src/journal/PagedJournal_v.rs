@@ -429,7 +429,6 @@ state_machine!{ PagedJournal {
         self.unmarshalled_tail.seq_end
     }
 
-    #[is_variant]
     pub enum Label
     {
         ReadForRecovery{messages: MsgHistory},

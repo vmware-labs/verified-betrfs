@@ -25,7 +25,6 @@ pub open spec(checked) fn empty_image() -> StampedBetree {
     Stamped{ value: BetreeNode::Nil, seq_end: 0 }
 }
 
-#[is_variant]
 #[verifier::ext_equal]
 pub enum BetreeNode {
     Nil,
@@ -494,7 +493,6 @@ state_machine!{ PivotBetree {
         &&& self.root.wf()
     }
 
-    #[is_variant]
     pub enum Label
     {
         Query{end_lsn: LSN, key: Key, value: Value},

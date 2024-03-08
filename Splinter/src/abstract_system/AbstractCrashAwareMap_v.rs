@@ -26,7 +26,6 @@ type StoreImage = StampedMap;
 
 /// Ephemeral state of crash aware map is the ephemeral (not crash-tolerant)
 /// view of the map.
-#[is_variant]
 pub enum Ephemeral {
     Unknown,
     Known{ v: AbstractMap::State },
@@ -56,7 +55,6 @@ state_machine!{ CrashTolerantMap {
         }
     }
 
-    #[is_variant]
     pub enum Label{
         LoadEphemeralFromPersistentLabel{ end_lsn: LSN },
         PutRecordsLabel{ records: MsgHistory },

@@ -26,7 +26,6 @@ verus! {
 /// (x9du): A SplitArg is a value used for determining a pivot value at which to split
 /// a B+tree node into two nodes. Its an enum to handle the cases for splitting an index
 /// node vs. a Leaf node separately.
-#[is_variant]
 pub enum SplitArg {
     SplitIndex{pivot: Key, pivot_index: int},
     SplitLeaf{pivot: Key}
@@ -82,7 +81,6 @@ children[i] owns range [pivots[i-1], pivots[i]) where pivots[-1] = -infinity, pi
 Leaf nodes store a map from keys to messages.
 keys[i] maps to msgs[i].
 */
-#[is_variant]
 pub enum Node {
     Index{pivots: Seq<Key>, children: Seq<Node>},
     Leaf{keys: Seq<Key>, msgs: Seq<Message>}

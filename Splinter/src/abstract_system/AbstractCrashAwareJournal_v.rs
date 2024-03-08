@@ -18,7 +18,6 @@ verus! {
 pub type StoreImage = MsgHistory;
 
 // TODO: Could use option types? But they are not supported in verus
-#[is_variant]
 pub enum Ephemeral {
     Unknown,
     Known{ v: AbstractJournal::State },
@@ -56,7 +55,6 @@ state_machine!{ CrashTolerantJournal {
         }
     }
 
-    #[is_variant]  // TODO: verus! should always make enum variants
     pub enum Label {
         LoadEphemeralFromPersistentLabel,
         ReadForRecoveryLabel{ records: MsgHistory },

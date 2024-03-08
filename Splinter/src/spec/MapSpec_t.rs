@@ -24,7 +24,6 @@ verus! {
 /// An Input represents a possible action that can be taken on an abstract
 /// MapSpec (i.e.: abstract key-value store), and contains the relevant
 /// arguments for performing that operation.
-#[is_variant]
 pub enum Input {
     QueryInput{key: Key},
     PutInput{key: Key, value: Value},
@@ -33,7 +32,6 @@ pub enum Input {
 
 /// An Output represents the result from taking an Input action (and contains
 /// any relevant return arguments from performing the corresponding action).
-#[is_variant]
 pub enum Output {
     QueryOutput{value: Value},
     PutOutput,
@@ -78,7 +76,6 @@ pub open spec(checked) fn getOutput(label: MapSpec::Label) -> Output {
 state_machine!{ MapSpec {
     fields { pub kmmap: TotalKMMap }
 
-    #[is_variant]
     pub enum Label{
         Query{input: Input, output: Output},
         Put{input: Input, output: Output},
@@ -196,7 +193,6 @@ pub struct EphemeralState {
 // received strictly before request is fired. (Standard Distributed
 // Systems linearizability).
 state_machine!{ AsyncMap {
-    #[is_variant]
     pub enum Label { // Was AsyncMod.UIOp
         /// Request transition is labeled with the requested operation.
         RequestOp { req: Request },
@@ -306,7 +302,6 @@ state_machine!{ CrashTolerantAsyncMap {
         pub sync_requests: Map<SyncReqId, nat>,
     }
 
-    #[is_variant]
     pub enum Label { // Unrolled version of Dafny labels for CrashTolerantMod(MapSpecMod)
         OperateOp{ base_op: AsyncMap::Label },
         CrashOp,

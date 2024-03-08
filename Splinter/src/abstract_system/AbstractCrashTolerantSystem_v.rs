@@ -66,7 +66,6 @@ state_machine!{ CoordinationSystem {
   // Labels of coordinationsystem should directly be the labels of the
   // CrashTolerantAsyncMap labels. Ideal would be to just copy it somehow,
   // but for now we're just wrapping the CTAM ones.
-  #[is_variant]
   pub enum Label{
     Label{ ctam_label: CrashTolerantAsyncMap::Label }
   }

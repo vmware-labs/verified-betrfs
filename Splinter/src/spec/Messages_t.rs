@@ -29,7 +29,6 @@ pub open spec(checked) fn nop_delta() -> Delta {
 /// state of values in a map.
 /// Messages can themselves be used as the values of a map as long as only "Define"
 /// messages are stored (see TotalKMMap).
-#[is_variant]
 pub enum Message {
     /// A Define message represents setting a variable to the given value.
     Define{ value: Value },

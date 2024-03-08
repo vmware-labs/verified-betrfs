@@ -25,7 +25,6 @@ state_machine!{ AbstractJournal {
       self.journal.wf()
     }
 
-    #[is_variant]  // TODO: verus! should always make enum variants
     pub enum Label{
         ReadForRecoveryLabel{ messages: MsgHistory },
         FreezeForCommitLabel{ frozen_journal: MsgHistory},

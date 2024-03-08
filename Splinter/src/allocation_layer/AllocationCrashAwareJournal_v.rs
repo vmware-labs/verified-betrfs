@@ -14,7 +14,6 @@ use crate::allocation_layer::MiniAllocator_v::*;
 
 verus! {
 
-#[is_variant]
 pub enum Ephemeral
 {
     Unknown,
@@ -60,7 +59,6 @@ state_machine!{AllocationCrashAwareJournal{
       }
     }
 
-    #[is_variant]
     pub enum Label
     {
         LoadEphemeralFromPersistent,

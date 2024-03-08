@@ -172,7 +172,6 @@ impl EphemeralState {
     }
 }
 
-#[is_variant]
 pub enum Ephemeral {
     Unknown,
     Known { v: EphemeralState },
@@ -205,7 +204,6 @@ state_machine!{UnifiedCrashAwareJournal{
         }
     }
 
-    #[is_variant]
     pub enum Label
     {
         LoadEphemeralFromPersistent,

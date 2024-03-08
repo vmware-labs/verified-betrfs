@@ -990,7 +990,6 @@ state_machine!{ LinkedBetreeVars {
         pub linked: LinkedBetree<BufferDisk>,
     }
 
-    #[is_variant]
     pub enum Label
     {
         Query{end_lsn: LSN, key: Key, value: Value},

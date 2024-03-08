@@ -17,7 +17,6 @@ use crate::disk::GenericDisk_v::*;
 
 verus! {
 
-#[is_variant]
 pub enum SplitArg {
     SplitIndex{pivot: Key, pivot_index: int},
     SplitLeaf{pivot: Key}
@@ -54,7 +53,6 @@ impl SplitArg {
     }
 }
 
-#[is_variant]
 pub enum Node {
     Index{pivots: Seq<Key>, children: Seq<Address>},
     Leaf{keys: Seq<Key>, msgs: Seq<Message>}

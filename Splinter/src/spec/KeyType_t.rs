@@ -27,7 +27,6 @@ pub struct Key(pub nat);
 /// 
 /// Elements are essentially just Keys with a special `Max` value, and thus the two types
 /// can be converted between each other.
-#[is_variant]
 pub enum Element {
     /// Max is the max key in the domain. Only the last pivot of a Be-tree can
     /// be Max (in which case the last bucket has an unbounded upper bound).

@@ -1261,7 +1261,6 @@ state_machine!{ AllocationJournal {
         pub mini_allocator: MiniAllocator,
     }
 
-    #[is_variant]
     pub enum Label
     {
         ReadForRecovery{messages: MsgHistory},

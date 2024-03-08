@@ -22,7 +22,6 @@ state_machine!{ AbstractMap {
     // applied LSN, the "seq_end").
     fields { pub stamped_map: StampedMap }
 
-    #[is_variant]
     pub enum Label{
         /// When querying, we label the transition with the map LSN (one past the end)
         /// at time of querying, plus the queried key and received value.

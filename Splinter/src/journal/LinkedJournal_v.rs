@@ -876,7 +876,6 @@ state_machine!{ LinkedJournal {
         !self.truncated_journal.disk_view.entries.contains_key(addr)
     }
 
-    #[is_variant]
     pub enum Label
     {
         ReadForRecovery{messages: MsgHistory},

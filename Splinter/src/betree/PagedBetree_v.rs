@@ -334,7 +334,6 @@ state_machine!{ PagedBetree {
         &&& self.root.wf()
     }
 
-    #[is_variant]
     pub enum Label
     {
         Query{end_lsn: LSN, key: Key, value: Value},
