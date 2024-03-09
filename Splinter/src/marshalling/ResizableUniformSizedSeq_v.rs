@@ -295,8 +295,8 @@ impl <
 
     open spec fn settable(&self, data: Seq<u8>, idx: int, value: DVElt) -> bool
     {
-        &&& 0 <= idx < self.length(data)
-        &&& self.elt_marshallable(value)
+        &&& self.lengthable(data)
+        &&& 0 <= idx < self.max_length() as int
         &&& self.eltm.spec_size(value) == self.oblinfo.uniform_size()
     }
 
@@ -338,45 +338,16 @@ impl <
 
     exec fn exec_set(&self, dslice: &Slice, data: &mut Vec<u8>, idx: usize, value: &Elt)
     {
-        proof {
-            self.index_bounds_facts(idx as int);
-            self.oblinfo.uniform_size_ensures();
-        }
-        let newend = self.eltm.exec_marshall(value, data, dslice.start + idx * self.oblinfo.exec_uniform_size());
-        assert forall |i: int| i != idx as int && self.gettable(dslice.i(old(data)@), i)
-            implies self.get_data(dslice.i(data@), i) == self.get_data(dslice.i(old(data)@), i) by
-        {
-            self.index_bounds_facts(i);
+        proof { self.index_bounds_facts(idx as int); }
+        let elt_start = dslice.start + self.exec_size_of_length_field() + idx * self.oblinfo.exec_uniform_size();
+        let Ghost(elt_end) = self.eltm.exec_marshall(value, data, elt_start);
 
-            lemma_seq_slice_slice(data@,
-                dslice.start as int,
-                dslice.end as int,
-                i * self.oblinfo.uniform_size() as int,
-                i * self.oblinfo.uniform_size() as int + self.oblinfo.uniform_size() as int);
-            lemma_seq_slice_slice(old(data)@,
-                dslice.start as int,
-                dslice.end as int,
-                i * self.oblinfo.uniform_size() as int,
-                i * self.oblinfo.uniform_size() as int + self.oblinfo.uniform_size() as int);
+        // Extensionality trigger.
+        assert( dslice.i(data@).subrange(0, self.size_of_length_field() as int)
+                =~= dslice.i(old(data)@).subrange(0, self.size_of_length_field() as int) );
 
-            if i < idx as int {
-                mul_preserves_le(i + 1, idx as int, self.oblinfo.uniform_size() as int);
-            } else {
-                mul_preserves_le(idx as int + 1, i, self.oblinfo.uniform_size() as int);
-            }
-
-            // TODO(verus): shouldn't assert-by conclusion give us this trigger for free?
-            assert( self.get_data(dslice.i(data@), i) == self.get_data(dslice.i(old(data)@), i) );
-        }
-
-        proof {
-            lemma_seq_slice_slice(
-                data@,
-                dslice.start as int,
-                dslice.end as int,
-                idx as int * self.oblinfo.uniform_size() as int,
-                idx as int * self.oblinfo.uniform_size() as int + self.oblinfo.uniform_size() as int);
-        }
+        // Extensionality trigger.
+        assert( data@.subrange(elt_start as int, elt_end as int) =~= self.get_data(dslice.i(data@), idx as int) );
     }
 
     /////////////////////////////////////////////////////////////////////////

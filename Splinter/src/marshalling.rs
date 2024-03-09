@@ -5,5 +5,5 @@ pub mod Marshalling_v;
 pub mod IntegerMarshalling_v;
 pub mod SeqMarshalling_v;
 pub mod UniformSizedSeq_v;
-// pub mod ResizableUniformSizedSeq_v;
+pub mod ResizableUniformSizedSeq_v;
 pub mod math_v;

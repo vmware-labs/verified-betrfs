@@ -325,13 +325,13 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
     open spec fn gettable_to_len(&self, data: Seq<u8>, len: int) -> bool
     recommends self.seq_valid()
     {
-        forall |i: int| 0<=i<len ==> self.gettable(data, i)
+        forall |i: int| 0<=i && i<len ==> self.gettable(data, i)
     }
 
     open spec fn elt_parsable_to_len(&self, data: Seq<u8>, len: int) -> bool
     recommends self.seq_valid(), self.gettable_to_len(data, len)
     {
-        forall |i: int| 0<=i<len ==> self.elt_parsable(data, i)
+        forall |i: int| 0<=i && i<len ==> self.elt_parsable(data, i)
     }
 
     // TODO(robj): why switch to usize in spec land here?
