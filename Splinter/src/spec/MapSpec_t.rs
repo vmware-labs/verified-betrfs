@@ -96,7 +96,7 @@ state_machine!{ MapSpec {
             require let Input::QueryInput { key } = input;
             require let Output::QueryOutput { value } = output;
 
-            require pre.kmmap[key].get_Define_value() == value;
+            require pre.kmmap[key]->value == value;
         }
     }
 

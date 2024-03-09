@@ -26,10 +26,10 @@ impl DiskView {
         self.acyclic(),
         self.block_in_bounds(ptr),
     ensures
-        self.iptr(ptr).is_Some() ==> self.iptr(ptr).unwrap().valid(self.boundary_lsn),
+        self.iptr(ptr) is Some ==> self.iptr(ptr).unwrap().valid(self.boundary_lsn),
     decreases self.the_rank_of(ptr)
     {
-        if ptr.is_Some() {
+        if ptr is Some {
             self.iptr_output_valid(self.next(ptr));
         }
     }
@@ -45,19 +45,19 @@ impl DiskView {
         post.block_in_bounds(ptr),
     ensures
         post.acyclic(),
-        self.iptr(ptr).is_Some() ==> self.iptr(ptr).unwrap().valid(lsn),
+        self.iptr(ptr) is Some ==> self.iptr(ptr).unwrap().valid(lsn),
         post.iptr(ptr) == PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn),
-    decreases if ptr.is_Some() { self.the_ranking()[ptr.unwrap()]+1 } else { 0 }
+    decreases if ptr is Some { self.the_ranking()[ptr.unwrap()]+1 } else { 0 }
     {
         self.iptr_output_valid(ptr);
         assert( post.valid_ranking(self.the_ranking()) );
-        if ptr.is_Some() && lsn < self.entries[ptr.unwrap()].message_seq.seq_start {
+        if ptr is Some && lsn < self.entries[ptr.unwrap()].message_seq.seq_start {
             self.discard_interp(lsn, post, post.next(ptr));
         }
-        if post.iptr(ptr).is_None() {
-            assert( PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn).is_None() );
+        if post.iptr(ptr) is None {
+            assert( PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn) is None );
         } else {
-            assert( PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn).is_Some() );
+            assert( PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn) is Some );
         }
         assert( post.iptr(ptr) =~= PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn) );
     }
@@ -93,11 +93,11 @@ impl DiskView {
     ensures
         self.acyclic(),
         self.iptr(ptr) == big.iptr(ptr),
-    decreases if ptr.is_Some() { big.the_ranking()[ptr.unwrap()]+1 } else { 0 } 
+    decreases if ptr is Some { big.the_ranking()[ptr.unwrap()]+1 } else { 0 } 
     {
         assert( big.valid_ranking(big.the_ranking()) ); // witness; new in Verus
         self.sub_disk_ranking(big);
-        if ptr.is_Some() {
+        if ptr is Some {
             assert( self.entries.contains_key(ptr.unwrap()) );  // new trigger required with verus update
             self.sub_disk_interp(big, big.next(ptr));
         }
@@ -117,7 +117,7 @@ impl DiskView {
         self.block_in_bounds(ptr),
         bdy == self.boundary_lsn,
         self.can_crop(ptr, depth),
-        self.pointer_after_crop(ptr, depth).is_Some(),
+        self.pointer_after_crop(ptr, depth) is Some,
     ensures
         PagedJournal_v::JournalRecord::opt_rec_can_crop_head_records(self.iptr(ptr), bdy, depth),
         PagedJournal_v::JournalRecord::opt_rec_can_crop_head_records(self.iptr(ptr), bdy, depth+1),
@@ -166,16 +166,16 @@ impl DiskView {
         self.acyclic(),
         self.block_in_bounds(ptr),
         self.boundary_lsn <= new_bdy,
-        ptr.is_Some() ==> new_bdy < self.entries[ptr.unwrap()].message_seq.seq_end,
+        ptr is Some ==> new_bdy < self.entries[ptr.unwrap()].message_seq.seq_end,
     ensures
         self.discard_old(new_bdy).acyclic(),
-        self.iptr(ptr).is_Some() ==> self.iptr(ptr).unwrap().valid(new_bdy), // discard_old_journal_rec prereq
+        self.iptr(ptr) is Some ==> self.iptr(ptr).unwrap().valid(new_bdy), // discard_old_journal_rec prereq
         PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), new_bdy) == self.discard_old(new_bdy).iptr(ptr),
     decreases self.the_rank_of(ptr)
     {
         self.iptr_output_valid(ptr);
         assert( self.discard_old(new_bdy).valid_ranking(self.the_ranking()) );
-        if ptr.is_Some() {
+        if ptr is Some {
             let next_ptr = self.entries[ptr.unwrap()].cropped_prior(new_bdy);
             self.iptr(ptr).unwrap().discard_valid(self.boundary_lsn, new_bdy);
             self.discard_old_commutes(next_ptr, new_bdy);
@@ -194,7 +194,7 @@ impl DiskView {
         self.iptr(ptr) == dv2.iptr(ptr),
     decreases self.the_rank_of(ptr)
     {
-        if ptr.is_Some() {
+        if ptr is Some {
             self.iptr_framing(dv2, self.next(ptr));
         }
     }
@@ -209,7 +209,7 @@ impl DiskView {
         self.build_tight(root).acyclic(),
     decreases self.the_rank_of(root),
     {
-        if root.is_Some() {
+        if root is Some {
             self.build_tight_is_awesome(self.next(root));
             // TODO(chris): weird that I have to leave both of these identical calls in place!
             assert( self.build_tight(root).is_sub_disk(self) ); // introduced trigger to mitigate flakiness
@@ -228,7 +228,7 @@ impl DiskView {
     decreases self.the_rank_of(root),
     {
         self.build_tight_is_awesome(root);
-        if root.is_Some() {
+        if root is Some {
             self.build_tight_maintains_interpretation(self.next(root));
             self.build_tight(root).iptr_framing(self, self.next(root));
             assert( self.iptr(root) =~~= self.build_tight(root).iptr(root) );
@@ -242,7 +242,7 @@ impl TruncatedJournal {
     pub open spec(checked) fn next(self) -> Self
     recommends
         self.wf(),
-        self.freshest_rec.is_Some(),
+        self.freshest_rec is Some,
     {
         Self{ freshest_rec: self.disk_view.next(self.freshest_rec), ..self }
     }
@@ -535,7 +535,7 @@ impl LinkedJournal::State {
         reveal(PagedJournal::State::next);       // unfortunate defaults
         reveal(LinkedJournal::State::next_by);   // unfortunate defaults
 
-        let fj = lbl.get_FreezeForCommit_frozen_journal();
+        let fj = lbl->frozen_journal;
         let new_bdy = fj.disk_view.boundary_lsn;
         let depth = step.get_freeze_for_commit_0(); // ew. Using Steps in lemmas sucks. Another mismatch with Rust's
                                                     // match-everything-all-the-time style. Change Step() to Step{}?
@@ -579,7 +579,7 @@ impl LinkedJournal::State {
 //             LinkedJournal::Step::put() =>  {
 //             }
             LinkedJournal::Step::discard_old(new_tj) =>  {
-                let lsn = lbl.get_DiscardOld_start_lsn();
+                let lsn = lbl->start_lsn;
                 let post_discard = self.truncated_journal.discard_old(lsn);
 
                 self.truncated_journal.discard_old_decodable(lsn);
@@ -588,7 +588,7 @@ impl LinkedJournal::State {
             LinkedJournal::Step::internal_journal_marshal(cut, addr) =>  {
                 let rank = self.truncated_journal.disk_view.the_ranking();
                 let post_rank = rank.insert(step.get_internal_journal_marshal_1(),  // TODO(travis): ewww
-                    if self.truncated_journal.freshest_rec.is_None() { 0 }
+                    if self.truncated_journal.freshest_rec is None { 0 }
                     else { rank[self.truncated_journal.freshest_rec.unwrap()] + 1 });
                 assert( post.truncated_journal.disk_view.valid_ranking(post_rank) );
             }
@@ -612,7 +612,7 @@ impl LinkedJournal::State {
         reveal(LinkedJournal::State::next_by);   // unfortunate defaults
 
         // self.inv_next(post, lbl, step);
-        let lsn = lbl.get_DiscardOld_start_lsn();
+        let lsn = lbl->start_lsn;
 
         if !(self.unmarshalled_tail.seq_start <= lsn) {
             let cropped_tj = self.truncated_journal.discard_old(lsn);

@@ -144,7 +144,7 @@ impl MiniAllocator {
 
     pub open spec(checked) fn wf(self) -> bool {
         &&& forall |au| #[trigger] self.allocs.contains_key(au) ==> self.allocs[au].wf() && self.allocs[au].au == au
-        &&& self.curr.is_Some() ==> self.allocs.contains_key(self.curr.unwrap())
+        &&& self.curr is Some ==> self.allocs.contains_key(self.curr.unwrap())
     }
 
     pub open spec(checked) fn add_aus(self, aus: Set<AU>) -> Self
@@ -259,7 +259,7 @@ impl MiniAllocator {
         let new_allocs = Map::new(
             |au| self.allocs.contains_key(au) && !aus.contains(au),
             |au| self.allocs[au]);
-        let new_curr = if self.curr.is_Some() && aus.contains(self.curr.unwrap()) { None }
+        let new_curr = if self.curr is Some && aus.contains(self.curr.unwrap()) { None }
                        else { self.curr };
         Self{allocs: new_allocs, curr: new_curr}
     }

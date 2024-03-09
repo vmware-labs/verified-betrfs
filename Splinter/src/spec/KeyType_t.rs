@@ -37,9 +37,9 @@ pub enum Element {
 /// Returns the key corresponding to an Element::Elem.
 pub open spec(checked) fn to_key(elem: Element) -> Key
     recommends
-        elem.is_Elem(),
+        elem is Elem,
 {
-    Key(elem.get_Elem_e())
+    Key(elem->e)
 }
 
 // Returns an Element corresponding to the provided Key.
@@ -156,8 +156,8 @@ impl Key {
 
 impl Element {
     pub open spec(checked) fn lte(a: Element, b: Element) -> bool {
-        ||| b.is_Max()
-        ||| (a.is_Elem() && b.is_Elem() && Key::lte(to_key(a), to_key(b)))
+        ||| b is Max
+        ||| (a is Elem && b is Elem && Key::lte(to_key(a), to_key(b)))
     }
 
     pub open spec(checked) fn lt(a: Element, b: Element) -> bool {

@@ -41,7 +41,7 @@ impl PivotTable {
     {
         &&& self.num_ranges() > 0
         &&& Element::is_strictly_sorted(self.pivots)
-        &&& (forall |i: int| 0 <= i < self.num_ranges() ==> (#[trigger] self.pivots[i].is_Elem()))
+        &&& (forall |i: int| 0 <= i < self.num_ranges() ==> (#[trigger] self.pivots[i] is Elem))
     }
 
     pub open spec(checked) fn len(self) -> nat
@@ -71,7 +71,7 @@ impl PivotTable {
     pub open spec(checked) fn can_insert(self, i: int, element: Element) -> bool
     {
         &&& self.wf()
-        &&& element.is_Elem()
+        &&& element is Elem
         &&& 0 <= i <= self.len()
         &&& (i == 0 ==> Element::lt(element, self.pivots[0]))
         &&& (i == self.len() ==> Element::lt(self.pivots.last(), element))

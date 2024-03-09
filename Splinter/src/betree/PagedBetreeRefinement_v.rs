@@ -333,8 +333,8 @@ impl PagedBetree::State {
         reveal(AbstractMap::State::next);
         reveal(AbstractMap::State::next_by);
 
-        let built_receipt = self.root.build_query_receipt(lbl.get_Query_key());
-        self.root.build_query_receipt_valid(lbl.get_Query_key());
+        let built_receipt = self.root.build_query_receipt(lbl->key);
+        self.root.build_query_receipt_valid(lbl->key);
         receipt.equal_receipts(built_receipt);
 
         assert(AbstractMap::State::next_by(self.i(), post.i(), lbl.i(), AbstractMap::Step::query()));
@@ -397,7 +397,7 @@ impl PagedBetree::State {
         reveal(AbstractMap::State::next);
         reveal(AbstractMap::State::next_by);
 
-        self.apply_put_is_map_plus_history(post, lbl.get_Put_puts());
+        self.apply_put_is_map_plus_history(post, lbl->puts);
         assert(AbstractMap::State::next_by(self.i(), post.i(), lbl.i(), AbstractMap::Step::put()));
     }
 

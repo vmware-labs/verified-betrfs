@@ -173,10 +173,10 @@ impl LinkedBetree{
 
             assert forall |i| (
                 #[trigger] out.valid_child_index(i)
-                && out.get_Node_children()[i as int].is_Node()
-                && out.get_Node_children()[i as int].local_structure()    
+                && out->children[i as int] is Node
+                && out->children[i as int].local_structure()    
             ) implies (
-                out.get_Node_children()[i as int].my_domain() == out.child_domain(i)
+                out->children[i as int].my_domain() == out.child_domain(i)
             ) by {
                 assert(self.root().valid_child_index(i));
             }
@@ -259,7 +259,7 @@ impl LinkedBetree{
             self.root().valid_child_index(idx), 
         ensures 
             self.i().valid_child_index(idx),
-            self.child_at_idx(idx).i() == self.i().get_Node_children()[idx as int]
+            self.child_at_idx(idx).i() == self.i()->children[idx as int]
     {
         let child = self.child_at_idx(idx);
         self.child_at_idx_acyclic(idx);
@@ -290,8 +290,8 @@ impl LinkedBetree{
         self.i_children_lemma(self.the_ranking());
 
         if self.root().is_index() {
-            assert forall |i:nat| 0 <= i < self.i().get_Node_children().len()
-            implies #[trigger] self.i().get_Node_children()[i as int].is_Node()
+            assert forall |i:nat| 0 <= i < self.i()->children.len()
+            implies #[trigger] self.i()->children[i as int] is Node
             by {
                 assert(self.root().valid_child_index(i));
             }
@@ -319,8 +319,8 @@ impl LinkedBetree{
             self.i_children_lemma(ranking);
             big.i_children_lemma(ranking);
 
-            let a = self.i_node(ranking).get_Node_children();
-            let b = big.i_node(ranking).get_Node_children();
+            let a = self.i_node(ranking)->children;
+            let b = big.i_node(ranking)->children;
             assert(a.len() == b.len());
 
             assert forall |i| 0 <= i < a.len()
@@ -413,7 +413,7 @@ impl LinkedBetree{
             self.dv.entries.dom().contains(addr),
         ensures ({
             let node = self.dv.entries[addr];
-            &&& forall |i| #[trigger] node.valid_child_index(i) && node.children[i as int].is_Some() 
+            &&& forall |i| #[trigger] node.valid_child_index(i) && node.children[i as int] is Some 
                 ==> self.reachable_addrs_using_ranking(ranking).contains(node.children[i as int].unwrap())
         })
         decreases self.get_rank(ranking)
@@ -422,7 +422,7 @@ impl LinkedBetree{
         let reachable_addrs = self.reachable_addrs_using_ranking(ranking);
         self.reachable_addrs_using_ranking_closed(ranking);
 
-        assert forall |i| #[trigger] node.valid_child_index(i) && node.children[i as int].is_Some() 
+        assert forall |i| #[trigger] node.valid_child_index(i) && node.children[i as int] is Some 
         implies reachable_addrs.contains(node.children[i as int].unwrap())
         by {
             if addr == self.root.unwrap() {
@@ -505,7 +505,7 @@ impl LinkedBetree{
             self.buffer_dv.is_sub_disk(other.buffer_dv),
             self.root().children[idx as int] == other.root().children[other_idx as int]
         ensures 
-            self.i().get_Node_children()[idx as int] == other.i().get_Node_children()[other_idx as int]
+            self.i()->children[idx as int] == other.i()->children[other_idx as int]
     {
         let child = self.child_at_idx(idx);
         let other_child = other.child_at_idx(other_idx);
@@ -644,8 +644,8 @@ impl LinkedBetree{
             }
         }
         
-        assert(result.i().get_Node_children() =~= self.i().push_memtable(memtable).get_Node_children());
-        assert(result.i().get_Node_buffers() =~= self.i().push_memtable(memtable).get_Node_buffers());
+        assert(result.i()->children =~= self.i().push_memtable(memtable)->children);
+        assert(result.i()->buffers =~= self.i().push_memtable(memtable)->buffers);
     }
 
     pub proof fn grow_new_ranking(self, new_root_addr: Address, old_ranking: Ranking) -> (new_ranking: Ranking)
@@ -701,8 +701,8 @@ impl LinkedBetree{
                 self.child_at_idx(i as nat).fresh_entry_preserves_i(other.child_at_idx(i as nat), ranking, new_addr);
             }
 
-            assert(self.i_node(ranking).get_Node_children() =~= other.i_node(ranking).get_Node_children());
-            assert(self.i_node(ranking).get_Node_buffers() =~= other.i_node(ranking).get_Node_buffers());
+            assert(self.i_node(ranking)->children =~= other.i_node(ranking)->children);
+            assert(self.i_node(ranking)->buffers =~= other.i_node(ranking)->buffers);
         }
     }
 
@@ -728,8 +728,8 @@ impl LinkedBetree{
         self.i_node_ignores_ranking(self.the_ranking(), new_ranking);
         self.fresh_entry_preserves_i(child, new_ranking, new_root_addr);
 
-        assert(result.i().get_Node_children() =~= self.i().grow().get_Node_children());
-        assert(result.i().get_Node_buffers() =~= self.i().grow().get_Node_buffers());
+        assert(result.i()->children =~= self.i().grow()->children);
+        assert(result.i()->buffers =~= self.i().grow()->buffers);
     }
 
 
@@ -745,7 +745,7 @@ impl LinkedBetree{
     //         self.split_parent(request, new_addrs).valid_ranking(new_ranking),
     //         new_ranking.dom() == ranking.dom() + new_addrs.repr()
     // {
-    //     let child_idx = request.get_child_idx();
+    //     let child_idx = request.xxxget_child_idx();
     //     let old_child_addr = self.root().children[child_idx as int].unwrap();
 
     //     let old_parent_rank = ranking[self.root.unwrap()];
@@ -765,8 +765,8 @@ impl LinkedBetree{
     //     assert forall |i| new_left_child.valid_child_index(i) ==> old_child.valid_child_index(i) by {} // trigger
     //     // assert(result.dv.node_children_respects_rank(new_ranking, new_addrs.left));
 
-    //     assert forall |i| request.is_SplitLeaf() && new_right_child.valid_child_index(i) ==> old_child.valid_child_index(i) by {} // trigger
-    //     assert forall |i| request.is_SplitIndex() && new_right_child.valid_child_index(i) ==> 
+    //     assert forall |i| request is SplitLeaf && new_right_child.valid_child_index(i) ==> old_child.valid_child_index(i) by {} // trigger
+    //     assert forall |i| request is SplitIndex && new_right_child.valid_child_index(i) ==> 
     //         old_child.valid_child_index(i + request->child_pivot_idx) by {} // trigger
     //     // assert(result.dv.node_children_respects_rank(new_ranking, new_addrs.right));
 
@@ -799,7 +799,7 @@ impl LinkedBetree{
         let result = self.split_parent(request, new_addrs);
         let new_ranking = self.split_new_ranking(request, new_addrs, self.the_ranking());
 
-        let child_idx = request.get_child_idx();
+        let child_idx = request.xxxget_child_idx();
         let old_child = self.child_at_idx(child_idx);
 
         self.i_wf();
@@ -811,7 +811,7 @@ impl LinkedBetree{
         assert(self.i().can_split_parent(request));
 
         let a = result.i_children(result.the_ranking());
-        let b = self.i().split_parent(request).get_Node_children();
+        let b = self.i().split_parent(request)->children;
 
         assert(a.len() == b.len()) by {
             self.i_children_lemma(self.the_ranking());
@@ -831,7 +831,7 @@ impl LinkedBetree{
                 new_left_child.i_children_lemma(new_ranking);
 
                 assert forall |j| 0 <= j < new_left_child.root().children.len()
-                implies #[trigger] new_left_child.i_children(new_ranking)[j] == b[i].get_Node_children()[j]
+                implies #[trigger] new_left_child.i_children(new_ranking)[j] == b[i]->children[j]
                 by {
                     assert(new_left_child.root().valid_child_index(j as nat));
                     assert(old_child.root().valid_child_index(j as nat));
@@ -844,18 +844,18 @@ impl LinkedBetree{
                     old_grand_child.i_node_ignores_ranking(self.the_ranking(), new_ranking);
                 }
 
-                assert(new_left_child.i_children(new_ranking) =~= b[i].get_Node_children());
+                assert(new_left_child.i_children(new_ranking) =~= b[i]->children);
                 new_left_child.i_node_ignores_ranking(new_ranking, new_left_child.the_ranking());
             } else if i == child_idx + 1 {
                 let new_right_child = result.child_at_idx(i as nat);
                 new_right_child.i_children_lemma(new_ranking);
 
                 assert forall |j| 0 <= j < new_right_child.root().children.len()
-                implies #[trigger] new_right_child.i_children(new_ranking)[j] == b[i].get_Node_children()[j]
+                implies #[trigger] new_right_child.i_children(new_ranking)[j] == b[i]->children[j]
                 by {
                     assert(new_right_child.root().valid_child_index(j as nat));
 
-                    if request.is_SplitIndex() {
+                    if request is SplitIndex {
                         let pivot_idx = request->child_pivot_idx;
                         assert(old_child.root().valid_child_index((j + pivot_idx)  as nat));
 
@@ -870,7 +870,7 @@ impl LinkedBetree{
                     }
                 }
 
-                assert(new_right_child.i_children(new_ranking) =~= b[i].get_Node_children());
+                assert(new_right_child.i_children(new_ranking) =~= b[i]->children);
                 new_right_child.i_node_ignores_ranking(new_ranking, new_right_child.the_ranking());
             } else {
                 self.identical_children_commutes_with_i((i-1) as nat, result, i as nat, new_ranking);
@@ -941,10 +941,10 @@ impl LinkedBetree{
         let new_ranking = self.flush_new_ranking(child_idx, buffer_gc, new_addrs, self.the_ranking());
         
         self.i_wf();
-        assert(result.i().get_Node_buffers() =~= self.i().flush(child_idx, buffer_gc).get_Node_buffers());
+        assert(result.i()->buffers =~= self.i().flush(child_idx, buffer_gc)->buffers);
 
         let a = result.i_children(result.the_ranking());
-        let b = self.i().flush(child_idx, buffer_gc).get_Node_children();
+        let b = self.i().flush(child_idx, buffer_gc)->children;
 
         self.i_children_lemma(self.the_ranking());
         result.i_children_lemma(result.the_ranking());
@@ -966,11 +966,11 @@ impl LinkedBetree{
             result.child_at_idx_valid_ranking(i as nat);
 
             if i == child_idx {
-                assert(a[i].get_Node_children() == new_child.i_children(result.the_ranking()));
-                assert(b[i].get_Node_children() == old_child.i_children(self.the_ranking()));
+                assert(a[i]->children == new_child.i_children(result.the_ranking()));
+                assert(b[i]->children == old_child.i_children(self.the_ranking()));
 
-                assert forall |j| 0 <= j < a[i].get_Node_children().len()
-                implies a[i].get_Node_children()[j] == b[i].get_Node_children()[j]
+                assert forall |j| 0 <= j < a[i]->children.len()
+                implies a[i]->children[j] == b[i]->children[j]
                 by {
                     assert(old_child.root().valid_child_index(j as nat));
                     assert(new_child.root().valid_child_index(j as nat));
@@ -984,12 +984,12 @@ impl LinkedBetree{
                     old_child.child_at_idx_valid_ranking(j as nat);
                     new_child.child_at_idx_valid_ranking(j as nat);
 
-                    assert(a[i].get_Node_children()[j] == new_grand_child.i_node(new_ranking)) by {
+                    assert(a[i]->children[j] == new_grand_child.i_node(new_ranking)) by {
                         new_child.i_children_lemma(result.the_ranking());
                         new_grand_child.i_node_ignores_ranking(result.the_ranking(), new_ranking);
                     }
-                    assert(b[i].get_Node_children()[j] == old_grand_child.i_node(new_ranking)) by {
-                        // assert(b[i].get_Node_children()[j] == old_child.i_children(self.the_ranking())[j]);
+                    assert(b[i]->children[j] == old_grand_child.i_node(new_ranking)) by {
+                        // assert(b[i]->children[j] == old_child.i_children(self.the_ranking())[j]);
                         old_child.i_children_lemma(self.the_ranking());
                         // assert(old_child.i_children(self.the_ranking())[j] == old_grand_child.i_node(self.the_ranking()));
                         old_grand_child.i_node_ignores_ranking(self.the_ranking(), new_ranking);
@@ -998,7 +998,7 @@ impl LinkedBetree{
                     old_grand_child.betree_subdisk_preserves_i_with_ranking(new_grand_child, new_ranking);
                     assert(new_grand_child.i_node(new_ranking) == old_grand_child.i_node(new_ranking));
                 }
-                assert(a[i].get_Node_children() =~= b[i].get_Node_children());
+                assert(a[i]->children =~= b[i]->children);
             } else {
                 old_child.i_node_ignores_ranking(old_child.the_ranking(), new_ranking);
                 new_child.i_node_ignores_ranking(new_child.the_ranking(), new_ranking);
@@ -1056,11 +1056,11 @@ impl LinkedBetree{
             self.i().can_compact(start, end, compacted_buffer)
     {
         self.i_wf();
-        assert(self.i().is_Node());
-        assert(start < end <= self.i().get_Node_buffers().len());
+        assert(self.i() is Node);
+        assert(start < end <= self.i()->buffers.len());
 
         let compact_slice = self.root().buffers.slice(start as int, end as int);
-        let i_compact_slice = self.i().get_Node_buffers().slice(start as int, end as int);
+        let i_compact_slice = self.i()->buffers.slice(start as int, end as int);
         assert(compact_slice.i(self.buffer_dv) =~= i_compact_slice);
         assert(self.root().buffers.valid(self.buffer_dv)); // trigger
 
@@ -1090,7 +1090,7 @@ impl LinkedBetree{
         assert forall |k| #![auto] compacted_buffer.map.contains_key(k)
         implies {
             let from = if self.i().flushed_ofs(k) <= start { 0 } else { self.i().flushed_ofs(k)-start };
-            &&& compacted_buffer.query(k) == self.i().get_Node_buffers().slice(start as int, end as int).query_from(k, from)
+            &&& compacted_buffer.query(k) == self.i()->buffers.slice(start as int, end as int).query_from(k, from)
         } by {
             let from = if self.i().flushed_ofs(k) <= start { 0 } else { self.i().flushed_ofs(k)-start };
             compact_slice.query_from_commutes_with_i(self.buffer_dv, k, from);
@@ -1114,10 +1114,10 @@ impl LinkedBetree{
         self.can_compact_commutes_with_i(start, end, compacted_buffer, new_addrs);
 
         self.root().buffers.subdisk_implies_same_i(self.buffer_dv, result.buffer_dv);
-        assert(result.i().get_Node_buffers() =~= self.i().compact(start, end, compacted_buffer).get_Node_buffers());
+        assert(result.i()->buffers =~= self.i().compact(start, end, compacted_buffer)->buffers);
 
         let a = result.i_children(result.the_ranking());
-        let b = self.i().compact(start, end, compacted_buffer).get_Node_children();
+        let b = self.i().compact(start, end, compacted_buffer)->children;
         result.i_children_lemma(result.the_ranking());
         assert(a.len() == b.len());
 
@@ -1390,7 +1390,7 @@ impl Path{
                 self.betree_diskview_diff(replacement, path_addrs);
                 if addr == new_root_addr {
                     let node = result.dv.entries[addr];
-                    assert forall |i| #[trigger] node.valid_child_index(i) && node.children[i as int].is_Some()
+                    assert forall |i| #[trigger] node.valid_child_index(i) && node.children[i as int] is Some
                     implies {
                         &&& new_ranking.contains_key(node.children[i as int].unwrap())
                         &&& new_ranking[node.children[i as int].unwrap()] < new_ranking[addr]
@@ -1450,8 +1450,8 @@ impl Path{
             let subtree = self.subpath().substitute(replacement, sub_path_addrs);
             let new_children = self.linked.root().children.update(r, subtree.root);
 
-            assert forall |i| 0 <= i < result.i().get_Node_children().len()
-            implies #[trigger] result.i().get_Node_children()[i] == self.i().substitute(replacement.i()).get_Node_children()[i]
+            assert forall |i| 0 <= i < result.i()->children.len()
+            implies #[trigger] result.i()->children[i] == self.i().substitute(replacement.i())->children[i]
             by {
                 assert(self.linked.root().valid_child_index(i as nat));
                 assert(result.root().valid_child_index(i as nat));
@@ -1480,9 +1480,9 @@ impl Path{
                     new_child.i_node_ignores_ranking(new_ranking, result.the_ranking());
                 }
             }
-            assert(result.i().get_Node_children() =~= self.i().substitute(replacement.i()).get_Node_children());
+            assert(result.i()->children =~= self.i().substitute(replacement.i())->children);
             result.root().buffers.subdisk_implies_same_i(self.linked.buffer_dv, result.buffer_dv);
-            assert(result.i().get_Node_buffers() =~= self.i().substitute(replacement.i()).get_Node_buffers());
+            assert(result.i()->buffers =~= self.i().substitute(replacement.i())->buffers);
         }
     }
 

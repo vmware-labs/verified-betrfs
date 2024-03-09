@@ -325,7 +325,7 @@ impl QueryReceiptLine{
     pub open spec(checked) fn wf(self) -> bool
     {
         &&& self.node.wf()
-        &&& self.result.is_Define()
+        &&& self.result is Define
     }
 } // end impl QueryReceiptLine
 

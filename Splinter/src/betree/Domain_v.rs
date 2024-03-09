@@ -23,7 +23,7 @@ impl Domain {
     {
         &&& self is Domain ==> {
             &&& Element::lt(self->start, self->end)
-            &&& self->start.is_Elem()  // Note(Jialin): skipping elementIsKey since we are integrating element to contain key sized elements
+            &&& self->start is Elem  // Note(Jialin): skipping elementIsKey since we are integrating element to contain key sized elements
         }
     }
 

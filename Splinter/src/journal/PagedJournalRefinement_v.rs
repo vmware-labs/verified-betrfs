@@ -42,7 +42,7 @@ impl JournalRecord {
     // Not sure why i can't prove this recommends
     pub open spec /*XXX (checked)*/ fn i_opt(ojr: Option<Self>, boundary_lsn: LSN) -> MsgHistory
     recommends
-        ojr.is_Some() ==> ojr.unwrap().valid(boundary_lsn),
+        ojr is Some ==> ojr.unwrap().valid(boundary_lsn),
     decreases ojr
     {
         match ojr {
@@ -106,7 +106,7 @@ impl JournalRecord {
     requires
         0 < depth,
         self.can_crop_head_records(bdy, (depth-1) as nat),
-        self.crop_head_records(bdy, (depth-1) as nat).is_Some(),
+        self.crop_head_records(bdy, (depth-1) as nat) is Some,
         self.crop_head_records(bdy, (depth-1) as nat).unwrap().message_seq.can_discard_to(bdy),
     ensures
         !self.can_crop_head_records(bdy, depth+1)
@@ -122,7 +122,7 @@ impl JournalRecord {
     requires
         0 < depth,
         self.can_crop_head_records(bdy, (depth-1) as nat),
-        self.crop_head_records(bdy, (depth-1) as nat).is_Some(),
+        self.crop_head_records(bdy, (depth-1) as nat) is Some,
         self.can_crop_head_records(bdy, depth),
     ensures
         self.crop_head_records(bdy, (depth-1) as nat).unwrap().cropped_prior(bdy) == self.crop_head_records(bdy, depth),
@@ -145,7 +145,7 @@ impl JournalRecord {
         msgs.wf(),
         self.can_crop_head_records(bdy, depth+1),
         self.can_crop_head_records(bdy, depth),
-        self.crop_head_records(bdy, depth).is_Some(),
+        self.crop_head_records(bdy, depth) is Some,
         self.crop_head_records(bdy, depth).unwrap().i(bdy).includes_subseq(msgs),
     ensures
         0 < depth ==> self.can_crop_head_records(bdy, (depth-1) as nat),
@@ -193,7 +193,7 @@ impl JournalRecord {
     pub proof fn crop_equivalence(ojr: Option<JournalRecord>, bdy: LSN, depth: nat)
     requires
         0 < depth,
-        ojr.is_Some() ==> ojr.unwrap().valid(bdy),
+        ojr is Some ==> ojr.unwrap().valid(bdy),
         Self::opt_rec_can_crop_head_records(ojr, bdy, (depth-1) as nat),
         Self::opt_rec_can_crop_head_records(ojr, bdy, depth),
     ensures
@@ -215,17 +215,17 @@ impl JournalRecord {
     pub proof fn discard_old_maintains_subseq(ojr: Option<JournalRecord>, old_bdy: LSN, new_bdy: LSN)
     requires
         old_bdy <= new_bdy,
-        ojr.is_None() ==> new_bdy == old_bdy,
-        ojr.is_Some() ==> new_bdy < ojr.unwrap().message_seq.seq_end,
-        ojr.is_Some() ==> ojr.unwrap().valid(old_bdy),
+        ojr is None ==> new_bdy == old_bdy,
+        ojr is Some ==> new_bdy < ojr.unwrap().message_seq.seq_end,
+        ojr is Some ==> ojr.unwrap().valid(old_bdy),
     ensures
-        ojr.is_Some() ==> ojr.unwrap().valid(new_bdy),
+        ojr is Some ==> ojr.unwrap().valid(new_bdy),
         Self::i_opt(ojr, old_bdy).includes_subseq(Self::i_opt(Self::discard_old_journal_rec(ojr, new_bdy), new_bdy)),
     decreases ojr
     {
         Self::i_lemma_forall(); // new text; needed a dozen lines of debugging to find it.
         Self::option_new_boundary_valid(ojr, old_bdy, new_bdy);
-        if ojr.is_Some() && new_bdy < ojr.unwrap().message_seq.seq_start {
+        if ojr is Some && new_bdy < ojr.unwrap().message_seq.seq_start {
             Self::discard_old_maintains_subseq(*ojr.unwrap().prior_rec, old_bdy, new_bdy);
 
             let prior = *ojr.unwrap().prior_rec;
@@ -240,7 +240,7 @@ impl JournalRecord {
 
     pub proof fn crop_head_maintains_subseq(ojr: Option<JournalRecord>, bdy: LSN, depth: nat)
     requires
-        ojr.is_Some() ==> ojr.unwrap().valid(bdy),
+        ojr is Some ==> ojr.unwrap().valid(bdy),
         Self::opt_rec_can_crop_head_records(ojr, bdy, depth),
     ensures
         Self::i_opt(ojr, bdy).includes_subseq(Self::i_opt(Self::opt_rec_crop_head_records(ojr, bdy, depth), bdy)),
@@ -264,15 +264,15 @@ impl JournalRecord {
     // lemmas I need now that I didn't then. :'v(
     pub proof fn discard_old_defn_interprets(ojr: Option<JournalRecord>, old_lsn: LSN, new_lsn: LSN)
     requires
-        ojr.is_Some() ==> ojr.unwrap().valid(old_lsn),
-        ojr.is_Some() ==> ojr.unwrap().valid(new_lsn),
+        ojr is Some ==> ojr.unwrap().valid(old_lsn),
+        ojr is Some ==> ojr.unwrap().valid(new_lsn),
         Self::i_opt(ojr, old_lsn).can_discard_to(new_lsn),
     ensures
         Self::i_opt(Self::discard_old_journal_rec(ojr, new_lsn), new_lsn) == Self::i_opt(ojr, old_lsn).discard_old(new_lsn)
     decreases ojr
     {
-        if ojr.is_Some() {
-            if ojr.is_Some() && new_lsn < ojr.unwrap().message_seq.seq_start {
+        if ojr is Some {
+            if ojr is Some && new_lsn < ojr.unwrap().message_seq.seq_start {
                 Self::discard_old_defn_interprets(*ojr.unwrap().prior_rec, old_lsn, new_lsn);   // recursive call
                 (*ojr.unwrap().prior_rec).unwrap().i_lemma(old_lsn);  // new invocation; i_lemma_forall wasn't triggery enough
             }
@@ -324,7 +324,7 @@ impl TruncatedJournal {
         self.i().includes_subseq(frozen.i())
     {
         let ctj = self.crop_head_records(depth);
-        if ctj.freshest_rec.is_Some() && frozen.boundary_lsn < ctj.freshest_rec.unwrap().message_seq.seq_end {
+        if ctj.freshest_rec is Some && frozen.boundary_lsn < ctj.freshest_rec.unwrap().message_seq.seq_end {
             self.freshest_rec.unwrap().crop_head_records_lemma(self.boundary_lsn, depth);   // newly required
             JournalRecord::discard_old_maintains_subseq(ctj.freshest_rec, ctj.boundary_lsn, frozen.boundary_lsn);
         }
@@ -341,7 +341,7 @@ impl TruncatedJournal {
     ensures self.discard_old_defn(lsn).wf()
     {
         if lsn != self.seq_end() {
-            if self.freshest_rec.is_Some() {
+            if self.freshest_rec is Some {
                 let rec = self.freshest_rec.unwrap();
                 rec.discard_valid(self.boundary_lsn, lsn);  // translates OptionNewBoundaryValid
                 JournalRecord::discard_old_journal_rec_ensures(self.freshest_rec, lsn);
@@ -403,8 +403,8 @@ impl PagedJournal::State {
 
         let ojr = self.truncated_journal.freshest_rec;
         let bdy = self.truncated_journal.boundary_lsn;
-        let msgs = lbl.get_ReadForRecovery_messages();
-        if ojr.is_Some() {
+        let msgs = lbl.arrow_ReadForRecovery_messages();
+        if ojr is Some {
             ojr.unwrap().can_crop_monotonic(bdy, depth, depth+1);
             ojr.unwrap().can_crop_more_yields_some(bdy, depth, depth+1);
 
@@ -432,7 +432,7 @@ impl PagedJournal::State {
         reveal(AbstractJournal::State::next_by);    // newly required; unfortunate macro defaults
         reveal(AbstractJournal::State::next);    // newly required; unfortunate macro defaults
 
-        self.truncated_journal.tj_freeze_for_commit(lbl.get_FreezeForCommit_frozen_journal(), depth);
+        self.truncated_journal.tj_freeze_for_commit(lbl->frozen_journal, depth);
 
         JournalRecord::i_lemma_forall(); // newly required call
         self.truncated_journal.i().concat_lemma(self.unmarshalled_tail);    // newly required call
@@ -455,17 +455,17 @@ impl PagedJournal::State {
         reveal(AbstractJournal::State::next);       // newly required; unfortunate macro defaults
         JournalRecord::i_lemma_forall();            // newly required
 
-        let lsn = lbl.get_DiscardOld_start_lsn();
+        let lsn = lbl->start_lsn;
         let tj = self.truncated_journal;
         if lsn < self.unmarshalled_tail.seq_start {
-            if tj.freshest_rec.is_Some() && lsn < tj.seq_end() {
+            if tj.freshest_rec is Some && lsn < tj.seq_end() {
                 tj.freshest_rec.unwrap().discard_valid(tj.boundary_lsn, lsn);
                 tj.discard_old_defn_wf(lsn);    // newly required
             }
             JournalRecord::discard_old_defn_interprets(tj.freshest_rec, tj.boundary_lsn, lsn);
         }
 
-        assert_maps_equal!( post.i().journal.msgs, self.i().journal.discard_old(lbl.i().get_DiscardOldLabel_start_lsn()).msgs );    // newly required extensionality
+        assert_maps_equal!( post.i().journal.msgs, self.i().journal.discard_old(lbl.i()->start_lsn).msgs );    // newly required extensionality
         assert(AbstractJournal::State::next_by(self.i(), post.i(), lbl.i(), AbstractJournal::Step::discard_old())); // newly required witness
     }
 
@@ -511,7 +511,7 @@ impl PagedJournal::State {
                 assert(AbstractJournal::State::next_by(self.i(), post.i(), lbl.i(), AbstractJournal::Step::observe_fresh_journal())); // new witness
             }
             PagedJournal::Step::put() => {
-                assert_maps_equal!( post.i().journal.msgs, self.i().journal.concat(lbl.i().get_PutLabel_messages()).msgs );    // newly required extensionality; this branch used to be a freebie.
+                assert_maps_equal!( post.i().journal.msgs, self.i().journal.concat(lbl.i().arrow_PutLabel_messages()).msgs );    // newly required extensionality; this branch used to be a freebie.
                 assert(AbstractJournal::State::next_by(self.i(), post.i(), lbl.i(), AbstractJournal::Step::put())); // new witness
             }
             PagedJournal::Step::discard_old() => {

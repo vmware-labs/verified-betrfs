@@ -358,7 +358,7 @@ impl BetreeNode {
     pub open spec(checked) fn split_element(self, request: SplitRequest) -> Element
         recommends self.can_split_parent(request)
     {
-        let child = self->children[request.get_child_idx() as int];
+        let child = self->children[request.xxxget_child_idx() as int];
         match request {
             SplitRequest::SplitLeaf{child_idx, split_key} => to_element(split_key),
             SplitRequest::SplitIndex{child_idx, child_pivot_idx} => child->pivots.pivots[child_pivot_idx as int]
@@ -390,7 +390,7 @@ impl BetreeNode {
         requires self.can_split_parent(request)
         ensures self.split_parent(request).wf()
     { 
-        let child_idx = request.get_child_idx();
+        let child_idx = request.xxxget_child_idx();
         let old_child = self->children[child_idx as int];
         let new_parent = self.split_parent(request);
 
@@ -518,7 +518,7 @@ impl BetreeNode {
 
         let new_parent = self.split_parent(request);
         let i_new_parent = self.i().split_parent(request);
-        let split_child_idx = request.get_child_idx() as int;
+        let split_child_idx = request.xxxget_child_idx() as int;
 
         assert forall |k| self.key_in_domain(k)
         implies self.flushed_ofs(k) == new_parent.flushed_ofs(k)
@@ -555,14 +555,14 @@ impl BetreeNode {
         self.split_parent_wf(request);
         BetreeNode::i_wf_auto();
 
-        let split_child_idx = request.get_child_idx() as int;
+        let split_child_idx = request.xxxget_child_idx() as int;
         let child = self->children[split_child_idx];
         let i_child = self.i()->children[split_child_idx];
 
         self.i_children_lemma();
         child.i_children_lemma();
 
-        if request.is_SplitLeaf() {
+        if request is SplitLeaf {
             assert(child.i_children() == i_child->children); // trigger
             child.split_leaf_commutes_with_i(request->split_key);
         } else {

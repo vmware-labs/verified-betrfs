@@ -169,7 +169,7 @@ impl BetreeNode {
     pub open spec(checked) fn split_element(self, request: SplitRequest) -> Element
         recommends self.wf(), self.can_split_parent(request)
     {
-        let old_child = self->children[request.get_child_idx() as int];
+        let old_child = self->children[request.xxxget_child_idx() as int];
         match request {
             SplitRequest::SplitLeaf{child_idx, split_key} => to_element(split_key),
             SplitRequest::SplitIndex{child_idx, child_pivot_idx} => old_child->pivots.pivots[child_pivot_idx as int]
@@ -199,7 +199,7 @@ impl BetreeNode {
         requires self.can_split_parent(request)
         ensures self.split_parent(request).wf()
     {
-        let child_idx = request.get_child_idx();
+        let child_idx = request.xxxget_child_idx();
         let old_child = self->children[child_idx as int];
         let new_parent = self.split_parent(request);
 
@@ -222,7 +222,7 @@ impl BetreeNode {
     pub open spec(checked) fn split_keys(self, request: SplitRequest) -> (Set<Key>, Set<Key>)
         recommends self.can_split_parent(request)
     {
-        let child_idx = request.get_child_idx();
+        let child_idx = request.xxxget_child_idx();
         let child_domain = self.child_domain(child_idx);
 
         let split_element = self.split_element(request);
@@ -235,7 +235,7 @@ impl BetreeNode {
     proof fn split_keys_agrees_with_domains(self, request: SplitRequest)
         requires self.can_split_parent(request)
         ensures ({
-            let child_domain = self.child_domain(request.get_child_idx());
+            let child_domain = self.child_domain(request.xxxget_child_idx());
             let split_element = self.split_element(request);
             let left_domain = Domain::Domain{start: child_domain->start, end: split_element};
             let right_domain = Domain::Domain{start: split_element, end: child_domain->end};
@@ -243,7 +243,7 @@ impl BetreeNode {
             &&& right_domain.key_set() == self.split_keys(request).1
         })
     {
-        let child_domain = self.child_domain(request.get_child_idx());
+        let child_domain = self.child_domain(request.xxxget_child_idx());
         let split_element = self.split_element(request);
         let left_domain = Domain::Domain{start: child_domain->start, end: split_element};
         let right_domain = Domain::Domain{start: split_element, end: child_domain->end};
@@ -295,7 +295,7 @@ impl BetreeNode {
         self.split_parent(request).i_children_lemma();
 
         PivotTable::route_lemma_auto();
-        self.split_parent(request)->pivots.route_is_lemma(key, request.get_child_idx() as int);
+        self.split_parent(request)->pivots.route_is_lemma(key, request.xxxget_child_idx() as int);
 
         let a = self.child(key).i().filter_buffer_and_children(left_keys);
         if request is SplitLeaf {
@@ -339,7 +339,7 @@ impl BetreeNode {
         self.split_parent(request).i_children_lemma();
 
         PivotTable::route_lemma_auto();
-        self.split_parent(request)->pivots.route_is_lemma(key, request.get_child_idx() as int + 1);
+        self.split_parent(request)->pivots.route_is_lemma(key, request.xxxget_child_idx() as int + 1);
 
         let a = self.child(key).i().filter_buffer_and_children(right_keys);
         if request is SplitLeaf {
@@ -383,7 +383,7 @@ impl BetreeNode {
         })
     {
         self.split_parent_wf(request);
-        let child_idx = request.get_child_idx();
+        let child_idx = request.xxxget_child_idx();
         let r = self->pivots.route(key);
         PivotTable::route_lemma_auto();
 

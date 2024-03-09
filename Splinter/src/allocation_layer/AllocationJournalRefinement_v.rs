@@ -70,7 +70,7 @@ impl DiskView{
             #[trigger] self.build_lsn_addr_index(root)[lsn].au == self.build_lsn_au_index_page_walk(root)[lsn]
     decreases self.the_rank_of(root)
     {
-        if root.is_Some() {
+        if root is Some {
             self.build_lsn_au_index_page_walk_consistency(self.next(root));
         }
     }
@@ -96,7 +96,7 @@ impl AllocationJournal::State {
         reveal(AllocationJournal::State::next_by);
         reveal(LikesJournal::State::next_by);
 
-        let frozen_journal = lbl.get_FreezeForCommit_frozen_journal();
+        let frozen_journal = lbl->frozen_journal;
         let frozen_root = frozen_journal.tj.freshest_rec;
         let new_bdy = frozen_journal.tj.seq_start();
 
@@ -157,8 +157,8 @@ impl AllocationJournal::State {
         reveal(LikesJournal::State::next_by);
         assert(post.i().journal == new_journal);
 
-        let start_lsn = lbl.get_DiscardOld_start_lsn();
-        let require_end = lbl.get_DiscardOld_require_end();
+        let start_lsn = lbl->start_lsn;
+        let require_end = lbl->require_end;
         let keep_addrs = Set::new(|addr: Address| addr.wf() && post.lsn_au_index.values().contains(addr.au));
 
         let lsn_addr_index_post = LikesJournal_v::lsn_addr_index_discard_up_to(self.i().lsn_addr_index, start_lsn);

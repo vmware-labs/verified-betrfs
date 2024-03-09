@@ -49,7 +49,7 @@ impl Ephemeral {
         if self is Unknown {
             AllocationCrashAwareJournal_v::Ephemeral::Unknown
         } else {
-            AllocationCrashAwareJournal_v::Ephemeral::Known { v: self.get_Known_v().to_aj(dv) }
+            AllocationCrashAwareJournal_v::Ephemeral::Known { v: self->v.to_aj(dv) }
         }
     }
 }
@@ -218,11 +218,11 @@ impl UnifiedCrashAwareJournal::State {
 
         ImageState::i_valid_auto();
 
-        let v = self.ephemeral.get_Known_v();
-        let post_v = post.ephemeral.get_Known_v();
+        let v = self.ephemeral->v;
+        let post_v = post.ephemeral->v;
 
-        let allocs = lbl.get_Internal_allocs();
-        let deallocs = lbl.get_Internal_deallocs();
+        let allocs = lbl->allocs;
+        let deallocs = lbl.arrow_Internal_deallocs();
         let aj_lbl = AllocationJournal::Label::InternalAllocations{ allocs, deallocs };
 
         match choose |step| AllocationJournal::State::next_by(v.to_aj(self.dv), post_v.to_aj(post.dv), aj_lbl, step)
@@ -262,7 +262,7 @@ impl UnifiedCrashAwareJournal::State {
 
         ImageState::i_valid_auto();
 
-        let aj = self.ephemeral.get_Known_v().to_aj(self.dv);
+        let aj = self.ephemeral->v.to_aj(self.dv);
         let new_bdy = frozen_journal.seq_start();
         let i_frozen = frozen_journal.i(self.dv);
         let frozen_index = frozen_journal.to_tj(self.dv).build_lsn_au_index(frozen_journal.first);
@@ -313,7 +313,7 @@ impl UnifiedCrashAwareJournal::State {
         
         ImageState::i_valid_auto();
 
-        let post_v = post.ephemeral.get_Known_v();
+        let post_v = post.ephemeral->v;
 
         let bdy = post.persistent.boundary_lsn;
         let root = post.persistent.freshest_rec;
@@ -330,7 +330,7 @@ impl UnifiedCrashAwareJournal::State {
             post_jdv.build_lsn_au_index_page_walk_sub_disk(pre_jdv, root);
         }
 
-        // assert(lbl.get_CommitComplete_discarded().disjoint(post_v.lsn_au_index.values()));
+        // assert(lbl->discarded.disjoint(post_v.lsn_au_index.values()));
         assert(index <= post_v.lsn_au_index) by {
             post.persistent.to_tj(post.dv).sub_disk_build_sub_lsn_au_index(
                 first, post_v.to_aj(post.dv).tj(), post_v.image.first);

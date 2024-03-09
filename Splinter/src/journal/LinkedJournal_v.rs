@@ -39,7 +39,7 @@ impl JournalRecord {
     }
 
     pub open spec(checked) fn has_link(self, boundary_lsn: LSN) -> bool {
-        boundary_lsn < self.message_seq.seq_start ==> self.cropped_prior(boundary_lsn).is_Some()
+        boundary_lsn < self.message_seq.seq_start ==> self.cropped_prior(boundary_lsn) is Some
     }
 
     pub open spec(checked) fn cropped_prior(self, boundary_lsn: LSN) -> Pointer {
@@ -71,7 +71,7 @@ impl DiskView {
     }
 
     pub open spec(checked) fn is_nondangling_pointer(self, ptr: Pointer) -> bool {
-        ptr.is_Some() ==> self.entries.contains_key(ptr.unwrap())
+        ptr is Some ==> self.entries.contains_key(ptr.unwrap())
     }
 
     pub open spec(checked) fn nondangling_pointers(self) -> bool {
@@ -87,7 +87,7 @@ impl DiskView {
     {
         let head = self.entries[addr];
         let next_ptr = head.cropped_prior(self.boundary_lsn);
-        next_ptr.is_Some() ==> self.entries[next_ptr.unwrap()].message_seq.can_concat(head.message_seq)
+        next_ptr is Some ==> self.entries[next_ptr.unwrap()].message_seq.can_concat(head.message_seq)
     }
 
     pub open spec(checked) fn blocks_can_concat(self) -> bool
@@ -108,7 +108,7 @@ impl DiskView {
     pub open spec(checked) fn block_in_bounds(self, ptr: Pointer) -> bool
     {
         &&& self.is_nondangling_pointer(ptr)
-        &&& (ptr.is_Some() ==> self.boundary_lsn < self.entries[ptr.unwrap()].message_seq.seq_end)
+        &&& (ptr is Some ==> self.boundary_lsn < self.entries[ptr.unwrap()].message_seq.seq_end)
     }
 
     pub open spec(checked) fn wf(self) -> bool
@@ -124,7 +124,7 @@ impl DiskView {
         self.wf(),
     {
         &&& self.entries.dom().subset_of(ranking.dom())
-        &&& (forall |addr| #[trigger] self.entries.contains_key(addr) && self.entries[addr].cropped_prior(self.boundary_lsn).is_Some()
+        &&& (forall |addr| #[trigger] self.entries.contains_key(addr) && self.entries[addr].cropped_prior(self.boundary_lsn) is Some
                 ==> ranking[self.entries[addr].cropped_prior(self.boundary_lsn).unwrap()] < ranking[addr]
             )
     }
@@ -157,7 +157,7 @@ impl DiskView {
     recommends
         self.decodable(ptr),
     {
-        if ptr.is_Some() && self.acyclic()
+        if ptr is Some && self.acyclic()
             { self.the_ranking()[ptr.unwrap()] + 1 }
         else
             { 0 }
@@ -171,7 +171,7 @@ impl DiskView {
     recommends
         self.is_nondangling_pointer(root),   // why not just wf()?
     {
-        if root.is_None()
+        if root is None
             { self.boundary_lsn }
         else
             { self.entries[root.unwrap()].message_seq.seq_end }
@@ -217,7 +217,7 @@ impl DiskView {
     decreases self.the_rank_of(root) when self.decodable(root)
     {
         if !self.acyclic() { Self{boundary_lsn: 0, entries: map![]} } // silly
-        else if root.is_None() { Self{boundary_lsn: self.boundary_lsn, entries: map![]} }
+        else if root is None { Self{boundary_lsn: self.boundary_lsn, entries: map![]} }
         else {
             let addr = root.unwrap();
             let tail = self.build_tight(self.next(root));
@@ -240,7 +240,7 @@ impl DiskView {
         self.the_rank_of(root),
     {
         if !self.acyclic() { }
-        else if root.is_None() { }
+        else if root is None { }
         else {
             self.build_tight_ensures(self.next(root));
         }
@@ -271,7 +271,7 @@ impl DiskView {
     decreases depth
     {
         0 < depth ==> {
-            &&& root.is_Some()
+            &&& root is Some
             &&& self.can_crop(self.next(root), (depth-1) as nat)
         }
     }
@@ -350,10 +350,10 @@ impl DiskView {
         self.acyclic(),
 //     ensures
 //         self.block_in_bounds(ptr),
-//         out.is_Some() ==> out.unwrap().valid(self.boundary_lsn)
+//         out is Some ==> out.unwrap().valid(self.boundary_lsn)
     decreases self.the_rank_of(ptr) when self.decodable(ptr) && self.acyclic()
     {
-        if ptr.is_None() { None }
+        if ptr is None { None }
         else {
             let jr = self.entries[ptr.unwrap()];
             Some(PagedJournal_v::JournalRecord{
@@ -379,7 +379,7 @@ impl DiskView {
         assert( self.entries.dom().subset_of(big.entries.dom()) );
 
         assert( self.valid_ranking(big.the_ranking()) ); // witness to acyclic
-        if ptr.is_Some() {
+        if ptr is Some {
             assert( big.the_rank_of(self.next(ptr)) < big.the_rank_of(ptr) );
             self.iptr_ignores_extra_blocks(self.next(ptr), big);
         }
@@ -388,7 +388,7 @@ impl DiskView {
     pub open spec /*XXX (checked)*/ fn next(self, ptr: Pointer) -> Pointer
     recommends
         self.wf(),
-        ptr.is_Some(),
+        ptr is Some,
     {
 //         let _ = spec_affirm( self.entries.contains_key(ptr.unwrap()) );
 //         let _ = spec_affirm( self.entries.dom().contains(ptr.unwrap()) );
@@ -404,7 +404,7 @@ impl DiskView {
     requires
         self.decodable(ptr),
         self.acyclic(),
-        ptr.is_Some(),
+        ptr is Some,
     ensures ({
         forall |addr: Address| #[trigger] self.build_tight(self.next(ptr)).entries.contains_key(addr) ==> {
             &&& self.the_ranking().contains_key(addr)
@@ -414,7 +414,7 @@ impl DiskView {
     decreases self.the_rank_of(ptr)
     {
         let next = self.next(ptr);
-        if next.is_Some() {
+        if next is Some {
             self.build_tight_ranks(next);
 
             assert forall |addr: Address| #[trigger] self.build_tight(self.next(ptr)).entries.contains_key(addr) implies {
@@ -428,14 +428,14 @@ impl DiskView {
 
     pub proof fn build_tight_shape(self, root: Pointer)
     requires
-        root.is_Some(),
+        root is Some,
         self.decodable(root),
         self.acyclic(),
     ensures (
         self.build_tight(self.next(root))
         == Self{entries: self.build_tight(root).entries.remove(root.unwrap()), ..self})
     {
-        if self.next(root).is_Some() {
+        if self.next(root) is Some {
             self.build_tight_ranks(root);   // proves root.value !in self.build_tight(next, ranking).entries;
         }
 
@@ -468,7 +468,7 @@ impl DiskView {
     //     self.build_tight(root).is_sub_disk(self),
     // decreases self.the_rank_of(root)
     // {
-    //     if root.is_Some() {
+    //     if root is Some {
     //         self.build_tight_builds_sub_disks(self.next(root));
     //     }
     //     assert( self.build_tight(root).is_sub_disk(self) ); // This line shouldn't be necessary
@@ -514,7 +514,7 @@ impl DiskView {
         // Yikes. Dafny proof was 15 lines; this "minimized" Verus proof is 73 lines.
         self.build_tight_ensures(root); //new because not auto
         //assert(tight.wf());
-        if root.is_Some() {
+        if root is Some {
             let next = self.next(root);
             let inner = self.build_tight(next);
             self.build_tight_shape(root);
@@ -587,7 +587,7 @@ impl DiskView {
     //     tight.acyclic(),
     // decreases big.the_rank_of(root)
     // {
-    //     if root.is_None() {
+    //     if root is None {
     //         big.tight_empty_disk()
     //     } else {
     //         big.build_tight_builds_sub_disks(root);
@@ -621,7 +621,7 @@ impl DiskView {
         self.lsns_have_entries(root),
     decreases self.the_rank_of(root)
     {
-        if root.is_Some() {
+        if root is Some {
             self.decodable_implies_lsns_have_entries(self.next(root));
             assert forall |lsn| self.seq_start() <= lsn < self.seq_end(root) implies self.lsn_has_entry(lsn) by {
                 if self.entries[root.unwrap()].message_seq.seq_start <= lsn {
@@ -897,27 +897,27 @@ state_machine!{ LinkedJournal {
 
     transition!{ read_for_recovery(lbl: Label, depth: nat) {
         require pre.wf();
-        require lbl.is_ReadForRecovery();
+        require lbl is ReadForRecovery;
         require Self::lbl_wf(lbl);
         require pre.truncated_journal.decodable(); // Shown by invariant, not runtime-checked
         let dv = pre.truncated_journal.disk_view;
         require dv.can_crop(pre.truncated_journal.freshest_rec, depth);
         let ptr = dv.pointer_after_crop(pre.truncated_journal.freshest_rec, depth);
-        require ptr.is_Some();
-        require dv.entries[ptr.unwrap()].message_seq.maybe_discard_old(dv.boundary_lsn) == lbl.get_ReadForRecovery_messages();
+        require ptr is Some;
+        require dv.entries[ptr.unwrap()].message_seq.maybe_discard_old(dv.boundary_lsn) == lbl.arrow_ReadForRecovery_messages();
     }}
 
     transition!{ freeze_for_commit(lbl: Label, depth: nat) {
         require pre.wf();
         require Self::lbl_wf(lbl);
-        require lbl.is_FreezeForCommit();
+        require lbl is FreezeForCommit;
         require pre.truncated_journal.decodable(); // Shown by invariant, not runtime-checked
 
         let dv = pre.truncated_journal.disk_view;
         require dv.can_crop(pre.truncated_journal.freshest_rec, depth);
 
         let cropped_tj = pre.truncated_journal.crop(depth);
-        let label_fj = lbl.get_FreezeForCommit_frozen_journal();
+        let label_fj = lbl->frozen_journal;
         let new_bdy = label_fj.seq_start();
         require dv.boundary_lsn <= new_bdy;
 
@@ -929,26 +929,26 @@ state_machine!{ LinkedJournal {
     transition!{ query_end_lsn(lbl: Label) {
         require pre.wf();
         require Self::lbl_wf(lbl);
-        require lbl.is_QueryEndLsn();
-        require lbl.get_QueryEndLsn_end_lsn() == pre.seq_end();
+        require lbl is QueryEndLsn;
+        require lbl->end_lsn == pre.seq_end();
     }}
 
     transition!{ put(lbl: Label) {
         require pre.wf();
         //require Self::lbl_wf(lbl);
-        require lbl.get_Put_messages().wf();    // direct translation. TODO fold into lbl_wf
-        require lbl.is_Put();
-        require lbl.get_Put_messages().seq_start == pre.seq_end();
-        update unmarshalled_tail = pre.unmarshalled_tail.concat(lbl.get_Put_messages());
+        require lbl.arrow_Put_messages().wf();    // direct translation. TODO fold into lbl_wf
+        require lbl is Put;
+        require lbl.arrow_Put_messages().seq_start == pre.seq_end();
+        update unmarshalled_tail = pre.unmarshalled_tail.concat(lbl.arrow_Put_messages());
     }}
 
     transition!{ discard_old(lbl: Label, new_tj: TruncatedJournal) {
         require pre.wf();
         require Self::lbl_wf(lbl);
-        require lbl.is_DiscardOld();
+        require lbl is DiscardOld;
 
-        let start_lsn = lbl.get_DiscardOld_start_lsn();
-        let require_end = lbl.get_DiscardOld_require_end();
+        let start_lsn = lbl->start_lsn;
+        let require_end = lbl->require_end;
 
         require require_end == pre.seq_end();
         require pre.truncated_journal.can_discard_to(start_lsn);
@@ -972,7 +972,7 @@ state_machine!{ LinkedJournal {
 
         // InternalJournalMarshalRecord(v, v', lbl, cut, addr)
         require pre.wf();
-        require lbl.is_Internal();
+        require lbl is Internal;
         require pre.unmarshalled_tail.seq_start < cut; // Can't marshall nothing.
         require pre.unmarshalled_tail.can_discard_to(cut);
         let marshalled_msgs = pre.unmarshalled_tail.discard_recent(cut);
@@ -983,7 +983,7 @@ state_machine!{ LinkedJournal {
 
     transition!{ internal_no_op(lbl: Label) {
         require pre.wf();
-        require lbl.is_Internal();
+        require lbl is Internal;
     }}
 
     init!{ initialize(truncated_journal: TruncatedJournal) {
@@ -1014,7 +1014,7 @@ state_machine!{ LinkedJournal {
 
     #[inductive(discard_old)]
     fn discard_old_inductive(pre: Self, post: Self, lbl: Label, new_tj: TruncatedJournal) {
-        let lsn = lbl.get_DiscardOld_start_lsn();
+        let lsn = lbl->start_lsn;
         let post_discard = pre.truncated_journal.discard_old(lsn);
 
         pre.truncated_journal.discard_old_decodable(lsn);

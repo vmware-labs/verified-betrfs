@@ -111,7 +111,7 @@ impl<T> BetreeNode<T> {
     pub open spec(checked) fn is_leaf(self) -> bool
     {
         &&& self.children.len() == 1
-        &&& self.children[0].is_None()
+        &&& self.children[0] is None
         &&& self.flushed.offsets == seq![0nat]
     }
 
@@ -264,7 +264,7 @@ impl<T> DiskView<T> {
 
     pub open spec(checked) fn is_nondangling_ptr(self, ptr: Pointer) -> bool
     {
-        ptr.is_Some() ==> self.entries.contains_key(ptr.unwrap())
+        ptr is Some ==> self.entries.contains_key(ptr.unwrap())
     }
 
     pub open spec(checked) fn node_has_nondangling_child_ptrs(self, node: BetreeNode<T>) -> bool
@@ -307,7 +307,7 @@ impl<T> DiskView<T> {
     }
 
     pub open spec(checked) fn get(self, ptr: Pointer) -> BetreeNode<T>
-        recommends self.is_nondangling_ptr(ptr), ptr.is_Some()
+        recommends self.is_nondangling_ptr(ptr), ptr is Some
     {
         self.entries[ptr.unwrap()]
     }
@@ -439,7 +439,7 @@ impl<T> LinkedBetree<T> {
 
     pub open spec(checked) fn has_root(self) -> bool
     {
-        &&& self.root.is_Some()
+        &&& self.root is Some
         &&& self.dv.is_nondangling_ptr(self.root)
     }
 
@@ -612,8 +612,8 @@ impl<T> LinkedBetree<T> {
     {
         &&& self.wf()
         &&& self.has_root()
-        &&& self.root().valid_child_index(request.get_child_idx())
-        &&& self.child_at_idx(request.get_child_idx()).has_root()
+        &&& self.root().valid_child_index(request.xxxget_child_idx())
+        &&& self.child_at_idx(request.xxxget_child_idx()).has_root()
         &&& match request {
             SplitRequest::SplitLeaf{child_idx, split_key} => {
                 &&& self.child_at_idx(child_idx).root().can_split_leaf(split_key)
@@ -825,7 +825,7 @@ pub struct QueryReceiptLine<T>{
 impl<T> QueryReceiptLine<T>{
     pub open spec(checked) fn wf(self) -> bool
     {
-        &&& self.result.is_Define()
+        &&& self.result is Define
     }
 } // end impl QueryReceiptLine
 
@@ -1714,7 +1714,7 @@ impl<T> LinkedBetree<T> {
             self.split_parent(request, new_addrs).valid_ranking(new_ranking),
             new_ranking.dom() == ranking.dom() + new_addrs.repr()
     {
-        let child_idx = request.get_child_idx();
+        let child_idx = request.xxxget_child_idx();
         let child_addr = self.root().children[child_idx as int].unwrap();
         let result = self.split_parent(request, new_addrs);
         self.root().pivots.insert_wf(child_idx as int + 1, self.split_element(request));
@@ -1905,7 +1905,7 @@ impl<T> LinkedBetree<T> {
         ensures 
             self.reachable_buffer_addrs() =~= self.split_parent(request, new_addrs).reachable_buffer_addrs(),
     {
-        let child_idx = request.get_child_idx();
+        let child_idx = request.xxxget_child_idx();
         let child = self.child_at_idx(child_idx as nat);
 
         let new_parent = self.split_parent(request, new_addrs);
