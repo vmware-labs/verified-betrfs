@@ -322,27 +322,27 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
     /////////////////////////////////////////////////////////////////////////
     // parse (entire sequence)
     /////////////////////////////////////////////////////////////////////////
-    spec fn gettable_to_len(&self, data: Seq<u8>, len: int) -> bool
+    open spec fn gettable_to_len(&self, data: Seq<u8>, len: int) -> bool
     recommends self.seq_valid()
     {
         forall |i: int| 0<=i<len ==> self.gettable(data, i)
     }
 
-    spec fn elt_parsable_to_len(&self, data: Seq<u8>, len: int) -> bool
+    open spec fn elt_parsable_to_len(&self, data: Seq<u8>, len: int) -> bool
     recommends self.seq_valid(), self.gettable_to_len(data, len)
     {
         forall |i: int| 0<=i<len ==> self.elt_parsable(data, i)
     }
 
     // TODO(robj): why switch to usize in spec land here?
-    spec fn parsable_to_len(&self, data: Seq<u8>, len: usize) -> bool
+    open spec fn parsable_to_len(&self, data: Seq<u8>, len: usize) -> bool
     recommends self.seq_valid()
     {
         &&& self.gettable_to_len(data, len as int)
         &&& self.elt_parsable_to_len(data, len as int)
     }
 
-    spec fn parse_to_len(&self, data: Seq<u8>, len: usize) -> Seq<DVElt>
+    open spec fn parse_to_len(&self, data: Seq<u8>, len: usize) -> Seq<DVElt>
     recommends self.seq_valid(), self.parsable_to_len(data, len)
     {
         Seq::new(len as nat, |i: int| self.get_elt(data, i))

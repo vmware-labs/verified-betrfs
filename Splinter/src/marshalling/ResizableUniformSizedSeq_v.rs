@@ -34,7 +34,7 @@ pub struct ResizableUniformSizedElementSeqMarshalling <
     pub length_int: LengthIntObligations,
     pub oblinfo: O,
     pub eltm: O::EltMarshalling,
-    _p: std::marker::PhantomData<(DVElt,Elt,LengthInt,)>,
+    pub _p: std::marker::PhantomData<(DVElt,Elt,LengthInt,)>,
 }
 
 impl <

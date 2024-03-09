@@ -41,7 +41,7 @@ pub trait UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt: Deepview<DVElt>> 
 
 pub struct IntegerSeqMarshallingOblinfo<Elt: Deepview<int> + builtin::Integer, IO: IntObligations<Elt>> {
     pub int_marshalling: IO,
-    _p: std::marker::PhantomData<(Elt,)>,
+    pub _p: std::marker::PhantomData<(Elt,)>,
 }
 
 impl<Elt: Deepview<int> + builtin::Integer, IO: IntObligations<Elt>> IntegerSeqMarshallingOblinfo<Elt, IO> {
@@ -81,7 +81,7 @@ impl<Elt: Deepview<int> + builtin::Integer + Copy, IO: IntObligations<Elt>>
 pub struct UniformSizedElementSeqMarshalling<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>> {
     pub oblinfo: O,
     pub eltm: O::EltMarshalling,
-    _p: std::marker::PhantomData<(DVElt,Elt,)>,
+    pub _p: std::marker::PhantomData<(DVElt,Elt,)>,
 }
 
 impl <DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>>

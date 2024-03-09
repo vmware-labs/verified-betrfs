@@ -64,7 +64,7 @@ pub trait IntObligations<T: Deepview<int> + builtin::Integer> {
     ensures forall |t: T| t.deepv() == #[trigger] Self::as_int(t);
 
     // Helpers for SeqMarshalling
-    spec fn spec_this_fits_in_usize(v: int) -> bool { v <= usize::MAX as int }
+    open spec fn spec_this_fits_in_usize(v: int) -> bool { v <= usize::MAX as int }
 
     exec fn exec_this_fits_in_usize(v: T) -> (rc: bool)
         ensures rc == Self::spec_this_fits_in_usize(Self::as_int(v))
