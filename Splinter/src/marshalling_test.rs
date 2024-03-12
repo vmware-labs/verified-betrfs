@@ -52,8 +52,7 @@ fn test_seq_marshalling() -> (Vec<u8>, usize) {
     let oblinfo = IntegerSeqMarshallingOblinfo::new(lengthm);
     let eltm: IntMarshalling<u32> = IntMarshalling::new();
     let usm = UniformSizedElementSeqMarshalling::new(oblinfo, eltm);
-
-    assert( usm.marshallable(val.deepv()) );
+    assert(usm.marshallable(val.deepv()));
     let req = usm.exec_size(&val);
     let mut data = prealloc(req);
     let end = usm.exec_marshall(&val, &mut data, 0);
