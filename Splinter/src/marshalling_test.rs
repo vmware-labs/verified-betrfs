@@ -1,3 +1,5 @@
+#![verifier::spinoff_loop(false)]
+
 use builtin::*;
 use builtin_macros::*;
 
@@ -5,6 +7,7 @@ pub mod marshalling;
 use crate::marshalling::IntegerMarshalling_v::*;
 use crate::marshalling::Marshalling_v::*;
 use crate::marshalling::SeqMarshalling_v::*;
+use crate::marshalling::UniformSizedSeq_v::*;
 
 // fn m<M: Marshalling<int, u32>>(m: &M) {
 // }
@@ -49,6 +52,8 @@ fn test_seq_marshalling() -> (Vec<u8>, usize) {
     let oblinfo = IntegerSeqMarshallingOblinfo::new(lengthm);
     let eltm: IntMarshalling<u32> = IntMarshalling::new();
     let usm = UniformSizedElementSeqMarshalling::new(oblinfo, eltm);
+
+    assert( usm.marshallable(val.deepv()) );
     let req = usm.exec_size(&val);
     let mut data = prealloc(req);
     let end = usm.exec_marshall(&val, &mut data, 0);

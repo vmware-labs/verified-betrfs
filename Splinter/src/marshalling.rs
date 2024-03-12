@@ -7,3 +7,8 @@ pub mod SeqMarshalling_v;
 pub mod Slice_v;
 pub mod UniformSizedSeq_v;
 pub mod math_v;
+
+// next steps:
+//
+// ResizableIntegerSeqMarshalling: perf improvement to marshall many ints in a batch
+// VariableSizedElementSeqMarshalling: We'll eventually have variable-sized element lists: keys & values!
