@@ -29,6 +29,13 @@ pub proof fn euclidean_div_truncates(x: int, y: int)
 }
 
 #[verifier(nonlinear)]
+pub proof fn mul_div_identity(x: int, y: int)
+    requires 0!=y
+    ensures (x*y)/y == x
+{
+}
+
+#[verifier(nonlinear)]
 pub proof fn pos_mul_preserves_order(x: int, y: int, m: int)
     requires 0<= x < y, 0 < m
     ensures x*m < y*m
