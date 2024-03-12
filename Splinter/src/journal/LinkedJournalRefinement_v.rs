@@ -54,12 +54,14 @@ impl DiskView {
         if ptr is Some && lsn < self.entries[ptr.unwrap()].message_seq.seq_start {
             self.discard_interp(lsn, post, post.next(ptr));
         }
+
+        let result = PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn);
         if post.iptr(ptr) is None {
-            assert( PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn) is None );
+            assert( result is None );
         } else {
-            assert( PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn) is Some );
+            assert( result is Some );
+            assert( post.iptr(ptr).unwrap() =~= result.unwrap() );
         }
-        assert( post.iptr(ptr) =~= PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn) );
     }
 
     // In Dafny, this entire lemma was unneeded; call sites could be replaced by this single line:

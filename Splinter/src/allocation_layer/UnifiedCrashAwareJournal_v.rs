@@ -385,8 +385,9 @@ state_machine!{UnifiedCrashAwareJournal{
     #[inductive(initialize)]
     fn initialize_inductive(post: Self) {
         LinkedJournal_v::TruncatedJournal::mkfs_ensures();
-        reveal(LinkedJournal_v::DiskView::pages_allocated_in_lsn_order);
-        assert(post.persistent.valid_image(post.dv));
+        assert(post.persistent.valid_image(post.dv)) by {
+            reveal(LinkedJournal_v::DiskView::pages_allocated_in_lsn_order);
+        }
     }
 
     #[inductive(load_ephemeral_from_persistent)]

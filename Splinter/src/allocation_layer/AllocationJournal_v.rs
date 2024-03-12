@@ -372,9 +372,10 @@ impl DiskView {
             self.decodable(root),
             big.decodable(root),
             big.acyclic(),
-            self.is_sub_disk(big) 
+            self.is_sub_disk_with_newer_lsn(big),
         ensures
-            self.build_lsn_au_index_page_walk(root) == big.build_lsn_au_index_page_walk(root)
+            self.build_lsn_au_index_page_walk(root) <= big.build_lsn_au_index_page_walk(root),
+            self.is_sub_disk(big) ==> self.build_lsn_au_index_page_walk(root) == big.build_lsn_au_index_page_walk(root)
         decreases self.the_rank_of(root),
     {
         assert forall|addr|
@@ -385,28 +386,6 @@ impl DiskView {
         assert(self.valid_ranking(big.the_ranking()));
         if root is Some {
             self.build_lsn_au_index_page_walk_sub_disk(big, self.next(root));
-        }
-    }
-
-    #[verifier::spinoff_prover]
-    pub proof fn build_lsn_au_index_page_walk_sub_disk_with_newer_lsn(self, big: DiskView, root: Pointer)
-        requires
-            self.decodable(root),
-            big.decodable(root),
-            big.acyclic(),
-            self.is_sub_disk_with_newer_lsn(big),
-        ensures
-            self.build_lsn_au_index_page_walk(root) <= big.build_lsn_au_index_page_walk(root)
-        decreases self.the_rank_of(root),
-    {
-        assert forall|addr|
-            self.entries.contains_key(addr) ==> big.entries.contains_key(
-                addr,
-            ) by {}  // trigger for ranking
-
-        assert(self.valid_ranking(big.the_ranking()));
-        if root is Some {
-            self.build_lsn_au_index_page_walk_sub_disk_with_newer_lsn(big, self.next(root));
             self.build_lsn_au_index_page_walk_domain(self.next(root));
         }
     }
@@ -1551,7 +1530,7 @@ state_machine!{ AllocationJournal {
 
             post_dv.build_lsn_au_index_page_walk_domain(post.tj().freshest_rec); // same domain
             assert( post.lsn_au_index.dom() =~= repr.dom() ); // needs more proof
-            post_dv.build_lsn_au_index_page_walk_sub_disk_with_newer_lsn(pre_dv, post.tj().freshest_rec); // index subset
+            post_dv.build_lsn_au_index_page_walk_sub_disk(pre_dv, post.tj().freshest_rec); // index subset
         }
         assert( post.lsn_au_index =~= post.tj().build_lsn_au_index(post.first) ); // needs more proof
         assert( post.inv() );

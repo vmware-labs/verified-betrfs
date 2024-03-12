@@ -1217,6 +1217,8 @@ impl FilteredBetree::State {
         ensures post.inv(), PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_grow())
     {
         BetreeNode::i_wf_auto();
+
+        assert(post.i().root->children =~= self.i().root.grow()->children); // needs this for trigger?
         assert(post.i().root =~= self.i().root.grow());
 
         reveal(PivotBetree::State::next_by);

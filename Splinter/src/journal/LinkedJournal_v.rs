@@ -675,7 +675,7 @@ impl TruncatedJournal {
        }
     }
 
-    pub open spec(checked) fn valid_discard_old(self, lsn: LSN, new: Self) -> bool
+    pub open spec/*(checked)*/ fn valid_discard_old(self, lsn: LSN, new: Self) -> bool
     recommends
         self.wf(),
         self.can_discard_to(lsn)
@@ -834,7 +834,7 @@ impl TruncatedJournal {
 }
 
 impl MsgHistory {
-    pub open spec(checked) fn bounded_discard(self, new_bdy: LSN) -> Self
+    pub open spec fn bounded_discard(self, new_bdy: LSN) -> Self
     {
         if self.seq_start <= new_bdy { 
             self.discard_old(new_bdy) 

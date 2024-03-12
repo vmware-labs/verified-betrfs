@@ -1124,7 +1124,6 @@ state_machine!{ LinkedBetreeVars {
 
     #[inductive(internal_flush_memtable)]
     fn internal_flush_memtable_inductive(pre: Self, post: Self, lbl: Label, new_addrs: TwoAddrs) {
-        // assume(false);
         let ranking = pre.linked.the_ranking();
         let pushed = pre.linked.push_memtable(pre.memtable, new_addrs);
         let pushed_ranking = pre.linked.push_memtable_new_ranking(pre.memtable, new_addrs, ranking);
@@ -1157,8 +1156,6 @@ state_machine!{ LinkedBetreeVars {
    
     #[inductive(internal_grow)]
     fn internal_grow_inductive(pre: Self, post: Self, lbl: Label, new_root_addr: Address) { 
-        // assume(false);
-
         let old_ranking = pre.linked.finite_ranking();
         pre.linked.finite_ranking_ensures();
 
@@ -1193,8 +1190,6 @@ state_machine!{ LinkedBetreeVars {
     #[inductive(internal_split)]
     fn internal_split_inductive(pre: Self, post: Self, lbl: Label, new_linked: LinkedBetree<BufferDisk>, path: Path<BufferDisk>, 
         request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs) {
-            // assume(false);
-
         let ranking = pre.linked.finite_ranking();
         path.target_ensures();
         path.valid_ranking_throughout(ranking);
@@ -1224,12 +1219,9 @@ state_machine!{ LinkedBetreeVars {
     #[inductive(internal_flush)]
     fn internal_flush_inductive(pre: Self, post: Self, lbl: Label, new_linked: LinkedBetree<BufferDisk>, path: Path<BufferDisk>, 
         child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, path_addrs: PathAddrs) {
-
         let ranking = pre.linked.finite_ranking();
         path.target_ensures();
-
         path.valid_ranking_throughout(ranking); // seems to be here?
-        // assume(false);
 
         let new_subtree = path.target().flush(child_idx, buffer_gc, new_addrs);
         let new_ranking = path.target().flush_new_ranking(child_idx, buffer_gc, new_addrs, ranking);
@@ -1256,41 +1248,16 @@ state_machine!{ LinkedBetreeVars {
     #[inductive(internal_compact)]
     fn internal_compact_inductive(pre: Self, post: Self, lbl: Label, new_linked: LinkedBetree<BufferDisk>, path: Path<BufferDisk>, 
         start: nat, end: nat, compacted_buffer: Buffer, new_addrs: TwoAddrs, path_addrs: PathAddrs) {
-
-        // NOTE(JL): somehow really needs other context to verify
-        // some context is not brought in properly???
-
         let ranking = pre.linked.finite_ranking();
-        // pre.linked.finite_ranking_ensures();
-
         path.target_ensures();
         path.valid_ranking_throughout(ranking);
 
         let new_subtree = path.target().compact(start, end, compacted_buffer, new_addrs);
         let new_ranking = path.target().compact_new_ranking(start, end, compacted_buffer, new_addrs, ranking);
-        
-        // obvious facts cannot be proven
-        // assert(pre.linked.dv.is_fresh(path_addrs.to_set()));
-        // assert(path_addrs.to_set().disjoint(new_ranking.dom()));
-        // path.target().compact_ensures(start, end, compacted_buffer, new_addrs);
-
-        // ??????? why ?????? 
-        // assert(pre.linked.dv == path.target().dv);
-        // assert(new_subtree.dv.is_fresh(path_addrs.to_set()));
-        // assert(new_subtree.wf());
-        // assert(new_subtree.has_root());
-        // assert(new_subtree.root().my_domain() == path.target().root().my_domain());
-        // assert(path.linked.dv.is_sub_disk(new_subtree.dv));
-        // assert(path.linked.buffer_dv.is_sub_disk(new_subtree.buffer_dv));
-        assert(path.can_substitute(new_subtree, path_addrs));
-
         let compacted = path.substitute(new_subtree, path_addrs);
         path.substitute_ensures(new_subtree, path_addrs);
 
         assert(post.linked.acyclic()) by {
-            assert(new_subtree.valid_ranking(new_ranking));
-            // assert(path_addrs.to_set().disjoint(new_ranking.dom()));
-            assert(path.ranking_for_substitution(new_subtree, path_addrs, new_ranking));
             let _ = path.ranking_after_substitution(new_subtree, path_addrs, new_ranking);
             compacted.subtree_same_tightness_preserves_acyclicity(new_linked);
         }
@@ -2452,6 +2419,7 @@ impl<T: QueryableDisk> Path<T>{
                     if i == r {
                         self.linked.child_at_idx_reachable_addrs_ensures(i);
                     } else {
+                        assert(self.linked.valid_ranking(result_ranking)); // trigger
                         result.same_child_same_reachable_buffers(self.linked, i, i, result_ranking);
                     }
                 }
