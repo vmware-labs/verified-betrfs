@@ -60,6 +60,7 @@ fn test_seq_marshalling() -> (Vec<u8>, usize) {
 }
 
 } // verus!
+
 fn main() {
     let (v, end) = test_seq_marshalling();
     print!("end: {:?} v {:?}\n", end, v);

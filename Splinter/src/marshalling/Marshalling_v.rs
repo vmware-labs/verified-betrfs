@@ -44,9 +44,9 @@ pub trait Marshalling<DV, U: Deepview<DV>> {
     exec fn exec_parsable(&self, slice: &Slice, data: &Vec<u8>) -> (p: bool)
     requires
         self.valid(),
-        slice.valid(data@),
+        slice@.valid(data@),
     ensures
-        p == self.parsable(slice.i(data@))
+        p == self.parsable(slice@.i(data@))
     ;
 
     spec fn marshallable(&self, value: DV) -> bool
@@ -75,19 +75,19 @@ pub trait Marshalling<DV, U: Deepview<DV>> {
     exec fn try_parse(&self, slice: &Slice, data: &Vec<u8>) -> (ov: Option<U>)
     requires
         self.valid(),
-        slice.valid(data@),
+        slice@.valid(data@),
     ensures
-        self.parsable(slice.i(data@)) <==> ov is Some,
-        self.parsable(slice.i(data@)) ==> ov.unwrap().deepv() == self.parse(slice.i(data@))
+        self.parsable(slice@.i(data@)) <==> ov is Some,
+        self.parsable(slice@.i(data@)) ==> ov.unwrap().deepv() == self.parse(slice@.i(data@))
     ;
 
     exec fn exec_parse(&self, slice: &Slice, data: &Vec<u8>) -> (value: U)
     requires
         self.valid(),
-        slice.valid(data@),
-        self.parsable(slice.i(data@)),
+        slice@.valid(data@),
+        self.parsable(slice@.i(data@)),
     ensures
-        value.deepv() == self.parse(slice.i(data@)),
+        value.deepv() == self.parse(slice@.i(data@)),
     {
         self.try_parse(slice, data).unwrap()
     }

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 pub mod IntegerMarshalling_v;
 pub mod Marshalling_v;
-pub mod ResizableUniformSizedSeq_v;
+//pub mod ResizableUniformSizedSeq_v;
 pub mod SeqMarshalling_v;
 pub mod Slice_v;
 pub mod UniformSizedSeq_v;

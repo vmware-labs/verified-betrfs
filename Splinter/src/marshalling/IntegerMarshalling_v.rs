@@ -121,9 +121,22 @@ impl<T: Deepview<int> + builtin::Integer + Copy, O: IntObligations<T>> Marshalli
         Self::o_spec_size() <= data.len()
     }
 
-    fn exec_parsable(&self, slice: &Slice, data: &Vec<u8>) -> (p: bool)
+    exec fn exec_parsable(&self, slice: &Slice, data: &Vec<u8>) -> (p: bool)
     {
-        Self::o_exec_size() <= slice.exec_len()
+        let l = slice.len();
+        let p = Self::o_exec_size() <= l;
+        assert( slice@.valid(data@) ); // decoy trait recommends
+        proof {
+            assert( l == slice@.i(data@).len() );
+            if p {
+                assert( Self::o_spec_size() <= data@.len() );
+                assert( self.parsable(slice@.i(data@)) );
+            } else {
+                assert( !self.parsable(slice@.i(data@)) );
+            }
+        }
+        assert( p == self.parsable(slice@.i(data@)) );
+        p
     }
 
     open spec fn marshallable(&self, value: int) -> bool
@@ -150,16 +163,16 @@ impl<T: Deepview<int> + builtin::Integer + Copy, O: IntObligations<T>> Marshalli
     {
         proof { Self::as_int_ensures(); }
         // TODO(verus): shouldn't need to trigger this; it's in our (inherited) requires
-        assert( slice.valid(data@) );
+        assert( slice@.valid(data@) );
 
-        if Self::o_exec_size() <= slice.exec_len() {
+        if Self::o_exec_size() <= slice.len() {
             let sr = slice_subrange(data.as_slice(), slice.start, slice.start+Self::o_exec_size());
             let parsed = Self::from_le_bytes(sr);
-            assert( sr@ == slice.i(data@).subrange(0, Self::o_spec_size() as int) ); // trigger
-            assert( parsed.deepv() == self.parse(slice.i(data@)) );
+            assert( sr@ == slice@.i(data@).subrange(0, Self::o_spec_size() as int) ); // trigger
+            assert( parsed.deepv() == self.parse(slice@.i(data@)) );
             Some(parsed)
         } else {
-            assert( !self.parsable(slice.i(data@)) );
+            assert( !self.parsable(slice@.i(data@)) );
             None
         }
     }
@@ -168,7 +181,7 @@ impl<T: Deepview<int> + builtin::Integer + Copy, O: IntObligations<T>> Marshalli
     {
         proof { Self::as_int_ensures(); }
         let sr = slice_subrange(data.as_slice(), slice.start, slice.start+Self::o_exec_size());
-        assert( sr@ == slice.i(data@).subrange(0, Self::o_spec_size() as int) ); // trigger
+        assert( sr@ == slice@.i(data@).subrange(0, Self::o_spec_size() as int) ); // trigger
         Self::from_le_bytes(sr)
     }
 
