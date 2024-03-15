@@ -58,10 +58,11 @@ impl BufferOffsets {
         requires self.all_gte(target), self.all_lte(limit), limit >= target
         ensures self.shift_left(target).all_lte((limit-target) as nat)
     {
-    } 
+    }
 
+    // compacting buffers from [start..end) and shifting the corresponding offsets
     pub open spec(checked) fn adjust_compact(self, start: int, end: int) -> BufferOffsets
-        recommends 0 <= start <= end <= self.len()
+        recommends 0 <= start < end
     {
         BufferOffsets{ offsets: Seq::new(self.len(), |i:int| 
             if self.offsets[i] <= start {
@@ -149,6 +150,39 @@ impl BufferOffsets {
         implies #[trigger] result.offsets.contains(self.offsets[i])
         by {
             let _ = result.offsets[i]; // trigger
+        }
+    }
+
+    pub proof fn adjust_compact_ensures(self, start: int, end: int)
+        requires
+            0 <= start < end,
+        ensures
+            self.adjust_compact(start, end).min_ofs() <= self.min_ofs()
+    {
+        let result = self.adjust_compact(start, end);
+        let result_ofs = result.min_ofs();
+
+        result.min_ofs_ensures();
+        self.min_ofs_ensures();
+
+        if result.offsets.len() > 0 {
+            let idx = result.offsets.index_of(result_ofs);
+            assert forall |i:int| 0 <= i < self.len()
+            implies self.offsets[i] >= result_ofs
+            by {
+                if self.offsets[i] <= start {
+                    assert(self.offsets[i] == result.offsets[i]);
+                } else if self.offsets[i] >= end {
+                    assert(result.offsets[i] <= self.offsets[i]);
+                }
+            }
+
+            if self.offsets.contains(result_ofs) {
+                assert(self.all_gte(result_ofs));
+                self.all_gte_is_min_ofs(result_ofs);
+            } else {
+                assert(result_ofs <= self.min_ofs());
+            }
         }
     }
 

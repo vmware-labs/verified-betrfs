@@ -6,7 +6,7 @@ use builtin::*;
 use builtin_macros::*;
 use state_machines_macros::state_machine;
 
-use vstd::{prelude::*,set_lib::*, map_lib::*};
+use vstd::{prelude::*, set_lib::*, map_lib::*};
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 use crate::disk::GenericDisk_v::*;
@@ -775,6 +775,7 @@ impl<T: QueryableDisk> LinkedBetree<T> {
         &&& self.wf()
         &&& self.has_root()
         &&& start < end <= self.root().buffers.len()
+        // &&& !compacted_buffer.map.is_empty() // do not want to compact nothing?
         &&& self.compact_buffer_valid_domain(start, end, compacted_buffer)
         &&& self.compact_buffer_valid_range(start, end, compacted_buffer)
     }
@@ -1101,7 +1102,10 @@ state_machine!{ LinkedBetreeVars {
     }}
 
     init!{ initialize(stamped_betree: StampedBetree) {
-        require stamped_betree.value.wf();
+        require stamped_betree.value.acyclic();
+        require stamped_betree.value.valid_buffer_dv();
+        require stamped_betree.value.has_root()
+            ==> stamped_betree.value.root().my_domain() == total_domain();
         init memtable = Memtable::empty_memtable(stamped_betree.seq_end);
         init linked = stamped_betree.value;
     }}
@@ -1263,7 +1267,7 @@ state_machine!{ LinkedBetreeVars {
         }
 
         assert(post.linked.valid_buffer_dv()) by {
-            assume(new_subtree.reachable_buffer_addrs() <= path.target().reachable_buffer_addrs() + new_addrs.repr());
+            path.target().compact_reachable_buffers_in_scope(start, end, compacted_buffer, new_addrs, new_ranking);
             path.substitute_reachable_buffers_ensures(new_subtree, path_addrs, new_ranking);
             assert(compacted.no_dangling_buffer_ptr());
             assert(compacted.valid_buffer_dv());
@@ -1277,11 +1281,7 @@ state_machine!{ LinkedBetreeVars {
     fn internal_noop_inductive(pre: Self, post: Self, lbl: Label) { }
    
     #[inductive(initialize)]
-    fn initialize_inductive(post: Self, stamped_betree: StampedBetree) { 
-        assume(post.linked.acyclic());
-        assume(post.linked.has_root() ==> post.linked.root().my_domain() == total_domain());
-        assume(post.linked.valid_buffer_dv());
-    }
+    fn initialize_inductive(post: Self, stamped_betree: StampedBetree) {}
 }} // end LinkedBetree state machine
 
 // utility & invariant proof functions
@@ -1292,7 +1292,6 @@ proof fn get_max_rank(ranking: Ranking) -> (max: nat)
     ensures forall |addr| #[trigger] ranking.contains_key(addr) ==> ranking[addr] <= max
     decreases ranking.dom().len()
 {
-    assume(false);
     if ranking.dom().is_empty() {
         assert forall |addr| #[trigger] ranking.contains_key(addr) 
         implies ranking[addr] <= 0 by { assert(false); }
@@ -2162,21 +2161,56 @@ impl LinkedBetree<BufferDisk> {
         new_ranking
     }
 
-    // #[verifier::spinoff_prover]
-    proof fn compact_ensures(self, start: nat, end: nat, compacted_buffer: Buffer, new_addrs: TwoAddrs)
+    proof fn compact_reachable_buffers_in_scope(self, start: nat, end: nat, compacted_buffer: Buffer, new_addrs: TwoAddrs, ranking: Ranking)
         requires 
             self.can_compact(start, end, compacted_buffer),
             self.is_fresh(new_addrs.repr()),
             new_addrs.no_duplicates(),
+            self.valid_ranking(ranking),
+            self.compact(start, end, compacted_buffer, new_addrs).valid_ranking(ranking),
         ensures ({
             let result = self.compact(start, end, compacted_buffer, new_addrs);
-            &&& result.root().my_domain() == self.root().my_domain()
-            &&& self.dv.is_sub_disk(result.dv)
-            &&& self.buffer_dv.is_sub_disk(result.buffer_dv)
-            &&& result.dv.entries.dom() <= self.dv.entries.dom() + new_addrs.repr()
-            &&& result.buffer_dv.repr() <= self.buffer_dv.repr() + new_addrs.repr()
+            &&& result.reachable_buffer_addrs() <= self.reachable_buffer_addrs() + new_addrs.repr()
         })
     {
+        let result = self.compact(start, end, compacted_buffer, new_addrs);
+
+        assert forall |addr| result.reachable_buffer_addrs().contains(addr)
+        implies self.reachable_buffer_addrs().contains(addr) || new_addrs.repr().contains(addr)
+        by {
+            if result.root().active_buffers().contains(addr) {
+                reveal(BetreeNode::active_buffers);
+
+                let buffers = self.root().buffers;
+                let result_buffers = result.root().buffers;
+
+                self.root().flushed.adjust_compact_ensures(start as int, end as int);
+                self.reachable_betree_addrs_using_ranking_closed(ranking);
+
+                let result_ofs = result.root().flushed.min_ofs();
+                let buffer_idx = choose |buffer_idx| result_ofs <= buffer_idx < result_buffers.len() 
+                    && result_buffers[buffer_idx] == addr;
+
+                self.root().flushed.min_ofs_ensures();
+                result.root().flushed.min_ofs_ensures();
+
+                if buffer_idx == start {
+                    assert(result_buffers[buffer_idx] == new_addrs.addr2);
+                } else {
+                    // if buffer_idx < start {
+                    //     let offsets = self.root().flushed.offsets;
+                    //     let result_offsets = result.root().flushed.offsets;
+                    //     let result_idx = result_offsets.index_of(result_ofs);
+                    //     assert(result_offsets[result_idx] == offsets[result_idx]);
+                    // }
+                    assert(self.reachable_buffer(self.root.unwrap(), addr));
+                }
+            } else {
+                let tree_addr = choose |tree_addr| result.reachable_buffer(tree_addr, addr);
+                let i = result.non_root_buffers_belongs_to_child(tree_addr, addr);
+                self.same_child_same_reachable_buffers(result, i, i, ranking);
+            }
+        }
     }
 }
 
