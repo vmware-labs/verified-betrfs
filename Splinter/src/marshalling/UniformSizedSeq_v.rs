@@ -93,10 +93,10 @@ impl <DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<D
         Self{ oblinfo, eltm, _p: Default::default() }
     }
 
-    spec fn slice_length(&self, dslice: Slice) -> int
+    spec fn slice_length(&self, dslice: SpecSlice) -> int
     recommends self.valid(), dslice.wf(),
     {
-        dslice.spec_len() / (self.oblinfo.uniform_size() as int)
+        dslice.len() / (self.oblinfo.uniform_size() as int)
     }
 
     // TODO(delete): dead code
@@ -105,7 +105,7 @@ impl <DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<D
 //         self.valid(),
 //         data.len() < usize::MAX,
 //     ensures (
-//         self.slice_length(Slice::all(data))
+//         self.slice_length(SpecSlice::all(data))
 //         == self.length(data)
 //         <= self.length(data) * (self.oblinfo.uniform_size() as int)
 //         <= data.len()
@@ -116,20 +116,20 @@ impl <DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<D
 //         mul_le(self.length(data), self.oblinfo.uniform_size() as int);
 //     }
 
-    proof fn index_bounds_facts(&self, slice: Slice, idx: int)
-    requires self.valid(), slice.wf(), 0 <= idx, idx < slice.spec_len() / (self.oblinfo.uniform_size() as int)
+    proof fn index_bounds_facts(&self, slice: SpecSlice, idx: int)
+    requires self.valid(), slice.wf(), 0 <= idx, idx < slice.len() / (self.oblinfo.uniform_size() as int)
     ensures
         0
             <= idx * (self.oblinfo.uniform_size() as int)
             < idx * (self.oblinfo.uniform_size() as int) + (self.oblinfo.uniform_size() as int)
             == (idx+1) * (self.oblinfo.uniform_size() as int)
-            <= slice.spec_len()
+            <= slice.len()
     {
         self.oblinfo.uniform_size_ensures();   // TODO(verus): lament of the spec ensures
         nat_mul_nat_is_nat(idx, self.oblinfo.uniform_size() as int);
         pos_mul_preserves_order(idx, idx+1, self.oblinfo.uniform_size() as int);
         distribute_left(idx, 1, self.oblinfo.uniform_size() as int);
-        div_mul_order(slice.spec_len(), self.oblinfo.uniform_size() as int);
+        div_mul_order(slice.len(), self.oblinfo.uniform_size() as int);
         if idx + 1 < self.slice_length(slice) {
             pos_mul_preserves_order(idx + 1, self.slice_length(slice), self.oblinfo.uniform_size() as int);
         }
@@ -155,7 +155,7 @@ impl <DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<D
     exec fn try_length(&self, dslice: &Slice, data: &Vec<u8>) -> (out: Option<usize>)
     {
         proof { self.oblinfo.uniform_size_ensures() }
-        Some(dslice.exec_len() / self.oblinfo.exec_uniform_size())
+        Some(dslice.len() / self.oblinfo.exec_uniform_size())
     }
 
     exec fn exec_lengthable(&self, dslice: &Slice, data: &Vec<u8>) -> (l: bool) { true }
@@ -163,7 +163,7 @@ impl <DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<D
     exec fn exec_length(&self, dslice: &Slice, data: &Vec<u8>) -> (len: usize)
     {
         proof { self.oblinfo.uniform_size_ensures() }   // 0 < denom
-        dslice.exec_len() / self.oblinfo.exec_uniform_size()
+        dslice.len() / self.oblinfo.exec_uniform_size()
     }
 
     /////////////////////////////////////////////////////////////////////////
@@ -175,15 +175,14 @@ impl <DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<D
         0 <= idx < self.length(data)
     }
 
-    open spec fn get(&self, dslice: Slice, data: Seq<u8>, idx: int) -> (eslice: Slice)
+    open spec fn get(&self, dslice: SpecSlice, data: Seq<u8>, idx: int) -> (eslice: SpecSlice)
     {
-        dslice.spec_sub(
-            ((idx as usize) * self.oblinfo.uniform_size()) as usize,
-            ((idx as usize) * self.oblinfo.uniform_size() + self.oblinfo.uniform_size()) as usize
-        )
+        dslice.subslice(
+            idx * self.oblinfo.uniform_size(),
+            idx * self.oblinfo.uniform_size() + self.oblinfo.uniform_size())
     }
 
-    proof fn get_ensures(&self, dslice: Slice, data: Seq<u8>, idx: int)
+    proof fn get_ensures(&self, dslice: SpecSlice, data: Seq<u8>, idx: int)
     {
         self.index_bounds_facts(dslice, idx as int);
         assert( self.get(dslice, data, idx).valid(data) );
@@ -192,7 +191,7 @@ impl <DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<D
     open spec fn get_data(&self, data: Seq<u8>, idx: int) -> (edata: Seq<u8>)
     // TODO factor out this common impl
     {
-        self.get(Slice::all(data), data, idx).i(data)
+        self.get(SpecSlice::all(data), data, idx).i(data)
     }
 
     open spec fn elt_parsable(&self, data: Seq<u8>, idx: int) -> bool
@@ -211,8 +210,10 @@ impl <DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<D
     {
         let len = self.exec_length(dslice, data);
         if idx < len {
-            proof { self.index_bounds_facts(*dslice, idx as int); }
-            Some( dslice.exec_sub(
+            proof {
+                self.index_bounds_facts(dslice@, idx as int);
+            }
+            Some( dslice.subslice(
                     (idx as usize) * self.oblinfo.exec_uniform_size(),
                     (idx as usize) * self.oblinfo.exec_uniform_size() + self.oblinfo.exec_uniform_size()) )
         } else {
@@ -228,8 +229,8 @@ impl <DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<D
 
     exec fn exec_get(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (eslice: Slice)
     {
-        proof { self.index_bounds_facts(*dslice, idx as int); }
-        dslice.exec_sub(
+        proof { self.index_bounds_facts(dslice@, idx as int); }
+        dslice.subslice(
             (idx as usize) * self.oblinfo.exec_uniform_size(),
             (idx as usize) * self.oblinfo.exec_uniform_size() + self.oblinfo.exec_uniform_size())
     }
@@ -244,10 +245,10 @@ impl <DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<D
             None => None,
             Some(eslice) => {
                 proof {
-                    self.get_ensures(*dslice, data@, idx as int);   // TODO(verus): lament of spec ensures
-                    self.index_bounds_facts(*dslice, idx as int);
-                    let edslice = self.get(Slice::all(dslice.i(data@)), dslice.i(data@), idx as int);
-                    assert( edslice.i(dslice.i(data@)) == eslice.i(data@));   // trigger
+                    self.get_ensures(dslice@, data@, idx as int);   // TODO(verus): lament of spec ensures
+                    self.index_bounds_facts(dslice@, idx as int);
+                    let edslice = self.get(SpecSlice::all(dslice@.i(data@)), dslice@.i(data@), idx as int);
+                    assert( edslice.i(dslice@.i(data@)) == eslice@.i(data@));   // trigger
                 }
                 let oelt = self.eltm.try_parse(&eslice, data);
                 oelt
@@ -260,10 +261,10 @@ impl <DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<D
     {
         let eslice = self.exec_get(dslice, data, idx);
         proof { // duplicated from try_get_elt
-            self.get_ensures(*dslice, data@, idx as int);   // TODO(verus): lament of spec ensures
-            self.index_bounds_facts(*dslice, idx as int);
-            let edslice = self.get(Slice::all(dslice.i(data@)), dslice.i(data@), idx as int);
-            assert( edslice.i(dslice.i(data@)) == eslice.i(data@));   // trigger
+            self.get_ensures(dslice@, data@, idx as int);   // TODO(verus): lament of spec ensures
+            self.index_bounds_facts(dslice@, idx as int);
+            let edslice = self.get(SpecSlice::all(dslice@.i(data@)), dslice@.i(data@), idx as int);
+            assert( edslice.i(dslice@.i(data@)) == eslice@.i(data@));   // trigger
         }
         self.eltm.exec_parse(&eslice, data)
     }
@@ -316,14 +317,14 @@ impl <DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<D
     exec fn exec_set(&self, dslice: &Slice, data: &mut Vec<u8>, idx: usize, value: &Elt)
     {
         proof {
-            self.index_bounds_facts(*dslice, idx as int);
+            self.index_bounds_facts(dslice@, idx as int);
             self.oblinfo.uniform_size_ensures();
         }
         let newend = self.eltm.exec_marshall(value, data, dslice.start + idx * self.oblinfo.exec_uniform_size());
-        assert forall |i: int| i != idx as int && self.gettable(dslice.i(old(data)@), i)
-            implies self.get_data(dslice.i(data@), i) == self.get_data(dslice.i(old(data)@), i) by
+        assert forall |i: int| i != idx as int && self.gettable(dslice@.i(old(data)@), i)
+            implies self.get_data(dslice@.i(data@), i) == self.get_data(dslice@.i(old(data)@), i) by
         {
-            self.index_bounds_facts(*dslice, i);
+            self.index_bounds_facts(dslice@, i);
 
             lemma_seq_slice_slice(data@,
                 dslice.start as int,
@@ -343,7 +344,7 @@ impl <DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<D
             }
 
             // TODO(verus): shouldn't assert-by conclusion give us this trigger for free?
-            assert( self.get_data(dslice.i(data@), i) == self.get_data(dslice.i(old(data)@), i) );
+            assert( self.get_data(dslice@.i(data@), i) == self.get_data(dslice@.i(old(data)@), i) );
         }
 
         proof {
@@ -479,29 +480,29 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
         match self.try_length(dslice, data) {
             None => {
                 proof {
-                    let ghost idata = dslice.i(data@);
+                    let ghost idata = dslice@.i(data@);
                     assert( !self.lengthable(idata) );
                 }
-                assert( !self.seq_parsable(dslice.i(data@)) );
-                assert( !self.parsable(dslice.i(data@)) );
+                assert( !self.seq_parsable(dslice@.i(data@)) );
+                assert( !self.parsable(dslice@.i(data@)) );
                 return None;
             },
             Some(len) => {
-                assert( len as int == self.length(dslice.i(data@)) );
+                assert( len as int == self.length(dslice@.i(data@)) );
                 assert( len <= usize::MAX );
                 let mut i: usize = 0;
                 let mut result:Vec<Elt> = Vec::with_capacity(len);
                 while i < len
                     invariant i <= len,
                     self.valid(),   // TODO(verus #984): waste of my debugging time
-                    dslice.valid(data@),   // TODO(verus #984): waste of my debugging time
-                    len == self.length(dslice.i(data@)) as usize, // TODO(verus #984): waste of my debugging time
+                    dslice@.valid(data@),   // TODO(verus #984): waste of my debugging time
+                    len == self.length(dslice@.i(data@)) as usize, // TODO(verus #984): waste of my debugging time
                         result.len() == i,
-                        forall |j| 0<=j<i as nat ==> self.gettable(dslice.i(data@), j),
-                        forall |j| 0<=j<i as nat ==> self.elt_parsable(dslice.i(data@), j),
-                        forall |j| #![auto] 0<=j<i as nat ==> result[j].deepv() == self.get_elt(dslice.i(data@), j),
+                        forall |j| 0<=j<i as nat ==> self.gettable(dslice@.i(data@), j),
+                        forall |j| 0<=j<i as nat ==> self.elt_parsable(dslice@.i(data@), j),
+                        forall |j| #![auto] 0<=j<i as nat ==> result[j].deepv() == self.get_elt(dslice@.i(data@), j),
                 {
-                    let ghost idata = dslice.i(data@);
+                    let ghost idata = dslice@.i(data@);
                     let oelt = self.try_get_elt(dslice, data, i);
                     if oelt.is_none() {
                         return None;
@@ -511,7 +512,7 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
                 }
                 // Looks like this wants extensionality, but no ~! Not sure why it's needed.
                 // Oh maybe it's the trait-ensures-don't-trigger bug?
-                assert( result.deepv() == self.parse(dslice.i(data@)) );    // trigger.
+                assert( result.deepv() == self.parse(dslice@.i(data@)) );    // trigger.
                 return Some(result);
             }
         }
@@ -617,6 +618,9 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
 
             assert( self.eltm.marshallable(value.deepv()[i as int]) );
             assert( end as int + self.eltm.spec_size(value.deepv()[i as int]) as int <= data.len() );
+
+            let ghost prior_data = data@;    // note not subranged
+            assert( olddata == prior_data.subrange(start as int, end as int) );
             end = self.eltm.exec_marshall(&value[i], data, end);
             i += 1;
 
@@ -638,6 +642,12 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
                 assert( self.gettable_to_len(marshalled_data, self.length(marshalled_data) as usize as int) );
 
                 assert( self.spec_size(value.deepv().subrange(0, i as int)) == i * self.oblinfo.uniform_size() );
+
+                assert( marshalled_data =~= data@.subrange(start as int, end as int) );
+
+                let old_in_end = oldi * self.oblinfo.uniform_size();
+                assert( marshalled_data.subrange(0, oldend as int) =~= olddata.subrange(0, old_in_end) );
+
 //                 assert( marshalled_data.len() == end - start );
 //                 assert( marshalled_data.len() == self.oblinfo.uniform_size() * i );
 //                 mul_div_identity(i as int, self.oblinfo.uniform_size() as int);
@@ -648,35 +658,42 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
                         assert( self.elt_parsable_to_len(olddata, self.length(olddata)) );
                         assume( j < self.length(olddata) );
                         assert( self.elt_parsable(olddata, j) );
-                        assert( self.get(Slice::all(olddata), olddata, j)
-                                == self.get(Slice::all(marshalled_data), olddata, j) );
-                        let gslice = self.get(Slice::all(olddata), olddata, j);
+                        assert( self.get(SpecSlice::all(olddata), olddata, j)
+                                == self.get(SpecSlice::all(marshalled_data), olddata, j) );
+                        let gslice = self.get(SpecSlice::all(olddata), olddata, j);
                         assert( gslice ==
-                            Slice::all(olddata).spec_sub(
-                                ((j as usize) * self.oblinfo.uniform_size()) as usize,
-                                ((j as usize) * self.oblinfo.uniform_size() + self.oblinfo.uniform_size()) as usize
+                            SpecSlice::all(olddata).subslice(
+                                j * self.oblinfo.uniform_size(),
+                                j * self.oblinfo.uniform_size() + self.oblinfo.uniform_size()
                             )
                         );
-                        assert( Slice::all(olddata).start == 0 );
+                        assert( SpecSlice::all(olddata).start == 0 );
                         assert( gslice ==
-                            Slice{
-                                start: (0 + ((j as usize) * self.oblinfo.uniform_size()) as usize) as usize,
-                                end: (0 + ((j as usize) * self.oblinfo.uniform_size() + self.oblinfo.uniform_size()) as usize) as usize,
+                            SpecSlice{
+                                start: j * self.oblinfo.uniform_size(),
+                                end: j * self.oblinfo.uniform_size() + self.oblinfo.uniform_size(),
                             }
                         );
 
-                        assert( gslice.start == (0 + ((j as usize) * self.oblinfo.uniform_size()) as usize) as usize );
+                        assert( gslice.start == j * self.oblinfo.uniform_size() );
                         assert( gslice.start == 0 + (j as usize) * (self.oblinfo.uniform_size() as usize) );
 
                         assert( self.get_data(olddata, j) == gslice.i(olddata) );
                         assert( self.get_data(marshalled_data, j) == gslice.i(marshalled_data) );
+                        assert( gslice.len() < end - start );
                         assert forall |c| gslice.start <= c < gslice.end implies olddata[c] == marshalled_data[c] by {
+                            assert( forall |i| 0 <= i < oldend ==> prior_data[i] == data[i] );
+                            assert( 0 <= c );
+                            assert( c - gslice.start < end - start );
+                            assert( olddata[c] == prior_data[start + c] );
+                            assert( marshalled_data[c] == data[start + c] );
+                            //assert( olddata[c]
                         }
                         assert( 0 <= gslice.start as int );
                         assert( gslice.start as int <= gslice.end as int );
-                        assert( gslice.end as int <= data.len() );
-                        assert( gslice.valid(olddata) );
-                        assert( gslice.i(olddata).len() == gslice.spec_len() );
+                        assume( gslice.end as int <= data.len() );
+                        assume( gslice.valid(olddata) );
+                        assert( gslice.i(olddata).len() == gslice.len() );
                         assert( gslice.i(olddata).len() == gslice.i(marshalled_data).len() );
                         assert( gslice.i(olddata) =~= gslice.i(marshalled_data) );
                         assert( self.get_data(olddata, j) =~= self.get_data(marshalled_data, j) );
@@ -805,7 +822,7 @@ fn test_is_marshalling<M: Marshalling<Seq<int>, Vec<u64>>>(m: &M) { }
 type IntegerSeqMarshalling<IT> = UniformSizedElementSeqMarshalling<int, IT, IntegerSeqMarshallingOblinfo<IT, IntMarshalling<IT>>>;
 
 fn test(t: IntegerSeqMarshalling<u64>, data: &Vec<u8>) {
-    let dslice = Slice::exec_all(data);
+    let dslice = Slice::all(data);
     test_is_seq_marshalling(&t);
     test_is_marshalling(&t);
     let oelt = t.try_get_elt(&dslice, data, 0);

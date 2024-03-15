@@ -153,7 +153,7 @@ impl <
             // Took way too long to track down this lemma call. Decent automation would have been nice.
             LengthIntObligations::as_int_ensures();
 
-            assert( dslice.spec_sub(0, LengthIntObligations::o_spec_size()).i(data@)
+            assert( dslice.sub(0, LengthIntObligations::o_spec_size()).i(data@)
                     == dslice.i(data@).subrange(0, self.size_of_length_field() as int) );   // subrange trigger
         }
 
@@ -187,17 +187,14 @@ impl <
         &&& 0 <= idx < self.max_length()
     }
 
-    open spec fn get(&self, dslice: Slice, data: Seq<u8>, idx: int) -> (eslice: Slice)
+    open spec fn get(&self, dslice: SpecSlice, data: Seq<u8>, idx: int) -> (eslice: SpecSlice)
     {
-        dslice.spec_sub(
-            (self.size_of_length_field() + 
-                ((idx as usize) * self.oblinfo.uniform_size())) as usize,
-            (self.size_of_length_field() + 
-                (idx as usize) * self.oblinfo.uniform_size() + self.oblinfo.uniform_size()) as usize
-        )
+        dslice.sub(
+            self.size_of_length_field() + idx * self.oblinfo.uniform_size(),
+            self.size_of_length_field() + idx * self.oblinfo.uniform_size() + self.oblinfo.uniform_size())
     }
 
-    proof fn get_ensures(&self, dslice: Slice, data: Seq<u8>, idx: int)
+    proof fn get_ensures(&self, dslice: SpecSlice, data: Seq<u8>, idx: int)
     {
         self.index_bounds_facts(idx as int);
     }
@@ -260,7 +257,7 @@ impl <
             None => None,
             Some(eslice) => {
                 proof {
-                    self.get_ensures(*dslice, data@, idx as int);   // TODO(verus): lament of spec ensures
+                    self.get_ensures(dslice@, data@, idx as int);   // TODO(verus): lament of spec ensures
                     self.index_bounds_facts(idx as int);
                     let edslice = self.get(Slice::all(dslice.i(data@)), dslice.i(data@), idx as int);
                     assert( edslice.i(dslice.i(data@)) == eslice.i(data@));   // trigger
@@ -276,7 +273,7 @@ impl <
     {
         let eslice = self.exec_get(dslice, data, idx);
         proof { // duplicated from try_get_elt
-            self.get_ensures(*dslice, data@, idx as int);   // TODO(verus): lament of spec ensures
+            self.get_ensures(dslice@, data@, idx as int);   // TODO(verus): lament of spec ensures
             self.index_bounds_facts(idx as int);
             let edslice = self.get(Slice::all(dslice.i(data@)), dslice.i(data@), idx as int);
             assert( edslice.i(dslice.i(data@)) == eslice.i(data@));   // trigger

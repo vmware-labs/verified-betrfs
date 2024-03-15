@@ -32,28 +32,28 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
     exec fn try_length(&self, dslice: &Slice, data: &Vec<u8>) -> (out: Option<usize>)
     requires
         self.seq_valid(),
-        dslice.valid(data@),
+        dslice@.valid(data@),
     ensures
-        out is Some <==> self.lengthable(dslice.i(data@)),
-        out is Some ==> out.unwrap() as int == self.length(dslice.i(data@))
+        out is Some <==> self.lengthable(dslice@.i(data@)),
+        out is Some ==> out.unwrap() as int == self.length(dslice@.i(data@))
     ;
 
     exec fn exec_lengthable(&self, dslice: &Slice, data: &Vec<u8>) -> (l: bool)
     requires
         self.seq_valid(),
-        dslice.valid(data@),
+        dslice@.valid(data@),
     ensures
-        l == self.lengthable(dslice.i(data@))
+        l == self.lengthable(dslice@.i(data@))
     // TODO dfy has a default impl here based on try_length
     ;
 
     exec fn exec_length(&self, dslice: &Slice, data: &Vec<u8>) -> (len: usize)
     requires
         self.seq_valid(),
-        dslice.valid(data@),
-        self.lengthable(dslice.i(data@)),
+        dslice@.valid(data@),
+        self.lengthable(dslice@.i(data@)),
     ensures
-        len == self.length(dslice.i(data@))
+        len == self.length(dslice@.i(data@))
     // TODO dfy has a default impl here based on try_length
     ;
 
@@ -78,7 +78,7 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
     //
     // NOPE! The correct answer is: get wants to take a slice argument because it returns
     // an eslice *relative to the original data*. If get only took data, so you had
-    // to call get(outerslice.i(data)), then its result would need to be composed with
+    // to call get(outerslice@.i(data)), then its result would need to be composed with
     // (taken as a subslice of) outerslice to be meaningful. That's a lot of shuffling that
     // we don't do in the exec code. Doing it in spec makes the proofs confusing at best.
     // This is something like Rob's (3) above.
@@ -87,14 +87,14 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
         self.seq_valid()
     ;
 
-    spec fn get(&self, dslice: Slice, data: Seq<u8>, idx: int) -> (eslice: Slice)
+    spec fn get(&self, dslice: SpecSlice, data: Seq<u8>, idx: int) -> (eslice: SpecSlice)
     recommends
         self.seq_valid(),
         dslice.valid(data),
         self.gettable(dslice.i(data), idx)
     ;
 
-    proof fn get_ensures(&self, dslice: Slice, data: Seq<u8>, idx: int)
+    proof fn get_ensures(&self, dslice: SpecSlice, data: Seq<u8>, idx: int)
     requires
         self.seq_valid(),
         dslice.valid(data),
@@ -138,52 +138,52 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
     exec fn try_get(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oeslice: Option<Slice>)
     requires
         self.seq_valid(),
-        dslice.valid(data@),
+        dslice@.valid(data@),
     ensures
-        oeslice is Some <==> self.gettable(dslice.i(data@), idx as int),
-        oeslice is Some ==> oeslice.unwrap() == self.get(*dslice, data@, idx as int)
+        oeslice is Some <==> self.gettable(dslice@.i(data@), idx as int),
+        oeslice is Some ==> oeslice.unwrap()@ == self.get(dslice@, data@, idx as int)
     // TODO dfy has a default impl here
     ;
 
     exec fn exec_gettable(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (g: bool)
     requires self.seq_valid(),
-        dslice.valid(data@),
-    ensures g == self.gettable(dslice.i(data@), idx as int)
+        dslice@.valid(data@),
+    ensures g == self.gettable(dslice@.i(data@), idx as int)
     // TODO dfy has a default impl here
     ;
 
     exec fn exec_get(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (eslice: Slice)
     requires
         self.seq_valid(),
-        dslice.valid(data@),
-        self.gettable(dslice.i(data@), idx as int),
+        dslice@.valid(data@),
+        self.gettable(dslice@.i(data@), idx as int),
     ensures
-        eslice.wf(),
-        eslice == self.get(*dslice, data@, idx as int)
+        eslice@.wf(),
+        eslice@ == self.get(dslice@, data@, idx as int)
     // TODO dfy has a default impl here
     ;
 
     exec fn try_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oelt: Option<Elt>)
     requires
         self.seq_valid(),
-        dslice.valid(data@),
+        dslice@.valid(data@),
     ensures
         oelt is Some <==> {
-                &&& self.gettable(dslice.i(data@), idx as int)
-                &&& self.elt_parsable(dslice.i(data@), idx as int)
+                &&& self.gettable(dslice@.i(data@), idx as int)
+                &&& self.elt_parsable(dslice@.i(data@), idx as int)
         },
-        oelt is Some ==> oelt.unwrap().deepv() == self.get_elt(dslice.i(data@), idx as int)
+        oelt is Some ==> oelt.unwrap().deepv() == self.get_elt(dslice@.i(data@), idx as int)
     // TODO dfy has a default impl here
     ;
 
     exec fn exec_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (elt: Elt)
     requires
         self.seq_valid(),
-        self.gettable(dslice.i(data@), idx as int),
-        self.elt_parsable(dslice.i(data@), idx as int),
-        dslice.valid(data@),
+        self.gettable(dslice@.i(data@), idx as int),
+        self.elt_parsable(dslice@.i(data@), idx as int),
+        dslice@.valid(data@),
     ensures
-        elt.deepv() == self.get_elt(dslice.i(data@), idx as int)
+        elt.deepv() == self.get_elt(dslice@.i(data@), idx as int)
     // TODO dfy has a default impl here
     ;
 
@@ -218,21 +218,21 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
     exec fn exec_settable(&self, dslice: &Slice, data: &Vec<u8>, idx: usize, value: &Elt) -> (s: bool)
     requires
         self.seq_valid(),
-        dslice.valid(data@),
+        dslice@.valid(data@),
         self.elt_marshallable(value.deepv()),
     ensures
-        s == self.settable(dslice.i(data@), idx as int, value.deepv())
+        s == self.settable(dslice@.i(data@), idx as int, value.deepv())
     ;
 
     exec fn exec_set(&self, dslice: &Slice, data: &mut Vec<u8>, idx: usize, value: &Elt)
     requires
         self.seq_valid(),
-        dslice.valid(old(data)@),
+        dslice@.valid(old(data)@),
         self.elt_marshallable(value.deepv()),
-        self.settable(dslice.i(old(data)@), idx as int, value.deepv()),
+        self.settable(dslice@.i(old(data)@), idx as int, value.deepv()),
     ensures
-        dslice.agree_beyond_slice(old(data)@, data@),
-        self.sets(dslice.i(old(data)@), idx as int, value.deepv(), dslice.i(data@))
+        dslice@.agree_beyond_slice(old(data)@, data@),
+        self.sets(dslice@.i(old(data)@), idx as int, value.deepv(), dslice@.i(data@))
     ;
 
 
@@ -251,15 +251,15 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
 
     exec fn exec_resizable(&self, dslice: &Slice, data: &Vec<u8>, newlen: usize) -> (r: bool)
         requires self.seq_valid()
-        ensures r == self.resizable(dslice.i(data@), newlen as int)
+        ensures r == self.resizable(dslice@.i(data@), newlen as int)
         ;
 
     exec fn resize(&self, dslice: &Slice, data: &mut Vec<u8>, newlen: usize)
-        requires self.seq_valid(), dslice.valid(old(data)@), self.resizable(dslice.i(old(data)@), newlen as int)
+        requires self.seq_valid(), dslice@.valid(old(data)@), self.resizable(dslice@.i(old(data)@), newlen as int)
         ensures data@.len() == old(data)@.len(),
             forall |i| 0 <= i < dslice.start ==> data[i] == old(data)@[i],
             forall |i| dslice.end <= i < data.len() ==> data[i] == old(data)@[i],
-            self.resizes(dslice.i(old(data)@), newlen as int, dslice.i(data@)),
+            self.resizes(dslice@.i(old(data)@), newlen as int, dslice@.i(data@)),
     ;
 
     /////////////////////////////////////////////////////////////////////////
@@ -292,13 +292,13 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
     requires
         self.seq_valid(),
     ensures
-            w == self.well_formed(dslice.i(data@))
+            w == self.well_formed(dslice@.i(data@))
         ;
 
     exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: Elt) -> (r: bool)
     requires
         self.seq_valid(),
-        dslice.valid(data@),
+        dslice@.valid(data@),
         self.well_formed(data@),
         self.elt_marshallable(value.deepv()),
     ensures
@@ -308,7 +308,7 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
     exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: Elt)
     requires
         self.seq_valid(),
-        dslice.valid(old(data)@),
+        dslice@.valid(old(data)@),
         self.well_formed(old(data)@),
         self.elt_marshallable(value.deepv()),
         self.appendable(old(data)@, value.deepv()),
@@ -393,10 +393,10 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
 // //     exec fn seq_exec_parse(&self, dslice: &Slice, data: &Vec<u8>) -> (value: Vec<Elt>)
 // //     requires
 // //         self.seq_valid(),
-// //         dslice.valid(data@),
-// //         self.seq_parsable(dslice.i(data@)),
+// //         dslice@.valid(data@),
+// //         self.seq_parsable(dslice@.i(data@)),
 // //     ensures
-// //         value.deepv() == self.seq_parse(dslice.i(data@)),
+// //         value.deepv() == self.seq_parse(dslice@.i(data@)),
 // //     ;
 // 
 //     exec fn exec_marshall(&self, value: &Vec<Elt>, data: &mut Vec<u8>, start: usize) -> (end: usize)
