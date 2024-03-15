@@ -857,11 +857,12 @@ impl<T: QueryableDisk> QueryReceipt<T>{
     pub open spec(checked) fn all_lines_wf(self) -> bool
         recommends self.structure()
     {
-        &&& forall |i:nat| i < self.lines.len() ==> (#[trigger] self.lines[i as int].wf())
-        &&& forall |i:nat| i < self.lines.len() ==> (#[trigger] self.lines[i as int].linked.acyclic())
-        &&& forall |i:nat| i < self.lines.len()-1 ==> 
-            (#[trigger] self.lines[i as int].linked.root().buffers).valid(self.linked.buffer_dv)
-        &&& forall |i:nat| i < self.lines.len()-1 ==> (#[trigger] self.node(i as int).key_in_domain(self.key))
+        &&& forall |i| 0 <= i < self.lines.len() ==> (#[trigger] self.lines[i].wf())
+        &&& forall |i| 0 <= i < self.lines.len() ==> (#[trigger] self.lines[i].linked.acyclic())
+        &&& forall |i| 0 <= i < self.lines.len()-1 ==> 
+            (#[trigger] self.lines[i].linked.root().buffers).valid(self.linked.buffer_dv)
+        &&& forall |i| 0 <= i < self.lines.len()-1 ==> 
+            (#[trigger] self.node(i).key_in_domain(self.key))
     }
 
     pub open spec(checked) fn child_linked_at(self, i: int) -> bool
@@ -2231,7 +2232,7 @@ impl<T: QueryableDisk> Path<T>{
         }
     }
 
-    proof fn valid_ranking_throughout(self, ranking: Ranking)
+    pub proof fn valid_ranking_throughout(self, ranking: Ranking)
         requires 
             self.valid(), 
             self.linked.valid_ranking(ranking)
