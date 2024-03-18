@@ -78,24 +78,32 @@ pub open spec(checked) fn empty_disk() -> BufferDisk
 }
 
 pub open spec(checked) fn i_buffer_seq(addrs: LinkedSeq<BufferDisk>, dv: BufferDisk) -> BufferSeq_v::BufferSeq
-    recommends addrs.valid(dv)
 {
-    let buffers = Seq::new(addrs.len(), |i| dv.entries[addrs[i]]);
+    let buffers = Seq::new(addrs.len(), |i| 
+        if dv.entries.contains_key(addrs[i]) { 
+            dv.entries[addrs[i]] 
+        } else { Buffer::empty() });
+
     BufferSeq_v::BufferSeq{ buffers: buffers }
 }
 
 pub proof fn subdisk_implies_same_i(addrs: LinkedSeq<BufferDisk>, small: BufferDisk, big: BufferDisk)
-    requires addrs.valid(small), small.is_sub_disk(big)
-    ensures addrs.valid(big), i_buffer_seq(addrs, small) == i_buffer_seq(addrs, big)
+    requires
+        addrs.valid(small),
+        small.is_sub_disk(big),
+    ensures 
+        i_buffer_seq(addrs, small) == i_buffer_seq(addrs, big)
 {
     let i_small = i_buffer_seq(addrs, small);
     let i_big = i_buffer_seq(addrs, big);
 
-    assert forall |i| 0 <= i < addrs.len()
-    implies i_small[i] == i_big[i]
-    by {
-        assert(big.entries.dom().contains(addrs[i])); // trigger
-    }
+    // assert forall |i| 0 <= i < addrs.len()
+    // implies i_small[i] == i_big[i]
+    // by {
+    //     if small.entries.contains_key(addrs[i]) {
+    //         assert(big.entries.contains_key(addrs[i])); // trigger
+    //     }
+    // }
     assert(i_small =~= i_big);
 }
 

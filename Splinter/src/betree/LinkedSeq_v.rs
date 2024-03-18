@@ -34,9 +34,9 @@ impl<T> LinkedSeq<T> {
         self.addrs[i]
     }
 
-    pub open spec(checked) fn repr(self) -> Set<Address>
+    pub open spec(checked) fn contains(self, addr: Address) -> bool
     {
-        self.addrs.to_set()
+        self.addrs.contains(addr)
     }
 
     pub open spec(checked) fn slice(self, start: int, end: int) -> LinkedSeq<T>

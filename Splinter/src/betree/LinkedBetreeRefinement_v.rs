@@ -25,7 +25,6 @@ use crate::betree::LinkedBetree_v::*;
 use crate::betree::SplitRequest_v::*;
 
 verus! {
-
 impl LinkedBetree<BufferDisk>{
     pub open spec/*XXX(checked)*/ fn i_children_seq(self, ranking: Ranking, start: nat) -> Seq<FilteredBetree_v::BetreeNode>
         recommends 
@@ -102,7 +101,7 @@ impl LinkedBetree<BufferDisk>{
         } 
     }
 
-    proof fn i_children_lemma(self, ranking: Ranking)
+    proof fn i_children_with_ranking(self, ranking: Ranking)
         requires 
             self.has_root(), 
             self.valid_ranking(ranking)
@@ -122,7 +121,7 @@ impl LinkedBetree<BufferDisk>{
         decreases self.get_rank(ranking), 2nat
     {
         if self.has_root() {
-            self.i_children_lemma(ranking);
+            self.i_children_with_ranking(ranking);
             let out = self.i_node(ranking);
 
             assert forall |i| (
@@ -142,6 +141,31 @@ impl LinkedBetree<BufferDisk>{
         ensures self.i().wf()
     {
         self.i_node_wf(self.the_ranking());
+    }
+
+    proof fn i_children_lemma(self)
+        requires 
+            self.has_root(),
+            self.acyclic(),
+        ensures
+            self.i().wf_children(),
+            self.i()->children.len() == self.root().children.len(),
+            forall |i| (#[trigger] self.root().valid_child_index(i))
+            ==> ({
+                &&& self.child_at_idx(i).acyclic()
+                &&& self.i()->children[i as int] == self.child_at_idx(i).i()
+            })
+    {
+        self.i_children_with_ranking(self.the_ranking());
+        assert forall |i| #[trigger] self.root().valid_child_index(i)
+        implies ({
+            &&& self.child_at_idx(i).acyclic()
+            &&& self.i()->children[i as int] == self.child_at_idx(i).i()
+        }) by {
+            let child = self.child_at_idx(i);
+            self.child_at_idx_acyclic(i);
+            child.i_node_ignores_ranking(child.the_ranking(), self.the_ranking());
+        }
     }
 
     // proof fn child_at_idx_valid_ranking(self, idx: nat)
@@ -168,17 +192,21 @@ impl LinkedBetree<BufferDisk>{
 //     }
 
     proof fn i_children_ignores_ranking(self, r1: Ranking, r2: Ranking)
-        requires self.wf(), self.has_root(),
+        requires 
+            self.wf(), 
+            self.has_root(),
             self.valid_ranking(r1), 
             self.valid_ranking(r2),
-        ensures self.i_children(r1) == self.i_children(r2)
-        decreases self.get_rank(r1), 0nat
+        ensures 
+            self.i_children(r1) == self.i_children(r2)
+        decreases 
+            self.get_rank(r1), 0nat
     {
         let a = self.i_children(r1);
         let b = self.i_children(r2);
 
-        self.i_children_lemma(r1);
-        self.i_children_lemma(r2);
+        self.i_children_with_ranking(r1);
+        self.i_children_with_ranking(r2);
 
         assert forall |i| 0 <= i < a.len()
         implies a[i] == b[i]
@@ -191,9 +219,14 @@ impl LinkedBetree<BufferDisk>{
     }
 
     proof fn i_node_ignores_ranking(self, r1: Ranking, r2: Ranking)
-        requires self.wf(), self.valid_ranking(r1), self.valid_ranking(r2)
-        ensures self.i_node(r1) == self.i_node(r2)
-        decreases self.get_rank(r1), 1nat
+        requires 
+            self.wf(), 
+            self.valid_ranking(r1), 
+            self.valid_ranking(r2)
+        ensures 
+            self.i_node(r1) == self.i_node(r2)
+        decreases 
+            self.get_rank(r1), 1nat
     {
         if self.has_root() {
             self.i_children_ignores_ranking(r1, r2);
@@ -211,35 +244,35 @@ impl LinkedBetree<BufferDisk>{
     // {
     //     let child = self.child_at_idx(idx);
     //     self.child_at_idx_acyclic(idx);
-    //     self.i_children_lemma(self.the_ranking());
+    //     self.i_children_with_ranking(self.the_ranking());
     //     child.i_node_ignores_ranking(self.the_ranking(), child.the_ranking());
     // }
 
     proof fn child_for_key_commutes_with_i(self, k: Key)
-        requires self.acyclic(), self.has_root(), self.root().key_in_domain(k)
+        requires 
+            self.acyclic(), 
+            self.has_root(), 
+            self.root().key_in_domain(k)
         ensures 
             self.child_for_key(k).acyclic(),
             self.child_for_key(k).i() == self.i().child(k)
     {
         let r = self.root().pivots.route(k) as nat;
-        let child = self.child_for_key(k);
-
         self.root().pivots.route_lemma(k);
         assert(self.root().valid_child_index(r));
-        assert(child.valid_ranking(self.the_ranking()));
-
-        self.i_children_lemma(self.the_ranking());
-        child.i_node_ignores_ranking(self.the_ranking(), child.the_ranking());
+        self.i_children_lemma();
     }
 
     proof fn indexiness_commutes_with_i(self)
-        requires self.acyclic(), self.has_root()
+        requires
+            self.acyclic(), 
+            self.has_root()
         ensures 
             self.root().is_index() ==> self.i().is_index(),
             self.root().is_leaf() ==> self.i().is_leaf()
     {
         self.i_wf();
-        self.i_children_lemma(self.the_ranking());
+        self.i_children_with_ranking(self.the_ranking());
 
         if self.root().is_index() {
             assert forall |i:nat| 0 <= i < self.i()->children.len()
@@ -250,53 +283,82 @@ impl LinkedBetree<BufferDisk>{
         }
     }
 
-    // proof fn betree_subdisk_preserves_i(self, big: LinkedBetree<BufferDisk>, ranking: Ranking)
-    //     requires 
-    //         self.wf(), 
-    //         big.wf(),
-    //         self.root == big.root,
-    //         self.dv.is_sub_disk(big.dv),
-    //         self.buffer_dv.is_sub_disk(big.buffer_dv),
-    //         self.valid_buffer_dv(),
-    //         big.valid_ranking(ranking),
-    //     ensures
-    //         // self.valid_ranking(ranking),
-    //         self.i() == big.i()
-    //     decreases 
-    //         self.get_rank(ranking), big.get_rank(ranking)
-    // {
-    //     self.dv.subdisk_implies_ranking_validity(big.dv, ranking);
-    //     assert(self.valid_ranking(ranking));
+    proof fn valid_buffer_dv_throughout(self)
+        requires
+            self.acyclic(),
+            self.has_root(),
+            self.valid_buffer_dv(),
+        ensures 
+            self.root().buffers.valid(self.buffer_dv),
+            forall |i: nat| i < self.root().children.len()
+            ==> #[trigger] self.child_at_idx(i).valid_buffer_dv(),
+    {
+        self.reachable_betree_addrs_using_ranking_closed(self.the_ranking());
+    
+        let buffers = self.root().buffers;   
+        assert forall |i| 0 <= i < buffers.len() 
+        implies self.buffer_dv.repr().contains(#[trigger] buffers[i])
+        by {
+            assert(self.reachable_buffer(self.root.unwrap(), buffers[i]));
+        }
 
-    //     if self.has_root() {
+        assert forall |i: nat| i < self.root().children.len()
+        implies #[trigger] self.child_at_idx(i).valid_buffer_dv()
+        by {
+            self.child_at_idx_reachable_addrs_ensures(i);
+        }
+    }
 
+    proof fn subdisk_preserves_i_with_ranking(self, big: Self, ranking: Ranking, big_ranking: Ranking)
+        requires 
+            self.valid_ranking(ranking),
+            big.valid_ranking(big_ranking),
+            self.root == big.root,
+            self.dv.is_sub_disk(big.dv),
+            self.buffer_dv.is_sub_disk(big.buffer_dv),
+            self.valid_buffer_dv(),
+        ensures
+            self.i() == big.i()
+        decreases 
+            self.get_rank(ranking),
+            big.get_rank(big_ranking),
+    {
+        if self.has_root() {
+            self.valid_buffer_dv_throughout();
+            assert(self.i()->buffers =~= big.i()->buffers);
 
-    //         subdisk_implies_same_i(self.root().buffers, self.buffer_dv, big.buffer_dv);
+            self.i_children_lemma();
+            big.i_children_lemma();
 
-    //         self.i_children_lemma(ranking);
-    //         big.i_children_lemma(ranking);
+            assert forall |i| 0 <= i < self.i()->children.len()
+            implies self.i()->children[i] == big.i()->children[i]
+            by {
+                let child = self.child_at_idx(i as nat);
+                let big_child = big.child_at_idx(i as nat);
 
-    //         let a = self.i_node(ranking)->children;
-    //         let b = big.i_node(ranking)->children;
-    //         assert(a.len() == b.len());
+                assert(self.root().valid_child_index(i as nat));
+                assert(big.root().valid_child_index(i as nat));
+                child.subdisk_preserves_i_with_ranking(big_child, ranking, big_ranking);
+            }
+            assert(self.i()->children =~= big.i()->children);
+        }
+    }
 
-    //         assert forall |i| 0 <= i < a.len()
-    //         implies a[i] == b[i]
-    //         by {
-    //             assert(self.root().valid_child_index(i as nat));
-    //             assert(big.root().valid_child_index(i as nat));
-
-    //             self.child_at_idx_acyclic(i as nat);
-    //             big.child_at_idx_acyclic(i as nat);
-
-    //             self.child_at_idx(i as nat).betree_subdisk_preserves_i(big.child_at_idx(i as nat), ranking);
-    //             // self.child_at_idx(i as nat).betree_subdisk_preserves_i(big.child_at_idx(i as nat), ranking);
-
-    //         }
-    //         assert(a =~= b);
-    //     }
-    // }
-
+    proof fn subdisk_preserves_i(self, big: Self)
+        requires 
+            self.acyclic(),
+            big.acyclic(),
+            self.root == big.root,
+            self.dv.is_sub_disk(big.dv),
+            self.buffer_dv.is_sub_disk(big.buffer_dv),
+            self.valid_buffer_dv(),
+        ensures
+            self.i() == big.i()
+    {
+        if self.has_root() {
+            self.subdisk_preserves_i_with_ranking(big, self.the_ranking(), big.the_ranking());
+        }
+    }
 
     // proof fn betree_subdisk_preserves_i_with_ranking(self, big: LinkedBetree<BufferDisk>, ranking: Ranking)
     //     requires 
@@ -316,8 +378,8 @@ impl LinkedBetree<BufferDisk>{
     //     if self.has_root() {
     //         self.root().buffers.subdisk_implies_same_i(self.buffer_dv, big.buffer_dv);
 
-    //         self.i_children_lemma(ranking);
-    //         big.i_children_lemma(ranking);
+    //         self.i_children_with_ranking(ranking);
+    //         big.i_children_with_ranking(ranking);
 
     //         let a = self.i_node(ranking)->children;
     //         let b = big.i_node(ranking)->children;
@@ -408,176 +470,86 @@ impl LinkedBetree<BufferDisk>{
 //         lemma_len_subset(result.buffer_dv.entries.dom(), self.buffer_dv.entries.dom());
 //     }
 
-//     proof fn build_tight_preserves_i(self)
-//         requires self.acyclic()
-//         ensures 
-//             self.build_tight_tree().wf(),
-//             self.build_tight_tree().valid_ranking(self.the_ranking()),
-//             self.i() == self.build_tight_tree().i()
-//     {
-//         let ranking = self.the_ranking();
-//         let result = self.build_tight_tree();
-//         self.build_tight_preserves_wf(ranking);
-//         assert(result.valid_ranking(ranking));
-//         result.betree_subdisk_preserves_i_with_ranking(self, ranking);
-//         result.i_node_ignores_ranking(ranking, result.the_ranking());
-//     }
+    // proof fn same_child_commutes_with_i(self, idx: nat, other: LinkedBetree<BufferDisk>, other_idx: nat, ranking: Ranking)
+    //     requires 
+    //         self.wf(), 
+    //         self.has_root(), 
+    //         self.root().valid_child_index(idx),
+    //         other.wf(), 
+    //         other.has_root(), 
+    //         other.root().valid_child_index(other_idx),
+    //         self.valid_ranking(ranking),
+    //         other.valid_ranking(ranking),
+    //         self.dv.is_sub_disk(other.dv),
+    //         self.buffer_dv.is_sub_disk(other.buffer_dv),
+    //         self.root().children[idx as int] == other.root().children[other_idx as int]
+    //     ensures 
+    //         self.i()->children[idx as int] == other.i()->children[other_idx as int]
+    // {
+    //     let child = self.child_at_idx(idx);
+    //     let other_child = other.child_at_idx(other_idx);
 
-//     proof fn identical_children_commutes_with_i(self, idx: nat, other: LinkedBetree<BufferDisk>, other_idx: nat, ranking: Ranking)
-//         requires 
-//             self.wf(), self.has_root(), 
-//             self.root().valid_child_index(idx),
-//             other.wf(), other.has_root(), 
-//             other.root().valid_child_index(other_idx),
-//             self.valid_ranking(ranking),
-//             other.valid_ranking(ranking),
-//             self.dv.is_sub_disk(other.dv),
-//             self.buffer_dv.is_sub_disk(other.buffer_dv),
-//             self.root().children[idx as int] == other.root().children[other_idx as int]
-//         ensures 
-//             self.i()->children[idx as int] == other.i()->children[other_idx as int]
-//     {
-//         let child = self.child_at_idx(idx);
-//         let other_child = other.child_at_idx(other_idx);
+    //     self.i_children_with_ranking(self.the_ranking());
+    //     other.i_children_with_ranking(other.the_ranking());
 
-//         self.i_children_lemma(self.the_ranking());
-//         other.i_children_lemma(other.the_ranking());
+    //     self.child_at_idx_commutes_with_i(idx);
+    //     other.child_at_idx_commutes_with_i(other_idx);
 
-//         self.child_at_idx_commutes_with_i(idx);
-//         other.child_at_idx_commutes_with_i(other_idx);
+    //     child.betree_subdisk_preserves_i_with_ranking(other_child, ranking);
+    //     child.i_node_ignores_ranking(self.the_ranking(), ranking);
+    //     other_child.i_node_ignores_ranking(other.the_ranking(), ranking);
+    // }
 
-//         child.betree_subdisk_preserves_i_with_ranking(other_child, ranking);
-//         child.i_node_ignores_ranking(self.the_ranking(), ranking);
-//         other_child.i_node_ignores_ranking(other.the_ranking(), ranking);
-//     }
+    proof fn valid_root_buffers(self)
+        requires 
+            self.acyclic(),
+            self.has_root(),
+            self.valid_buffer_dv(),
+        ensures 
+            self.root().buffers.valid(self.buffer_dv)
+    {
+        self.reachable_betree_addrs_using_ranking_closed(self.the_ranking());
+    
+        let buffers = self.root().buffers;   
+        assert forall |i| 0 <= i < buffers.len() 
+        implies self.buffer_dv.repr().contains(#[trigger] buffers[i])
+        by {
+            assert(self.reachable_buffer(self.root.unwrap(), buffers[i]));
+        }
+    }
 
+    proof fn push_memtable_commutes_with_i(self, memtable: Memtable, new_addrs: TwoAddrs)
+        requires 
+            self.acyclic(),
+            self.valid_buffer_dv(),
+            self.push_memtable(memtable, new_addrs).acyclic(),
+            self.is_fresh(new_addrs.repr()),
+            new_addrs.no_duplicates(),
+        ensures
+            self.push_memtable(memtable, new_addrs).i() == self.i().push_memtable(memtable)
+    {
+        self.i_wf();
+        let result = self.push_memtable(memtable, new_addrs);
+    
+        if self.has_root() {
+            self.i_children_lemma();
+            result.i_children_lemma();
+            self.valid_buffer_dv_throughout();
 
-//     // operations
+            assert forall |i: nat| i < self.i()->children.len()
+            implies self.i()->children[i as int] =~= result.i()->children[i as int]
+            by {
+                assert(self.root().valid_child_index(i)); // trigger
+                assert(result.root().valid_child_index(i)); // trigger
+                self.child_at_idx(i).subdisk_preserves_i(result.child_at_idx(i));
+            }
+        } else {
+            result.i_children_with_ranking(result.the_ranking());
+        }
 
-//     // proof fn push_memtable_wf(self, memtable: Memtable, new_addrs: TwoAddrs)
-//     //     requires 
-//     //         self.wf(), 
-//     //         new_addrs.no_duplicates(),
-//     //         self.is_fresh(new_addrs.repr()),
-//     //     ensures
-//     //         self.push_memtable(memtable, new_addrs).wf()
-//     // {
-//     //     let result = self.push_memtable(memtable, new_addrs);
-
-//     //     if self.has_root() {
-//     //         assert forall |i| result.root().valid_child_index(i) ==> self.root().valid_child_index(i) by {} // trigger
-//     //         assert(result.dv.node_has_nondangling_child_ptrs(result.root()));
-//     //         assert(result.dv.node_has_linked_children(result.root()));
-//     //     }
-//     //     assert(result.dv.healthy_child_ptrs());
-//     //     assert(result.dv.wf());
-
-//     //     assert forall |addr| result.dv.entries.contains_key(addr)
-//     //     implies #[trigger] result.dv.entries[addr].buffers.valid(result.buffer_dv)
-//     //     by {
-//     //         if addr == result.root.unwrap() && self.has_root() {
-//     //             let node = result.root();
-//     //             assert(node.buffers.len() == self.root().buffers.len() + 1);
-//     //             assert(self.root().buffers.valid(self.buffer_dv));
-
-//     //             assert forall |i| 0 <= i < node.buffers.len()
-//     //             implies #[trigger] result.buffer_dv.repr().contains(node.buffers[i])
-//     //             by {
-//     //                 if i < node.buffers.len() - 1 {
-//     //                     assert(self.root().buffers[i] == node.buffers[i]);
-//     //                     assert(self.buffer_dv.repr().contains(node.buffers[i]));
-//     //                     assert(result.buffer_dv.repr().contains(node.buffers[i]));
-//     //                 } else {
-//     //                     assert(node.buffers[i] == new_addrs.addr2);
-//     //                 }
-//     //             }
-//     //         } else if addr != result.root.unwrap() {
-//     //             assert(result.dv.entries[addr].buffers.valid(self.buffer_dv)); //  trigger
-//     //         }
-//     //     }
-//     //     assert(result.dv.no_dangling_buffer_ptr(result.buffer_dv));
-//     //     assert(result.wf());
-//     // }
-
-//     // #[verifier::spinoff_prover]
-//     // proof fn push_memtable_new_ranking(self, memtable: Memtable, new_addrs: TwoAddrs, old_ranking: Ranking) -> (new_ranking: Ranking)
-//     //     requires 
-//     //         self.wf(), 
-//     //         new_addrs.no_duplicates(),
-//     //         self.is_fresh(new_addrs.repr()),
-//     //         self.valid_ranking(old_ranking),
-//     //         self.dv.ranking_is_tight(old_ranking)
-//     //     ensures 
-//     //         self.push_memtable(memtable, new_addrs).valid_ranking(new_ranking),
-//     //         self.push_memtable(memtable, new_addrs).build_tight_tree().wf(),
-//     //         self.push_memtable(memtable, new_addrs).build_tight_tree().valid_ranking(new_ranking),
-//     //         new_ranking.dom() == old_ranking.dom().insert(new_addrs.addr1)
-//     // {
-//     //     let result = self.push_memtable(memtable, new_addrs);
-//     //     self.push_memtable_wf(memtable, new_addrs);
-
-//     //     let new_rank = if self.has_root() { old_ranking[self.root.unwrap()]+1 } else { 0 };
-//     //     let new_ranking = old_ranking.insert(new_addrs.addr1, new_rank);
-
-//     //     if self.has_root() {
-//     //         // Add this to suppress "recommends" warning for `result.root()` call.
-//     //         assert(result.has_root());
-//     //         assert forall |i| result.root().valid_child_index(i) ==> self.root().valid_child_index(i) by {} // trigger
-//     //     }
-
-//     //     // tenzinhl: Adding this assertion caused the proof to go through. Unsure what it's triggering.
-//     //     assert(result.dv.valid_ranking(new_ranking));
-
-//     //     assert(result.valid_ranking(new_ranking));
-//     //     result.build_tight_preserves_wf(new_ranking);
-//     //     new_ranking
-//     // }
-
-//     proof fn push_memtable_commutes_with_i(self, memtable: Memtable, new_addrs: TwoAddrs)
-//         requires 
-//             self.acyclic(),
-//             new_addrs.no_duplicates(),
-//             self.is_fresh(new_addrs.repr()),
-//         ensures
-//             self.push_memtable(memtable, new_addrs).build_tight_tree().acyclic(),
-//             self.push_memtable(memtable, new_addrs).build_tight_tree().i() == self.i().push_memtable(memtable)
-//     {
-//         let result = self.push_memtable(memtable, new_addrs);
-//         let old_ranking = self.build_tight_ranking(self.the_ranking());
-//         let new_ranking = self.push_memtable_new_ranking(memtable, new_addrs, old_ranking);
-
-//         result.build_tight_preserves_i();
-//         assert(result.build_tight_tree().i() == result.i());
-
-//         result.i_node_ignores_ranking(result.the_ranking(), new_ranking);
-//         result.i_children_lemma(result.the_ranking());
-
-//         if self.has_root() {
-//             assert(self.valid_ranking(new_ranking));
-
-//             self.i_children_lemma(new_ranking);
-//             result.i_children_lemma(new_ranking);
-
-//             self.i_children_ignores_ranking(self.the_ranking(), new_ranking);
-//             result.i_node_ignores_ranking(result.the_ranking(), new_ranking);
-
-//             self.root().buffers.subdisk_implies_same_i(self.buffer_dv, result.buffer_dv);
-
-//             let a = self.i_children(new_ranking);
-//             let b = result.i_children(new_ranking);
-//             assert(a.len() == b.len());
-
-//             assert forall |i| 0 <= i < a.len()
-//             implies a[i] =~= b[i]
-//             by {
-//                 self.identical_children_commutes_with_i(i as nat, result, i as nat, new_ranking);
-//             }
-//         }
-        
-//         assert(result.i()->children =~= self.i().push_memtable(memtable)->children);
-//         assert(result.i()->buffers =~= self.i().push_memtable(memtable)->buffers);
-//     }
-
+        assert(result.i()->buffers =~= self.i().push_memtable(memtable)->buffers);
+        assert(result.i()->children =~= self.i().push_memtable(memtable)->children);
+    }
 
 //     proof fn fresh_entry_preserves_i(self, other: LinkedBetree<BufferDisk>, ranking: Ranking, new_addr: Address)
 //         requires 
@@ -594,8 +566,8 @@ impl LinkedBetree<BufferDisk>{
 //         decreases self.get_rank(ranking)
 //     {
 //         if self.has_root() {
-//             self.i_children_lemma(ranking);
-//             other.i_children_lemma(ranking);
+//             self.i_children_with_ranking(ranking);
+//             other.i_children_with_ranking(ranking);
 
 //             assert(self.i_children(ranking).len() == other.i_children(ranking).len());
 //             assert forall |i| 0 <= i < self.i_children(ranking).len()
@@ -614,127 +586,92 @@ impl LinkedBetree<BufferDisk>{
 //         }
 //     }
 
-//     proof fn grow_commutes_with_i(self, new_root_addr: Address)
-//         requires 
-//             self.acyclic(),
-//             self.has_root() ==> self.root().my_domain() == total_domain(),
-//             self.is_fresh(Set::empty().insert(new_root_addr))
-//         ensures
-//             self.grow(new_root_addr).acyclic(),
-//             self.grow(new_root_addr).i() == self.i().grow()
-//     {
-//         let result = self.grow(new_root_addr);
-//         let old_ranking = self.build_tight_ranking(self.the_ranking());
-//         let new_ranking = self.grow_new_ranking(new_root_addr, old_ranking);
-//         result.i_children_lemma(result.the_ranking());
+    proof fn grow_commutes_with_i(self, new_root_addr: Address)
+        requires 
+            self.acyclic(),
+            self.valid_buffer_dv(),
+            self.grow(new_root_addr).acyclic(),
+            self.has_root() ==> self.root().my_domain() == total_domain(),
+            self.is_fresh(Set::empty().insert(new_root_addr))
+        ensures
+            self.grow(new_root_addr).i() == self.i().grow()
+    {
+        let result = self.grow(new_root_addr);
+        let child = result.child_at_idx(0);
 
-//         result.child_at_idx_acyclic(0);
-//         let child = result.child_at_idx(0);
-//         result.child_at_idx_valid_ranking(0);
-//         child.i_node_ignores_ranking(new_ranking, result.the_ranking());
-        
-//         self.i_node_ignores_ranking(self.the_ranking(), new_ranking);
-//         self.fresh_entry_preserves_i(child, new_ranking, new_root_addr);
+        result.i_children_lemma();
+        assert(result.root().valid_child_index(0)); // trigger
+        self.subdisk_preserves_i(child);
 
-//         assert(result.i()->children =~= self.i().grow()->children);
-//         assert(result.i()->buffers =~= self.i().grow()->buffers);
-//     }
+        assert(result.i()->buffers =~= self.i().grow()->buffers);
+        assert(result.i()->children =~= self.i().grow()->children);
+    }
 
-//     #[verifier::spinoff_prover]
-//     proof fn split_parent_commutes_with_i(self, request: SplitRequest, new_addrs: SplitAddrs)
-//         requires 
-//             self.acyclic(), 
-//             self.can_split_parent(request),
-//             new_addrs.no_duplicates(),
-//             self.is_fresh(new_addrs.repr()),
-//         ensures 
-//             self.split_parent(request, new_addrs).acyclic(),
-//             self.i().can_split_parent(request),
-//             self.split_parent(request, new_addrs).i() == self.i().split_parent(request)
-//     {
-//         // TODO(JL): fix
-//         let result = self.split_parent(request, new_addrs);
-//         let new_ranking = self.split_new_ranking(request, new_addrs, self.the_ranking());
+    #[verifier::spinoff_prover]
+    proof fn split_parent_commutes_with_i(self, request: SplitRequest, new_addrs: SplitAddrs)
+        requires 
+            self.acyclic(),
+            self.split_parent(request, new_addrs).acyclic(),
+            self.valid_buffer_dv(),
+            self.can_split_parent(request),
+            new_addrs.no_duplicates(),
+            self.is_fresh(new_addrs.repr()),
+        ensures 
+            self.i().can_split_parent(request),
+            self.split_parent(request, new_addrs).i() == self.i().split_parent(request)
+    {
+        let result = self.split_parent(request, new_addrs);
+        let child_idx = request.get_child_idx();
+        let child = self.child_at_idx(child_idx);
 
-//         let child_idx = request.xxxget_child_idx();
-//         let old_child = self.child_at_idx(child_idx);
+        self.i_wf();
+        self.i_children_lemma();
+        result.i_children_lemma();
 
-//         self.i_wf();
-//         self.child_at_idx_acyclic(child_idx);
-//         self.child_at_idx_commutes_with_i(child_idx);
+        child.indexiness_commutes_with_i();
+        assert(self.i().valid_child_index(child_idx)); // trigger
+        assert(self.i().can_split_parent(request));
+        assert(result.i()->children.len() == self.i().split_parent(request)->children.len());
 
-//         old_child.i_node_ignores_ranking(self.the_ranking(), old_child.the_ranking());
-//         old_child.indexiness_commutes_with_i();
-//         assert(self.i().can_split_parent(request));
+        assert forall |i| 0 <= i < result.i()->children.len()
+        implies 
+            #[trigger] result.i()->children[i] == 
+            self.i().split_parent(request)->children[i]
+        by {
+            let result_child = result.child_at_idx(i as nat);
+            let i_child = self.i().split_parent(request)->children[i];
 
-//         let a = result.i_children(result.the_ranking());
-//         let b = self.i().split_parent(request)->children;
+            assert(result.root().valid_child_index(i as nat)); // trigger
+            self.valid_buffer_dv_throughout();
 
-//         assert(a.len() == b.len()) by {
-//             self.i_children_lemma(self.the_ranking());
-//             result.i_children_lemma(result.the_ranking());
-//         }
+            if i < child_idx {
+                assert(self.root().valid_child_index(i as nat));
+                self.child_at_idx(i as nat).subdisk_preserves_i(result_child);
+            } else if i <= child_idx + 1 {
+                let delta = if i == child_idx + 1 && request is SplitIndex 
+                    { request->child_pivot_idx } else { 0 } ;
 
-//         assert forall |i| 0 <= i < a.len()
-//         implies a[i] =~= b[i]
-//         by {
-//             result.child_at_idx_acyclic(i as nat);
-//             result.child_at_idx_commutes_with_i(i as nat);
+                child.i_children_lemma();
+                result_child.i_children_lemma();
 
-//             if i < child_idx {
-//                 self.identical_children_commutes_with_i(i as nat, result, i as nat, new_ranking);
-//             } else if i == child_idx {
-//                 let new_left_child = result.child_at_idx(i as nat);
-//                 new_left_child.i_children_lemma(new_ranking);
+                assert forall |j| 0 <= j < i_child->children.len()
+                implies #[trigger] i_child->children[j] == result_child.i()->children[j]
+                by {
+                    assert(result_child.root().valid_child_index(j as nat));
+                    assert(child.root().valid_child_index((delta + j) as nat));
 
-//                 assert forall |j| 0 <= j < new_left_child.root().children.len()
-//                 implies #[trigger] new_left_child.i_children(new_ranking)[j] == b[i]->children[j]
-//                 by {
-//                     assert(new_left_child.root().valid_child_index(j as nat));
-//                     assert(old_child.root().valid_child_index(j as nat));
-
-//                     let old_grand_child = old_child.child_at_idx(j as nat);
-//                     let new_grand_child = new_left_child.child_at_idx(j as nat);
-
-//                     old_child.i_children_lemma(self.the_ranking());
-//                     old_grand_child.betree_subdisk_preserves_i_with_ranking(new_grand_child, new_ranking);
-//                     old_grand_child.i_node_ignores_ranking(self.the_ranking(), new_ranking);
-//                 }
-
-//                 assert(new_left_child.i_children(new_ranking) =~= b[i]->children);
-//                 new_left_child.i_node_ignores_ranking(new_ranking, new_left_child.the_ranking());
-//             } else if i == child_idx + 1 {
-//                 let new_right_child = result.child_at_idx(i as nat);
-//                 new_right_child.i_children_lemma(new_ranking);
-
-//                 assert forall |j| 0 <= j < new_right_child.root().children.len()
-//                 implies #[trigger] new_right_child.i_children(new_ranking)[j] == b[i]->children[j]
-//                 by {
-//                     assert(new_right_child.root().valid_child_index(j as nat));
-
-//                     if request is SplitIndex {
-//                         let pivot_idx = request->child_pivot_idx;
-//                         assert(old_child.root().valid_child_index((j + pivot_idx)  as nat));
-
-//                         let old_grand_child = old_child.child_at_idx((j + pivot_idx)  as nat);
-//                         let new_grand_child = new_right_child.child_at_idx(j as nat);
-    
-//                         old_child.i_children_lemma(self.the_ranking());
-//                         old_grand_child.betree_subdisk_preserves_i_with_ranking(new_grand_child, new_ranking);
-//                         old_grand_child.i_node_ignores_ranking(self.the_ranking(), new_ranking);
-//                     } else {
-//                         assert(old_child.root().valid_child_index(j as nat));
-//                     }
-//                 }
-
-//                 assert(new_right_child.i_children(new_ranking) =~= b[i]->children);
-//                 new_right_child.i_node_ignores_ranking(new_ranking, new_right_child.the_ranking());
-//             } else {
-//                 self.identical_children_commutes_with_i((i-1) as nat, result, i as nat, new_ranking);
-//             }
-//         }
-//         assert(a =~= b);
-//     }
+                    child.child_at_idx_acyclic((delta + j) as nat);
+                    child.valid_buffer_dv_throughout();
+                    child.child_at_idx((delta + j) as nat).subdisk_preserves_i(result_child.child_at_idx(j as nat));
+                }
+                assert(i_child->children =~= result_child.i()->children);
+            } else {
+                assert(self.root().valid_child_index((i-1)as nat));
+                self.child_at_idx((i-1)as nat).subdisk_preserves_i(result_child);
+            }
+        }
+        assert(result.i()->children =~= self.i().split_parent(request)->children);
+    }
 
 //     #[verifier::spinoff_prover]
 //     proof fn flush_commutes_with_i(self, child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs)
@@ -757,8 +694,8 @@ impl LinkedBetree<BufferDisk>{
 //         let a = result.i_children(result.the_ranking());
 //         let b = self.i().flush(child_idx, buffer_gc)->children;
 
-//         self.i_children_lemma(self.the_ranking());
-//         result.i_children_lemma(result.the_ranking());
+//         self.i_children_with_ranking(self.the_ranking());
+//         result.i_children_with_ranking(result.the_ranking());
 
 //         assert forall |i| 0 <= i < a.len()
 //         implies a[i] =~= b[i]
@@ -796,12 +733,12 @@ impl LinkedBetree<BufferDisk>{
 //                     new_child.child_at_idx_valid_ranking(j as nat);
 
 //                     assert(a[i]->children[j] == new_grand_child.i_node(new_ranking)) by {
-//                         new_child.i_children_lemma(result.the_ranking());
+//                         new_child.i_children_with_ranking(result.the_ranking());
 //                         new_grand_child.i_node_ignores_ranking(result.the_ranking(), new_ranking);
 //                     }
 //                     assert(b[i]->children[j] == old_grand_child.i_node(new_ranking)) by {
 //                         // assert(b[i]->children[j] == old_child.i_children(self.the_ranking())[j]);
-//                         old_child.i_children_lemma(self.the_ranking());
+//                         old_child.i_children_with_ranking(self.the_ranking());
 //                         // assert(old_child.i_children(self.the_ranking())[j] == old_grand_child.i_node(self.the_ranking()));
 //                         old_grand_child.i_node_ignores_ranking(self.the_ranking(), new_ranking);
 //                     }
@@ -891,7 +828,7 @@ impl LinkedBetree<BufferDisk>{
 
 //         let a = result.i_children(result.the_ranking());
 //         let b = self.i().compact(start, end, compacted_buffer)->children;
-//         result.i_children_lemma(result.the_ranking());
+//         result.i_children_with_ranking(result.the_ranking());
 //         assert(a.len() == b.len());
 
 //         assert forall |i| 0 <= i < a.len()
@@ -974,7 +911,6 @@ impl QueryReceipt<BufferDisk>{
             assert(self.lines[i].linked.has_root());
             assert(node.key_in_domain(self.key));
             node.pivots.route_lemma(self.key);
-            // assert(start <= node.buffers.len());
             assert(self.result_linked_at(i)); // trigger
             query_from_commutes_with_i(node.buffers, self.linked.buffer_dv, self.key, start);
         }
@@ -1033,164 +969,103 @@ impl Path<BufferDisk>{
         }
     }
 
-//     proof fn betree_diskview_diff(self, replacement: LinkedBetree<BufferDisk>, path_addrs: PathAddrs)
-//         requires 
-//             self.can_substitute(replacement, path_addrs),
-//             path_addrs.no_duplicates(),
-//         ensures 
-//             self.substitute(replacement, path_addrs).dv.entries.dom() =~= replacement.dv.entries.dom() + path_addrs.to_set()
-//         decreases self.depth
-//     {
-//         let result = self.substitute(replacement, path_addrs);
+    proof fn target_valid_buffer_dv(self)
+        requires 
+            self.valid(), 
+            self.linked.valid_buffer_dv(),
+        ensures 
+            self.target().valid_buffer_dv(),
+        decreases self.depth
+    {
+        if 0 < self.depth {
+            let node = self.linked.root();
+            let r = node.pivots.route(self.key) as nat;
 
-//         if 0 < self.depth {
-//             let sub_path_addrs = path_addrs.subrange(1, path_addrs.len() as int);
-//             let subtree = self.subpath().substitute(replacement, sub_path_addrs);
-//             self.subpath().betree_diskview_diff(replacement, sub_path_addrs);
-//             path_addrs_to_set_additive(path_addrs);
-//         }
-//     }
+            node.pivots.route_lemma(self.key);
+            assert(self.subpath().linked == self.linked.child_at_idx(r));
+            self.linked.valid_buffer_dv_throughout();
+            self.subpath().target_valid_buffer_dv();
+        }
+    }
 
-//     #[verifier::spinoff_prover]
-//     proof fn substitute_preserves_wf(self, replacement: LinkedBetree<BufferDisk>, path_addrs: PathAddrs)
-//         requires 
-//             self.can_substitute(replacement, path_addrs),
-//             path_addrs.no_duplicates(),
-//             self.linked.is_fresh(path_addrs.to_set()),
-//             replacement.is_fresh(path_addrs.to_set()),
-//         ensures ({
-//             let result = self.substitute(replacement, path_addrs);
-//             &&& result.wf()
-//             &&& result.has_root()
-//             &&& result.root().my_domain() == self.linked.root().my_domain()
-//             &&& self.linked.dv.is_sub_disk(result.dv)
-//             &&& self.linked.buffer_dv.is_sub_disk(result.buffer_dv)
-//             &&& result.dv.entries.dom() =~= (self.linked.dv.entries.dom() + replacement.dv.entries.dom() + path_addrs.to_set())
-//         })
-//         decreases self.depth, 1nat
-//     {
-//         if 0 < self.depth {
-//             let sub_path_addrs = path_addrs.subrange(1, path_addrs.len() as int);
-//             let subtree = self.subpath().substitute(replacement, sub_path_addrs);
-//             self.subpath().substitute_preserves_wf(replacement, sub_path_addrs);
-//             path_addrs_to_set_additive(path_addrs);
+    proof fn substitute_commutes_with_i(self, replacement: LinkedBetree<BufferDisk>, path_addrs: PathAddrs)
+        requires 
+            self.linked.acyclic(),
+            replacement.acyclic(),
+            self.can_substitute(replacement, path_addrs), 
+            self.substitute(replacement, path_addrs).acyclic(),
+            self.linked.valid_buffer_dv(),
+            self.substitute(replacement, path_addrs).valid_buffer_dv(),
+            path_addrs.no_duplicates(),
+            replacement.is_fresh(path_addrs.to_set()),
+        ensures 
+            self.i().can_substitute(replacement.i()),
+            self.substitute(replacement, path_addrs).i() === self.i().substitute(replacement.i())
+        decreases self.depth
+    {        
+        self.i_valid();
+        replacement.i_wf();
 
-//             let result = self.substitute(replacement, path_addrs);
-//             let node = result.dv.entries[path_addrs[0]];
+        if 0 < self.depth {
+            let result = self.substitute(replacement, path_addrs);
+            let ranking = result.the_ranking();
+            self.substitute_ensures(replacement, path_addrs);
 
-//             let r = node.pivots.route(self.key);
-//             PivotTable::route_lemma_auto();
-//             assert(self.linked.dv.entries.contains_key(self.linked.root.unwrap())); // trigger
+            let i_result = self.i().substitute(replacement.i());
+            self.target_commutes_with_i();
+            assert(self.i().can_substitute(replacement.i()));
+    
+            let sub_path_addrs = path_addrs.subrange(1, path_addrs.len() as int);
+            let subtree = self.subpath().substitute(replacement, sub_path_addrs);
+            self.subpath().substitute_ensures(replacement, sub_path_addrs);
 
-//             assert forall |i| #[trigger] node.valid_child_index(i)
-//             implies {
-//                 &&& result.dv.is_nondangling_ptr(node.children[i as int])
-//                 &&& result.dv.child_linked(node, i)
-//             } by {
-//                 assert(self.linked.root().valid_child_index(i)); // trigger
-//                 if i != r {
-//                     assert(self.linked.dv.is_nondangling_ptr(node.children[i as int]));
-//                     assert(self.linked.dv.child_linked(self.linked.root(), i));
-//                     assert(result.dv.is_nondangling_ptr(node.children[i as int]));
-//                     assert(result.dv.child_linked(node, i));
-//                 }
-//             }
-//             self.betree_diskview_diff(replacement, path_addrs);
-//             assert(self.linked.root().buffers.valid(self.linked.buffer_dv)); // trigger            
-//             assert(result.root().buffers.valid(result.buffer_dv));
-//         }
-//     }
+            let r = self.linked.root().pivots.route(self.key);
+            self.linked.root().pivots.route_lemma(self.key);
 
-//     proof fn substitute_commutes_with_i(self, replacement: LinkedBetree<BufferDisk>, path_addrs: PathAddrs, ranking: Ranking)
-//         requires 
-//             self.can_substitute(replacement, path_addrs),
-//             path_addrs.no_duplicates(),
-//             self.linked.valid_ranking(ranking),
-//             replacement.valid_ranking(ranking),
-//             ranking.contains_key(self.linked.root.unwrap()),
-//             path_addrs.to_set().disjoint(ranking.dom()),
-//             self.linked.is_fresh(path_addrs.to_set()),
-//             replacement.is_fresh(path_addrs.to_set()),
-//         ensures 
-//             self.substitute(replacement, path_addrs).acyclic(), 
-//             self.i().can_substitute(replacement.i()),
-//             self.substitute(replacement, path_addrs).i() === self.i().substitute(replacement.i())
-//         decreases self.depth
-//     {        
-//         self.i_valid();
-//         replacement.i_wf();
+            assert( subtree.valid_ranking(ranking) ) by {
+                assert(result.root().valid_child_index(r as nat)); // trigger
+                subtree.dv.subdisk_implies_ranking_validity(result.dv, ranking);
+            }
 
-//         if 0 < self.depth {
-//             let new_ranking = self.ranking_after_substitution(replacement, path_addrs, ranking);
-//             let result = self.substitute(replacement, path_addrs);
+            assert( subtree.valid_buffer_dv() ) by {
+                let result_child = result.child_at_idx(r as nat);
+                assert(result_child.valid_ranking(ranking));
+                subtree.agreeable_disks_same_reachable_betree_addrs(result_child, ranking);
+                subtree.reachable_betree_addrs_ignore_ranking(subtree.the_ranking(), ranking);
+                result_child.reachable_betree_addrs_ignore_ranking(result_child.the_ranking(), ranking);
+                subtree.same_reachable_betree_addrs_implies_same_buffer_addrs(result_child);
+                assert(subtree.reachable_buffer_addrs() == result.child_at_idx(r as nat).reachable_buffer_addrs());        
+                result.child_at_idx_reachable_addrs_ensures(r as nat);
+            }
 
-//             self.substitute_preserves_wf(replacement, path_addrs);
-//             assert(result.valid_ranking(new_ranking));
+            self.linked.valid_buffer_dv_throughout();
+            assert(result.i()->buffers =~= i_result->buffers) by {
+                assert(result.root().buffers == self.linked.root().buffers);
+                subdisk_implies_same_i(result.root().buffers, self.linked.buffer_dv, result.buffer_dv);
+            }
 
-//             result.i_node_ignores_ranking(result.the_ranking(), new_ranking);
-//             self.target_commutes_with_i();
+            result.i_children_lemma();
+            self.linked.i_children_lemma();
+            assert(result.i()->children.len() == i_result->children.len());
 
-//             PivotTable::route_lemma_auto();
-//             result.i_children_lemma(result.the_ranking());
-//             self.linked.i_children_lemma(self.linked.the_ranking());
+            assert forall |i| 0 <= i < result.i()->children.len()
+            implies #[trigger] result.i()->children[i] == i_result->children[i]
+            by {
+                assert(self.linked.root().valid_child_index(i as nat)); // trigger
+                assert(result.root().valid_child_index(i as nat)); // trigger
 
-//             let r = self.linked.root().pivots.route(self.key);
-//             let sub_path_addrs = path_addrs.subrange(1, path_addrs.len() as int);
-//             let subtree = self.subpath().substitute(replacement, sub_path_addrs);
-//             let new_children = self.linked.root().children.update(r, subtree.root);
-
-//             assert forall |i| 0 <= i < result.i()->children.len()
-//             implies #[trigger] result.i()->children[i] == self.i().substitute(replacement.i())->children[i]
-//             by {
-//                 assert(self.linked.root().valid_child_index(i as nat));
-//                 assert(result.root().valid_child_index(i as nat));
-
-//                 self.linked.child_at_idx_acyclic(i as nat);
-//                 result.child_at_idx_acyclic(i as nat);
-
-//                 let child = self.linked.child_at_idx(i as nat);
-//                 let new_child = result.child_at_idx(i as nat);
-//                 if i == r {
-//                     result.child_at_idx_commutes_with_i(i as nat);
-//                     new_child.i_node_ignores_ranking(result.the_ranking(), new_child.the_ranking());
-                    
-//                     self.subpath().substitute_commutes_with_i(replacement, sub_path_addrs, ranking);
-//                     self.subpath().betree_diskview_diff(replacement, sub_path_addrs);
-//                     self.betree_diskview_diff(replacement, path_addrs);
-//                     self.subpath_commutes_with_i();
-
-//                     subtree.dv.subdisk_implies_ranking_validity(new_child.dv, new_child.the_ranking());
-//                     subtree.betree_subdisk_preserves_i_with_ranking(new_child, new_child.the_ranking());
-//                     subtree.i_node_ignores_ranking(subtree.the_ranking(), new_child.the_ranking());
-//                 } else {
-//                     child.dv.subdisk_implies_ranking_validity(new_child.dv, new_ranking);
-//                     child.betree_subdisk_preserves_i_with_ranking(new_child, new_ranking);
-//                     child.i_node_ignores_ranking(new_ranking, self.linked.the_ranking());
-//                     new_child.i_node_ignores_ranking(new_ranking, result.the_ranking());
-//                 }
-//             }
-//             assert(result.i()->children =~= self.i().substitute(replacement.i())->children);
-//             result.root().buffers.subdisk_implies_same_i(self.linked.buffer_dv, result.buffer_dv);
-//             assert(result.i()->buffers =~= self.i().substitute(replacement.i())->buffers);
-//         }
-//     }
-
-//     proof fn fresh_substitution_implies_subdisk(self, replacement: LinkedBetree<BufferDisk>, path_addrs: PathAddrs)
-//         requires 
-//             self.can_substitute(replacement, path_addrs),
-//             self.linked.dv.is_sub_disk(replacement.dv),
-//             self.linked.buffer_dv.is_sub_disk(replacement.buffer_dv),
-//             self.linked.is_fresh(path_addrs.to_set())
-//         ensures 
-//             self.linked.dv.is_sub_disk(self.substitute(replacement, path_addrs).dv),
-//             self.linked.buffer_dv.is_sub_disk(self.substitute(replacement, path_addrs).buffer_dv)
-//         decreases
-//             self.depth
-//     {
-//         if 0 < self.depth {
-//             self.subpath().fresh_substitution_implies_subdisk(replacement, path_addrs.subrange(1, path_addrs.len() as int));
-//         }
-//     }
+                if i != r {
+                    self.linked.child_at_idx(i as nat).subdisk_preserves_i(result.child_at_idx(i as nat));
+                } else {
+                    self.linked.child_at_idx_reachable_addrs_ensures(r as nat);
+                    self.subpath().substitute_commutes_with_i(replacement, sub_path_addrs);
+                    subtree.subdisk_preserves_i(result.child_at_idx(i as nat));
+                    assert(result.i()->children[i] == i_result->children[i]);
+                }
+            }
+            assert(result.i()->children =~= i_result->children);
+        }
+    }
 }
 
 impl LinkedBetreeVars::Label {
@@ -1239,7 +1114,6 @@ impl LinkedBetreeVars::State {
     {
         reveal(FilteredBetree::State::next_by);
         receipt.i_valid();
-        assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::query(receipt.i())));
     }
 
     proof fn put_refines(self, post: Self, lbl: LinkedBetreeVars::Label)
@@ -1250,10 +1124,7 @@ impl LinkedBetreeVars::State {
         ensures 
             FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::put())
     {
-        reveal(FilteredBetree::State::next);
-
-        assume(false);
-        assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::put()));
+        reveal(FilteredBetree::State::next_by);
     }
 
     proof fn freeze_as_refines(self, post: Self, lbl: LinkedBetreeVars::Label)
@@ -1262,13 +1133,10 @@ impl LinkedBetreeVars::State {
             post.inv(), 
             LinkedBetreeVars::State::freeze_as(self, post, lbl)
         ensures
-            FilteredBetree::State::next(self.i(), post.i(), lbl.i())
+            FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::freeze_as())
     {
         reveal(FilteredBetree::State::next_by);
-        assume(false);
-
-        // self.linked.i_wf();
-        // assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::freeze_as()));
+        self.linked.i_wf();
     }
 
     proof fn internal_flush_memtable_refines(self, post: Self, lbl: LinkedBetreeVars::Label, new_addrs: TwoAddrs)
@@ -1280,11 +1148,9 @@ impl LinkedBetreeVars::State {
             FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_flush_memtable())
     {
         reveal(FilteredBetree::State::next_by);
-        assume(false);
-        // self.linked.push_memtable_commutes_with_i(self.memtable, new_addrs);
-        // self.linked.i_wf();
-        // post.linked.i_wf();
-        // assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_flush_memtable()));
+        self.linked.i_wf();
+        post.linked.i_wf();
+        self.linked.push_memtable_commutes_with_i(self.memtable, new_addrs);
     }
 
     proof fn internal_grow_refines(self, post: Self, lbl: LinkedBetreeVars::Label, new_root_addr: Address)
@@ -1296,40 +1162,33 @@ impl LinkedBetreeVars::State {
             FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_grow())
     {
         reveal(FilteredBetree::State::next_by);
-        assume(false);
-
-        // self.linked.grow_commutes_with_i(new_root_addr);
-        // self.linked.i_wf();
-        // post.linked.i_wf();
-        // assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_grow()));
+        self.linked.grow_commutes_with_i(new_root_addr);
+        self.linked.i_wf();
+        post.linked.i_wf();
     }
 
     proof fn internal_split_refines(self, post: Self, lbl: LinkedBetreeVars::Label, new_linked: LinkedBetree<BufferDisk>,
             path: Path<BufferDisk>, request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs)
         requires 
             self.inv(), 
-            post.inv(), 
+            post.inv(),
             LinkedBetreeVars::State::internal_split(self, post, lbl, new_linked, path, request, new_addrs, path_addrs)
         ensures 
             FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_split(path.i(), request))
     {
         reveal(FilteredBetree::State::next_by);
-        assume(false);
 
-//         path.i_valid();
-//         path.target_commutes_with_i();
-//         path.target().split_parent_commutes_with_i(request, new_addrs);
-        
-//         let replacement = path.target().split_parent(request, new_addrs);
-//         let old_ranking = self.linked.build_tight_ranking(self.linked.the_ranking());
-//         path.valid_ranking_throughout(old_ranking);
+        path.i_valid();
+        path.target_commutes_with_i();
+        path.target_valid_buffer_dv();
 
-//         let new_ranking = path.target().split_new_ranking(request, new_addrs, old_ranking);
-//         path.fresh_substitution_implies_subdisk(replacement, path_addrs);
-//         path.substitute_commutes_with_i(replacement, path_addrs, new_ranking);
-//         path.substitute(replacement, path_addrs).build_tight_preserves_i();
+        let new_subtree = path.target().split_parent(request, new_addrs);
+        let splitted = path.substitute(new_subtree, path_addrs);
 
-//         assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_split(path.i(), request)));
+        Self::split_parent_substitute_preserves_inv(self, post, lbl, path, request, new_addrs, path_addrs);
+        path.target().split_parent_commutes_with_i(request, new_addrs);
+        path.substitute_commutes_with_i(new_subtree, path_addrs);
+        post.linked.subdisk_preserves_i(splitted);
     }
 
     proof fn internal_flush_refines(self, post: Self, lbl: LinkedBetreeVars::Label, new_linked: LinkedBetree<BufferDisk>, 
@@ -1393,9 +1252,8 @@ impl LinkedBetreeVars::State {
         ensures FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_noop())
     {
         reveal(FilteredBetree::State::next_by);
-
         self.linked.i_wf();
-        assume(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_noop()));
+        assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_noop()));
     }
 
     proof fn next_refines(self, post: Self, lbl: LinkedBetreeVars::Label)
