@@ -19,7 +19,6 @@ impl Node {
         recommends self.wf()
         decreases self
         when self is Index ==> forall |key| 0 <= #[trigger] self.route(key) + 1 < self->children.len()
-        when self is Index ==> forall |key| 0 <= #[trigger] self.route(key) + 1 < self->children.len()
     {
         match self {
             Node::Leaf{keys, msgs} => {
@@ -207,7 +206,6 @@ pub proof fn lemma_sub_index_preserves_wf(node: Node, from: int, to: int)
     requires
         node.wf(),
         node is Index,
-        0 <= from < to <= node->children.len()
         0 <= from < to <= node->children.len()
     ensures node.sub_index(from, to).wf()
 {
@@ -595,8 +593,6 @@ pub proof fn lemma_insert_leaf_preserves_wf(node: Node, key: Key, msg: Message)
     ensures
         node.insert_leaf(key, msg).wf(),
 {
-    Key::strictly_sorted_implies_sorted(node->keys);
-    Key::largest_lte_ensures(node->keys, key, Key::largest_lte(node->keys, key));
     Key::strictly_sorted_implies_sorted(node->keys);
     Key::largest_lte_ensures(node->keys, key, Key::largest_lte(node->keys, key));
 }
