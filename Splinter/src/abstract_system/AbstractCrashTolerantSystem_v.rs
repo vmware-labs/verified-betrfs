@@ -66,7 +66,6 @@ state_machine!{ CoordinationSystem {
   // Labels of coordinationsystem should directly be the labels of the
   // CrashTolerantAsyncMap labels. Ideal would be to just copy it somehow,
   // but for now we're just wrapping the CTAM ones.
-  #[is_variant]
   pub enum Label{
     Label{ ctam_label: CrashTolerantAsyncMap::Label }
   }
@@ -147,7 +146,7 @@ state_machine!{ CoordinationSystem {
     ) {
       require let Label::Label{ ctam_label: CrashTolerantAsyncMap::Label::Noop } = label;
 
-      require pre.ephemeral.is_Some();
+      require pre.ephemeral is Some;
       require records.wf();
 
       require CrashTolerantJournal::State::next(
@@ -182,7 +181,7 @@ state_machine!{ CoordinationSystem {
     accept_request(
       label: Label,
     ) {
-      require pre.ephemeral.is_Some();
+      require pre.ephemeral is Some;
 
       // Tenzin: Each of these destructurings requires looking
       // up in another file what the fully qualified name of the type
@@ -198,12 +197,12 @@ state_machine!{ CoordinationSystem {
       let Label::Label{ ctam_label } = label;
 
       // Alternative syntax for destructuring and matching enum type
-      // require pre.ephemeral.is_Some();
+      // require pre.ephemeral is Some;
       // let pre_ephemeral = pre.ephemeral.get_Some_0();
-      // require ctam_label.is_OperateOp();
-      // let base_op = ctam_label.get_OperateOp_base_op();
-      // require base_op.is_RequestOp();
-      // let req = base_op.get_RequestOp_req();
+      // require ctam_label is OperateOp;
+      // let base_op = ctam_label->base_op;
+      // require base_op is RequestOp;
+      // let req = base_op->req;
 
       require !pre.ephemeral.get_Some_0().progress.requests.contains(req);
 
@@ -235,7 +234,7 @@ state_machine!{ CoordinationSystem {
       new_mapadt: CrashTolerantMap::State,
     ) {
       // State must be known
-      require pre.ephemeral.is_Some();
+      require pre.ephemeral is Some;
       let pre_ephemeral = pre.ephemeral.get_Some_0();
 
       // The query transition label is labeled with the input and output of the
@@ -244,17 +243,17 @@ state_machine!{ CoordinationSystem {
       // previously requested query (as well as assert that enums are of right
       // type along the way). (Unfortunately this requires a series of rather
       // ugly calls).
-      let ctam_label = label.get_Label_ctam_label();
+      let ctam_label = label->ctam_label;
 
-      require ctam_label.is_OperateOp();
-      let base_op = ctam_label.get_OperateOp_base_op();
-      require base_op.is_ExecuteOp();
-      let req = base_op.get_ExecuteOp_req();
-      let reply = base_op.get_ExecuteOp_reply();
-      require req.input.is_QueryInput();
-      require reply.output.is_QueryOutput();
-      let key = req.input.get_QueryInput_key();
-      let value = reply.output.get_QueryOutput_value();
+      require ctam_label is OperateOp;
+      let base_op = ctam_label->base_op;
+      require base_op is ExecuteOp;
+      let req = base_op.arrow_ExecuteOp_req();
+      let reply = base_op.arrow_ExecuteOp_reply();
+      require req.input is QueryInput;
+      require reply.output is QueryOutput;
+      let key = req.input.arrow_QueryInput_key();
+      let value = reply.output->value;
 
       require pre_ephemeral.progress.requests.contains(req);
       require req.id == reply.id;
@@ -299,7 +298,7 @@ state_machine!{ CoordinationSystem {
       new_journal: CrashTolerantJournal::State,
       new_mapadt: CrashTolerantMap::State,
     ) {
-      require pre.ephemeral.is_Some();
+      require pre.ephemeral is Some;
       let pre_ephemeral = pre.ephemeral.get_Some_0();
 
       // Destructuring and label checking boilerplate
@@ -366,17 +365,17 @@ state_machine!{ CoordinationSystem {
 
   transition! {
     deliver_reply(label: Label) {
-      require pre.ephemeral.is_Some();
+      require pre.ephemeral is Some;
       let pre_ephemeral = pre.ephemeral.get_Some_0();
       
-      let ctam_label = label.get_Label_ctam_label();
+      let ctam_label = label->ctam_label;
 
-      require ctam_label.is_OperateOp();
+      require ctam_label is OperateOp;
       
-      let base_op = ctam_label.get_OperateOp_base_op();
-      require base_op.is_ReplyOp();
+      let base_op = ctam_label->base_op;
+      require base_op is ReplyOp;
 
-      let reply = base_op.get_ReplyOp_reply();
+      let reply = base_op.arrow_ReplyOp_reply();
 
       require pre_ephemeral.progress.replies.contains(reply);
       update ephemeral = Some(
@@ -396,11 +395,11 @@ state_machine!{ CoordinationSystem {
       label: Label,
       new_journal: CrashTolerantJournal::State,
     ) {
-      require pre.ephemeral.is_Some();
+      require pre.ephemeral is Some;
       let pre_ephemeral = pre.ephemeral.get_Some_0();
 
-      let ctam_label = label.get_Label_ctam_label();
-      require ctam_label.is_Noop();
+      let ctam_label = label->ctam_label;
+      require ctam_label is Noop;
 
       require CrashTolerantJournal::State::next(
         pre.journal,
@@ -417,11 +416,11 @@ state_machine!{ CoordinationSystem {
       label: Label,
       new_mapadt: CrashTolerantMap::State,
     ) {
-      require pre.ephemeral.is_Some();
+      require pre.ephemeral is Some;
       let pre_ephemeral = pre.ephemeral.get_Some_0();
 
-      let ctam_label = label.get_Label_ctam_label();
-      require ctam_label.is_Noop();
+      let ctam_label = label->ctam_label;
+      require ctam_label is Noop;
 
       require CrashTolerantMap::State::next(
         pre.mapadt,
@@ -438,13 +437,13 @@ state_machine!{ CoordinationSystem {
       label: Label,
       new_journal: CrashTolerantJournal::State,
     ) {
-      require pre.ephemeral.is_Some();
+      require pre.ephemeral is Some;
       let pre_ephemeral = pre.ephemeral.get_Some_0();
 
-      let ctam_label = label.get_Label_ctam_label();
-      require ctam_label.is_ReqSyncOp();
+      let ctam_label = label->ctam_label;
+      require ctam_label is ReqSyncOp;
 
-      let sync_req_id = ctam_label.get_ReqSyncOp_sync_req_id();
+      let sync_req_id = ctam_label.arrow_ReqSyncOp_sync_req_id();
       require !pre_ephemeral.sync_reqs.dom().contains(sync_req_id);
       
       require CrashTolerantJournal::State::next(
@@ -468,13 +467,13 @@ state_machine!{ CoordinationSystem {
       label: Label,
       new_journal: CrashTolerantJournal::State,
     ) {
-      require pre.ephemeral.is_Some();
+      require pre.ephemeral is Some;
       let pre_ephemeral = pre.ephemeral.get_Some_0();
 
-      let ctam_label = label.get_Label_ctam_label();
-      require ctam_label.is_ReplySyncOp();
+      let ctam_label = label->ctam_label;
+      require ctam_label is ReplySyncOp;
 
-      let sync_req_id = ctam_label.get_ReplySyncOp_sync_req_id();
+      let sync_req_id = ctam_label.arrow_ReplySyncOp_sync_req_id();
       require pre_ephemeral.sync_reqs.dom().contains(sync_req_id);
 
       require CrashTolerantJournal::State::next(
@@ -500,11 +499,11 @@ state_machine!{ CoordinationSystem {
       label: Label,
       new_boundary_lsn: LSN,
     ) {
-      require pre.ephemeral.is_Some();
+      require pre.ephemeral is Some;
       let pre_ephemeral = pre.ephemeral.get_Some_0();
 
-      let ctam_label = label.get_Label_ctam_label();
-      require ctam_label.is_Noop();
+      let ctam_label = label->ctam_label;
+      require ctam_label is Noop;
 
       require CrashTolerantJournal::State::next(
         pre.journal,
@@ -533,11 +532,11 @@ state_machine!{ CoordinationSystem {
       new_mapadt: CrashTolerantMap::State,
       new_journal: CrashTolerantJournal::State,
     ) {
-      require pre.ephemeral.is_Some();
+      require pre.ephemeral is Some;
       let pre_ephemeral = pre.ephemeral.get_Some_0();
 
-      let ctam_label = label.get_Label_ctam_label();
-      require ctam_label.is_SyncOp();
+      let ctam_label = label->ctam_label;
+      require ctam_label is SyncOp;
 
       // CrashTolerantJournal commit complete truncates the old
       // part of ephemeral journal that's now saved on disk

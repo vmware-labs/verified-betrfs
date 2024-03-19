@@ -32,7 +32,7 @@ impl LikesJournal::State {
     {
         reveal(LinkedJournal::State::next_by);
 
-        let fj = lbl.get_FreezeForCommit_frozen_journal();
+        let fj = lbl->frozen_journal;
         let tj = self.journal.truncated_journal;
         let new_bdy = fj.seq_start();
 
@@ -96,8 +96,8 @@ impl LikesJournal::State {
         let tj_pre = self.journal.truncated_journal;
         let tj_post = post.journal.truncated_journal;
 
-        let start_lsn = lbl.get_DiscardOld_start_lsn();
-        let require_end = lbl.get_DiscardOld_require_end();
+        let start_lsn = lbl->start_lsn;
+        let require_end = lbl->require_end;
 
         let post_discard = tj_pre.discard_old(start_lsn);
         let post_tight = post_discard.build_tight();

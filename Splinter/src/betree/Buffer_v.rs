@@ -30,19 +30,6 @@ impl Buffer {
         }
     }
 
-    // pub proof fn query_agrees_with_map(self, other: Buffer)
-    //     requires self.map.dom() == other.map.dom(), 
-    //         forall |k| #![auto] self.map.contains_key(k) ==> self.query(k) == other.query(k)
-    //     ensures self.map == other.map
-    // {
-    //     assert forall #![auto] |k| self.map.contains_key(k) 
-    //     implies self.map[k] == other.map[k]
-    //     by {
-    //         assert(self.query(k) == self.map[k]); // trigger
-    //     }
-    //     assert(self.map =~= other.map);
-    // }
-
     pub open spec(checked) fn apply_filter(self, accept: Set<Key>) -> Buffer {
         Buffer{ map: Map::new( |k| accept.contains(k) && self.map.contains_key(k), |k| self.map[k] ) }
     }

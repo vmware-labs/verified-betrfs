@@ -22,7 +22,6 @@ state_machine!{ AbstractMap {
     // applied LSN, the "seq_end").
     fields { pub stamped_map: StampedMap }
 
-    #[is_variant]
     pub enum Label{
         /// When querying, we label the transition with the map LSN (one past the end)
         /// at time of querying, plus the queried key and received value.
@@ -47,9 +46,9 @@ state_machine!{ AbstractMap {
     /// A query transition represents querying the value in a map.
     transition!{
         query(lbl: Label) {
-            require lbl.is_QueryLabel();
-            require lbl.get_QueryLabel_end_lsn() == pre.stamped_map.seq_end;
-            require lbl.get_QueryLabel_value() === pre.stamped_map.value[lbl.get_QueryLabel_key()].get_Define_value();
+            require lbl is QueryLabel;
+            require lbl->end_lsn == pre.stamped_map.seq_end;
+            require lbl->value === pre.stamped_map.value[lbl->key]->value;
         }
     }
 
@@ -58,9 +57,9 @@ state_machine!{ AbstractMap {
     transition!{
         // Apply the MsgHistory in the label to this.state 
         put(lbl: Label) {
-            require lbl.is_PutLabel();
-            require lbl.get_PutLabel_puts().can_follow(pre.stamped_map.seq_end);
-            update stamped_map = MsgHistory::map_plus_history(pre.stamped_map, lbl.get_PutLabel_puts());
+            require lbl is PutLabel;
+            require lbl->puts.can_follow(pre.stamped_map.seq_end);
+            update stamped_map = MsgHistory::map_plus_history(pre.stamped_map, lbl->puts);
         }
     }
 
@@ -70,15 +69,15 @@ state_machine!{ AbstractMap {
     /// the current state.
     transition!{
         freeze_as(lbl: Label) {
-            require lbl.is_FreezeAsLabel();
-            require lbl.get_FreezeAsLabel_stamped_map() === pre.stamped_map;
+            require lbl is FreezeAsLabel;
+            require lbl->stamped_map === pre.stamped_map;
         }
     }
 
     /// Internal transition for non-public-facing updates.
     transition!{
         internal(lbl: Label) {
-            require lbl.is_InternalLabel();
+            require lbl is InternalLabel;
         }
     }
 }}

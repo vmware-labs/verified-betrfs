@@ -58,7 +58,6 @@ pub open spec(checked) fn empty_child_map() -> ChildMap {
     constant_child_map(BetreeNode::Nil)
 }
 
-#[is_variant]
 #[verifier::ext_equal]
 pub enum BetreeNode {
     Nil,
@@ -71,15 +70,15 @@ impl BetreeNode {
     pub open spec(checked) fn wf(self) -> bool
     decreases self
     {
-        self.is_Node() ==> self.get_Node_children().wf()
+        self is Node ==> self->children.wf()
     }
 
     pub open spec(checked) fn child(self, key: Key) -> BetreeNode
     recommends
         self.wf(),
-        self.is_Node(),
+        self is Node,
     {
-        self.get_Node_children().map[key]
+        self->children.map[key]
     }
 
     pub open spec(checked) fn empty_root() -> BetreeNode {
@@ -90,7 +89,7 @@ impl BetreeNode {
     }
 
     pub open spec(checked) fn promote(self) -> BetreeNode {
-        if self.is_Nil() {
+        if self is Nil {
             Self::empty_root() 
         } else {
             self
@@ -99,8 +98,8 @@ impl BetreeNode {
 
     pub open spec(checked) fn merge_buffer(self, new_buffer: Buffer) -> BetreeNode {
         BetreeNode::Node{
-            buffer: self.get_Node_buffer().merge(new_buffer),
-            children: self.get_Node_children(),
+            buffer: self->buffer.merge(new_buffer),
+            children: self->children,
         }
     }
 
@@ -112,14 +111,14 @@ impl BetreeNode {
     }
 
     pub open spec(checked) fn filter_buffer_and_children(self, filter: Set<Key>) -> BetreeNode {
-        if self.is_Nil() {
+        if self is Nil {
             self
         } else {
             let filtered_children = ChildMap {
-                map: Map::new( |k| true, |k| if filter.contains(k) { self.get_Node_children().map[k] } else { BetreeNode:: Nil } )
+                map: Map::new( |k| true, |k| if filter.contains(k) { self->children.map[k] } else { BetreeNode:: Nil } )
             };
             BetreeNode::Node {
-                buffer: self.get_Node_buffer().apply_filter(filter),
+                buffer: self->buffer.apply_filter(filter),
                 children: filtered_children,
             }
         }
@@ -134,14 +133,14 @@ impl BetreeNode {
                 else if right_keys.contains(k) {self.child(k).filter_buffer_and_children(right_keys)} 
                 else {self.child(k)});
         BetreeNode::Node {
-            buffer: self.get_Node_buffer(),
+            buffer: self->buffer,
             children: ChildMap{ map }
         }
     }
 
     pub open spec(checked) fn flush(self, down_keys: Set<Key>) -> BetreeNode {
-        let kept_buffer = self.get_Node_buffer().apply_filter(all_keys().difference(down_keys));
-        let moved_buffer = self.get_Node_buffer().apply_filter(down_keys);
+        let kept_buffer = self->buffer.apply_filter(all_keys().difference(down_keys));
+        let moved_buffer = self->buffer.apply_filter(down_keys);
         let out_children_map = Map::new( |k| true, |k| 
             if down_keys.contains(k) {self.child(k).promote().merge_buffer(moved_buffer)}
             else {self.child(k)}
@@ -163,7 +162,7 @@ pub struct QueryReceiptLine {
 impl QueryReceiptLine {
     pub open spec(checked) fn wf(self) -> bool {
         &&& self.node.wf()
-        &&& self.result.is_Define()
+        &&& self.result is Define
     }
 } //end impl QueryReceiptLine
 
@@ -181,7 +180,7 @@ impl QueryReceipt {
         &&& 0 < self.lines.len()
         &&& self.lines[0].node == self.root
         &&& (forall |i| #![auto] 0 <= i < self.lines.len() ==> (
-            self.lines[i].node.is_Node() <==> i < self.lines.len() - 1
+            self.lines[i].node is Node <==> i < self.lines.len() - 1
         ))
         &&& self.lines.last().result == Message::empty()
     }
@@ -220,7 +219,7 @@ impl QueryReceipt {
             self.structure(),
             0 <= i < self.lines.len() - 1,
     {
-        let msg = self.lines[i].node.get_Node_buffer().query(self.key);
+        let msg = self.lines[i].node->buffer.query(self.key);
         self.result_at(i) == self.result_at(i+1).merge(msg)
     }
 
@@ -256,7 +255,7 @@ impl Path {
     recommends 
         0 < self.routing.len(),
         self.node.wf(),
-        self.node.is_Node(),
+        self.node is Node,
     {
         Path{node: self.node.child(self.key), key: self.key, routing: self.routing.subrange(1, self.routing.len() as int)}
     }
@@ -264,7 +263,7 @@ impl Path {
     pub open spec(checked) fn common_children(self) -> bool
     recommends
         self.node.wf(),
-        self.node.is_Node(),
+        self.node is Node,
         0 < self.routing.len(),
     {
         forall |k: Key| #![auto] self.routing.index(0).contains(k) ==> self.node.child(k) == self.node.child(self.key)
@@ -274,7 +273,7 @@ impl Path {
     decreases self.routing.len()
     {
         &&& self.node.wf()
-        &&& self.node.is_Node()
+        &&& self.node is Node
         &&& 0 < self.routing.len() ==> {
             &&& self.subpath().valid()
             &&& self.common_children()
@@ -317,7 +316,7 @@ impl Path {
             replacement
         } else {
             BetreeNode::Node{
-                buffer: self.node.get_Node_buffer(),
+                buffer: self.node->buffer,
                 children: self.replaced_children(replacement)
             }
         }
@@ -335,7 +334,6 @@ state_machine!{ PagedBetree {
         &&& self.root.wf()
     }
 
-    #[is_variant]
     pub enum Label
     {
         Query{end_lsn: LSN, key: Key, value: Value},

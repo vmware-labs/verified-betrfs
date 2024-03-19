@@ -26,7 +26,6 @@ type StoreImage = StampedMap;
 
 /// Ephemeral state of crash aware map is the ephemeral (not crash-tolerant)
 /// view of the map.
-#[is_variant]
 pub enum Ephemeral {
     Unknown,
     Known{ v: AbstractMap::State },
@@ -56,7 +55,6 @@ state_machine!{ CrashTolerantMap {
         }
     }
 
-    #[is_variant]
     pub enum Label{
         LoadEphemeralFromPersistentLabel{ end_lsn: LSN },
         PutRecordsLabel{ records: MsgHistory },
@@ -69,9 +67,9 @@ state_machine!{ CrashTolerantMap {
 
     transition!{
         load_ephemeral_from_persistent(lbl: Label) {
-            require lbl.is_LoadEphemeralFromPersistentLabel();
-            require pre.ephemeral.is_Unknown();
-            require lbl.get_LoadEphemeralFromPersistentLabel_end_lsn() == pre.persistent.seq_end;
+            require lbl is LoadEphemeralFromPersistentLabel;
+            require pre.ephemeral is Unknown;
+            require lbl.arrow_LoadEphemeralFromPersistentLabel_end_lsn() == pre.persistent.seq_end;
 
             let new_abstract_map = AbstractMap::State {
                 stamped_map: pre.persistent,
@@ -99,27 +97,27 @@ state_machine!{ CrashTolerantMap {
         // Apply the commands in the message history in the given label
         // to this map
         put_records(lbl: Label, new_map: AbstractMap::State) {
-            require lbl.is_PutRecordsLabel();
-            require pre.ephemeral.is_Known();
+            require lbl is PutRecordsLabel;
+            require pre.ephemeral is Known;
             require AbstractMap::State::next(
-                pre.ephemeral.get_Known_v(), 
+                pre.ephemeral->v, 
                 new_map,
-                AbstractMap::Label::PutLabel{ puts: lbl.get_PutRecordsLabel_records() });
+                AbstractMap::Label::PutLabel{ puts: lbl.arrow_PutRecordsLabel_records() });
             update ephemeral = Ephemeral::Known{ v: new_map };
         }
     }
 
     transition!{
         query(lbl: Label, new_map: AbstractMap::State) {
-            require lbl.is_QueryLabel();
-            require pre.ephemeral.is_Known();
+            require lbl is QueryLabel;
+            require pre.ephemeral is Known;
             require AbstractMap::State::next(
-                pre.ephemeral.get_Known_v(), 
+                pre.ephemeral->v, 
                 new_map,
                 AbstractMap::Label::QueryLabel{ 
-                    end_lsn: lbl.get_QueryLabel_end_lsn(),
-                    key: lbl.get_QueryLabel_key(),
-                    value: lbl.get_QueryLabel_value()
+                    end_lsn: lbl.arrow_QueryLabel_end_lsn(),
+                    key: lbl->key,
+                    value: lbl->value
                 }
             );
         }
@@ -127,11 +125,11 @@ state_machine!{ CrashTolerantMap {
 
     transition!{
         freeze_map_internal(lbl: Label, frozen_map: StampedMap, new_map: AbstractMap::State) {
-            require lbl.is_InternalLabel();
-            require pre.ephemeral.is_Known();
+            require lbl is InternalLabel;
+            require pre.ephemeral is Known;
             require pre.in_flight is None;
             require AbstractMap::State::next(
-                pre.ephemeral.get_Known_v(), 
+                pre.ephemeral->v, 
                 new_map,
                 AbstractMap::Label::FreezeAsLabel{ stamped_map: frozen_map}
             );
@@ -142,10 +140,10 @@ state_machine!{ CrashTolerantMap {
 
     transition!{
         ephemeral_internal(lbl: Label, new_map: AbstractMap::State) {
-            require lbl.is_InternalLabel();
-            require pre.ephemeral.is_Known();
+            require lbl is InternalLabel;
+            require pre.ephemeral is Known;
             require AbstractMap::State::next(
-                pre.ephemeral.get_Known_v(), 
+                pre.ephemeral->v, 
                 new_map,
                 AbstractMap::Label::InternalLabel,
             );
@@ -155,17 +153,17 @@ state_machine!{ CrashTolerantMap {
 
     transition!{
         commit_start(lbl: Label) {
-            require lbl.is_CommitStartLabel();
-            require pre.ephemeral.is_Known();
+            require lbl is CommitStartLabel;
+            require pre.ephemeral is Known;
             require pre.in_flight is Some;
-            require pre.persistent.seq_end <= lbl.get_CommitStartLabel_new_boundary_lsn();
-            require lbl.get_CommitStartLabel_new_boundary_lsn() == pre.in_flight.unwrap().seq_end;
+            require pre.persistent.seq_end <= lbl->new_boundary_lsn;
+            require lbl->new_boundary_lsn == pre.in_flight.unwrap().seq_end;
         }
     }
 
     transition!{
         commit_complete(lbl: Label) {
-            require lbl.is_CommitCompleteLabel();
+            require lbl is CommitCompleteLabel;
             require pre.in_flight is Some;
             update persistent = pre.in_flight.unwrap();
             update in_flight = Option::None;
@@ -174,7 +172,7 @@ state_machine!{ CrashTolerantMap {
 
     transition!{
         crash(lbl: Label) {
-            require lbl.is_CrashLabel();
+            require lbl is CrashLabel;
             update ephemeral = Ephemeral::Unknown;
             update in_flight = Option::None;
         }

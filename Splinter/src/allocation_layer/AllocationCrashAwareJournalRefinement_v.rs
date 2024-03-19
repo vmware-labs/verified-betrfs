@@ -97,7 +97,7 @@ impl Ephemeral{
             AbstractCrashAwareJournal_v::Ephemeral::Unknown
         } else {
             AbstractCrashAwareJournal_v::Ephemeral::Known{
-                v: self.get_Known_v().i_abstract()
+                v: self->v.i_abstract()
             }
         }
     }
@@ -169,8 +169,8 @@ impl AllocationCrashAwareJournal::State{
     {
         reveal(CrashTolerantJournal::State::next_by);
 
-        let aj = self.ephemeral.get_Known_v();
-        let alloc_lbl = AllocationJournal::Label::ReadForRecovery{messages: lbl.get_ReadForRecovery_records()};
+        let aj = self.ephemeral->v;
+        let alloc_lbl = AllocationJournal::Label::ReadForRecovery{messages: lbl.arrow_ReadForRecovery_records()};
         aj.next_refines_abstract(aj, alloc_lbl);
     }
 
@@ -184,8 +184,8 @@ impl AllocationCrashAwareJournal::State{
     {
         reveal(CrashTolerantJournal::State::next_by);
 
-        let aj = self.ephemeral.get_Known_v();
-        let alloc_lbl = AllocationJournal::Label::QueryEndLsn{end_lsn: lbl.get_QueryEndLsn_end_lsn() };
+        let aj = self.ephemeral->v;
+        let alloc_lbl = AllocationJournal::Label::QueryEndLsn{end_lsn: lbl->end_lsn };
         aj.next_refines_abstract(aj, alloc_lbl);
     }
 
@@ -201,8 +201,8 @@ impl AllocationCrashAwareJournal::State{
     {
         reveal(CrashTolerantJournal::State::next_by);
 
-        let aj = self.ephemeral.get_Known_v();
-        let alloc_lbl = AllocationJournal::Label::Put{messages: lbl.get_Put_records() };
+        let aj = self.ephemeral->v;
+        let alloc_lbl = AllocationJournal::Label::Put{messages: lbl.arrow_Put_records() };
         aj.next_refines_abstract(new_journal, alloc_lbl);
     }
 
@@ -218,10 +218,10 @@ impl AllocationCrashAwareJournal::State{
     {
         reveal(CrashTolerantJournal::State::next_by);
 
-        let aj = self.ephemeral.get_Known_v();
+        let aj = self.ephemeral->v;
         let alloc_lbl = AllocationJournal::Label::InternalAllocations{
-            allocs: lbl.get_Internal_allocs(),
-            deallocs: lbl.get_Internal_deallocs(),
+            allocs: lbl->allocs,
+            deallocs: lbl.arrow_Internal_deallocs(),
         };
         aj.next_refines_abstract(new_journal, alloc_lbl);
     }
@@ -247,7 +247,7 @@ impl AllocationCrashAwareJournal::State{
         assert(frozen_journal.i().wf());
         assert(frozen_journal.tj.seq_start() == frozen_journal.i().seq_start);
 
-        let aj = self.ephemeral.get_Known_v();
+        let aj = self.ephemeral->v;
         let alloc_lbl = AllocationJournal::Label::FreezeForCommit{frozen_journal};
         aj.next_refines_abstract(aj, alloc_lbl);
     }
@@ -269,11 +269,11 @@ impl AllocationCrashAwareJournal::State{
 
         assert(self.inflight.unwrap().tj.seq_start() == self.i().in_flight.unwrap().seq_start);
 
-        let aj = self.ephemeral.get_Known_v();
+        let aj = self.ephemeral->v;
         let alloc_lbl = AllocationJournal::Label::DiscardOld{ 
             start_lsn: self.inflight.unwrap().tj.seq_start(), 
-            require_end: lbl.get_CommitComplete_require_end(),
-            deallocs: lbl.get_CommitComplete_discarded(),
+            require_end: lbl->require_end,
+            deallocs: lbl->discarded,
         };
         aj.next_refines_abstract(new_journal, alloc_lbl);
     }

@@ -35,9 +35,9 @@ impl OffsetMap {
     }
 
     pub open spec(checked) fn decrement(self, i: nat) -> OffsetMap
-        recommends self.is_total()
+        // recommends self.is_total()
     {
-        OffsetMap{ offsets: Map::new(|k| true, 
+        OffsetMap{ offsets: Map::new(|k| self.offsets.contains_key(k), 
             |k| if i <= self.offsets[k] { (self.offsets[k]-i) as nat } else { 0 as nat} )}
     }
 } // end impl offsetmap

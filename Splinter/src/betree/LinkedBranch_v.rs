@@ -17,7 +17,6 @@ use crate::disk::GenericDisk_v::*;
 
 verus! {
 
-#[is_variant]
 pub enum SplitArg {
     SplitIndex{pivot: Key, pivot_index: int},
     SplitLeaf{pivot: Key}
@@ -31,15 +30,15 @@ impl SplitArg {
         match self {
             Self::SplitLeaf{pivot} => {
                 &&& root is Leaf
-                &&& root.get_Leaf_keys().len() == root.get_Leaf_msgs().len()
-                &&& 0 < Key::largest_lt(root.get_Leaf_keys(), pivot) + 1 < root.get_Leaf_keys().len()
+                &&& root->keys.len() == root->msgs.len()
+                &&& 0 < Key::largest_lt(root->keys, pivot) + 1 < root->keys.len()
             }
             Self::SplitIndex{pivot, pivot_index} => {
                 &&& root is Index
-                &&& root.get_Index_children().len() == root.get_Index_pivots().len() + 1
+                &&& root->children.len() == root.arrow_Index_pivots().len() + 1
                 &&& split_branch.acyclic() ==> split_branch.all_keys_in_range()
-                &&& 0 <= pivot_index < root.get_Index_pivots().len()
-                &&& root.get_Index_pivots()[pivot_index] == pivot
+                &&& 0 <= pivot_index < root.arrow_Index_pivots().len()
+                &&& root.arrow_Index_pivots()[pivot_index] == pivot
             }
         }
     }
@@ -47,14 +46,13 @@ impl SplitArg {
     pub open spec(checked) fn get_pivot(self) -> Key
     {
         if self is SplitLeaf {
-            self.get_SplitLeaf_pivot()
+            self.arrow_SplitLeaf_pivot()
         } else {
-            self.get_SplitIndex_pivot()
+            self.arrow_SplitIndex_pivot()
         }
     }
 }
 
-#[is_variant]
 pub enum Node {
     Index{pivots: Seq<Key>, children: Seq<Address>},
     Leaf{keys: Seq<Key>, msgs: Seq<Message>}
@@ -78,13 +76,13 @@ impl Node {
     pub open spec(checked) fn valid_child_index(self, i: nat) -> bool
     {
         &&& self is Index
-        &&& i < self.get_Index_children().len()
+        &&& i < self->children.len()
     }
 
     pub open spec(checked) fn route(self, key: Key) -> int
         recommends self.wf()
     {
-        let s = if self is Leaf { self.get_Leaf_keys() } else { self.get_Index_pivots() };
+        let s = if self is Leaf { self->keys } else { self.arrow_Index_pivots() };
         Key::largest_lte(s, key)
     }
 }
@@ -114,7 +112,7 @@ impl DiskView {
     pub open spec(checked) fn node_has_valid_child_address(self, node: Node) -> bool
     {
         node is Index ==>
-            forall |idx| 0 <= idx < node.get_Index_children().len() ==> self.valid_address(#[trigger] node.get_Index_children()[idx])
+            forall |idx| 0 <= idx < node->children.len() ==> self.valid_address(#[trigger] node->children[idx])
     }
 
     // disk is closed wrt to all the address in the nodes on disk
@@ -134,9 +132,9 @@ impl DiskView {
     {
         let node = self.get(addr);
         if node is Index {
-            node.get_Index_pivots().to_set()
+            node.arrow_Index_pivots().to_set()
         } else {
-            node.get_Leaf_keys().to_set()
+            node->keys.to_set()
         }
     }
 
@@ -164,8 +162,8 @@ impl DiskView {
     {
         let node = self.entries[addr];
         forall |child_idx: nat| #[trigger] node.valid_child_index(child_idx) ==> {
-            &&& ranking.contains_key(node.get_Index_children()[child_idx as int]) // ranking is closed
-            &&& ranking[node.get_Index_children()[child_idx as int]] < ranking[addr]
+            &&& ranking.contains_key(node->children[child_idx as int]) // ranking is closed
+            &&& ranking[node->children[child_idx as int]] < ranking[addr]
         }
     }
 
@@ -271,9 +269,9 @@ impl LinkedBranch {
             decreases self.get_rank(ranking), 1int
     {
         self.root() is Index ==> {
-            &&& forall |i| 0 <= i < self.root().get_Index_children().len() ==> self.child_all_keys_in_range_internal(ranking, i)
-            &&& forall |i| 0 <= i < self.root().get_Index_children().len() - 1 ==> self.all_keys_below_bound(i, ranking)
-            &&& forall |i| 0 < i < self.root().get_Index_children().len() ==> self.all_keys_above_bound(i, ranking)
+            &&& forall |i| 0 <= i < self.root()->children.len() ==> self.child_all_keys_in_range_internal(ranking, i)
+            &&& forall |i| 0 <= i < self.root()->children.len() - 1 ==> self.all_keys_below_bound(i, ranking)
+            &&& forall |i| 0 < i < self.root()->children.len() ==> self.all_keys_above_bound(i, ranking)
         }
     }
 
@@ -282,7 +280,7 @@ impl LinkedBranch {
             self.wf(),
             self.valid_ranking(ranking),
             self.root() is Index,
-            0 <= i < self.root().get_Index_children().len()
+            0 <= i < self.root()->children.len()
         decreases self.get_rank(ranking), 0int
         when {
             &&& self.root() is Index
@@ -300,19 +298,19 @@ impl LinkedBranch {
             self.wf(),
             self.valid_ranking(ranking),
             self.root() is Index,
-            0 <= i <= self.root().get_Index_children().len()
+            0 <= i <= self.root()->children.len()
         decreases
             self.get_rank(ranking),
             0int,
-            self.root().get_Index_children().len() - i
+            self.root()->children.len() - i
         when {
             &&& self.root() is Index
-            &&& 0 <= i <= self.root().get_Index_children().len()
+            &&& 0 <= i <= self.root()->children.len()
             &&& self.root().valid_child_index(i) ==>
                 self.child_at_idx(i).get_rank(ranking) < self.get_rank(ranking)
         }
     {
-        if i == self.root().get_Index_children().len() {
+        if i == self.root()->children.len() {
             set!{}
         } else {
             self.child_at_idx(i).all_keys(ranking) + self.children_keys(ranking, i + 1)
@@ -328,9 +326,9 @@ impl LinkedBranch {
         // TODO (x9du): the match doesn't satisfy the self.root() is Index recommends
         // but the if does?
         if self.root() is Leaf {
-            self.root().get_Leaf_keys().to_set()
+            self.root()->keys.to_set()
         } else {
-            let pivot_keys = self.root().get_Index_pivots().to_set();
+            let pivot_keys = self.root().arrow_Index_pivots().to_set();
             let index_keys = self.children_keys(ranking, 0);
             pivot_keys + index_keys
         }
@@ -351,11 +349,11 @@ impl LinkedBranch {
             self.wf(),
             self.valid_ranking(ranking),
             self.root() is Index,
-            0 <= i < self.root().get_Index_pivots().len()
+            0 <= i < self.root().arrow_Index_pivots().len()
         decreases self.get_rank(ranking)
     {
         // Need valid ranking implies child has valid ranking to restore checked
-        forall |key| self.child_at_idx(i as nat).all_keys(ranking).contains(key) ==> Key::lt(key, self.root().get_Index_pivots()[i])
+        forall |key| self.child_at_idx(i as nat).all_keys(ranking).contains(key) ==> Key::lt(key, self.root().arrow_Index_pivots()[i])
     }
 
     pub open spec/*XXX (checked)*/ fn all_keys_above_bound(self, i: int, ranking: Ranking) -> bool
@@ -363,11 +361,11 @@ impl LinkedBranch {
             self.wf(),
             self.valid_ranking(ranking),
             self.root() is Index,
-            0 <= i - 1 < self.root().get_Index_pivots().len()
+            0 <= i - 1 < self.root().arrow_Index_pivots().len()
         decreases self.get_rank(ranking)
     {
         // Need valid ranking implies child has valid ranking to restore checked
-        forall |key| self.child_at_idx(i as nat).all_keys(ranking).contains(key) ==> #[trigger] Key::lte(self.root().get_Index_pivots()[i-1], key)
+        forall |key| self.child_at_idx(i as nat).all_keys(ranking).contains(key) ==> #[trigger] Key::lte(self.root().arrow_Index_pivots()[i-1], key)
     }
 
     pub open spec(checked) fn child_at_idx(self, i: nat) -> LinkedBranch
@@ -375,7 +373,7 @@ impl LinkedBranch {
             self.has_root(),
             self.root().valid_child_index(i)
     {
-        LinkedBranch{root: self.root().get_Index_children()[i as int], disk_view: self.disk_view}
+        LinkedBranch{root: self.root()->children[i as int], disk_view: self.disk_view}
     }
 
     pub open spec(checked) fn representation(self) -> Set<Address>
@@ -395,7 +393,7 @@ impl LinkedBranch {
         } else if self.root() is Leaf {
             set!{self.root}
         } else {
-            let num_children = self.root().get_Index_children().len();
+            let num_children = self.root()->children.len();
             let subtree_addrs = Seq::new(num_children, |i: int| self.child_reachable_addrs_using_ranking(ranking, i as nat));
             union_seq_of_sets(subtree_addrs).insert(self.root)
         }
@@ -406,10 +404,10 @@ impl LinkedBranch {
             self.wf(),
             self.valid_ranking(ranking),
             self.root() is Index,
-            0 <= i < self.root().get_Index_children().len()
+            0 <= i < self.root()->children.len()
         decreases self.get_rank(ranking), 0int
         when {
-            &&& 0 <= i < self.root().get_Index_children().len()
+            &&& 0 <= i < self.root()->children.len()
             &&& self.child_at_idx(i).get_rank(ranking) < self.get_rank(ranking)
         }
     {
@@ -438,8 +436,8 @@ impl LinkedBranch {
         let node = self.root();
         let r = node.route(key);
         if node is Leaf {
-            if r >= 0 && node.get_Leaf_keys()[r] == key {
-                node.get_Leaf_msgs()[r]
+            if r >= 0 && node->keys[r] == key {
+                node->msgs[r]
             } else {
                 Message::Update{delta: nop_delta()}
             }
@@ -475,12 +473,12 @@ impl LinkedBranch {
     {
         // Need largest_lte ensures to restore checked
         let node = self.root();
-        let llte = Key::largest_lte(node.get_Leaf_keys(), key);
+        let llte = Key::largest_lte(node->keys, key);
         let new_node =
-            if 0 <= llte && node.get_Leaf_keys()[llte] == key {
-                Node::Leaf{keys: node.get_Leaf_keys(), msgs: node.get_Leaf_msgs().update(llte, msg)}
+            if 0 <= llte && node->keys[llte] == key {
+                Node::Leaf{keys: node->keys, msgs: node->msgs.update(llte, msg)}
             } else {
-                Node::Leaf{keys: node.get_Leaf_keys().insert(llte+1, key), msgs: node.get_Leaf_msgs().insert(llte+1, msg)}
+                Node::Leaf{keys: node->keys.insert(llte+1, key), msgs: node->msgs.insert(llte+1, msg)}
             };
         LinkedBranch{root: self.root, disk_view: self.disk_view.modify_disk(self.root, new_node)}
     }
@@ -532,14 +530,14 @@ impl LinkedBranch {
             self.disk_view.is_fresh(set!{right_root_addr})
     {
         let pivot = split_arg.get_pivot();
-        let split_index = Key::largest_lt(self.root().get_Leaf_keys(), pivot) + 1;
+        let split_index = Key::largest_lt(self.root()->keys, pivot) + 1;
         let left_root = Node::Leaf{
-            keys: self.root().get_Leaf_keys().take(split_index),
-            msgs: self.root().get_Leaf_msgs().take(split_index)
+            keys: self.root()->keys.take(split_index),
+            msgs: self.root()->msgs.take(split_index)
         };
         let right_root = Node::Leaf{
-            keys: self.root().get_Leaf_keys().skip(split_index),
-            msgs: self.root().get_Leaf_msgs().skip(split_index)
+            keys: self.root()->keys.skip(split_index),
+            msgs: self.root()->msgs.skip(split_index)
         };
         let new_disk_view = self.disk_view
             .modify_disk(self.root, left_root)
@@ -553,12 +551,12 @@ impl LinkedBranch {
         recommends
             self.has_root(),
             self.root() is Index,
-            self.root().get_Index_children().len() == self.root().get_Index_pivots().len() + 1,
-            0 <= from < to <= self.root().get_Index_children().len()
+            self.root()->children.len() == self.root().arrow_Index_pivots().len() + 1,
+            0 <= from < to <= self.root()->children.len()
     {
         Node::Index{
-            pivots: self.root().get_Index_pivots().subrange(from, to-1),
-            children: self.root().get_Index_children().subrange(from, to)
+            pivots: self.root().arrow_Index_pivots().subrange(from, to-1),
+            children: self.root()->children.subrange(from, to)
         }
     }
 
@@ -569,9 +567,9 @@ impl LinkedBranch {
             self.disk_view.is_fresh(set!{right_root_addr})
     {
         // Possibly lexical match failure for sub_index recommends
-        let pivot_index = split_arg.get_SplitIndex_pivot_index();
+        let pivot_index = split_arg.arrow_SplitIndex_pivot_index();
         let left_root = self.sub_index(0, pivot_index + 1);
-        let right_root = self.sub_index(pivot_index + 1, self.root().get_Index_children().len() as int);
+        let right_root = self.sub_index(pivot_index + 1, self.root()->children.len() as int);
         let new_disk_view = self.disk_view
             .modify_disk(self.root, left_root)
             .modify_disk(right_root_addr, right_root);
@@ -615,8 +613,8 @@ impl LinkedBranch {
         let child_idx = self.root().route(pivot) + 1;
         let (left_branch, right_branch) = self.child_at_idx(child_idx as nat).split_node(split_arg, new_child_addr);
         let new_root = Node::Index{
-            pivots: self.root().get_Index_pivots().insert(child_idx, pivot),
-            children: self.root().get_Index_children().insert(child_idx + 1, new_child_addr)
+            pivots: self.root().arrow_Index_pivots().insert(child_idx, pivot),
+            children: self.root()->children.insert(child_idx + 1, new_child_addr)
         };
         let new_disk_view = self.disk_view
             .merge_disk(left_branch.disk_view)

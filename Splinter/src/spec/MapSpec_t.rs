@@ -6,9 +6,9 @@ use builtin::*;
 use builtin_macros::*;
 use vstd::{map::*, set::*};
 
+use crate::spec::FloatingSeq_t::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
-use crate::spec::FloatingSeq_t::*;
 use crate::spec::TotalKMMap_t::*;
 
 use state_machines_macros::state_machine;
@@ -20,65 +20,60 @@ verus! {
 // Parallels a structure from Dafny (specifically from MapSpec.s.dfy)
 // Where the abstract top-level map specification uses two variables to
 // label its transitions. One of type `Input` and one of type `Output`.
-
 /// An Input represents a possible action that can be taken on an abstract
 /// MapSpec (i.e.: abstract key-value store), and contains the relevant
 /// arguments for performing that operation.
-#[is_variant]
 pub enum Input {
-    QueryInput{key: Key},
-    PutInput{key: Key, value: Value},
-    NoopInput
+    QueryInput { key: Key },
+    PutInput { key: Key, value: Value },
+    NoopInput,
 }
 
 /// An Output represents the result from taking an Input action (and contains
 /// any relevant return arguments from performing the corresponding action).
-#[is_variant]
 pub enum Output {
-    QueryOutput{value: Value},
+    QueryOutput { value: Value },
     PutOutput,
-    NoopOutput
+    NoopOutput,
 }
 
 // TODO ugly workaround for init!{my_init()} being a predicate from outside
 // TODO 2: can't declare this fn inside MapSpec state_machine!?
-pub open spec(checked) fn my_init() -> MapSpec::State
-{
-    MapSpec::State{ kmmap: TotalKMMap::empty() }
+pub open spec(checked) fn my_init() -> MapSpec::State {
+    MapSpec::State { kmmap: TotalKMMap::empty() }
 }
 
 // TODO (jonh): Make this automated. A macro of some sort
 pub open spec(checked) fn getInput(label: MapSpec::Label) -> Input {
     match label {
-        MapSpec::Label::Query{input, output} => input,
-        MapSpec::Label::Put{input, output} => input,
-        MapSpec::Label::Noop{input, output} => input,
+        MapSpec::Label::Query { input, output } => input,
+        MapSpec::Label::Put { input, output } => input,
+        MapSpec::Label::Noop { input, output } => input,
     }
 }
 
 pub open spec(checked) fn getOutput(label: MapSpec::Label) -> Output {
     match label {
-        MapSpec::Label::Query{input, output} => output,
-        MapSpec::Label::Put{input, output} => output,
-        MapSpec::Label::Noop{input, output} => output,
+        MapSpec::Label::Query { input, output } => output,
+        MapSpec::Label::Put { input, output } => output,
+        MapSpec::Label::Noop { input, output } => output,
     }
 }
 
 // MapSpec is our top-level trusted spec on what a Map (key-value store)
 // is.
-// 
+//
 // We don't refine to this directly however as it doesn't provide
 // a model that allows for proper concurrent disk I/O access (since there's
 // no concept of asynchronicity between requesting an operation and
 // getting the result).
-// 
+//
 // To achieve this we wrap MapSpec within a AsyncMap state machine. Then
 // to allow for a model where crashes can occur, we then wrap the AsyncMap
 // state machine within a CrashTolerantAsyncMap state machine specification.
 state_machine!{ MapSpec {
     fields { pub kmmap: TotalKMMap }
 
-    #[is_variant]
     pub enum Label{
         Query{input: Input, output: Output},
         Put{input: Input, output: Output},
@@ -101,7 +96,7 @@ state_machine!{ MapSpec {
             require let Input::QueryInput { key } = input;
             require let Output::QueryOutput { value } = output;
 
-            require pre.kmmap[key].get_Define_value() == value;  
+            require pre.kmmap[key]->value == value;
         }
     }
 
@@ -124,17 +119,20 @@ state_machine!{ MapSpec {
             require let Output::NoopOutput = output;
         }
     }
-}}
+}}  // Async things
 
-// Async things
-type ID = int;  // wishing for genericity
+
+type ID = int;
+
+// wishing for genericity
 pub struct Request {
     pub input: Input,
-    pub id: ID
+    pub id: ID,
 }
+
 pub struct Reply {
     pub output: Output,
-    pub id: ID
+    pub id: ID,
 }
 
 // Tenzin: this structure is also brought in from Dafny (see Async.s.dfy). What is
@@ -145,14 +143,14 @@ pub struct Reply {
 // used for templating modules. I think we should just delete this type.
 // It causes confusion since there's so many names for things that are
 // the same thing.
-
 /// PersistentState represents the actual state of the AsyncMap (wraps
 /// the true key-value store). Whenever an operation is executed the
 /// PersistentState is updated.
 #[verifier::ext_equal]
 pub struct PersistentState {
-    pub appv: MapSpec::State
+    pub appv: MapSpec::State,
 }
+
 impl PersistentState {
     pub open spec(checked) fn ext_equal(self, other: PersistentState) -> bool {
         &&& self.appv.kmmap.ext_equal(other.appv.kmmap)
@@ -160,15 +158,14 @@ impl PersistentState {
 
     pub proof fn ext_equal_is_equality()
         ensures
-            forall |a: PersistentState, b: PersistentState|
-                a.ext_equal(b) == (a == b)
+            forall|a: PersistentState, b: PersistentState| a.ext_equal(b) == (a == b),
     {
     }
 }
 
 /// EphemeralState captures the relevant async information we need to
 /// track whether operations violate linearizability (and thus enforce
-/// in our transitions that all operations are linearizable from the 
+/// in our transitions that all operations are linearizable from the
 /// perspective of the client).
 ///
 /// We view our EphemeralState as a set of outstanding client requests
@@ -184,19 +181,17 @@ pub struct EphemeralState {
 
 // TODO(jonh): `error: state machine field must be marked public`: why make me type 'pub', then?
 // It's our syntax!
-
 // AsyncMap wraps a MapSpec with asynchrony. It represents a spec where
 // map operations are broken down into 3 stages:
 // - Requesting the operation
 // - Executing the operation
 // - Replying (delivering confirmation to client that operation was performed).
-// 
+//
 // An execution is considered valid as long as there's some sequence
 // of events where all requests reflect side effects from all responses
 // received strictly before request is fired. (Standard Distributed
 // Systems linearizability).
 state_machine!{ AsyncMap {
-    #[is_variant]
     pub enum Label { // Was AsyncMod.UIOp
         /// Request transition is labeled with the requested operation.
         RequestOp { req: Request },
@@ -274,7 +269,6 @@ pub type Version = PersistentState;
 // TODO(jonh): was sad to concretize Map (because no module functors). Is there a traity alternative?
 // TODO(jonh): also sad to cram Async into CrashTolerant (because Async wasn't really a real state machine).
 // How do we feel about going slightly off the state machine rails and having it fall apart?
-
 // CrashTolerantAsyncMap is a, well, crash-tolerant asynchronous map. This is the true top-level
 // spec which we refine our implementation to.
 //
@@ -286,11 +280,11 @@ state_machine!{ CrashTolerantAsyncMap {
         /// `versions` is a sequence of snapshots of the map state. `versions[i]` is a
         /// snapshot of the map when `map.seq_end == i` (i.e.: when the next LSN to-be-executed
         /// was `i`).
-        /// 
+        ///
         /// Invariant: the first active
         /// index in the floating seq is the "stable index" (i.e.: the latest index which is
         /// crash-tolerant). AKA "stable LSN".
-        /// 
+        ///
         /// All snapshots after the first index represent the sequence
         /// of states the Map has gone through that have yet to be persisted.
         /// Thus: the last state in `versions` represents the current up-to-date view
@@ -306,7 +300,6 @@ state_machine!{ CrashTolerantAsyncMap {
         pub sync_requests: Map<SyncReqId, nat>,
     }
 
-    #[is_variant]
     pub enum Label { // Unrolled version of Dafny labels for CrashTolerantMod(MapSpecMod)
         OperateOp{ base_op: AsyncMap::Label },
         CrashOp,
@@ -401,7 +394,7 @@ state_machine!{ CrashTolerantAsyncMap {
             update versions = pre.versions.get_suffix(new_stable_index);
         }
     }
-    
+
     /// req_sync represents a client requesting a sync operation. Allows us to do
     /// bookkeeping to specify when the reply is delivered that we actually followed
     /// good sync semantics (a reply to a sync should mean all observable state at
@@ -451,22 +444,22 @@ state_machine!{ CrashTolerantAsyncMap {
 
     #[inductive(initialize)]
     fn initialize_inductive(post: Self) { }
-   
+
     #[inductive(operate)]
     fn operate_inductive(pre: Self, post: Self, label: Label, new_versions: FloatingSeq<Version>, new_async_ephemeral: EphemeralState) { }
-   
+
     #[inductive(crash)]
     fn crash_inductive(pre: Self, post: Self, label: Label) { }
-   
+
     #[inductive(sync)]
     fn sync_inductive(pre: Self, post: Self, label: Label, new_stable_index: int) { }
-   
+
     #[inductive(req_sync)]
     fn req_sync_inductive(pre: Self, post: Self, label: Label) { }
-   
+
     #[inductive(reply_sync)]
     fn reply_sync_inductive(pre: Self, post: Self, label: Label) { }
-   
+
     #[inductive(noop)]
     fn noop_inductive(pre: Self, post: Self, label: Label) { }
 
@@ -476,6 +469,5 @@ state_machine!{ CrashTolerantAsyncMap {
 //    fn operate_inductive(pre: Self, post: Self, op: AsyncUILabel) { }
 }}
 
-}
-
-fn main() { }
+} // verus!
+fn main() {}

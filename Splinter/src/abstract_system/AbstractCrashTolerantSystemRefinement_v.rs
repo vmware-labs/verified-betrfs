@@ -32,16 +32,16 @@ verus! {
     {
         pub open spec(checked) fn i(self) -> MsgHistory
             recommends
-                self.ephemeral.is_Known()
+                self.ephemeral is Known
         {
-            self.ephemeral.get_Known_v().journal
+            self.ephemeral->v.journal
         }
 
         pub open spec(checked) fn wf(self) -> bool
         {
             &&& self.persistent.wf()
             &&& self.ephemeral.wf()
-            &&& (self.in_flight.is_Some() ==> self.in_flight.get_Some_0().wf())
+            &&& (self.in_flight is Some ==> self.in_flight.get_Some_0().wf())
         }
     }
 
@@ -49,9 +49,9 @@ verus! {
     {
         pub open spec(checked) fn i(self) -> StampedMap
             recommends
-                self.ephemeral.is_Known()
+                self.ephemeral is Known
         {
-            self.ephemeral.get_Known_v().stamped_map
+            self.ephemeral->v.stamped_map
         }
 
         // AbstractCrashAwareMap needs to carry wf/invariant that shows that contained
@@ -78,8 +78,8 @@ verus! {
         /// state.
         pub open spec(checked) fn ephemeral_seq_end(self) -> LSN
             recommends
-                self.ephemeral.is_Some(),
-                self.journal.ephemeral.is_Known(),
+                self.ephemeral is Some,
+                self.journal.ephemeral is Known,
         {
             self.journal.i().seq_end
         }
@@ -93,7 +93,7 @@ verus! {
             let stable_lsn = self.journal.persistent.seq_end;
             match self.ephemeral {
                 Some(Known{ progress, sync_reqs, .. }) => {
-                    let _ = spec_affirm(self.journal.i() == self.journal.ephemeral.get_Known_v().journal);
+                    let _ = spec_affirm(self.journal.i() == self.journal.ephemeral->v.journal);
                     let _ = spec_affirm(self.journal.i().can_follow(self.mapadt.persistent.seq_end));
                     let _ = spec_affirm(self.journal.i().can_discard_to(stable_lsn));
                         CrashTolerantAsyncMap::State{
@@ -181,9 +181,9 @@ verus! {
         {
             &&& self.journal.wf()
             &&& self.mapadt.wf()
-            &&& self.ephemeral.is_Some() == self.journal.ephemeral.is_Known()
-            &&& self.journal.ephemeral.is_Known() == self.mapadt.ephemeral.is_Known()
-            &&& self.journal.in_flight.is_Some() ==> self.mapadt.in_flight.is_Some()
+            &&& self.ephemeral is Some == self.journal.ephemeral is Known
+            &&& self.journal.ephemeral is Known == self.mapadt.ephemeral is Known
+            &&& self.journal.in_flight is Some ==> self.mapadt.in_flight is Some
         }
 
         // Geometry refers to the boundaries between the journal and
@@ -196,7 +196,7 @@ verus! {
         pub open spec(checked) fn inv_ephemeral_geometry(self) -> bool
             recommends
                 self.wf(),
-                self.ephemeral.is_Some(),
+                self.ephemeral is Some,
         {
             // Ephemeral journal begins at persistent map
             &&& self.journal.i().can_follow(self.mapadt.persistent.seq_end)
@@ -209,13 +209,13 @@ verus! {
             // Ephemeral journal is no shorter than persistent state
             &&& self.journal.persistent.seq_end <= self.ephemeral_seq_end()
             // Local snapshot of mapLsn matched actual map state machine
-            &&& self.ephemeral.get_Some_0().map_lsn == self.mapadt.ephemeral.get_Known_v().stamped_map.seq_end
+            &&& self.ephemeral.get_Some_0().map_lsn == self.mapadt.ephemeral->v.stamped_map.seq_end
         }
 
         pub open spec(checked) fn inv_ephemeral_value_agreement(self) -> bool
             recommends
                 self.wf(),
-                self.ephemeral.is_Some(),
+                self.ephemeral is Some,
                 self.inv_ephemeral_geometry()
         {
             // Ephemeral journal agrees with persistent journal
@@ -230,18 +230,18 @@ verus! {
 
         pub open spec(checked) fn map_is_frozen(self) -> bool
         {
-            self.mapadt.in_flight.is_Some()
+            self.mapadt.in_flight is Some
         }
 
         pub open spec(checked) fn commit_started(self) -> bool
         {
-            self.journal.in_flight.is_Some()
+            self.journal.in_flight is Some
         }
 
         pub open spec(checked) fn inv_frozen_map_geometry(self) -> bool
             recommends
                 self.wf(),
-                self.ephemeral.is_Some(),
+                self.ephemeral is Some,
                 self.map_is_frozen()
         {
             // frozen map hasn't passed ephemeral journal
@@ -253,7 +253,7 @@ verus! {
         pub open spec(checked) fn inv_frozen_map_value_agreement(self) -> bool
             recommends
                 self.wf(),
-                self.ephemeral.is_Some(),
+                self.ephemeral is Some,
                 self.inv_ephemeral_geometry(),
                 self.map_is_frozen(),
                 self.inv_frozen_map_geometry(),
@@ -279,7 +279,7 @@ verus! {
 
             // We need a well-behaved journal to relate in-flight state to.
             &&& self.wf()
-            &&& self.ephemeral.is_Some()
+            &&& self.ephemeral is Some
             &&& self.inv_ephemeral_geometry()
 
             // Geometry properties
@@ -321,8 +321,8 @@ verus! {
         {
             &&& self.wf()
             &&& self.inv_persistent_journal_geometry()
-            &&& self.ephemeral.is_None() ==> {!self.map_is_frozen() && !self.commit_started()}
-            &&& self.ephemeral.is_Some() ==>
+            &&& self.ephemeral is None ==> {!self.map_is_frozen() && !self.commit_started()}
+            &&& self.ephemeral is Some ==>
             {
                 &&& self.inv_ephemeral_geometry()
                 &&& self.inv_ephemeral_value_agreement()
@@ -413,9 +413,9 @@ verus! {
             // Dafny's able to figure this out without this line, idk
             // why Verus isn't, because of opaque `next_by` etc.? (But idk how
             // to reveal those for the requires list)
-            // v.ephemeral.is_Some(),
+            // v.ephemeral is Some,
             // // Same with this,
-            // v.journal.ephemeral.is_Known(),
+            // v.journal.ephemeral is Known,
             CoordinationSystem::State::next(v, vp, label),
             CoordinationSystem::State::next_by(v, vp, label, step),
             matches!(step, CoordinationSystem::Step::commit_complete(_, _)),
@@ -438,8 +438,8 @@ verus! {
         reveal(AbstractJournal::State::next_by);
 
         // Passes with the reveal statements, fails without
-        assert(v.ephemeral.is_Some());
-        assert(v.journal.ephemeral.is_Known());
+        assert(v.ephemeral is Some);
+        assert(v.journal.ephemeral is Known);
 
         assert(CrashTolerantJournal::State::next(v.journal, vp.journal, CrashTolerantJournal::Label::CommitCompleteLabel {
             require_end: v.ephemeral.get_Some_0().map_lsn,
@@ -574,10 +574,10 @@ verus! {
             }
         }
 
-        let key = label.get_Label_ctam_label().get_OperateOp_base_op()
-            .get_ExecuteOp_req().input.get_PutInput_key();
-        let value = label.get_Label_ctam_label().get_OperateOp_base_op()
-            .get_ExecuteOp_req().input.get_PutInput_value();
+        let key = label->ctam_label->base_op
+            .arrow_ExecuteOp_req().input.arrow_PutInput_key();
+        let value = label->ctam_label->base_op
+            .arrow_ExecuteOp_req().input->value;
 
         let keyed_message = KeyedMessage{
             key: key,
@@ -846,7 +846,7 @@ verus! {
             matches!(step, CoordinationSystem::Step::put(..)),
         ensures
             vp.inv(),
-            CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label.get_Label_ctam_label()),
+            CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label->ctam_label),
     {
         reveal(CoordinationSystem::State::next);
         reveal(CoordinationSystem::State::next_by);
@@ -884,8 +884,8 @@ verus! {
         let j = v.journal.i();
         let jp = vp.journal.i();
         let base = v.mapadt.persistent;
-        let key = label.get_Label_ctam_label().get_OperateOp_base_op().get_ExecuteOp_req().input.get_PutInput_key();
-        let value = label.get_Label_ctam_label().get_OperateOp_base_op().get_ExecuteOp_req().input.get_PutInput_value();
+        let key = label->ctam_label->base_op.arrow_ExecuteOp_req().input.arrow_PutInput_key();
+        let value = label->ctam_label->base_op.arrow_ExecuteOp_req().input->value;
 
         assert(jp.ext_equal(jp._dr(jp.seq_start + jp.len())));
         assert(j.ext_equal(j._dr(j.seq_start + j.len())));
@@ -918,13 +918,13 @@ verus! {
         // BEGIN - AsyncMap transition
         // Alright, let's show how you take an AsyncMap step using
         // this. It's going to be an OperateOp
-        let async_op = label.get_Label_ctam_label().get_OperateOp_base_op();
+        let async_op = label->ctam_label->base_op;
 
         assert(matches!(async_op, AsyncMap::Label::ExecuteOp{..}));
 
         // Step will be an execute step
-        let input = async_op.get_ExecuteOp_req().input;
-        let output = async_op.get_ExecuteOp_reply().output;
+        let input = async_op.arrow_ExecuteOp_req().input;
+        let output = async_op.arrow_ExecuteOp_reply().output;
         let map_label = MapSpec::Label::Put{input: input, output: output};
         let post_persistent = versions_prime.last();
         // Execute step requires map label
@@ -952,15 +952,14 @@ verus! {
             AsyncMap::State::next(
                 AsyncMap::State { persistent: versions.last(), ephemeral: v.i().async_ephemeral },
                 AsyncMap::State { persistent: versions_prime.last(), ephemeral: vp.i().async_ephemeral },
-                label.get_Label_ctam_label().get_OperateOp_base_op()
+                label->ctam_label->base_op
             )
         );
 
         // END - Goal is below, CrashTolerant
-        // assume(CrashTolerantAsyncMap::State::optionally_append_version(v.i().versions, vp.i().versions));
         // assert(v.i().versions.ext_equal(vp.i().versions.drop_last()));
-        assert(CrashTolerantAsyncMap::State::next_by(v.i(), vp.i(), label.get_Label_ctam_label(), ctam_step));
-        assert(CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label.get_Label_ctam_label()));
+        assert(CrashTolerantAsyncMap::State::next_by(v.i(), vp.i(), label->ctam_label, ctam_step));
+        assert(CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label->ctam_label));
     }
 
     /// Proof that a "commit_complete" transition maps to a "sync" transition
@@ -978,7 +977,7 @@ verus! {
             matches!(step, CoordinationSystem::Step::commit_complete(..)),
         ensures
             vp.inv(),
-            CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label.get_Label_ctam_label()),
+            CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label->ctam_label),
     {
         reveal(CoordinationSystem::State::next);
         reveal(CoordinationSystem::State::next_by);
@@ -1052,7 +1051,7 @@ verus! {
             matches!(step, CoordinationSystem::Step::crash(..)),
         ensures
             vp.inv(),
-            CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label.get_Label_ctam_label()),
+            CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label->ctam_label),
     {
         reveal(CoordinationSystem::State::next);
         reveal(CoordinationSystem::State::next_by);
@@ -1085,7 +1084,7 @@ verus! {
         reveal(journal_overlaps_agree);
         
         let stable_lsn = vp.journal.persistent.seq_end;
-        if (v.ephemeral.is_Some())
+        if (v.ephemeral is Some)
         {
             // ACCEPTED (necessary): Discarding all indices >= seq_end should
             // result in the same MsgHistory (it wasn't seeing this originally
@@ -1105,8 +1104,8 @@ verus! {
         assert(vp.i().versions =~~= v.i().versions.get_prefix(v.i().stable_index() + 1));
 
         // GOAL
-        assert(CrashTolerantAsyncMap::State::crash(v.i(), vp.i(), label.get_Label_ctam_label()));
-        CrashTolerantAsyncMap::show::crash(v.i(), vp.i(), label.get_Label_ctam_label());
+        assert(CrashTolerantAsyncMap::State::crash(v.i(), vp.i(), label->ctam_label));
+        CrashTolerantAsyncMap::show::crash(v.i(), vp.i(), label->ctam_label);
     }
 
     /// Proof that all transitions which map to no-ops in the refined state machine can be
@@ -1131,7 +1130,7 @@ verus! {
             },
         ensures
             vp.inv(),
-            CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label.get_Label_ctam_label()),
+            CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label->ctam_label),
     {
         reveal(CoordinationSystem::State::next);
         reveal(CoordinationSystem::State::next_by);
@@ -1164,7 +1163,7 @@ verus! {
 
         if (matches!(step, CoordinationSystem::Step::load_ephemeral_from_persistent(..)))
         {
-            assert(matches!(label.get_Label_ctam_label(), CrashTolerantAsyncMap::Label::Noop{..}));
+            assert(matches!(label.arrow_Label_ctam_label(), CrashTolerantAsyncMap::Label::Noop{..}));
         }
 
         // GOAL
@@ -1190,7 +1189,7 @@ verus! {
         matches!(step, CoordinationSystem::Step::query(..)),
     ensures
         vp.inv(),
-        CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label.get_Label_ctam_label()),
+        CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label->ctam_label),
     {
         reveal(CoordinationSystem::State::next);
         reveal(CoordinationSystem::State::next_by);
@@ -1220,7 +1219,7 @@ verus! {
 
         // PROOF ZONE
         inv_inductive(v, vp, label);
-        let ctam_label = label.get_Label_ctam_label();
+        let ctam_label = label->ctam_label;
         let ctam_pre = v.i();
         let ctam_post = vp.i();
 
@@ -1239,7 +1238,7 @@ verus! {
 
         // BEGIN - GOAL 1 (AsyncMap)
         // Pulling out label and pre + post states for AsyncMap transition.
-        let async_label = ctam_label.get_OperateOp_base_op();
+        let async_label = ctam_label->base_op;
         let async_pre = AsyncMap::State { persistent: ctam_pre.versions.last(), ephemeral: ctam_pre.async_ephemeral };
         let async_post = AsyncMap::State { persistent: ctam_post.versions.last(), ephemeral: ctam_post.async_ephemeral };
 
@@ -1249,8 +1248,8 @@ verus! {
         let map_post = async_post.persistent.appv;
         // What was I trying to destructure here? This doesn't work
         // let AsyncMap::Step::execute(map_label, post_persistent) = step;
-        let req = async_label.get_ExecuteOp_req();
-        let reply = async_label.get_ExecuteOp_reply();
+        let req = async_label.arrow_ExecuteOp_req();
+        let reply = async_label.arrow_ExecuteOp_reply();
 
         // Figure out map label for AsyncMap::State::execute()
         let map_label = MapSpec::Label::Query{ input: req.input, output: reply.output };
@@ -1293,7 +1292,7 @@ verus! {
         }
     ensures
         vp.inv(),
-        CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label.get_Label_ctam_label()),
+        CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label->ctam_label),
     {
         reveal(CoordinationSystem::State::next);
         reveal(CoordinationSystem::State::next_by);
@@ -1337,14 +1336,14 @@ verus! {
         // BEGIN - GOAL 1 (CTAM)
         let ctam_pre = v.i();
         let ctam_post = vp.i();
-        let ctam_label = label.get_Label_ctam_label();
+        let ctam_label = label->ctam_label;
 
         // BEGIN - GOAL 2 (AsyncMap)
         let async_pre = AsyncMap::State {
             persistent: ctam_pre.versions.last(), ephemeral: ctam_pre.async_ephemeral };
         let async_post = AsyncMap::State {
             persistent: ctam_post.versions.last(), ephemeral: ctam_post.async_ephemeral };
-        let async_label = ctam_label.get_OperateOp_base_op();
+        let async_label = ctam_label->base_op;
 
         // END - GOAL 2 (AsyncMap)
         match async_label {
@@ -1362,11 +1361,11 @@ verus! {
         // END - GOAL 1 (CTAM)
 
         // assert(CrashTolerantAsyncMap::State::operate(
-        //     ctam_pre, ctam_post, label.get_Label_ctam_label(), ctam_post.versions, ctam_post.async_ephemeral));
+        //     ctam_pre, ctam_post, label->ctam_label, ctam_post.versions, ctam_post.async_ephemeral));
         CrashTolerantAsyncMap::show::operate(
             ctam_pre,
             ctam_post,
-            label.get_Label_ctam_label(),
+            label->ctam_label,
             ctam_post.versions,
             ctam_post.async_ephemeral);
     }
@@ -1390,7 +1389,7 @@ verus! {
         }
     ensures
         vp.inv(),
-        CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label.get_Label_ctam_label()),
+        CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label->ctam_label),
     {
         reveal(CoordinationSystem::State::next);
         reveal(CoordinationSystem::State::next_by);
@@ -1424,7 +1423,7 @@ verus! {
         // BEGIN - GOAL 1 (CTAM)
         let ctam_pre = v.i();
         let ctam_post = vp.i();
-        let ctam_label = label.get_Label_ctam_label();
+        let ctam_label = label->ctam_label;
 
         let ctam_step = choose |step: CrashTolerantAsyncMap::Step|
             CrashTolerantAsyncMap::State::next_by(ctam_pre, ctam_post, ctam_label, step);
@@ -1475,7 +1474,7 @@ verus! {
         CoordinationSystem::State::next(v, vp, label),
     ensures
         vp.inv(),
-        CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label.get_Label_ctam_label()),
+        CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label->ctam_label),
     {
         // This was yet another sneaky reveal that was necessary. Without it verifier didn't
         // believe that there necessarily existed `s` such that `next_by` was satisfied

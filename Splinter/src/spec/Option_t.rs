@@ -4,11 +4,11 @@
 use builtin::*;
 use builtin_macros::*;
 
-verus!{
+verus! {
 
-#[is_variant]
-pub enum Option<T>{
+pub enum Option<T> {
     None,
-    Some(T)
+    Some(T),
 }
-}
+
+} // verus!

@@ -26,7 +26,6 @@ verus! {
 /// (x9du): A SplitArg is a value used for determining a pivot value at which to split
 /// a B+tree node into two nodes. Its an enum to handle the cases for splitting an index
 /// node vs. a Leaf node separately.
-#[is_variant]
 pub enum SplitArg {
     SplitIndex{pivot: Key, pivot_index: int},
     SplitLeaf{pivot: Key}
@@ -38,14 +37,14 @@ impl SplitArg {
         match self {
             Self::SplitLeaf{pivot} => {
                 &&& split_node is Leaf
-                &&& split_node.get_Leaf_keys().len() == split_node.get_Leaf_msgs().len()
-                &&& 0 < Key::largest_lt(split_node.get_Leaf_keys(), pivot) + 1 < split_node.get_Leaf_keys().len()
+                &&& split_node->keys.len() == split_node->msgs.len()
+                &&& 0 < Key::largest_lt(split_node->keys, pivot) + 1 < split_node->keys.len()
             }
             Self::SplitIndex{pivot, pivot_index} => {
                 &&& split_node is Index
                 &&& split_node.wf()
-                &&& 0 <= pivot_index < split_node.get_Index_pivots().len()
-                &&& split_node.get_Index_pivots()[pivot_index] == pivot
+                &&& 0 <= pivot_index < split_node.arrow_Index_pivots().len()
+                &&& split_node.arrow_Index_pivots()[pivot_index] == pivot
             }
         }
     }
@@ -53,9 +52,9 @@ impl SplitArg {
     pub open spec(checked) fn get_pivot(self) -> Key
     {
         if self is SplitLeaf {
-            self.get_SplitLeaf_pivot()
+            self.arrow_SplitLeaf_pivot()
         } else {
-            self.get_SplitIndex_pivot()
+            self.arrow_SplitIndex_pivot()
         }
     }
 }
@@ -82,7 +81,6 @@ children[i] owns range [pivots[i-1], pivots[i]) where pivots[-1] = -infinity, pi
 Leaf nodes store a map from keys to messages.
 keys[i] maps to msgs[i].
 */
-#[is_variant]
 pub enum Node {
     Index{pivots: Seq<Key>, children: Seq<Node>},
     Leaf{keys: Seq<Key>, msgs: Seq<Message>}
@@ -137,11 +135,11 @@ impl Node {
     pub open spec(checked) fn all_keys_below_bound(self, i: int) -> bool
         recommends
             self is Index,
-            0 <= i < self.get_Index_children().len() - 1,
-            0 <= i < self.get_Index_pivots().len()
+            0 <= i < self->children.len() - 1,
+            0 <= i < self.arrow_Index_pivots().len()
     {
-        forall |key| self.get_Index_children()[i].all_keys().contains(key)
-            ==> #[trigger] Key::lt(key, self.get_Index_pivots()[i])
+        forall |key| self->children[i].all_keys().contains(key)
+            ==> #[trigger] Key::lt(key, self.arrow_Index_pivots()[i])
     }
 
     /// Pre: self must be an Index node
@@ -150,11 +148,11 @@ impl Node {
     pub open spec(checked) fn all_keys_above_bound(self, i: int) -> bool
         recommends
             self is Index,
-            0 <= i < self.get_Index_children().len(),
-            0 <= i - 1 < self.get_Index_pivots().len()
+            0 <= i < self->children.len(),
+            0 <= i - 1 < self.arrow_Index_pivots().len()
     {
-        forall |key| self.get_Index_children()[i].all_keys().contains(key)
-            ==> #[trigger] Key::lte(self.get_Index_pivots()[i-1], key)
+        forall |key| self->children[i].all_keys().contains(key)
+            ==> #[trigger] Key::lte(self.arrow_Index_pivots()[i-1], key)
     }
 
     /// Returns true iff self is a well-formed B+ tree node.
@@ -207,7 +205,7 @@ impl Node {
         // very strange, would be much more natural to have it return [0, |pivots|) (then that means
         // it returns the actual child index you would expect to find key under). Currently we keep having
         // to add 1 everywhere.
-        let s = if self is Leaf { self.get_Leaf_keys() } else { self.get_Index_pivots() };
+        let s = if self is Leaf { self->keys } else { self.arrow_Index_pivots() };
         Key::largest_lte(s, key)
     }
 
@@ -215,7 +213,7 @@ impl Node {
     pub open spec/*XXX (checked)*/ fn query(self, key: Key) -> Message
         recommends self.wf()
         decreases self
-        when self is Index ==> 0 <= self.route(key)+1 < self.get_Index_children().len()
+        when self is Index ==> 0 <= self.route(key)+1 < self->children.len()
     {
         // Need ensures from route to restore checked
         let r = self.route(key);
@@ -238,16 +236,16 @@ impl Node {
             self.wf()
     {
         // Need largest_lte ensures to restore checked
-        let llte = Key::largest_lte(self.get_Leaf_keys(), key);
-        if 0 <= llte && self.get_Leaf_keys()[llte] == key {
+        let llte = Key::largest_lte(self->keys, key);
+        if 0 <= llte && self->keys[llte] == key {
             Node::Leaf{
-                keys: self.get_Leaf_keys(), 
-                msgs: self.get_Leaf_msgs().update(llte, msg)
+                keys: self->keys, 
+                msgs: self->msgs.update(llte, msg)
             }
         } else {
             Node::Leaf{
-                keys: self.get_Leaf_keys().insert(llte+1, key),
-                msgs: self.get_Leaf_msgs().insert(llte+1, msg)
+                keys: self->keys.insert(llte+1, key),
+                msgs: self->msgs.insert(llte+1, msg)
             }
         }
     }
@@ -305,14 +303,14 @@ impl Node {
             split_arg.wf(self)
     {
         let pivot = split_arg.get_pivot();
-        let split_index = Key::largest_lt(self.get_Leaf_keys(), pivot) + 1;
+        let split_index = Key::largest_lt(self->keys, pivot) + 1;
         let left_leaf = Node::Leaf{
-            keys: self.get_Leaf_keys().take(split_index),
-            msgs: self.get_Leaf_msgs().take(split_index)
+            keys: self->keys.take(split_index),
+            msgs: self->msgs.take(split_index)
         };
         let right_leaf = Node::Leaf{
-            keys: self.get_Leaf_keys().skip(split_index),
-            msgs: self.get_Leaf_msgs().skip(split_index)
+            keys: self->keys.skip(split_index),
+            msgs: self->msgs.skip(split_index)
         };
         (left_leaf, right_leaf)
     }
@@ -324,10 +322,10 @@ impl Node {
     pub open spec(checked) fn sub_index(self, from: int, to: int) -> Node
         recommends
             self is Index,
-            self.get_Index_children().len() == self.get_Index_pivots().len() + 1,
-            0 <= from < to <= self.get_Index_children().len()
+            self->children.len() == self.arrow_Index_pivots().len() + 1,
+            0 <= from < to <= self->children.len()
     {
-        Node::Index{ pivots: self.get_Index_pivots().subrange(from, to-1), children: self.get_Index_children().subrange(from, to) }
+        Node::Index{ pivots: self.arrow_Index_pivots().subrange(from, to-1), children: self->children.subrange(from, to) }
     }
 
     /// Pre: self is Index
@@ -351,11 +349,11 @@ impl Node {
             split_arg.wf(self)
     {
         // Assert split_arg.wf(self) ==> self.wf() ==>
-        // self.get_Index_children().len() == self.get_Index_pivots().len() + 1
+        // self->children.len() == self.arrow_Index_pivots().len() + 1
         // to restore checked
-        let pivot_index = split_arg.get_SplitIndex_pivot_index();
+        let pivot_index = split_arg.arrow_SplitIndex_pivot_index();
         let left_index = self.sub_index(0, pivot_index + 1);
-        let right_index = self.sub_index(pivot_index + 1, self.get_Index_children().len() as int);
+        let right_index = self.sub_index(pivot_index + 1, self->children.len() as int);
         (left_index, right_index)
     }
 
@@ -379,7 +377,7 @@ impl Node {
         &&& {
             // Need route ensures to restore checked
             let child_idx = self.route(split_arg.get_pivot()) + 1;
-            split_arg.wf(self.get_Index_children()[child_idx])
+            split_arg.wf(self->children[child_idx])
             }
     }
 
@@ -395,10 +393,10 @@ impl Node {
         // Need route ensures to restore checked
         let pivot = split_arg.get_pivot();
         let child_idx = self.route(pivot) + 1;
-        let (left_node, right_node) = self.get_Index_children()[child_idx].split_node(split_arg);
+        let (left_node, right_node) = self->children[child_idx].split_node(split_arg);
         Node::Index{
-            pivots: self.get_Index_pivots().insert(child_idx, pivot),
-            children: self.get_Index_children()
+            pivots: self.arrow_Index_pivots().insert(child_idx, pivot),
+            children: self->children
                 .update(child_idx, left_node)
                 .insert(child_idx + 1, right_node)
         }
@@ -439,7 +437,7 @@ impl Path {
     {
         // (x9du) Need route ensures to restore `(checked)` annotation on function.
         Path{
-            node: self.node.get_Index_children()[self.node.route(self.key) + 1],
+            node: self.node->children[self.node.route(self.key) + 1],
             key: self.key,
             depth: (self.depth - 1) as nat
         }
@@ -475,7 +473,7 @@ impl Path {
     {
         // (x9du) Need route ensures to restore (checked) annotation on function.
         let new_child = self.subpath().substitute(replacement);
-        self.node.get_Index_children().update(self.node.route(self.key) + 1, new_child)
+        self.node->children.update(self.node.route(self.key) + 1, new_child)
     }
 
     /// Returns the tree rooted at self.node, where self.target() is replaced with `replacement`.
@@ -486,7 +484,7 @@ impl Path {
         if 0 == self.depth {
             replacement
         } else {
-            Node::Index{ pivots: self.node.get_Index_pivots(), children: self.replaced_children(replacement) }
+            Node::Index{ pivots: self.node.arrow_Index_pivots(), children: self.replaced_children(replacement) }
         }
     }
 

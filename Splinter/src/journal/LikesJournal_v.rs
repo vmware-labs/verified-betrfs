@@ -98,7 +98,7 @@ impl DiskView {
     {
         &&& self.decodable(root)
         &&& self.acyclic()
-        &&& root.is_Some() ==> self.boundary_lsn < self.entries[root.unwrap()].message_seq.seq_end
+        &&& root is Some ==> self.boundary_lsn < self.entries[root.unwrap()].message_seq.seq_end
     }
 
     pub open spec(checked) fn build_lsn_addr_index(self, root: Pointer) -> LsnAddrIndex
@@ -106,7 +106,7 @@ impl DiskView {
         self.buildable(root),
     decreases self.the_rank_of(root) when self.decodable(root) && self.acyclic()
     {
-        if root.is_None() {
+        if root is None {
             map!{}
         } else {
             let curr_msgs = self.entries[root.unwrap()].message_seq;
@@ -181,7 +181,7 @@ impl DiskView {
     requires
         self.decodable(root),
         self.acyclic(),
-        root.is_Some(), // otherwise BuildLsnAddrIndex is trivially empty
+        root is Some, // otherwise BuildLsnAddrIndex is trivially empty
         self.boundary_lsn < self.entries[root.unwrap()].message_seq.seq_end,
     ensures
         self.tj_at(root).index_domain_valid(self.build_lsn_addr_index(root)),
@@ -190,7 +190,7 @@ impl DiskView {
     {
         reveal(TruncatedJournal::index_domain_valid);
         reveal(DiskView::index_keys_map_to_valid_entries);
-        if self.next(root).is_None() {
+        if self.next(root) is None {
             // TODO(chris) These lets are trigger something... not sure why, since we have the same
             // defn (build_lsn_addr_index) available in scope. ?
             let curr_msgs = self.entries[root.unwrap()].message_seq;
@@ -215,9 +215,9 @@ impl DiskView {
         reveal(TruncatedJournal::index_domain_valid);
         reveal(DiskView::index_keys_map_to_valid_entries);
 
-        if root.is_None() {
+        if root is None {
             assert( self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)) );
-        } else if self.next(root).is_None() {
+        } else if self.next(root) is None {
             // let curr_msgs = self.entries[root.unwrap()].message_seq;
             // let start_lsn = math::max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
             // let update = singleton_index(start_lsn, curr_msgs.seq_end, root.unwrap());
@@ -249,7 +249,7 @@ impl DiskView {
         self.buildable(root),
     ensures
         // This conclusion is used inside the recursion
-        root.is_Some() ==>
+        root is Some ==>
             forall |lsn| self.build_lsn_addr_index(root).contains_key(lsn) ==>
                 self.boundary_lsn <= lsn < self.entries[root.unwrap()].message_seq.seq_end,
         // This conclusion is the one we're trying to actually export
@@ -261,7 +261,7 @@ impl DiskView {
         reveal(TruncatedJournal::index_domain_valid);
         reveal(DiskView::index_keys_map_to_valid_entries);
 
-        if root.is_Some() {
+        if root is Some {
             self.build_tight_domain_is_build_lsn_addr_index_range(self.next(root));
             let curr_msgs = self.entries[root.unwrap()].message_seq;
             let begin = max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
@@ -323,20 +323,20 @@ impl DiskView {
         big.acyclic(),
         self.is_sub_disk(big),
         self.is_nondangling_pointer(ptr),
-        ptr.is_Some() ==> self.boundary_lsn < self.entries[ptr.unwrap()].message_seq.seq_end,
+        ptr is Some ==> self.boundary_lsn < self.entries[ptr.unwrap()].message_seq.seq_end,
     ensures
         self.build_lsn_addr_index(ptr) == big.build_lsn_addr_index(ptr),
-    decreases if ptr.is_Some() { big.the_ranking()[ptr.unwrap()]+1 } else { 0 }
+    decreases if ptr is Some { big.the_ranking()[ptr.unwrap()]+1 } else { 0 }
     {
         reveal(TruncatedJournal::index_domain_valid);
         reveal(DiskView::index_keys_map_to_valid_entries);
 
         assert( forall |addr| #[trigger] self.entries.contains_key(addr) ==> big.entries.dom().contains(addr) );    // new clunikness related to contains-vs-contains_key
         assert( self.valid_ranking(big.the_ranking()) );
-        if ptr.is_Some() {
+        if ptr is Some {
             //let jr = big.entries[ptr.unwrap()];
             //self.sub_disk_repr_index(big, jr.cropped_prior(big.boundary_lsn));
-            if big.next(ptr).is_Some() {
+            if big.next(ptr) is Some {
                 assert( big.entries.contains_key(ptr.unwrap()) );
                 assert( big.the_ranking()[big.next(ptr).unwrap()] < big.the_ranking()[ptr.unwrap()] );
             }
@@ -352,7 +352,7 @@ impl DiskView {
     decreases self.the_rank_of(root)
     {
         let lsn_addr_index = self.build_lsn_addr_index(root);   // I want that super-let!
-        if root.is_None() {
+        if root is None {
         } else {
             self.build_lsn_addr_all_decodable(self.next(root));
             assert forall |lsn| #![auto] lsn_addr_index.contains_key(lsn)
@@ -380,8 +380,8 @@ impl DiskView {
     decreases self.the_rank_of(root)
     {
         self.build_lsn_addr_all_decodable(root);
-        if root.is_None() {
-        } else if self.next(root).is_None() {
+        if root is None {
+        } else if self.next(root) is None {
 //             assert( self.build_lsn_addr_index(self.next(root)) == Map::<LSN, Address>::empty() );
         } else {
             self.build_lsn_addr_index_domain_valid(root);
@@ -524,7 +524,7 @@ impl TruncatedJournal {
         let post_dv = new.disk_view;
         let ranking = dv.the_ranking();
    
-        assert forall |addr| #[trigger] post_dv.entries.contains_key(addr) && post_dv.entries[addr].cropped_prior(post_dv.boundary_lsn).is_Some()
+        assert forall |addr| #[trigger] post_dv.entries.contains_key(addr) && post_dv.entries[addr].cropped_prior(post_dv.boundary_lsn) is Some
         implies ranking[post_dv.entries[addr].cropped_prior(post_dv.boundary_lsn).unwrap()] < ranking[addr]
         by {
             assert(dv.entries.contains_key(addr)); // trigger
@@ -617,7 +617,6 @@ state_machine!{ LikesJournal {
         pub lsn_addr_index: LsnAddrIndex,
     }
 
-    #[is_variant]
     pub enum Label
     {
         ReadForRecovery{messages: MsgHistory},
@@ -674,7 +673,7 @@ state_machine!{ LikesJournal {
     transition!{ freeze_for_commit(lbl: Label, depth: nat) {
         require lbl is FreezeForCommit;
 
-        let fj = lbl.get_FreezeForCommit_frozen_journal();
+        let fj = lbl->frozen_journal;
         let tj = pre.journal.truncated_journal;
         let new_bdy = fj.seq_start();
 
@@ -707,8 +706,8 @@ state_machine!{ LikesJournal {
     transition!{ discard_old(lbl: Label, new_journal: LinkedJournal_v::LinkedJournal::State) {
         require lbl is DiscardOld;
 
-        let start_lsn = lbl.get_DiscardOld_start_lsn();
-        let require_end = lbl.get_DiscardOld_require_end();
+        let start_lsn = lbl->start_lsn;
+        let require_end = lbl->require_end;
 
         require require_end == pre.journal.seq_end();
         require pre.journal.truncated_journal.can_discard_to(start_lsn);
@@ -794,7 +793,7 @@ state_machine!{ LikesJournal {
         let post_dv = post.journal.truncated_journal.disk_view;
         let ranking = dv.the_ranking();
 
-        assert forall |addr| #[trigger] post_dv.entries.contains_key(addr) && post_dv.entries[addr].cropped_prior(post_dv.boundary_lsn).is_Some()
+        assert forall |addr| #[trigger] post_dv.entries.contains_key(addr) && post_dv.entries[addr].cropped_prior(post_dv.boundary_lsn) is Some
         implies ranking[post_dv.entries[addr].cropped_prior(post_dv.boundary_lsn).unwrap()] < ranking[addr]
         by {
             assert(dv.entries.contains_key(addr)); // trigger
@@ -836,7 +835,7 @@ state_machine!{ LikesJournal {
     fn discard_old_inductive(pre: Self, post: Self, lbl: Label, new_journal: LinkedJournal_v::LinkedJournal::State) {
         let tj = pre.journal.truncated_journal;
         let post_tj = post.journal.truncated_journal;
-        let start_lsn = lbl.get_DiscardOld_start_lsn();
+        let start_lsn = lbl->start_lsn;
         tj.discard_old_preserves_acyclicity(start_lsn, post.lsn_addr_index.values(), post_tj);
         Self::discard_old_maintains_repr_index(pre, post, lbl);
     }

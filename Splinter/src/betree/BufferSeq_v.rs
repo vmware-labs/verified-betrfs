@@ -213,8 +213,10 @@ impl BufferSeq {
             offset_map.offsets[k] <= self.len(),
         ensures ({
             let start = offset_map.offsets[k] as int;
-            &&& start <= buffer_idx ==> self.i_filtered_from(offset_map, buffer_idx).query(k) == self.query_from(k, buffer_idx)
-            &&& start > buffer_idx ==> self.i_filtered_from(offset_map, buffer_idx).query(k) == self.query_from(k, start)
+            &&& start <= buffer_idx ==> 
+                self.i_filtered_from(offset_map, buffer_idx).query(k) == self.query_from(k, buffer_idx)
+            &&& start > buffer_idx ==> 
+                self.i_filtered_from(offset_map, buffer_idx).query(k) == self.query_from(k, start)
         })
         decreases self.len() - buffer_idx
     {
