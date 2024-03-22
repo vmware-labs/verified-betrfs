@@ -816,33 +816,59 @@ pub proof fn lemma_append_keys_are_path_equiv(keys: Seq<Key>, path: Path)
     }
 }
 
+pub proof fn lemma_to_set_distributes_over_plus<A>(a: Seq<A>, b: Seq<A>)
+    ensures
+        (a + b).to_set() == a.to_set().union(b.to_set())
+{
+    assert forall |x| a.to_set().union(b.to_set()).contains(x)
+    implies #[trigger] (a + b).to_set().contains(x) by {
+        assert(a.to_set().contains(x) || b.to_set().contains(x));
+        if (a.to_set().contains(x)) {
+            assert(a.contains(x));
+            let i = a.index_of(x);
+            assert((a + b)[i] == x);
+        } else {
+            assert(b.to_set().contains(x));
+            assert(b.contains(x));
+            let i = b.index_of(x);
+            assert((a + b)[a.len() + i] == x);
+        }
+        assert((a + b).contains(x));
+    }
+    assert((a + b).to_set() == a.to_set().union(b.to_set()));
+}
+
 pub proof fn lemma_append_appends_to_all_keys(pre: Node, new_keys: Seq<Key>, new_msgs: Seq<Message>, path: Path)
     requires
         pre.wf(),
         path.valid(),
         path.node == pre,
-        path.target() == Node::empty_leaf(),
         new_keys.len() > 0,
         new_keys.len() == new_msgs.len(),
         Key::is_strictly_sorted(new_keys),
+        path.target() is Leaf,
+        Key::lt(path.target()->keys.last(), new_keys[0]),
         path.key == new_keys[0],
         path.path_equiv(new_keys.last())
     ensures
         pre.append(new_keys, new_msgs, path).all_keys() == pre.all_keys().union(new_keys.to_set())
     decreases pre,
 {
+    lemma_path_target_is_wf(path);
+    assert(path.target().wf());
+    assert(path.target()->keys.len() > 0);
+    let post = pre.append(new_keys, new_msgs, path);
+
     match pre {
         Node::Leaf{keys, msgs} => {
-            assert(pre.all_keys().is_empty());
-            assert(pre.all_keys().union(new_keys.to_set()) == new_keys.to_set());
-            assert(pre.append(new_keys, new_msgs, path).all_keys() == new_keys.to_set());
+            lemma_to_set_distributes_over_plus(keys, new_keys);
         },
         Node::Index{pivots, children} => {
-            let post = pre.append(new_keys, new_msgs, path);
             let r = pre.route(new_keys[0]);
             lemma_append_keys_are_path_equiv(new_keys, path);
             lemma_route_auto();
             assert(0 <= r + 1 < children.len());
+            assert(children.len() == post->children.len());
 
             // Recursively call the lemma on the changed child: the child we inserted into.
             lemma_append_appends_to_all_keys(children[r+1], new_keys, new_msgs, path.subpath());
@@ -867,20 +893,34 @@ pub proof fn lemma_append_preserves_wf(pre: Node, keys: Seq<Key>, msgs: Seq<Mess
         pre.wf(),
         path.valid(),
         path.node == pre,
-        path.target() == Node::empty_leaf(),
         keys.len() > 0,
         keys.len() == msgs.len(),
         Key::is_strictly_sorted(keys),
+        path.target() is Leaf,
+        Key::lt(path.target()->keys.last(), keys[0]),
         path.key == keys[0],
         path.path_equiv(keys.last())
     ensures
         pre.append(keys, msgs, path).wf(),
     decreases pre
 {
-    if pre is Index {
+    lemma_path_target_is_wf(path);
+    assert(path.target().wf());
+    assert(path.target()->keys.len() > 0);
+    let post = pre.append(keys, msgs, path);
+
+    if pre is Leaf {
+        assert(post is Leaf);
+        Key::strictly_sorted_implies_sorted(pre->keys);
+        Key::strictly_sorted_implies_sorted(keys);
+        assert forall |i: int, j: int| 0 <= i < pre->keys.len() && 0 <= j < keys.len()
+        implies Key::lt(pre->keys[i], keys[j]) by {
+            assert(Key::lte(pre->keys[i], pre->keys.last()));
+            assert(Key::lte(keys[0], keys[j]));
+        }
+    } else {
         let pivots = pre->pivots;
         let children = pre->children;
-        let post = pre.append(keys, msgs, path);
         assert(post is Index); // For recommends
 
         let r = pre.route(path.key);
@@ -894,11 +934,17 @@ pub proof fn lemma_append_preserves_wf(pre: Node, keys: Seq<Key>, msgs: Seq<Mess
         assert(pivots.len() == post->pivots.len());
         assert(children.len() == post->children.len());
 
-        // Subgoal 1, needed for asserting that unchanged keys in children[r+1].all_keys() still satisfy bounds
         lemma_append_appends_to_all_keys(children[r+1], keys, msgs, path.subpath());
+
+        // Subgoal 1
+        assert(!post->children[r+1].all_keys().is_empty()) by {
+            assert(post->children[r+1].all_keys().contains(keys[0]));
+        }
+
+        // Subgoal 2, needed for asserting that unchanged keys in children[r+1].all_keys() still satisfy bounds
         assert(post->children[r+1].all_keys() =~~= children[r+1].all_keys().union(keys.to_set()));
 
-        // Subgoal 2: the only changed child, r+1, satisfies all keys bounds
+        // Subgoal 3: the only changed child, r+1, satisfies all keys bounds
 
         if (r+1 < children.len() - 1) {
             assert(pre.all_keys_below_bound(r+1));
@@ -922,7 +968,7 @@ pub proof fn lemma_append_preserves_wf(pre: Node, keys: Seq<Key>, msgs: Seq<Mess
             assert(post.all_keys_above_bound(r+1));
         }
 
-        // Subgoal 3: the unchanged children still satisfy all keys bounds
+        // Subgoal 4: the unchanged children still satisfy all keys bounds
 
         assert forall |i| 0 <= i < post->children.len() - 1 && i != r+1
         implies post.all_keys_below_bound(i) by
@@ -943,10 +989,11 @@ pub proof fn append_refines(pre: Node, lbl: AppendLabel)
         pre.wf(),
         lbl.path.valid(),
         lbl.path.node == pre,
-        lbl.path.target() == Node::empty_leaf(),
         lbl.keys.len() > 0,
         lbl.keys.len() == lbl.msgs.len(),
         Key::is_strictly_sorted(lbl.keys),
+        lbl.path.target() is Leaf,
+        Key::lt(lbl.path.target()->keys.last(), lbl.keys[0]),
         lbl.path.key == lbl.keys[0],
         lbl.path.path_equiv(lbl.keys.last())
     ensures

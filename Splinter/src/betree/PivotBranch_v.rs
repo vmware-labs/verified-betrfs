@@ -87,12 +87,6 @@ pub enum Node {
 }
 
 impl Node {
-    /// Returns a newly constructed empty leaf node.
-    pub open spec(checked) fn empty_leaf() -> Node
-    {
-        Node::Leaf{ keys: seq![], msgs: seq![] }
-    }
-
     /// Returns the set of pivots this node contains (empty set if
     /// self is Leaf).
     /// 
@@ -162,6 +156,7 @@ impl Node {
         match self {
             // Leaf nodes store key-value pairs sorted by key.
             Node::Leaf{keys, msgs} => {
+                &&& keys.len() > 0
                 &&& keys.len() == msgs.len()
                 &&& Key::is_strictly_sorted(keys)
             },
@@ -272,16 +267,16 @@ impl Node {
             self.wf(),
             path.valid(),
             path.node == self,
-            // Assert that the target of the path is an empty node, so that when we replace it we aren't
-            // "losing" anything per se. (tenzinhl) but why is the empty leaf node in the tree in the first place?
-            path.target() == Node::empty_leaf(),
             keys.len() > 0,
             keys.len() == msgs.len(),
             Key::is_strictly_sorted(keys),
+            path.target() is Leaf,
+            path.target().wf(), // comes from path.valid(), but not having this here causes recommendation not met
+            Key::lt(path.target()->keys.last(), keys[0]),
             path.key == keys[0],
             path.path_equiv(keys.last()) // all new keys must route to the same location
     {
-        path.substitute(Node::Leaf{ keys: keys, msgs: msgs })
+        path.substitute(Node::Leaf{ keys: path.target()->keys + keys, msgs: path.target()->msgs + msgs })
     }
 
     /// Pre: self is Leaf
