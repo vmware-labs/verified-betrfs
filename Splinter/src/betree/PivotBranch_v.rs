@@ -136,10 +136,10 @@ impl Node {
         recommends
             self is Index,
             0 <= i < self->children.len() - 1,
-            0 <= i < self.arrow_Index_pivots().len()
+            0 <= i < self->pivots.len()
     {
         forall |key| self->children[i].all_keys().contains(key)
-            ==> #[trigger] Key::lt(key, self.arrow_Index_pivots()[i])
+            ==> #[trigger] Key::lt(key, self->pivots[i])
     }
 
     /// Pre: self must be an Index node
@@ -172,19 +172,11 @@ impl Node {
                 &&& pivots.len() == children.len() - 1
                 &&& Key::is_strictly_sorted(pivots)
                 &&& forall |i| 0 <= i < children.len() ==> (#[trigger] children[i]).wf()
+                &&& forall |i| 0 <= i < children.len() ==> children[i].all_keys().finite()
+                &&& forall |i| 0 <= i < children.len() ==> !children[i].all_keys().is_empty()
                 // For children[0:-1], all keys they contain should be < their upper pivot.
                 // This also gives us that children[i]'s pivots are < pivots[i] (if children are index nodes)
                 &&& forall |i| 0 <= i < children.len() - 1 ==> self.all_keys_below_bound(i)
-                // Children[i]'s pivots > pivots[i-1] (if children are index nodes). This guarantees
-                // that all pivots in the tree (across all layers) are unique (and thus there's no
-                // leaf nodes with an empty domain).
-                // NOTE: !!! The trigger chosen for this forall is `children[i].get_pivots().contains(pivot)`,
-                //   which is highly unnatural and unexpected. If you're failing to get this fact from this forall
-                //   make sure you're matching that *exact* form. 
-                // TODO(tenzinhl): Ask in Zulip why this forall didn't cause the warning about automatic
-                // trigger selection. (Update to newest Verus version and try again first though).
-                &&& forall |i, pivot| 1 <= i < children.len() && #[trigger] children[i].get_pivots().contains(pivot)
-                    ==> Key::lt(pivots[i-1], pivot)
                 // For children[1:], all keys they contain should be >= their lower pivot.
                 &&& forall |i| 0 < i < children.len() ==> self.all_keys_above_bound(i)
             }
