@@ -998,7 +998,7 @@ pub proof fn append_refines(pre: Node, lbl: AppendLabel)
         lbl.path.path_equiv(lbl.keys.last())
     ensures
         pre.append(lbl.keys, lbl.msgs, lbl.path).wf(),
-        pre.append(lbl.keys, lbl.msgs, lbl.path).i() =~~= (
+        pre.append(lbl.keys, lbl.msgs, lbl.path).i() == (
             Buffer{map: pre.i().map.union_prefer_right(Map::new(
                 |key| lbl.keys.contains(key),
                 |key| lbl.msgs[(Node::Leaf{ keys: lbl.keys, msgs: lbl.msgs }).route(key)]))}),
@@ -1011,19 +1011,84 @@ pub proof fn append_refines(pre: Node, lbl: AppendLabel)
     // Goal 1 - WF is preserved
     lemma_append_preserves_wf(pre, lbl.keys, lbl.msgs, lbl.path);
 
+    lemma_path_target_is_wf(lbl.path);
+    assert(lbl.path.target().wf());
+    assert(lbl.path.target()->keys.len() > 0);
+
     let post = pre.append(lbl.keys, lbl.msgs, lbl.path);
+    assert(post.wf());
+    let append_leaf = Node::Leaf{ keys: lbl.keys, msgs: lbl.msgs };
+    let append_map = Map::new(
+        |key| lbl.keys.contains(key),
+        |key| lbl.msgs[append_leaf.route(key)]);
+    let pre_i_then_append = Buffer{map: pre.i().map.union_prefer_right(append_map)};
 
     // Goal 2 - Appending to node then refine is same as refine then append.
     match pre {
         Node::Leaf{keys, msgs} => {
-            // It's trivial!
+            assert(pre == lbl.path.target());
+            assert(lbl.path.depth == 0);
+            let post_target = Node::Leaf{ keys: keys + lbl.keys, msgs: msgs + lbl.msgs };
+            assert(post == lbl.path.substitute(post_target));
+            assert(post == post_target);
+
+            lemma_to_set_distributes_over_plus(keys, lbl.keys);
+            // GOAL 1
+            assert(post.i().map.dom() =~~= pre_i_then_append.map.dom());
+
+            // GOAL 2
+            assert forall |k| post.i().map.contains_key(k)
+            implies #[trigger] post.i().map[k] == #[trigger] pre_i_then_append.map[k] by {
+                if (keys.contains(k)) {
+                    let i = keys.index_of(k);
+                    assert(post_target->keys[i] == k);
+                    // Proof by contradiction
+                    if (lbl.keys.contains(k)) {
+                        let j = lbl.keys.index_of(k);
+                        assert(post_target->keys[keys.len() + j] == k);
+                        assert(i < keys.len() + j);
+                        assert(Key::lt(post_target->keys[i], post_target->keys[keys.len() + j]));
+                    }
+                    assert(!lbl.keys.contains(k));
+                    assert(!append_map.contains_key(k));
+                    assert(pre.i().map.contains_key(k));
+
+                    assert(post_target->keys[pre.route(k)] == k);
+                    assert(post_target->keys[post_target.route(k)] == k);
+                    // Proof by contradiction
+                    if (pre.route(k) < post_target.route(k)) {
+                        assert(Key::lt(post_target->keys[pre.route(k)], post_target->keys[post_target.route(k)]));
+                    }
+                    if (pre.route(k) > post_target.route(k)) {
+                        assert(Key::lt(post_target->keys[post_target.route(k)], post_target->keys[pre.route(k)]));
+                    }
+                    assert(pre.route(k) == post_target.route(k));
+                } else {
+                    assert(lbl.keys.contains(k));
+                    assert(append_map.contains_key(k));
+                    assert(post_target->keys.contains(k));
+
+                    assert(post_target->keys[post_target.route(k)] == k);
+                    assert(post_target->keys[keys.len() + append_leaf.route(k)] == k);
+                    // Proof by contradiction
+                    if (post_target.route(k) < keys.len() + append_leaf.route(k)) {
+                        assert(Key::lt(
+                            post_target->keys[post_target.route(k)],
+                            post_target->keys[keys.len() + append_leaf.route(k)]));
+                    }
+                    if (post_target.route(k) > keys.len() + append_leaf.route(k)) {
+                        assert(Key::lt(
+                            post_target->keys[keys.len() + append_leaf.route(k)],
+                            post_target->keys[post_target.route(k)]));
+                    }
+                    assert(post_target.route(k) == keys.len() + append_leaf.route(k));
+                }
+            }
+            
+            assert(post.i().map =~~= pre_i_then_append.map);
+            assert(post.i() =~~= pre_i_then_append);
         },
         Node::Index{pivots, children} => {
-            let pre_i_then_append = Buffer{map: pre.i().map.union_prefer_right(Map::new(
-                |key| lbl.keys.contains(key),
-                |key| lbl.msgs[(Node::Leaf{ keys: lbl.keys, msgs: lbl.msgs }).route(key)]))};
-            let post_i = pre.append(lbl.keys, lbl.msgs, lbl.path).i();
-
             let r = pre.route(lbl.keys[0]);
 
             // GOAL 1 START (prove by showing that all children are the same except children along
@@ -1037,13 +1102,13 @@ pub proof fn append_refines(pre: Node, lbl: AppendLabel)
             assert(post.wf());
             assert(post->children.len() == children.len()); 
             assert(forall |i| 0 <= i < post->children.len() ==> (#[trigger] post->children[i]).wf());
+            assert(forall |i| 0 <= i < children.len() ==> (#[trigger] children[i]).wf());
 
+            // TODO(x9du): flaky assert forall by
             // Required to trigger the route ensures for each of the children.
-            assert forall |i| 0 <= i < children.len() && children[i] is Index
-            implies (forall |key| 0 <= #[trigger] children[i].route(key) + 1 < children[i]->children.len()) by {
-                assert forall |key| 0 <= #[trigger] children[i].route(key) + 1 < children[i]->children.len() by {
-                    lemma_route_ensures(children[i], key);
-                }
+            assert forall |i, key| 0 <= i < children.len() && children[i] is Index
+            implies 0 <= #[trigger] children[i].route(key) + 1 < children[i]->children.len() by {
+                lemma_route_ensures(children[i], key);
             }
     
             // Assert that the i() of all unchanged children are the same!
@@ -1054,18 +1119,15 @@ pub proof fn append_refines(pre: Node, lbl: AppendLabel)
             append_refines(children[r+1], child_label);
 
             // GOAL 1
-            assert(post_i.map.dom() =~~= pre_i_then_append.map.dom());
+            assert(post.i().map.dom() =~~= pre_i_then_append.map.dom());
 
             // GOAL 2
-            assert(forall |k| post_i.map.contains_key(k) ==>
-                (#[trigger] post_i.map[k]) =~~= (#[trigger] pre_i_then_append.map[k]));
-            assert(post_i.map =~~= pre_i_then_append.map);
+            assert(forall |k| post.i().map.contains_key(k) ==>
+                (#[trigger] post.i().map[k]) =~~= (#[trigger] pre_i_then_append.map[k]));
+            assert(post.i().map =~~= pre_i_then_append.map);
 
             // OVERALL GOAL
-            assert(pre.append(lbl.keys, lbl.msgs, lbl.path).i() =~~= (
-                Buffer{map: pre.i().map.union_prefer_right(Map::new(
-                    |key| lbl.keys.contains(key),
-                    |key| lbl.msgs[(Node::Leaf{ keys: lbl.keys, msgs: lbl.msgs }).route(key)]))}));
+            assert(post.i() =~~= pre_i_then_append);
         },
     }
 }
