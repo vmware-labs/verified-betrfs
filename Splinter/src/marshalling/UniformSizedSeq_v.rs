@@ -648,10 +648,12 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
                 let old_in_end = oldi * self.oblinfo.uniform_size();
                 assert( marshalled_data.subrange(0, oldend as int) =~= olddata.subrange(0, old_in_end) );
 
-//                 assert( marshalled_data.len() == end - start );
-//                 assert( marshalled_data.len() == self.oblinfo.uniform_size() * i );
-//                 mul_div_identity(i as int, self.oblinfo.uniform_size() as int);
-//                 assert( i == self.length(marshalled_data) );
+                // need to prove that all the j's before i are elt_parsable.
+                // They were in the previous round, right? why not just an invariant?
+                // We have parsable for start..end
+                // That should give us elt_parsable_to_len for self.length(start..end)
+                // So if self.length(start..end) == old i, we're done, right?
+
                 assert forall |j: int| 0<=j<self.length(marshalled_data) implies self.elt_parsable(marshalled_data, j) by {
                     if j < i {
                         assert( self.parsable(olddata) );
