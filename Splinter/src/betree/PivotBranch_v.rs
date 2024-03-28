@@ -43,8 +43,8 @@ impl SplitArg {
             Self::SplitIndex{pivot, pivot_index} => {
                 &&& split_node is Index
                 &&& split_node.wf()
-                &&& 0 <= pivot_index < split_node.arrow_Index_pivots().len()
-                &&& split_node.arrow_Index_pivots()[pivot_index] == pivot
+                &&& 0 <= pivot_index < split_node->pivots.len()
+                &&& split_node->pivots[pivot_index] == pivot
             }
         }
     }
@@ -143,10 +143,10 @@ impl Node {
         recommends
             self is Index,
             0 <= i < self->children.len(),
-            0 <= i - 1 < self.arrow_Index_pivots().len()
+            0 <= i - 1 < self->pivots.len()
     {
         forall |key| self->children[i].all_keys().contains(key)
-            ==> #[trigger] Key::lte(self.arrow_Index_pivots()[i-1], key)
+            ==> #[trigger] Key::lte(self->pivots[i-1], key)
     }
 
     /// Returns true iff self is a well-formed B+ tree node.
@@ -192,7 +192,7 @@ impl Node {
         // very strange, would be much more natural to have it return [0, |pivots|) (then that means
         // it returns the actual child index you would expect to find key under). Currently we keep having
         // to add 1 everywhere.
-        let s = if self is Leaf { self->keys } else { self.arrow_Index_pivots() };
+        let s = if self is Leaf { self->keys } else { self->pivots };
         Key::largest_lte(s, key)
     }
 
@@ -309,10 +309,10 @@ impl Node {
     pub open spec(checked) fn sub_index(self, from: int, to: int) -> Node
         recommends
             self is Index,
-            self->children.len() == self.arrow_Index_pivots().len() + 1,
+            self->children.len() == self->pivots.len() + 1,
             0 <= from < to <= self->children.len()
     {
-        Node::Index{ pivots: self.arrow_Index_pivots().subrange(from, to-1), children: self->children.subrange(from, to) }
+        Node::Index{ pivots: self->pivots.subrange(from, to-1), children: self->children.subrange(from, to) }
     }
 
     /// Pre: self is Index
@@ -336,7 +336,7 @@ impl Node {
             split_arg.wf(self)
     {
         // Assert split_arg.wf(self) ==> self.wf() ==>
-        // self->children.len() == self.arrow_Index_pivots().len() + 1
+        // self->children.len() == self->pivots.len() + 1
         // to restore checked
         let pivot_index = split_arg.arrow_SplitIndex_pivot_index();
         let left_index = self.sub_index(0, pivot_index + 1);
@@ -382,7 +382,7 @@ impl Node {
         let child_idx = self.route(pivot) + 1;
         let (left_node, right_node) = self->children[child_idx].split_node(split_arg);
         Node::Index{
-            pivots: self.arrow_Index_pivots().insert(child_idx, pivot),
+            pivots: self->pivots.insert(child_idx, pivot),
             children: self->children
                 .update(child_idx, left_node)
                 .insert(child_idx + 1, right_node)
@@ -471,7 +471,7 @@ impl Path {
         if 0 == self.depth {
             replacement
         } else {
-            Node::Index{ pivots: self.node.arrow_Index_pivots(), children: self.replaced_children(replacement) }
+            Node::Index{ pivots: self.node->pivots, children: self.replaced_children(replacement) }
         }
     }
 

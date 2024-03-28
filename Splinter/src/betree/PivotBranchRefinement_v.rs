@@ -512,14 +512,11 @@ pub proof fn lemma_split_node_all_keys(old_node: Node, split_arg: SplitArg)
     }
 }
 
-/// (x9du): not sure if this is correct or useful
 pub proof fn lemma_interpretation(node: Node)
     requires
         node.wf(),
     ensures
-        node.i().map.dom().subset_of(
-            node.all_keys(),
-        ),  // maybe a hassle to prove  // forall |key| node.all_keys().contains(key) ==> node.query(lbl.key) == node.i().map[key]
+        node.i().map.dom().subset_of(node.all_keys()),
 {
     assume(false);
 }
@@ -753,14 +750,13 @@ pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
             assert(post.wf());
             assert(post->children.len() == children.len()); 
             assert(forall |i| 0 <= i < post->children.len() ==> (#[trigger] post->children[i]).wf());
+            assert(forall |i| 0 <= i < children.len() ==> (#[trigger] children[i]).wf());
 
             // TODO(x9du): This assert forall is known to be flaky (can fail as you modify/add other lemmas).
             // Required to trigger the route ensures for each of the children.
-            assert forall |i| 0 <= i < children.len() && children[i] is Index
-            implies (forall |key| 0 <= #[trigger] children[i].route(key) + 1 < children[i]->children.len()) by {
-                assert forall |key| 0 <= #[trigger] children[i].route(key) + 1 < children[i]->children.len() by {
-                    lemma_route_ensures(children[i], key);
-                }
+            assert forall |i, key| 0 <= i < children.len() && children[i] is Index
+            implies 0 <= #[trigger] children[i].route(key) + 1 < children[i]->children.len() by {
+                lemma_route_ensures(children[i], key);
             }
 
             // Assert that other children don't change
@@ -1664,23 +1660,229 @@ requires
 ensures
     pre.split(path, split_arg).wf(),
     pre.i() =~~= pre.split(path, split_arg).i(),
+decreases
+    path.depth,
 {
     lemma_route_auto();
+    assert(pre is Index);
+    let pivots = pre->pivots;
+    let children = pre->children;
     let post = pre.split(path, split_arg);
+    let pivot = split_arg.get_pivot();
 
-    assume(false);
     lemma_split_preserves_wf(pre, path, split_arg);
+    assert(post.wf());
+    assert(post is Index);
 
-    match pre {
-        Node::Leaf{keys, msgs} => {
-            // It's trivial!
-            assert(post.wf());
-        },
-        Node::Index{pivots, children} => {
-            // let r = 
-            // split_refines(children)
-            assert(post.wf());
-        },
+    let r = pre.route(pivot);
+    assert(0 <= r + 1 < children.len());
+
+    // assert(forall |i| #![auto] 0 <= i < children.len() && i != (r+1) ==> post->children[i].i() == children[i].i());
+
+    if (path.depth == 0) {
+        // i:
+        // Node::Leaf{keys, msgs} => {
+        //     Buffer{map: Map::new(|key| keys.contains(key), |key| msgs[self.route(key)])}
+        // }
+        // Node::Index{pivots, children} => {
+        //     Buffer{map: Map::new(
+        //         |key| children[self.route(key) + 1].i().map.contains_key(key),
+        //         |key| children[self.route(key) + 1].i().map[key]
+        //     )}
+        // }
+
+        // lemma_split_node_interpretation:
+        // old_node.i().map == Key::map_pivoted_union(left_node.i().map, split_arg.get_pivot(), right_node.i().map)
+
+        assert(post->children.len() == children.len() + 1);
+        assert(post->pivots.len() == pivots.len() + 1);
+        assert(post->pivots[r+1] == pivot);
+
+        assert(forall |i| 0 <= i < post->children.len() ==> (#[trigger] post->children[i]).wf());
+        assert(forall |i| 0 <= i < children.len() ==> (#[trigger] children[i]).wf());
+
+        assert forall |i, key| 0 <= i < children.len() && children[i] is Index
+        implies 0 <= #[trigger] children[i].route(key) + 1 < children[i]->children.len() by {
+            lemma_route_ensures(children[i], key);
+        }
+        assert forall |i, key| 0 <= i < post->children.len() && post->children[i] is Index
+        implies 0 <= #[trigger] post->children[i].route(key) + 1 < post->children[i]->children.len() by {
+            lemma_route_ensures(post->children[i], key);
+        }
+
+        assert forall |k| pre.i().map.contains_key(k) implies post.i().map.contains_key(k) by {
+            let r2 = pre.route(k);
+            let post_r2 = post.route(k);
+            assert(0 <= r2 + 1 < children.len());
+            assert(-1 <= r2 < pivots.len());
+            assert(0 <= post_r2 + 1 < post->children.len());
+            assert(-1 <= post_r2 < post->pivots.len());
+            assert(-1 <= post_r2 <= pivots.len());
+
+            assert(children[r2+1].i().map.contains_key(k));
+
+            // TODO(x9du): deduplicate the pre/post route proofs
+
+            if (r2 == r) {
+                lemma_split_node_preserves_wf(children[r+1], split_arg);
+                lemma_split_node_interpretation(children[r+1], split_arg);
+                if (Key::lt(k, pivot)) {
+                    assert(post->children[r2+1].i().map.contains_key(k));
+                    assert(r2 == post_r2) by {
+                        if (r2 >= 0) {
+                            assert(lte_route(pre, k, r2));
+                            assert(Key::lte(pivots[r2], k));
+                            assert(pivots[r2] == post->pivots[r2]);
+                        }
+                        Key::largest_lte_is_lemma(post->pivots, k, r2);
+                    }
+                } else {
+                    assert(post->children[r2+2].i().map.contains_key(k));
+                    assert(r2+1 == post_r2) by {
+                        if (r2+1 < post->pivots.len() - 1) {
+                            assert(gt_route(pre, k, r2+1));
+                            assert(Key::lt(k, pivots[r2+1]));
+                            assert(pivots[r2+1] == post->pivots[r2+2]);
+                        }
+                        Key::largest_lte_is_lemma(post->pivots, k, r2+1);
+                    }
+                }
+            } else if r2 < r {
+                assert(children[r2+1] == post->children[r2+1]);
+                assert(post->children[r2+1].i().map.contains_key(k));
+                assert(r2 == post_r2) by {
+                    if (r2 >= 0) {
+                        assert(lte_route(pre, k, r2));
+                        assert(Key::lte(pivots[r2], k));
+                        assert(pivots[r2] == post->pivots[r2]);
+                    }
+                    if (r2 < post->pivots.len() - 1) {
+                        assert(gt_route(pre, k, r2+1));
+                        assert(Key::lt(k, pivots[r2+1]));
+                        assert(pivots[r2+1] == post->pivots[r2+1]);
+                    }
+                    Key::largest_lte_is_lemma(post->pivots, k, r2);
+                }
+            } else {
+                assert(children[r2+1] == post->children[r2+2]);
+                assert(post->children[r2+2].i().map.contains_key(k));
+                assert(r2+1 == post_r2) by {
+                    assert(lte_route(pre, k, r2));
+                    assert(Key::lte(pivots[r2], k));
+                    assert(pivots[r2] == post->pivots[r2+1]);
+                    if (r2+1 < post->pivots.len() - 1) {
+                        assert(gt_route(pre, k, r2+1));
+                        assert(Key::lt(k, pivots[r2+1]));
+                        assert(pivots[r2+1] == post->pivots[r2+2]);
+                    }
+                    Key::largest_lte_is_lemma(post->pivots, k, r2+1);
+                }
+            }
+        }
+
+        assert forall |k| post.i().map.contains_key(k) implies pre.i().map.contains_key(k) by {
+            let r2 = pre.route(k);
+            let post_r2 = post.route(k);
+            assert(0 <= post_r2 + 1 < post->children.len());
+
+            assert(post->children[post_r2+1].i().map.contains_key(k));
+            lemma_interpretation(post->children[post_r2+1]);
+            assert(post->children[post_r2+1].all_keys().contains(k));
+            
+            if (post_r2 == r) {
+                lemma_split_node_preserves_wf(children[r+1], split_arg);
+                lemma_split_node_interpretation(children[r+1], split_arg);
+                assert(Key::lt(k, pivot)) by {
+                    assert(post.all_keys_below_bound(post_r2+1));
+                    assert(Key::lt(k, post->pivots[post_r2+1]));
+                }
+                assert(children[r+1].i().map.contains_key(k));
+                assert(r2 == post_r2) by {
+                    if (post_r2 >= 0) {
+                        assert(lte_route(post, k, post_r2));
+                        assert(Key::lte(post->pivots[post_r2], k));
+                        assert(pivots[post_r2] == post->pivots[post_r2]);
+                    }
+                    if (post_r2 < pivots.len() - 1) {
+                        assert(gt_route(post, k, post_r2+1));
+                        assert(Key::lt(k, post->pivots[post_r2+1]));
+                        assert(Key::lt(post->pivots[post_r2+1], post->pivots[post_r2+2]));
+                        assert(post->pivots[post_r2+2] == pivots[post_r2+1]);
+                        assert(Key::lt(k, pivots[post_r2+1]));
+                    }
+                    Key::largest_lte_is_lemma(pivots, k, post_r2);
+                }
+            } else if (post_r2 == r+1) {
+                lemma_split_node_preserves_wf(children[r+1], split_arg);
+                lemma_split_node_interpretation(children[r+1], split_arg);
+                assert(Key::lte(pivot, k)) by {
+                    assert(post.all_keys_above_bound(post_r2+1));
+                    assert(Key::lte(post->pivots[post_r2+1-1], k));
+                }
+                assert(children[r+1].i().map.contains_key(k));
+                assert(r2+1 == post_r2) by {
+                    if (post_r2-1 >= 0) {
+                        assert(lte_route(post, k, post_r2-1));
+                        assert(Key::lte(post->pivots[post_r2-1], k));
+                        assert(post->pivots[post_r2-1] == pivots[post_r2-1]);
+                    }
+                    if (post_r2-1 < pivots.len() - 1) {
+                        assert(gt_route(post, k, post_r2+1));
+                        assert(Key::lt(k, post->pivots[post_r2+1]));
+                        assert(pivots[post_r2] == post->pivots[post_r2+1]);
+                    }
+                    Key::largest_lte_is_lemma(pivots, k, post_r2-1);
+                }
+            } else if (post_r2 < r) {
+                assert(children[post_r2+1] == post->children[post_r2+1]);
+                assert(children[post_r2+1].i().map.contains_key(k));
+                assert(r2 == post_r2) by {
+                    if (post_r2 >= 0) {
+                        assert(lte_route(post, k, post_r2));
+                        assert(Key::lte(post->pivots[post_r2], k));
+                        assert(pivots[post_r2] == post->pivots[post_r2]);
+                    }
+                    assert(gt_route(post, k, post_r2+1));
+                    assert(Key::lt(k, post->pivots[post_r2+1]));
+                    assert(post->pivots[post_r2+1] == pivots[post_r2+1]);
+                    Key::largest_lte_is_lemma(pivots, k, post_r2);
+                }
+            } else {
+                assert(children[post_r2] == post->children[post_r2+1]);
+                assert(children[post_r2].i().map.contains_key(k));
+                assert(r2 == post_r2-1) by {
+                    if (post_r2-1 >= 0) {
+                        assert(lte_route(post, k, post_r2));
+                        assert(Key::lte(post->pivots[post_r2], k));
+                        assert(post->pivots[post_r2] == pivots[post_r2-1]);
+                    }
+                    if (post_r2-1 < pivots.len() - 1) {
+                        assert(gt_route(post, k, post_r2+1));
+                        assert(Key::lt(k, post->pivots[post_r2+1]));
+                        assert(pivots[post_r2] == post->pivots[post_r2+1]);
+                    }
+                    Key::largest_lte_is_lemma(pivots, k, post_r2-1);
+                }
+            }
+            assert(pre.i().map.contains_key(k));
+        }
+
+        // GOAL 1
+        assert(pre.i().map.dom() =~~= post.i().map.dom());
+
+        assume(false);
+
+        // GOAL 2
+        assert(forall |k| post.i().map.contains_key(k) ==>
+            #[trigger] post.i().map[k] == #[trigger] pre.i().map[k]);
+
+        assert(pre.i().map =~~= post.i().map);
+
+        // OVERALL GOAL
+        assert(pre.i() == post.i());
+    } else {
+        assert(path.subpath().valid());
+        split_refines(children[r+1], path.subpath(), split_arg);
     }
 }
 

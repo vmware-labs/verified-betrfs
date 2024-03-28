@@ -153,6 +153,19 @@ impl Key {
         }
     }
 
+    pub proof fn largest_lte_is_lemma(run: Seq<Key>, key: Key, r: int)
+        requires
+            -1 <= r < run.len(),
+            Key::is_strictly_sorted(run),
+            r == -1 || Key::lte(run[r], key),
+            r == run.len() - 1 || Key::lt(key, run[r+1]),
+        ensures
+            Key::largest_lte(run, key) == r,
+    {
+        Key::strictly_sorted_implies_sorted(run);
+        Key::largest_lte_ensures(run, key, Key::largest_lte(run, key));
+    }
+
     pub proof fn largest_lt_ensures(run: Seq<Key>, needle: Key, out: int)
         requires
             Key::is_sorted(run),
