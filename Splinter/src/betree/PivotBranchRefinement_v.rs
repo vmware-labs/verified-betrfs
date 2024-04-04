@@ -18,6 +18,7 @@ impl Node {
     pub open spec(checked) fn i(self) -> Buffer
         recommends self.wf()
         decreases self
+        // TODO(x9du): this when condition is kind of annoying to prove
         when self is Index ==> forall |key| 0 <= #[trigger] self.route(key) + 1 < self->children.len()
     {
         match self {
@@ -517,8 +518,22 @@ pub proof fn lemma_interpretation(node: Node)
         node.wf(),
     ensures
         node.i().map.dom().subset_of(node.all_keys()),
+    decreases node,
 {
-    assume(false);
+    if (node is Index) {
+        let children = node->children;
+        lemma_route_auto();
+
+        assert(forall |i| 0 <= i < children.len() ==> (#[trigger] children[i]).wf());
+
+        assert forall |key| node.i().map.dom().contains(key)
+        implies #[trigger] node.all_keys().contains(key) by {
+            let r = node.route(key);
+            assert(0 <= r + 1 < children.len());
+            assert(children[r + 1].i().map.contains_key(key));
+            lemma_interpretation(children[r+1]);
+        }
+    }
 }
 
 #[verifier::ext_equal]
