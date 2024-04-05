@@ -53,14 +53,42 @@ state_machine!{ CoordinationSystem {
   fields {
     /// The state of the journal in our system.
     pub journal: CrashTolerantJournal::State,
+
     /// State of the map backing our system.
     pub mapadt: CrashTolerantMap::State,
+
     /// The ephemeral state of the coordination system tracks the outstanding
     /// requests and replies for map operations, as well as the set of outstanding
     /// sync requests. Invariant: if not Known, then we cannot accept new requests
     /// (represents that our in-memory state has crashed and isn't fully up to date
     /// with persistent information yet).
     pub ephemeral: Ephemeral,
+
+    /// The state of the async disk buffer: is there a superblock write in-flight,
+    /// or has it landed on the disk? Used to refine when a spec Sync event occurs.
+
+    // This entire state machine is an abstraction of the ultimate implementation system, which is
+    // a trusted composition of a trusted disk and its async buffers with the untrusted program
+    // (and its in-memory state). At this level, the disk state is abstracted into the journal and
+    // the mapadt. Those models aren't "precise" with respect to the trusted disk at the bottom
+    // layer, in that they're only updated asynchronously as the program learns that writes have
+    // completed. But that doesn't really affect the refinement task.
+    //
+    // To precisely model the sync transition, however, we also need to know exactly when each
+    // superblock write hits the disk, for that is the moment when the spec version list has old
+    // versions discarded.
+    //
+    // In a previous version of this model, we didn't capture this state; instead, we just delayed
+    // declaring the abstract "Sync" event until the program learned (in the commit_complete step)
+    // that the commit had landed. The "sync" acted, in practice, as a "right mover" in the
+    // abstract spec.
+    //
+    // That scheme produced a valid refinement, but not really the intuitive one.  Nothing about
+    // that scheme was bogus: it wasn't unsound, nor did it represent a trusted spec that admitted
+    // executions we really didn't want to admit. But it was difficult to explain; it required
+    // apologizing for the fact that we were justifying the intuitive "real" execution with an
+    // "equally acceptable but not really the right" other execution.
+    pub superblock_in_flight: bool,
   }
 
   // Labels of coordinationsystem should directly be the labels of the
@@ -92,6 +120,7 @@ state_machine!{ CoordinationSystem {
       init journal = state.journal;
       init mapadt = state.mapadt;
       init ephemeral = None;
+      init superblock_in_flight = false;
     }
   }
 
@@ -522,7 +551,22 @@ state_machine!{ CoordinationSystem {
         }
       );
 
+      update superblock_in_flight = true;
+
       // ephemeral unchanged
+    }
+  }
+
+  // This transition models the trusted event of an outstanding superblock write landing on the
+  // disk. This event is invisible to the untrusted ("player 2") program, but in the proof we need
+  // to model it to precisely identify the linearization point for the Sync transition in the
+  // abstract Spec.
+  transition! {
+    superblock_write_lands(
+        label: Label,
+    ) {
+      require pre.superblock_in_flight;
+      update superblock_in_flight = false;
     }
   }
 
@@ -532,11 +576,12 @@ state_machine!{ CoordinationSystem {
       new_mapadt: CrashTolerantMap::State,
       new_journal: CrashTolerantJournal::State,
     ) {
+      require pre.superblock_in_flight;
       require pre.ephemeral is Some;
       let pre_ephemeral = pre.ephemeral.get_Some_0();
 
       let ctam_label = label->ctam_label;
-      require ctam_label is SyncOp;
+      require ctam_label is Noop;
 
       // CrashTolerantJournal commit complete truncates the old
       // part of ephemeral journal that's now saved on disk

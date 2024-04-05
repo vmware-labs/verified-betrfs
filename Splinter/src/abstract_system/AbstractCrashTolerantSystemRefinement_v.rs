@@ -84,6 +84,70 @@ verus! {
             self.journal.i().seq_end
         }
 
+        pub proof fn wtf(x: MsgHistory, y: LSN)
+        requires x.can_discard_to(y)
+        ensures x.discard_old(y).seq_start == y
+        {
+        }
+
+        pub open spec(checked) fn iversions_known(self) -> (versions: FloatingSeq<Version>)
+        recommends
+            self.inv(),
+            self.ephemeral matches Some(Known{..}),
+        {
+            let stable_lsn = self.journal.persistent.seq_end;
+            let _ = spec_affirm(self.journal.i() == self.journal.ephemeral->v.journal);
+            let _ = spec_affirm(self.journal.i().can_follow(self.mapadt.persistent.seq_end));
+            let _ = spec_affirm(self.journal.i().can_discard_to(stable_lsn));
+            if self.mapadt.in_flight is Some && !self.superblock_in_flight {
+
+                // Program thinks a superblock is still in-flight to the disk, but the disk
+                // knows it has actually landed. In that case, versions begins at the
+                // in-flight map.
+                let in_flight_map = self.mapadt.in_flight.unwrap();
+
+                // In that case, the program is still keeping more journal than it needs
+                // (because it hasn't yet heard about the write landing), so we need to
+                // trim off the irrevelant prefix before appending it to the more-recent
+                // in_flight_map.
+//                 let _: CrashTolerantJournal::State = self.journal;
+//                 let _ = spec_affirm( self.journal.i().wf() );
+//                 let _ = spec_affirm( self.journal.i().seq_start <= in_flight_map.seq_end );
+//                 let _ = spec_affirm( in_flight_map.seq_end <= self.journal.i().seq_end );
+//                 let _ = spec_affirm( self.journal.i().can_discard_to(in_flight_map.seq_end) );
+// 
+//                 let x = self.journal.i();
+//                 let y = in_flight_map.seq_end;
+// //                 let _ = spec_affirm(x.can_discard_to(y));
+//                 let _ = spec_affirm(self.journal.i().can_discard_to(in_flight_map.seq_end));
+// //                 let _ = spec_affirm(x.discard_old(y).seq_start == y);
+//                 let _ = spec_affirm(self.journal.i().discard_old(in_flight_map.seq_end).seq_start == in_flight_map.seq_end);
+// 
+                let remaining_journal = self.journal.i().discard_old(in_flight_map.seq_end);
+//                 //wtf(self.journal.i(), in_flight_map.seq_end);
+// 
+// //                 let foo_lsn = in_flight_map.seq_end;
+// //                 let foo = self.journal.i();
+// //                 let keepMap = Map::new(
+// //                   |k: nat| foo_lsn <= k < foo.seq_end,
+// //                   |k: nat| foo.msgs[k],
+// //                 );
+// //                 let foo_disc = MsgHistory{ msgs: keepMap, seq_start: foo_lsn, seq_end: foo.seq_end };
+// //                 let _ = spec_affirm( foo_disc == remaining_journal );
+// 
+//                 let _ = spec_affirm( remaining_journal == self.journal.i().discard_old(in_flight_map.seq_end) );
+//                 
+//                 let _ = spec_affirm( remaining_journal.seq_start == in_flight_map.seq_end );
+//                 //let _ = spec_affirm( self.journal.i().can_discard_to(in_flight_map.seq_end) );
+//                 let _ = spec_affirm( remaining_journal.seq_start <= remaining_journal.seq_end );
+//                 let _ = spec_affirm( remaining_journal.contains_exactly(remaining_journal.msgs.dom()) );
+//                 let _ = spec_affirm( remaining_journal.wf() );
+                floating_versions(in_flight_map, remaining_journal, stable_lsn)
+            } else {
+                floating_versions(self.mapadt.persistent, self.journal.i(), stable_lsn)
+            }
+        }
+
         /// Return the CrashTolerantAsyncMap state that this CoordinationSystem state
         /// corresponds to. (Interpretation function).
         pub open spec(checked) fn i(self) -> CrashTolerantAsyncMap::State
@@ -93,11 +157,8 @@ verus! {
             let stable_lsn = self.journal.persistent.seq_end;
             match self.ephemeral {
                 Some(Known{ progress, sync_reqs, .. }) => {
-                    let _ = spec_affirm(self.journal.i() == self.journal.ephemeral->v.journal);
-                    let _ = spec_affirm(self.journal.i().can_follow(self.mapadt.persistent.seq_end));
-                    let _ = spec_affirm(self.journal.i().can_discard_to(stable_lsn));
-                        CrashTolerantAsyncMap::State{
-                    versions: floating_versions(self.mapadt.persistent, self.journal.i(), stable_lsn),
+                CrashTolerantAsyncMap::State{
+                    versions: self.iversions_known(),
                     async_ephemeral: progress,
                     sync_requests: sync_reqs,
                 }},
@@ -908,6 +969,9 @@ verus! {
         let versions_prime = vp.i().versions;
         let versions = v.i().versions;
 
+        assert( versions_prime == vp.iversions_known() );
+        assert( versions == v.iversions_known() );
+
         assert(versions_prime.drop_last().ext_equal(versions));
 
         assert(0 < versions_prime.len());
@@ -960,6 +1024,24 @@ verus! {
         // assert(v.i().versions.ext_equal(vp.i().versions.drop_last()));
         assert(CrashTolerantAsyncMap::State::next_by(v.i(), vp.i(), label->ctam_label, ctam_step));
         assert(CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label->ctam_label));
+    }
+
+    pub proof fn superblock_write_lands_step_refines(
+        v: CoordinationSystem::State,
+        vp: CoordinationSystem::State,
+        label: CoordinationSystem::Label,
+        step: CoordinationSystem::Step
+    )
+        requires
+            v.inv(),
+            CoordinationSystem::State::next(v, vp, label),
+            CoordinationSystem::State::next_by(v, vp, label, step),
+            matches!(step, CoordinationSystem::Step::superblock_write_lands(..)),
+        ensures
+            vp.inv(),
+            CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label->ctam_label),
+    {
+        assume(false);  // XXX
     }
 
     /// Proof that a "commit_complete" transition maps to a "sync" transition
@@ -1032,8 +1114,11 @@ verus! {
         // assert(vers_p =~~= vers_s);
 
         // Proof goal: Show that it refines to a sync operation.
-        assert(CrashTolerantAsyncMap::State::sync(v.i(), vp.i(), CrashTolerantAsyncMap::Label::SyncOp{}, new_stable_index));
-        CrashTolerantAsyncMap::show::sync(v.i(), vp.i(), CrashTolerantAsyncMap::Label::SyncOp{}, new_stable_index);
+//         assert(CrashTolerantAsyncMap::State::sync(v.i(), vp.i(), CrashTolerantAsyncMap::Label::SyncOp{}, new_stable_index));
+//         CrashTolerantAsyncMap::show::sync(v.i(), vp.i(), CrashTolerantAsyncMap::Label::SyncOp{}, new_stable_index);
+         assert( v.i() =~= vp.i() );
+         assert(CrashTolerantAsyncMap::State::sync(v.i(), vp.i(), CrashTolerantAsyncMap::Label::Noop{}, new_stable_index));
+         CrashTolerantAsyncMap::show::sync(v.i(), vp.i(), CrashTolerantAsyncMap::Label::Noop{}, new_stable_index);
     }
 
     /// Proof that a "Crash" transition maps to a "Crash" transition
@@ -1516,6 +1601,8 @@ verus! {
                 req_sync_step_and_reply_sync_step_refine(v, vp, label, step),
             CoordinationSystem::Step::commit_start(..) =>
                 noop_steps_refine(v, vp, label, step),
+            CoordinationSystem::Step::superblock_write_lands(..) =>
+                superblock_write_lands_step_refines(v, vp, label, step),
             CoordinationSystem::Step::commit_complete(..) =>
                 commit_complete_step_refines(v, vp, label, step),
             CoordinationSystem::Step::crash(..) =>
