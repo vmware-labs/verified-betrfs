@@ -154,6 +154,7 @@ pub proof fn lemma_grow_preserves_all_keys(node: Node)
     assume(false);
 }
 
+// TODO(x9du): maybe we don't need this anymore now that the i() def is based on route?
 pub proof fn lemma_interpretation_delegation(node: Node, key: Key)
     requires
         node.wf(),
@@ -186,7 +187,98 @@ pub proof fn lemma_insert_leaf_is_correct(node: Node, key: Key, msg: Message)
         node.insert_leaf(key, msg).i() == (Buffer{map: node.i().map.insert(key, msg)}),
         node.insert_leaf(key, msg).all_keys() == node.all_keys().insert(key)
 {
-    assume(false);
+    let post = node.insert_leaf(key, msg);
+    let llte = Key::largest_lte(node->keys, key);
+    lemma_insert_leaf_preserves_wf(node, key, msg);
+    Key::strictly_sorted_implies_sorted(node->keys);
+    Key::largest_lte_ensures(node->keys, key, llte);
+    lemma_route_auto();
+    assert(post.wf());
+    assert(-1 <= llte < node->keys.len());
+
+    if 0 <= llte && node->keys[llte] == key {
+        assert(post.i().map =~~= node.i().map.insert(key, msg));
+        assert(post.all_keys() =~~= node.all_keys().insert(key));
+    } else {
+        assert forall |k| node.i().map.insert(key, msg).contains_key(k)
+        implies #[trigger] post.i().map.contains_key(k) by {
+            if k == key {
+                assert(0 <= llte + 1 < post->keys.len());
+                assert(post->keys[llte+1] == k);
+            } else {
+                let i = node->keys.index_of(k);
+                assert(0 <= i < post->keys.len());
+                assert(0 <= i+1 < post->keys.len());
+                if i < llte + 1 {
+                    assert(post->keys[i] == k);
+                } else if i >= llte + 1 {
+                    assert(post->keys[i+1] == k);
+                }
+            }
+        }
+
+        // TODO(x9du): create a lemma for post_r == r / post_r == r+1 proofs cuz this is getting repetitive...
+
+        assert forall |k| post.i().map.contains_key(k)
+        implies #[trigger] post.i().map[k] == node.i().map.insert(key, msg)[k] by {
+            assert(node.i().map.insert(key, msg).contains_key(k));
+
+            if k != key {
+                let r = node.route(k);
+                let post_r = post.route(k);
+                assert(0 <= post_r < post->msgs.len());
+                assert(0 <= r + 1 < post->msgs.len());
+                assert(0 <= r < node->msgs.len());
+                assert(post->keys.len() == post->msgs.len());
+                assert(node.i().map.contains_key(k));
+                if r <= llte {
+                    assert(post->msgs[r] == node->msgs[r]);
+                    assert(post_r == r) by {
+                        if (r >= 0) {
+                            assert(lte_route(node, k, r));
+                            assert(Key::lte(node->keys[r], k));
+                            assert(node->keys[r] == post->keys[r]);
+                        }
+                        if (r < post->keys.len() - 1) {
+                            assert(Key::lt(k, post->keys[r+1])) by {
+                                if (r < llte) {
+                                    assert(gt_route(node, k, r+1));
+                                    assert(Key::lt(k, node->keys[r+1]));
+                                    assert(node->keys[r+1] == post->keys[r+1]);
+                                } else {
+                                    assert(lte_route(node, key, r));
+                                    assert(Key::lte(node->keys[r], key));
+                                    assert(node->keys[r] == k);
+                                    assert(key == post->keys[r+1]);
+                                }
+                            }
+                        }
+                        Key::largest_lte_is_lemma(post->keys, k, r);
+                    }
+                    assert(post->msgs[post_r] == node->msgs[r]);
+                } else {
+                    assert(post->msgs[r+1] == node->msgs[r]);
+                    assert(post_r == r + 1) by {
+                        if (r+1 >= 0) {
+                            assert(lte_route(node, k, r));
+                            assert(Key::lte(node->keys[r], k));
+                            assert(node->keys[r] == post->keys[r+1]);
+                        }
+                        if (r+1 < post->keys.len() - 1) {
+                            assert(gt_route(node, k, r+1));
+                            assert(Key::lt(k, node->keys[r+1]));
+                            assert(node->keys[r+1] == post->keys[r+2]);
+                        }
+                        Key::largest_lte_is_lemma(post->keys, k, r+1);
+                    }
+                    assert(post->msgs[post_r] == node->msgs[r]);
+                }
+            }
+        }
+
+        assert(post.i().map =~~= node.i().map.insert(key, msg));
+        assert(post.all_keys() =~~= node.all_keys().insert(key));
+    }
 }
 
 pub proof fn lemma_split_leaf_preserves_wf(node: Node, split_arg: SplitArg)
@@ -237,7 +329,11 @@ pub proof fn lemma_split_node_preserves_wf(node: Node, split_arg: SplitArg)
         &&& right_node.wf()
     })
 {
-    assume(false);
+    if (node is Leaf) {
+        lemma_split_leaf_preserves_wf(node, split_arg);
+    } else {
+        lemma_split_index_preserves_wf(node, split_arg);
+    }
 }
 
 pub proof fn lemma_split_leaf_interpretation(old_leaf: Node, split_arg: SplitArg)
@@ -321,7 +417,11 @@ pub proof fn lemma_split_node_interpretation(old_node: Node, split_arg: SplitArg
         old_node.i().map == Key::map_pivoted_union(left_node.i().map, split_arg.get_pivot(), right_node.i().map)
     })
 {
-    assume(false);
+    if (old_node is Leaf) {
+        lemma_split_leaf_interpretation(old_node, split_arg);
+    } else {
+        lemma_split_index_interpretation(old_node, split_arg);
+    }
 }
 
 pub proof fn lemma_split_leaf_all_keys(old_leaf: Node, split_arg: SplitArg)
@@ -382,10 +482,6 @@ pub proof fn lemma_split_index_all_keys(old_index: Node, split_arg: SplitArg)
 
     // Ensures GOAL 1
     assert(old_index.all_keys() =~~= left_index.all_keys() + right_index.all_keys() + set![pivot]);
-
-    // ========= ========= =========
-    // CURRENT WORK
-    // ========= ========= =========
 
     assert(left_index->pivots == old_index->pivots.subrange(0, pivot_index));
     assert(left_index->children == old_index->children.subrange(0, pivot_index + 1));
@@ -513,7 +609,7 @@ pub proof fn lemma_split_node_all_keys(old_node: Node, split_arg: SplitArg)
     }
 }
 
-pub proof fn lemma_interpretation(node: Node)
+pub proof fn lemma_interpretation_subset_of_all_keys(node: Node)
     requires
         node.wf(),
     ensures
@@ -531,7 +627,7 @@ pub proof fn lemma_interpretation(node: Node)
             let r = node.route(key);
             assert(0 <= r + 1 < children.len());
             assert(children[r + 1].i().map.contains_key(key));
-            lemma_interpretation(children[r+1]);
+            lemma_interpretation_subset_of_all_keys(children[r+1]);
         }
     }
 }
@@ -1787,7 +1883,7 @@ decreases
             assert(0 <= post_r2 + 1 < post->children.len());
 
             assert(post->children[post_r2+1].i().map.contains_key(k));
-            lemma_interpretation(post->children[post_r2+1]);
+            lemma_interpretation_subset_of_all_keys(post->children[post_r2+1]);
             assert(post->children[post_r2+1].all_keys().contains(k));
 
             if (post_r2 <= r) {
