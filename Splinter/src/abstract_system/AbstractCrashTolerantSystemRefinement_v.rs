@@ -152,74 +152,18 @@ verus! {
             forall |lsn| self.iversions_known_inflight().start <= lsn < self.iversions_known_inflight().len()
                 ==> self.iversions_known_landed()[lsn] == self.iversions_known_inflight()[lsn]
         {
-            assert( self.iversions_known_landed().start == self.journal.persistent.seq_end );
-            assert( self.iversions_known_inflight().start == self.journal.in_flight.unwrap().seq_end );
-
-            // inv_commit_started_geometry says
-            assert( self.inv_commit_started_geometry() );
-            assert( self.journal.persistent.seq_end <= self.journal.in_flight.unwrap().seq_end );
-
-            assert( self.iversions_known_landed().start <= self.iversions_known_inflight().start );
-
             assert forall |lsn| self.iversions_known_inflight().start <= lsn < self.iversions_known_inflight().len()
-                implies self.iversions_known_landed()[lsn] == self.iversions_known_inflight()[lsn] by {
+            implies self.iversions_known_landed()[lsn] == self.iversions_known_inflight()[lsn] by {
 
-            let stable_lsn = self.journal.persistent.seq_end;
-            let in_flight_map = self.mapadt.in_flight.unwrap();
-            let remaining_journal = self.journal.i().discard_old(in_flight_map.seq_end);
+                let in_flight_map = self.mapadt.in_flight.unwrap();
+                let remaining_journal = self.journal.i().discard_old(in_flight_map.seq_end);
+                let in_flight_journal = self.journal.i().discard_recent(self.mapadt.in_flight.get_Some_0().seq_end);
+                let remaining_journal_discarded = remaining_journal.discard_recent(lsn as LSN);
 
-            // from: inv_frozen_map_value_agreement
-            assert( in_flight_map == self.mapadt.in_flight.get_Some_0() );
-            let ifj = self.journal.i().discard_recent(self.mapadt.in_flight.get_Some_0().seq_end);
+                journal_associativity(self.mapadt.persistent, in_flight_journal, remaining_journal_discarded);
 
-            let e1 = self.iversions_known_landed()[lsn];
-            let e2 = floating_versions(self.mapadt.persistent, self.journal.i(), stable_lsn)[lsn];
-
-            let e3 = MsgHistory::map_plus_history(
-                self.mapadt.persistent, self.journal.i().discard_recent(lsn as LSN))
-                .to_version();
-
-            //assert( ifj.can_concat(remaining_journal.discard_recent(lsn as LSN)) );
-            assert( ifj.can_concat(remaining_journal) );    // assert passes, but rec fails without it. Rec checking is useless if I can't trust it.
-            assert( ifj.concat(remaining_journal) =~= self.journal.i() );
-
-            let rjd = remaining_journal.discard_recent(lsn as LSN);
-            journal_associativity(self.mapadt.persistent, ifj, rjd);
-//             assert(
-//                 // e3
-//                 MsgHistory::map_plus_history(self.mapadt.persistent, ifj.concat(rjd)) ==
-//                 // e39
-//                 MsgHistory::map_plus_history(MsgHistory::map_plus_history(self.mapadt.persistent, ifj), rjd)
-//                 );
-
-            // not sure why this is a trigger. I'd think extensionality, but ... I didn't need ~
-            assert( ifj.concat(rjd) == self.journal.i().discard_recent(lsn as LSN) ); //trigger
-
-//             assert( e3 == MsgHistory::map_plus_history(self.mapadt.persistent, ifj.concat(rjd)).to_version() );
-
-//             let e39 = MsgHistory::map_plus_history(
-//                     MsgHistory::map_plus_history(self.mapadt.persistent, ifj), rjd)
-//                 .to_version();
-// 
-//             let e4 = MsgHistory::map_plus_history(
-//                 in_flight_map, remaining_journal.discard_recent(lsn as LSN))
-//                 .to_version();
-// 
-//             let e5 = floating_versions(in_flight_map, remaining_journal, in_flight_map.seq_end)[lsn];
-//             let e6 = self.iversions_known_inflight()[lsn];
-
-
-            // key: inv_frozen_map_value_agreement
-
-//             assert( in_flight_map == MsgHistory::map_plus_history(self.mapadt.persistent, ifj) );
-
-//             assert( e1 == e2);
-//             assert( e2 == e3);
-//             assert( e3 =~= e39);
-//             assert( e39 == e4);
-//             assert( e4 == e5);
-//             assert( e5 == e6);
-
+                // not sure why this is a trigger. I'd think extensionality, but ... I didn't need ~
+                assert( in_flight_journal.concat(remaining_journal_discarded) == self.journal.i().discard_recent(lsn as LSN) ); //trigger
             }
         }
 
@@ -1096,47 +1040,10 @@ verus! {
         let post_map = versions_prime.last().appv;
 
         if v.known_inflight() {
-            let stable_lsn = v.journal.persistent.seq_end;
-            if stable_lsn == v.journal.i().seq_end {
-                // if we have no additional ephemeral LSNs beyond stable_lsn,
-                // then the in-flight state can't, either.
-
-                assume( false );// focus on the easy case first
-                assert( stable_lsn <= v.journal.in_flight.unwrap().seq_end );   // from inv_frozen_map_geometry
-                assert( v.journal.in_flight.unwrap().seq_end <= stable_lsn );   // from inv_frozen_map_geometry
-                assert( stable_lsn == v.journal.in_flight.unwrap().seq_end );
-
-                assert( versions.last() == versions_prime.last() );
-
-                assert( pre_map == pre_ignore_inflight_map );
-                assert( post_map == post_ignore_inflight_map );
-            } else {
-                // this case should be easy: in both cases, last() is equal to ephemeral last()
-//                 assert( pre_ignore_inflight_map ==
-//                     FloatingSeq::new(
-//                         stable_lsn,
-//                         self.journal.i().seq_end + 1,
-//                         |lsn: int| MsgHistory::map_plus_history(
-//                             self.mapadt.persistent, self.journal.i().discard_recent(lsn as LSN))
-//                             .to_version()
-//                     )
-
-//                 assert( pre_ignore_inflight_map ==
-//                         MsgHistory::map_plus_history(
-//                             self.mapadt.persistent, msg_history.discard_recent(lsn as LSN)).to_version() );
-
-                
-//                 pre_ignore_inflight_map = v.iversions_known_landed().last().appv;
-//                 pre_map = v.i().versions.last().appv;
-
-                assert( v.i().versions == v.iversions_known() );
-                assert( !v.known_inflight() );
-                assert( v.iversions_known() == v.iversions_known_landed() );
-
-                assert( pre_map == pre_ignore_inflight_map );
-                assert( post_map == post_ignore_inflight_map );
-            }
+            v.lemma_iversions_known_inflight_landed_relation();
+            vp.lemma_iversions_known_inflight_landed_relation();
         }
+        // !v.known_inflight() case is easy
 
         // END - Yet another proof goal: show that MapSpec transition works
 
