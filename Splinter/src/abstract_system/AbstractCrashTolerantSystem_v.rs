@@ -565,6 +565,8 @@ state_machine!{ CoordinationSystem {
     superblock_write_lands(
         label: Label,
     ) {
+      let ctam_label = label->ctam_label;
+      require ctam_label is SyncOp;
       require pre.superblock_in_flight;
       update superblock_in_flight = false;
     }
