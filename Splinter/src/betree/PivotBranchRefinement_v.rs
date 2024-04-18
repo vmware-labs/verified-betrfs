@@ -138,13 +138,118 @@ pub proof fn lemma_index_all_keys(node: Node, key: Key)
             && (#[trigger] node->children[i]).all_keys().contains(key))
 {}
 
+// TODO(x9du): lemma_all_keys_finite() remove finite from wf
+
+pub open spec(checked) fn union_seq_of_sets<A>(sets: Seq<Set<A>>) -> Set<A>
+{
+    sets.fold_left(Set::empty(), |u: Set<A>, s| u.union(s))
+}
+
+pub proof fn lemma_union_seq_of_sets_finite<A>(sets: Seq<Set<A>>)
+    requires forall |i| 0 <= i < sets.len() ==> (#[trigger] sets[i]).finite()
+    ensures union_seq_of_sets(sets).finite()
+    decreases sets.len()
+{
+    if sets.len() > 0 {
+        lemma_union_seq_of_sets_finite(sets.drop_last());
+    }
+}
+
+pub proof fn lemma_set_subset_of_union_seq_of_sets<A>(sets: Seq<Set<A>>, a: A)
+    requires exists |i| 0 <= i < sets.len() && (#[trigger] sets[i]).contains(a)
+    ensures union_seq_of_sets(sets).contains(a)
+    decreases sets.len()
+{
+    assert(sets.len() > 0);
+    assert(union_seq_of_sets(sets) == union_seq_of_sets(sets.drop_last()).union(sets.last()));
+    let i = choose |i| 0 <= i < sets.len() && (#[trigger] sets[i]).contains(a);
+    if i < sets.len() - 1 {
+        assert(0 <= i < sets.drop_last().len() && (#[trigger] sets.drop_last()[i]).contains(a));
+        lemma_set_subset_of_union_seq_of_sets(sets.drop_last(), a);
+    }
+}
+
+pub proof fn lemma_union_seq_of_sets_contains<A>(sets: Seq<Set<A>>, a: A)
+    requires union_seq_of_sets(sets).contains(a)
+    ensures exists |i| 0 <= i < sets.len() && (#[trigger] sets[i]).contains(a)
+    decreases sets.len()
+{
+    assert(sets.len() > 0);
+    assert(union_seq_of_sets(sets) == union_seq_of_sets(sets.drop_last()).union(sets.last()));
+    if sets.last().contains(a) {
+    } else {
+        lemma_union_seq_of_sets_contains(sets.drop_last(), a);
+    }
+}
+
+pub open spec(checked) fn map_all_keys(children: Seq<Node>) -> Seq<Set<Key>>
+{
+    children.map(|i, child: Node| child.all_keys())
+}
+
+pub open spec(checked) fn union_all_keys(children: Seq<Node>) -> Set<Key>
+{
+    union_seq_of_sets(map_all_keys(children))
+}
+
+pub proof fn lemma_union_all_keys_finite(children: Seq<Node>)
+    requires forall |i| 0 <= i < children.len() ==> (#[trigger] children[i]).all_keys().finite()
+    ensures union_all_keys(children).finite()
+{
+    lemma_union_seq_of_sets_finite(map_all_keys(children));
+}
+
+pub proof fn lemma_children_all_keys_equivalence(children: Seq<Node>)
+    ensures
+        Set::new(|key| exists |i| 0 <= i < children.len()
+            && (#[trigger] children[i]).all_keys().contains(key)) ==
+        union_all_keys(children)
+{
+    let children_all_keys = Set::new(|key| exists |i| 0 <= i < children.len()
+        && (#[trigger] children[i]).all_keys().contains(key));
+
+    assert forall |key| #[trigger] children_all_keys.contains(key)
+    implies union_all_keys(children).contains(key) by
+    {
+        let i = choose |i| 0 <= i < children.len()
+            && (#[trigger] children[i]).all_keys().contains(key);
+        assert(map_all_keys(children)[i].contains(key));
+        lemma_set_subset_of_union_seq_of_sets(map_all_keys(children), key);
+    }
+
+    assert forall |key| union_all_keys(children).contains(key)
+    implies #[trigger] children_all_keys.contains(key) by
+    {
+        lemma_union_seq_of_sets_contains(map_all_keys(children), key);
+    }
+
+    assert(children_all_keys == union_all_keys(children));
+}
+
 pub proof fn lemma_grow_preserves_wf(node: Node)
     requires
         node.wf(),
         node.all_keys().len() > 0
     ensures node.grow().wf()
 {
-    assume(false);
+    let post = node.grow();
+    assert(post is Index);
+    assert(post->children.len() == 1);
+    assert(post->children[0] == node);
+    if node is Index {
+        let pivotKeys = node->pivots.to_set();
+        let indexKeys = Set::new(|key| 
+            exists |i| 0 <= i < node->children.len() 
+            && (#[trigger] node->children[i]).all_keys().contains(key));
+        let children_all_keys = union_all_keys(node->children);
+        assert(pivotKeys.finite());
+        lemma_children_all_keys_equivalence(node->children);
+        assert(indexKeys == children_all_keys);
+        lemma_union_all_keys_finite(node->children);
+        assert(indexKeys.finite());
+        assert(node.all_keys() == pivotKeys + indexKeys);
+        assert(node.all_keys().finite());
+    }
 }
 
 pub proof fn lemma_grow_preserves_all_keys(node: Node)
