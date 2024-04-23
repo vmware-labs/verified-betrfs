@@ -27,12 +27,8 @@ impl Node {
             }
             Node::Index{pivots, children} => {
                 Buffer{map: Map::new(
-                    // TODO(x9du): why do we also want self.all_keys().contains(key) here?
-                    // children[self.route(key) + 1].i().map.contains_key(key)
-                    // ==> self.i().map.contains_key(lbl.key) by lemma_interpretation_delegation
-                    // ==> self.all_keys().contains(key) by lemma_interpretation
                     // TODO(x9du): adding triggers in here causes ungraceful dump
-                    |key| /*self.all_keys().contains(key) &&*/ children[self.route(key) + 1].i().map.contains_key(key),
+                    |key| children[self.route(key) + 1].i().map.contains_key(key),
                     |key| children[self.route(key) + 1].i().map[key]
                 )}
             }
@@ -256,30 +252,8 @@ pub proof fn lemma_grow_preserves_all_keys(node: Node)
     requires node.wf()
     ensures node.grow().all_keys() == node.all_keys()
 {
-    assume(false);
-}
-
-// TODO(x9du): maybe we don't need this anymore now that the i() def is based on route?
-pub proof fn lemma_interpretation_delegation(node: Node, key: Key)
-    requires
-        node.wf(),
-        node is Index,
-        node->children[Key::largest_lte(node->pivots, key) + 1].i().map.contains_key(key)
-    ensures node.i().map.contains_pair(key, node->children[Key::largest_lte(node->pivots, key) + 1].i().map[key])
-{
-    assume(false);
-}
-
-// (tenzinhl): We think this is the `grow_refines` lemma.
-pub proof fn lemma_grow_preserves_i(node: Node)
-    requires
-        node.wf(),
-        node.all_keys().len() > 0
-    ensures
-        node.grow().wf(),
-        node.grow().i() == node.i()
-{
-    assume(false);
+    let post = node.grow();
+    assert(post.all_keys() == post->children[0].all_keys());
 }
 
 // Proves that insert() on a leaf node refines (as well as other useful and
@@ -784,17 +758,6 @@ pub proof fn query_refines(pre: Node, lbl: QueryLabel)
         query_refines(children[r+1], lbl);
         assert(children[r+1].i().query(lbl.key) == lbl.msg); // subgoal 2
 
-        if pre.i().map.contains_key(lbl.key) {
-            assert(children[r+1].i().map.contains_key(lbl.key));
-            lemma_interpretation_delegation(pre, lbl.key);
-            assert(pre.i().map[lbl.key] == children[r+1].i().map[lbl.key]);
-        } else {
-            if (children[r+1].i().map.contains_key(lbl.key)) {
-                lemma_interpretation_delegation(pre, lbl.key);
-                assert(pre.i().map.contains_key(lbl.key)); // contradiction
-            }
-            assert(!children[r+1].i().map.contains_key(lbl.key));
-        }
         assert(pre.i().query(lbl.key) == children[r+1].i().query(lbl.key)); // subgoal 3
     }
 }
@@ -988,16 +951,20 @@ pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
     }
 }
 
-// use `lemma_grow_preserves_i` instead
-// pub proof fn grow_refines(pre: Node, lbl: QueryLabel)
-//     requires
-//         pre.wf(),
-//         pre.query(lbl.key) == lbl.msg
-//     ensures
-//         pre.i().query(lbl.key) == lbl.msg
-//     decreases pre
-// {
-// }
+pub proof fn grow_refines(pre: Node, lbl: InternalLabel)
+    requires
+        pre.wf(),
+        pre.all_keys().len() > 0
+    ensures
+        pre.grow().wf(),
+        pre.grow().i() == pre.i()
+{
+    lemma_grow_preserves_wf(pre);
+    lemma_route_auto();
+    let post = pre.grow();
+    assert(post.wf());
+    assert(post.i().map =~~= pre.i().map);
+}
 
 /// Proves that if the first and last key in a sorted seq of keys are path
 /// equiv (i.e.: would map to the same node), then *all* keys in seq must
