@@ -360,20 +360,6 @@ pub proof fn lemma_insert_leaf_is_correct(node: Node, key: Key, msg: Message)
     }
 }
 
-pub proof fn lemma_split_leaf_preserves_wf(node: Node, split_arg: SplitArg)
-    requires
-        node.wf(),
-        node is Leaf,
-        split_arg.wf(node),
-    ensures ({
-        let (left_leaf, right_leaf) = node.split_leaf(split_arg);
-        &&& left_leaf.wf()
-        &&& right_leaf.wf()
-    })
-{
-    assume(false);
-}
-
 pub proof fn lemma_sub_index_preserves_wf(node: Node, from: int, to: int)
     requires
         node.wf(),
@@ -408,9 +394,7 @@ pub proof fn lemma_split_node_preserves_wf(node: Node, split_arg: SplitArg)
         &&& right_node.wf()
     })
 {
-    if (node is Leaf) {
-        lemma_split_leaf_preserves_wf(node, split_arg);
-    } else {
+    if node is Index {
         lemma_split_index_preserves_wf(node, split_arg);
     }
 }
@@ -487,7 +471,9 @@ pub proof fn lemma_split_index_interpretation(old_index: Node, split_arg: SplitA
     assert(right_index.wf());
     lemma_split_index_interpretation1(old_index, split_arg);
     lemma_split_index_interpretation2(old_index, split_arg);
-    assert(old_index.i().map =~~= Key::map_pivoted_union(left_index.i().map, split_arg.get_pivot(), right_index.i().map));
+    let union_map = Key::map_pivoted_union(left_index.i().map, split_arg.get_pivot(), right_index.i().map);
+    assert(old_index.i().map.dom() =~~= union_map.dom());
+    assert(old_index.i().map =~~= union_map);
 }
 
 pub proof fn lemma_split_node_interpretation(old_node: Node, split_arg: SplitArg)
