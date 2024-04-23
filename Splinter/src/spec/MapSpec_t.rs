@@ -122,7 +122,7 @@ state_machine!{ MapSpec {
 }}  // Async things
 
 
-type ID = int;
+pub type ID = int;
 
 // wishing for genericity
 pub struct Request {

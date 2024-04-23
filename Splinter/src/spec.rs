@@ -1,6 +1,6 @@
 // Copyright 2018-2023 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
-// pub mod Option_t;
+pub mod AsyncDisk_t;
 pub mod FloatingSeq_t;
 pub mod KeyType_t;
 pub mod MapSpec_t;
