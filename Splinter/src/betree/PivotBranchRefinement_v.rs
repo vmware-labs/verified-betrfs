@@ -439,7 +439,8 @@ pub proof fn lemma_split_index_interpretation1(old_index: Node, split_arg: Split
         let (left_index, right_index) = old_index.split_index(split_arg);
         &&& left_index.wf()
         &&& right_index.wf()
-        &&& old_index.i().map.submap_of(Key::map_pivoted_union(left_index.i().map, split_arg.get_pivot(), right_index.i().map))
+        &&& old_index.i().map.submap_of(
+            Key::map_pivoted_union(left_index.i().map, split_arg.get_pivot(), right_index.i().map))
     })
 {
     assume(false);
@@ -457,8 +458,8 @@ pub proof fn lemma_split_index_interpretation2(old_index: Node, split_arg: Split
         })
     ensures ({
         let (left_index, right_index) = old_index.split_index(split_arg);
-        Key::map_pivoted_union(left_index.i().map, split_arg.get_pivot(), right_index.i().map).dom()
-            <= old_index.i().map.dom()
+        Key::map_pivoted_union(left_index.i().map, split_arg.get_pivot(), right_index.i().map)
+            .submap_of(old_index.i().map)
     })
 {
     assume(false);
@@ -479,7 +480,14 @@ pub proof fn lemma_split_index_interpretation(old_index: Node, split_arg: SplitA
         old_index.i().map == Key::map_pivoted_union(left_index.i().map, split_arg.get_pivot(), right_index.i().map)
     })
 {
-    assume(false);
+    let (left_index, right_index) = old_index.split_index(split_arg);
+    lemma_route_auto();
+    lemma_split_index_preserves_wf(old_index, split_arg);
+    assert(left_index.wf());
+    assert(right_index.wf());
+    lemma_split_index_interpretation1(old_index, split_arg);
+    lemma_split_index_interpretation2(old_index, split_arg);
+    assert(old_index.i().map =~~= Key::map_pivoted_union(left_index.i().map, split_arg.get_pivot(), right_index.i().map));
 }
 
 pub proof fn lemma_split_node_interpretation(old_node: Node, split_arg: SplitArg)
