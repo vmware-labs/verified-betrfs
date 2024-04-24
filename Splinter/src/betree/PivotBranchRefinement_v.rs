@@ -387,20 +387,6 @@ pub proof fn lemma_sub_index_preserves_wf(node: Node, from: int, to: int)
     }
 }
 
-pub proof fn lemma_split_index_preserves_wf(node: Node, split_arg: SplitArg)
-    requires
-        node.wf(),
-        node is Index,
-        split_arg.wf(node)
-    ensures ({
-        let (left_index, right_index) = node.split_index(split_arg);
-        &&& left_index.wf()
-        &&& right_index.wf()
-    })
-{
-    assume(false);
-}
-
 pub proof fn lemma_split_node_preserves_wf(node: Node, split_arg: SplitArg)
     requires
         node.wf(),
@@ -412,7 +398,9 @@ pub proof fn lemma_split_node_preserves_wf(node: Node, split_arg: SplitArg)
     })
 {
     if node is Index {
-        lemma_split_index_preserves_wf(node, split_arg);
+        let pivot_index = split_arg->pivot_index;
+        lemma_sub_index_preserves_wf(node, 0, pivot_index + 1);
+        lemma_sub_index_preserves_wf(node, pivot_index + 1, node->children.len() as int);
     }
 }
 
@@ -483,7 +471,7 @@ pub proof fn lemma_split_index_interpretation(old_index: Node, split_arg: SplitA
 {
     let (left_index, right_index) = old_index.split_index(split_arg);
     lemma_route_auto();
-    lemma_split_index_preserves_wf(old_index, split_arg);
+    lemma_split_node_preserves_wf(old_index, split_arg);
     assert(left_index.wf());
     assert(right_index.wf());
     lemma_split_index_interpretation1(old_index, split_arg);

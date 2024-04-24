@@ -167,8 +167,8 @@ impl Node {
                 &&& pivots.len() == children.len() - 1
                 &&& Key::is_strictly_sorted(pivots)
                 &&& forall |i| 0 <= i < children.len() ==> (#[trigger] children[i]).wf()
-                &&& forall |i| 0 <= i < children.len() ==> (#[trigger] children[i]).all_keys().finite()
-                &&& forall |i| 0 <= i < children.len() ==> !(#[trigger] children[i]).all_keys().is_empty()
+                &&& forall |i| 0 <= i < children.len() ==> (#[trigger] children[i].all_keys()).finite()
+                &&& forall |i| 0 <= i < children.len() ==> !(#[trigger] children[i].all_keys()).is_empty()
                 // For children[0:-1], all keys they contain should be < their upper pivot.
                 // This also gives us that children[i]'s pivots are < pivots[i] (if children are index nodes)
                 &&& forall |i| 0 <= i < children.len() - 1 ==> self.all_keys_below_bound(i)
@@ -338,7 +338,7 @@ impl Node {
         // Assert split_arg.wf(self) ==> self.wf() ==>
         // self->children.len() == self->pivots.len() + 1
         // to restore checked
-        let pivot_index = split_arg.arrow_SplitIndex_pivot_index();
+        let pivot_index = split_arg->pivot_index;
         let left_index = self.sub_index(0, pivot_index + 1);
         let right_index = self.sub_index(pivot_index + 1, self->children.len() as int);
         (left_index, right_index)
