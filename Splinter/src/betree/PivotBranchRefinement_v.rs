@@ -367,7 +367,24 @@ pub proof fn lemma_sub_index_preserves_wf(node: Node, from: int, to: int)
         0 <= from < to <= node->children.len()
     ensures node.sub_index(from, to).wf()
 {
-    assume(false);
+    let sub = node.sub_index(from, to);
+    assert(sub is Index);
+    assert(sub->pivots.len() == sub->children.len() - 1);
+
+    assert(forall |i| 0 <= i < sub->children.len() ==>
+        0 <= from + i < node->children.len() && sub->children[i] == node->children[from + i]);
+    assert(forall |i| 0 <= i < sub->pivots.len() ==>
+        0 <= from + i < node->pivots.len() && sub->pivots[i] == node->pivots[from + i]);
+
+    assert forall |i| 0 <= i < sub->children.len() - 1 implies sub.all_keys_below_bound(i) by {
+        assert(0 <= from + i < node->children.len() - 1);
+        assert(node.all_keys_below_bound(from + i));
+    }
+
+    assert forall |i| 0 < i < sub->children.len() implies sub.all_keys_above_bound(i) by {
+        assume(node.all_keys_above_bound(from + i));
+        assert(sub->pivots[i-1] == node->pivots[from + i - 1]);
+    }
 }
 
 pub proof fn lemma_split_index_preserves_wf(node: Node, split_arg: SplitArg)
