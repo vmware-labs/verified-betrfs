@@ -566,7 +566,15 @@ pub proof fn lemma_split_leaf_all_keys(old_leaf: Node, split_arg: SplitArg)
             <==> (Key::lte(split_arg.get_pivot(), key) && old_leaf.all_keys().contains(key))
     })
 {
-    assume(false);
+    let (left_leaf, right_leaf) = old_leaf.split_leaf(split_arg);
+    let pivot = split_arg.get_pivot();
+
+    assert(old_leaf->keys == left_leaf->keys + right_leaf->keys);
+    assert(old_leaf.all_keys() == left_leaf.all_keys() + right_leaf.all_keys());
+
+    let split_index = Key::largest_lt(old_leaf->keys, pivot) + 1;
+    Key::strictly_sorted_implies_sorted(old_leaf->keys);
+    Key::largest_lt_ensures(old_leaf->keys, pivot, split_index - 1);
 }
 
 /// Prove that the `all_keys` of the left and right child after splitting an index node 
@@ -633,7 +641,7 @@ pub proof fn lemma_split_index_all_keys(old_index: Node, split_arg: SplitArg)
     assert forall |key| #[trigger] Key::lt(key, pivot) && old_index.all_keys().contains(key)
     implies left_index.all_keys().contains(key) by {
         if (old_index->pivots.contains(key)) {
-            let i = choose |i| 0 <= i < old_index->pivots.len() && old_index->pivots[i] == key;
+            let i = old_index->pivots.index_of(key);
             if (i >= pivot_index) { // proof by contradiction
                 assert(Key::lt(pivot, key));
             }
@@ -677,7 +685,7 @@ pub proof fn lemma_split_index_all_keys(old_index: Node, split_arg: SplitArg)
     assert forall |key| #[trigger] Key::lte(pivot, key) && old_index.all_keys().contains(key)
     implies (right_index.all_keys().contains(key) || key == pivot) by {
         if (old_index->pivots.contains(key)) {
-            let i = choose |i| 0 <= i < old_index->pivots.len() && old_index->pivots[i] == key;
+            let i = old_index->pivots.index_of(key);
             if (i == pivot_index) {
                 assert(key == pivot);
             } else if (i < pivot_index) { // proof by contradiction

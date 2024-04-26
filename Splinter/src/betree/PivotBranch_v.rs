@@ -123,8 +123,6 @@ impl Node {
         }
     }
 
-    /// Pre: self must be an Index node
-    ///
     /// Returns true iff all keys under node child[i] are less than pivots[i] 
     pub open spec(checked) fn all_keys_below_bound(self, i: int) -> bool
         recommends
@@ -136,8 +134,6 @@ impl Node {
             ==> #[trigger] Key::lt(key, self->pivots[i])
     }
 
-    /// Pre: self must be an Index node
-    /// 
     /// Returns true iff all keys under node child[i] are >= pivots[i-1].
     pub open spec(checked) fn all_keys_above_bound(self, i: int) -> bool
         recommends
@@ -214,7 +210,6 @@ impl Node {
         }
     }
 
-    /// Pre: self is a Leaf node.
     /// Returns a new Leaf node where the key-message pair {key, msg} is inserted into
     /// self.
     pub open spec/* XXX (checked)*/ fn insert_leaf(self, key: Key, msg: Message) -> Node
@@ -237,8 +232,6 @@ impl Node {
         }
     }
 
-    /// Pre: path.node == self && path.target is Leaf
-    /// 
     /// Returns a new tree rooted at self where {key, msg} is inserted at the Leaf node
     /// targeted by `path`.
     pub open spec/* XXX (checked)*/ fn insert(self, key: Key, msg: Message, path: Path) -> Node
@@ -279,8 +272,6 @@ impl Node {
         path.substitute(Node::Leaf{ keys: path.target()->keys + keys, msgs: path.target()->msgs + msgs })
     }
 
-    /// Pre: self is Leaf
-    /// 
     /// Returns two leaf nodes formed by splitting `self` into two Leaf nodes, where
     /// the left node contains all keys < `split_arg`, and right node contains all keys
     /// >= `split_arg`.
@@ -302,8 +293,6 @@ impl Node {
         (left_leaf, right_leaf)
     }
 
-    /// Pre: self is Index
-    /// 
     /// Returns a new Index node formed by taking self.children[from:to] and all pivots that divide
     /// those children.
     pub open spec(checked) fn sub_index(self, from: int, to: int) -> Node
@@ -315,8 +304,6 @@ impl Node {
         Node::Index{ pivots: self->pivots.subrange(from, to-1), children: self->children.subrange(from, to) }
     }
 
-    /// Pre: self is Index
-    /// 
     /// Returns two new index nodes that partition `self.children` such that the left node only contains
     /// children with keys < split_arg.key, and right node only contains children with keys >= split_arg.key.
     /// 
@@ -368,8 +355,6 @@ impl Node {
             }
     }
 
-    /// Pre: self is Index
-    /// 
     /// Returns a new Index node where the child containing `split_arg.pivot` is split on said pivot.
     /// The pivot arg can NOT be an existing pivot in the Index (because duh, otherwise you'd have two
     /// pivots with the same value, the bucket between them would be empty which is dumb).
