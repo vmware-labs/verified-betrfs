@@ -119,6 +119,19 @@ impl Key {
         }
     }
 
+    pub proof fn strictly_sorted_implies_unique(run: Seq<Key>)
+        requires Self::is_strictly_sorted(run),
+        ensures forall |i, j| 0 <= i <= j < run.len() && run[i] == run[j] ==> i == j
+    {
+        assert forall |i, j| 0 <= i <= j < run.len() && run[i] == run[j] implies i == j by {
+            if i < j {
+                assert(Key::lt(run[i], run[j]));
+            } else if i > j {
+                assert(Key::lt(run[j], run[i]));
+            }
+        }
+    }
+
     pub proof fn lte_transitive_forall()
         ensures
             forall|a: Key, b: Key, c: Key| Self::lte(a, b) && Self::lte(b, c) ==> Self::lte(a, c),

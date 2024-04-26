@@ -416,7 +416,52 @@ pub proof fn lemma_split_leaf_interpretation(old_leaf: Node, split_arg: SplitArg
         &&& old_leaf.i().map == Key::map_pivoted_union(left_leaf.i().map, split_arg.get_pivot(), right_leaf.i().map)
     })
 {
-    assume(false);
+    let (left_leaf, right_leaf) = old_leaf.split_leaf(split_arg);
+    lemma_split_node_preserves_wf(old_leaf, split_arg);
+    lemma_route_auto();
+    assert(left_leaf.wf() && right_leaf.wf());
+    let union_map = Key::map_pivoted_union(left_leaf.i().map, split_arg.get_pivot(), right_leaf.i().map);
+    let pivot = split_arg.get_pivot();
+    let split_index = Key::largest_lt(old_leaf->keys, pivot) + 1;
+
+    assert forall |key| #[trigger] old_leaf.i().map.contains_key(key)
+    implies union_map.contains_key(key) && old_leaf.i().map[key] == union_map[key] by {
+        assert(old_leaf->keys.contains(key));
+        let i = old_leaf->keys.index_of(key);
+        let new_leaf = if i < split_index { left_leaf } else { right_leaf };
+        let i_new = if i < split_index { i } else { i - split_index };
+        assert(0 <= i_new < new_leaf->keys.len() == new_leaf->msgs.len());
+
+        Key::strictly_sorted_implies_sorted(old_leaf->keys);
+        Key::largest_lt_ensures(old_leaf->keys, pivot, split_index - 1);
+        if i < split_index {
+            assert(Key::lt(key, pivot));
+        } else {
+            assert(Key::lte(pivot, key));
+        }
+
+        assert(old_leaf->keys[i] == new_leaf->keys[i_new]);
+
+        // Subgoal 1
+        assert(union_map.contains_key(key));
+
+        let r = old_leaf.route(key);
+        assert(0 <= r < old_leaf->keys.len());
+        assert(old_leaf->keys[r] == key);
+        Key::strictly_sorted_implies_unique(old_leaf->keys);
+        assert(r == i);
+
+        let r_new = new_leaf.route(key);
+        assert(0 <= r_new < new_leaf->keys.len());
+        assert(new_leaf->keys[r_new] == key);
+        Key::strictly_sorted_implies_unique(new_leaf->keys);
+        assert(r_new == i_new);
+        assert(old_leaf->msgs[i] == new_leaf->msgs[i_new]);
+        assert(old_leaf.i().map[key] == new_leaf.i().map[key]);
+        assert(union_map[key] == new_leaf.i().map[key]);
+    }
+
+    assert(old_leaf.i().map =~~= union_map);
 }
 
 pub proof fn lemma_split_index_interpretation1(old_index: Node, split_arg: SplitArg)
@@ -1217,6 +1262,8 @@ pub proof fn append_refines(pre: Node, lbl: AppendLabel)
             // GOAL 2
             assert forall |k| post.i().map.contains_key(k)
             implies #[trigger] post.i().map[k] == #[trigger] pre_i_then_append.map[k] by {
+                Key::strictly_sorted_implies_unique(post_target->keys);
+
                 if (keys.contains(k)) {
                     let i = keys.index_of(k);
                     assert(post_target->keys[i] == k);
@@ -1233,13 +1280,6 @@ pub proof fn append_refines(pre: Node, lbl: AppendLabel)
 
                     assert(post_target->keys[pre.route(k)] == k);
                     assert(post_target->keys[post_target.route(k)] == k);
-                    // Proof by contradiction
-                    if (pre.route(k) < post_target.route(k)) {
-                        assert(Key::lt(post_target->keys[pre.route(k)], post_target->keys[post_target.route(k)]));
-                    }
-                    if (pre.route(k) > post_target.route(k)) {
-                        assert(Key::lt(post_target->keys[post_target.route(k)], post_target->keys[pre.route(k)]));
-                    }
                     assert(pre.route(k) == post_target.route(k));
                 } else {
                     assert(lbl.keys.contains(k));
@@ -1248,17 +1288,6 @@ pub proof fn append_refines(pre: Node, lbl: AppendLabel)
 
                     assert(post_target->keys[post_target.route(k)] == k);
                     assert(post_target->keys[keys.len() + append_leaf.route(k)] == k);
-                    // Proof by contradiction
-                    if (post_target.route(k) < keys.len() + append_leaf.route(k)) {
-                        assert(Key::lt(
-                            post_target->keys[post_target.route(k)],
-                            post_target->keys[keys.len() + append_leaf.route(k)]));
-                    }
-                    if (post_target.route(k) > keys.len() + append_leaf.route(k)) {
-                        assert(Key::lt(
-                            post_target->keys[keys.len() + append_leaf.route(k)],
-                            post_target->keys[post_target.route(k)]));
-                    }
                     assert(post_target.route(k) == keys.len() + append_leaf.route(k));
                 }
             }
