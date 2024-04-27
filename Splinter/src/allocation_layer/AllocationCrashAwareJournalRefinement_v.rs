@@ -123,7 +123,7 @@ impl AllocationCrashAwareJournal::Label{
                 CrashTolerantJournal::Label::CommitStartLabel{new_boundary_lsn, max_lsn},
             Self::CommitComplete{ require_end, discarded } =>
                 CrashTolerantJournal::Label::CommitCompleteLabel{require_end},
-            Self::Crash => CrashTolerantJournal::Label::CrashLabel,
+            Self::Crash{ keep_in_flight } => CrashTolerantJournal::Label::CrashLabel{ keep_in_flight },
         }
     }
 }

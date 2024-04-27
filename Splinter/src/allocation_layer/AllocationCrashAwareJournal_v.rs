@@ -69,7 +69,7 @@ state_machine!{AllocationCrashAwareJournal{
         QueryLsnPersistence{ sync_lsn: LSN },
         CommitStart{ new_boundary_lsn: LSN, max_lsn: LSN },
         CommitComplete{ require_end: LSN, discarded: Set<AU> },
-        Crash,
+        Crash{ keep_in_flight: bool },
     }
 
     pub open spec(checked) fn fresh_label(self, lbl: Label) -> bool

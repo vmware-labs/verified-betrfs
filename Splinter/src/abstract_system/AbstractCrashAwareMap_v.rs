@@ -62,7 +62,7 @@ state_machine!{ CrashTolerantMap {
         InternalLabel,
         CommitStartLabel{ new_boundary_lsn: LSN },
         CommitCompleteLabel,
-        CrashLabel,
+        CrashLabel{ keep_in_flight: bool },
     }
 
     transition!{
@@ -175,6 +175,15 @@ state_machine!{ CrashTolerantMap {
             require lbl is CrashLabel;
             update ephemeral = Ephemeral::Unknown;
             update in_flight = Option::None;
+
+            // If the system crashes in the time between when a superblock hit the disk and when
+            // the program learned about it, then when the program wakes up again, it's going to
+            // see what the previous instance thought was "in-flight".
+            // (Here we're modeling what in the bottom layer will be a trusted event, which is
+            // why it's not ridiculous to "peek" at the disk buffer state via keep_in_flight;
+            // by the time we get to the bottom layer of the stack, this entire update will apply
+            // to only trusted parts of the system.)
+            update persistent = if lbl->keep_in_flight { pre.in_flight.unwrap() } else { pre.persistent };
         }
     }
 }}

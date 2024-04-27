@@ -64,7 +64,20 @@ state_machine!{ CrashTolerantJournal {
         QueryLsnPersistenceLabel{ sync_lsn: LSN },
         CommitStartLabel{ new_boundary_lsn: LSN, max_lsn: LSN },
         CommitCompleteLabel{ require_end: LSN },
-        CrashLabel,
+
+        // NB a modeling design choice:
+        // At this level, we're modeling the disk contents in the `persistent` view of the map &
+        // journal, which are *also* models of what the program thinks is on the disk. To so
+        // overload that field, there's a place where they diverge: in a crash. In a crash,
+        // the actual program "forgets" everything, which means the persistent view is a model
+        // of what the program will see once it starts reading the disk after reinitializing.
+        // What it sees depends on whether an in-flight superblock landed.
+        //
+        // An alternative design would separately model the disk state, and have a separate step
+        // representing the disk applying an in-flight superblock change. But that approach would
+        // introduce other fictions: presumably we don't want to model asynchrony of all the other
+        // disk writes at this level of abstraction.
+        CrashLabel{ keep_in_flight: bool },
     }
 
     transition!{
@@ -196,6 +209,7 @@ state_machine!{ CrashTolerantJournal {
             require lbl is CrashLabel;
             update ephemeral = Ephemeral::Unknown;
             update in_flight = Option::None;
+            update persistent = if lbl->keep_in_flight { pre.in_flight.unwrap() } else { pre.persistent };
         }
     }
 }}

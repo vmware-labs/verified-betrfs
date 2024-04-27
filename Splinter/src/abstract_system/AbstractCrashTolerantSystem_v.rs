@@ -578,7 +578,10 @@ state_machine!{ CoordinationSystem {
       new_mapadt: CrashTolerantMap::State,
       new_journal: CrashTolerantJournal::State,
     ) {
-      require pre.superblock_in_flight;
+      // The only way we could possibly learn that a commit has completed is if the superblock that
+      // was in-flight to the disk landed, since that write reply is the commit-complete
+      // notification.
+      require !pre.superblock_in_flight;
       require pre.ephemeral is Some;
       let pre_ephemeral = pre.ephemeral.get_Some_0();
 
@@ -622,21 +625,37 @@ state_machine!{ CoordinationSystem {
 
       require let Label::Label{ ctam_label: CrashTolerantAsyncMap::Label::CrashOp } = label;
 
+      // Tell journal/map whether any in-flight state, if present, should be recorded as persistent
+      // (because it actually landed on the disk, so the program will find it after recovery) or
+      // discarded (because the crash occurred when the superblock was in-flight, so it's lost, so
+      // the program will, upon recovery, discover the thing it thought was persistent before the
+      // crash step).
+      // Note that keep_in_flight means "the system thinks there IS a superblock in flight" (because the journal
+      // is in flight) and also "the disk thinks it has landed" (!pre.superblock_in_flight).
+      // Note also that pre.mapadt.in_flight is Some happens before there's actually a superblock
+      // in flight, so don't let that case confuse you.
+      let keep_in_flight = pre.journal.in_flight is Some && !pre.superblock_in_flight;
+
       require CrashTolerantJournal::State::next(
         pre.journal,
         new_journal,
-        CrashTolerantJournal::Label::CrashLabel
+        CrashTolerantJournal::Label::CrashLabel{ keep_in_flight }
       );
 
       require CrashTolerantMap::State::next(
         pre.mapadt,
         new_mapadt,
-        CrashTolerantMap::Label::CrashLabel
+        CrashTolerantMap::Label::CrashLabel{ keep_in_flight }
       );
 
       update journal = new_journal;
       update mapadt = new_mapadt;
       update ephemeral = None;
+
+      // The disk I/O buffers are cleared on a crash, which would include any in-flight superblock
+      // writes. We must be able to assume this; otherwise, ancient zombie writes could rise from
+      // the earth to corrupt future behavior.
+      update superblock_in_flight = false;
     }
   }
 }
