@@ -1297,65 +1297,11 @@ verus! {
             assert(vp.i().versions =~~= v.i().versions.get_prefix(v.i().stable_index() + 1));
         } else {
             // nothing was in flight
-//         MsgHistory::ext_equal_is_equality();
-//         StampedMap::ext_equal_is_equality();
-//             assert( vp.journal.persistent == v.journal.persistent );
-//             assert(vp.i().versions.start == v.i().versions.get_prefix(v.i().stable_index() + 1).start );
-//             assert(vp.i().versions.len() == v.i().versions.get_prefix(v.i().stable_index() + 1).len() );
-//             assert(    vp.i().versions.entries.len() == 1 );
-//             assert(    v.i().versions.entries[0]
-//                     == v.i().versions.get_prefix(v.i().stable_index() + 1).entries[0] );
-//             assert( v.i().versions == v.iversions_known() );
-//             assert( v.i().versions == v.iversions_known_landed() );
-// 
-//             assert( v.i().versions ==
-//                     floating_versions(v.mapadt.persistent, v.journal.i(), v.journal.persistent.seq_end) );
-// 
-            let start = vp.i().versions.start as int;
-            let vishort = v.i().versions.get_prefix(v.i().stable_index() + 1);
-//             assert( vishort.entries[0] == vishort[start] );
-// 
-//             assert( floating_versions(v.mapadt.persistent, v.journal.persistent, v.journal.persistent.seq_end).entries[0]
-// 
-//                     == MsgHistory::map_plus_history(v.mapadt.persistent,
-//                         v.journal.persistent.discard_recent(v.journal.persistent.seq_end as LSN)).to_version() );
-// 
-// 
-//             assert( v.i().versions.entries[0] ==
-//                     floating_versions(v.mapadt.persistent, v.journal.i(), v.journal.persistent.seq_end).entries[0] );
-// 
-//             assert( v.i().versions.entries[0]
-//                     == MsgHistory::map_plus_history(v.mapadt.persistent,
-//                         v.journal.i().discard_recent(v.journal.persistent.seq_end as LSN)).to_version() );
 
             // The extensional equality that took 63 lines to discover
             assert( v.journal.persistent.discard_recent(v.journal.persistent.seq_end as LSN)
                     =~=
                     v.journal.i().discard_recent(v.journal.persistent.seq_end as LSN) );
-
-//             assert( vp.i().versions ==
-//                     floating_versions(vp.mapadt.persistent, vp.journal.persistent, vp.journal.persistent.seq_end) );
-//             assert( floating_versions(vp.mapadt.persistent, vp.journal.persistent, vp.journal.persistent.seq_end).entries[0]
-//                     == MsgHistory::map_plus_history(vp.mapadt.persistent,
-//                         vp.journal.persistent.discard_recent(vp.journal.persistent.seq_end as LSN)).to_version() );
-// 
-//             assert( floating_versions(v.mapadt.persistent, v.journal.persistent, v.journal.persistent.seq_end).entries[0]
-//                 ==  floating_versions(vp.mapadt.persistent, vp.journal.persistent, vp.journal.persistent.seq_end).entries[0] );
-// 
-// //             assert( vp.i().versions.entries[0] ==
-// //                     MsgHistory::map_plus_history(vp.mapadt.persistent,
-// //                         vp.journal.persistent.discard_recent(vp.journal.persistent.seq_end as LSN)) );
-//             assert( forall|i| vp.i().versions.is_active(i) ==> i == vp.i().versions.start );
-// 
-//             assert( vishort.entries[0] == v.i().versions.entries[0] );
-// 
-//             assert( vp.i().versions[start] == vp.i().versions.entries[0] );
-//             assert( vp.i().versions.entries[0] == vishort.entries[0] );
-//             assert( vishort.entries[0] == vishort[start] );
-//             assert( vp.i().versions[start] == vishort[start] );
-// 
-//             assert( vp.i().versions[start] == v.i().versions.get_prefix(v.i().stable_index() + 1)[start] );
-//             vp.i().versions.extensionality(v.i().versions.get_prefix(v.i().stable_index() + 1));
             assert(vp.i().versions =~~= v.i().versions.get_prefix(v.i().stable_index() + 1));
         }
 //         if v.inflight_is_on_disk() {
