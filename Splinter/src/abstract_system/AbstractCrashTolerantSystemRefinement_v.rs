@@ -1282,156 +1282,27 @@ verus! {
             vp.mapadt,
             CrashTolerantMap::Label::CrashLabel{ keep_in_flight }) );
 
-        if v.ephemeral is None {
-            assert(vp.i().versions =~~= v.i().versions.get_prefix(v.i().stable_index() + 1));
-        } else if !(v.ephemeral.unwrap() is Known) {
+        if v.ephemeral is None || !(v.ephemeral.unwrap() is Known) {
             assert(vp.i().versions =~~= v.i().versions.get_prefix(v.i().stable_index() + 1));
         } else if keep_in_flight {
             // There was something in flight and we're moving it to persistent
-            assert( vp.journal.persistent == v.journal.in_flight.unwrap() );
-            assume(false);
-            assert(vp.i().versions =~~= v.i().versions.get_prefix(v.i().stable_index() + 1));
-        } else if v.journal.in_flight is Some {
-            // Something was in flight but it got discarded
-            assume( false );
+
+            assert(
+                vp.journal.persistent.discard_recent(vp.journal.persistent.seq_end)
+                =~=
+                v.journal.i().discard_old(v.mapadt.in_flight.unwrap().seq_end).discard_recent(v.journal.in_flight.unwrap().seq_end)
+            );
+
             assert(vp.i().versions =~~= v.i().versions.get_prefix(v.i().stable_index() + 1));
         } else {
-            // nothing was in flight
+            // Something was in flight but it got discarded (v.journal.in_flight is Some)
+            // or nothing was in flight
 
-            // The extensional equality that took 63 lines to discover
             assert( v.journal.persistent.discard_recent(v.journal.persistent.seq_end as LSN)
                     =~=
                     v.journal.i().discard_recent(v.journal.persistent.seq_end as LSN) );
             assert(vp.i().versions =~~= v.i().versions.get_prefix(v.i().stable_index() + 1));
         }
-//         if v.inflight_is_on_disk() {
-//             v.lemma_iversions_known_inflight_landed_relation();
-// 
-//             // This is the case where there is in-flight data in the program, we know that
-//             // superblock has actually landed on the disk, so the crash is going to slap it into
-//             // persistent to keep the interpretation function from changing at the crash.
-// 
-// 
-//             // OH! This is tricky!
-//             // Before we fixed the delayed-disk fiction, a crash was just "forget the ephemeral
-//             // state".
-//             // With the fiction fixed, we need crash to actually *update* the persistent state to
-//             // the in-flight state in the case that the sb write landed, since that's what the
-//             // next instance of the program will find when it reads the disk.
-// 
-//             // crash can't apply_pending_superblock , because the data is already there!
-// 
-//             // in-flight is on disk, so v.i().versions.get_prefix(v.i().stable_index() + 1)
-//             // refers to the landed update, which is recorded in the in-flight field in the program
-//             // (because we're crashing before the program learns that the write landed).
-//             // vp.i() should *also* refer to the in-flight field.
-//             // OH! But it's not being truncated? Because ephemeral stuff is lingering? Eww.
-//             // Except the failure is on start. Hrm.
-// 
-//             // What used to happen:
-//             // P was a single version. sb-landing was right-movered to commit-complete. At crash
-//             // vp' was exactly equal to v's first version. v.versions was P+EJ, and we're
-//             // truncating the EJ stuff.
-//             // What happens now:
-//             // vp.i() is a single version.
-//             // it agrees, by a journal-associativity argument, with (P+EJ[i])+EJ[e].
-//             // v.i().stable_index is P, not I, though! Because v hasn't heard about the landing?
-//             // No, v.i() knows about the landing.
-// 
-//             assert( v.i().versions.get_prefix(v.i().stable_index() + 1).start
-//                     == v.i().versions.start );
-//             assert( v.i().versions == v.iversions_known_inflight() );
-//             assert( v.i().versions.start == v.journal.in_flight.unwrap().seq_end );
-// 
-//             assert( !vp.inflight_is_on_disk() );
-//             // we're in ephemeral-none case of i()
-//             assert( vp.i().versions.start == vp.journal.persistent.seq_end );
-// 
-//             // Because we crashed while data was there.
-//             assert( v.journal.in_flight is Some );
-//             assert( CrashTolerantJournal::State::next(
-//                 v.journal,
-//                 vp.journal,
-//                 CrashTolerantJournal::Label::CrashLabel{ keep_in_flight: !v.superblock_in_flight }) );
-// 
-//             // At the moment of crash, the persistent journal (the thing we'll find after reboot)
-//             // will become either the old journal or the in-flight depending on whether the
-//             // superblock had landed before the crash.
-//             // In this branch, it has landed.
-//             assert( !v.superblock_in_flight );
-// 
-//             assert( vp.journal.persistent == v.journal.in_flight.unwrap() );
-// 
-//             assert( vp.i().versions.start == vp.journal.persistent.seq_end );
-// 
-// //                 // This should be an easy statement!
-// //                 assert( v.i().versions.start == v.iversions_known_inflight().start );
-// //                 assert( v.i().versions.start == v.journal.in_flight.unwrap().seq_end );
-// //                 assert( v.journal.persistent.seq_end == v.i().versions.start );
-// //                 assume(false);
-// // 
-// //                 assert( vp.journal.persistent.seq_end == v.i().versions.start );
-// // 
-// //                 assert( v.i().versions.start == v.i().versions.get_prefix(v.i().stable_index() + 1).start );
-// 
-//             assert( v.i().versions.start == v.journal.in_flight.unwrap().seq_end );
-// 
-//             assert( CoordinationSystem::State::next_by(v, vp, label, step) );
-//             assert( CrashTolerantJournal::State::next_by(
-//                 v.journal,
-//                 vp.journal,
-//                 CrashTolerantJournal::Label::CrashLabel{ keep_in_flight: true },
-//                 CrashTolerantJournal::Step::crash(),
-//                 )
-//             );
-// 
-//             assert( vp.journal.persistent == v.journal.in_flight.unwrap() );
-// 
-//             assert( vp.i().versions.start == v.journal.in_flight.unwrap().seq_end );
-//             assert( v.i().versions.get_prefix(v.i().stable_index() + 1).start
-//                     == v.i().versions.start );
-// 
-// 
-//             if (v.journal.in_flight is Some) {
-//                 // broken case: v thinks something is in-flight, and it landed, so v.i() sees it
-//                 // landed.
-//                 assert( v.journal.in_flight is Some );
-//                 assert( v.inflight_is_on_disk() );
-//                 assert( vp.journal.persistent == v.journal.in_flight.unwrap() );
-// 
-//                 assert( v.i().versions.start == v.journal.in_flight.unwrap().seq_end );
-//                 //assert( vp.i().versions.start == v.journal.persistent.seq_end );
-// 
-//                 assert( v.i().versions.get_prefix(v.i().stable_index() + 1).start
-//                         == v.i().versions.start );
-//                 assert( v.i().versions.get_prefix(v.i().stable_index() + 1).start
-//                         == v.journal.in_flight.unwrap().seq_end );
-//                 assert( v.i().versions.get_prefix(v.i().stable_index() + 1).start
-//                         == vp.journal.persistent.seq_end );
-//                 assert( vp.i().versions.start == v.i().versions.get_prefix(v.i().stable_index() + 1).start );
-//             } else {
-//                 // sensible case
-//                 assert( v.i().versions.start == v.journal.persistent.seq_end );
-//             }
-// 
-//             assert( vp.i().versions.start == v.i().versions.get_prefix(v.i().stable_index() + 1).start );
-// 
-//             assert( vp.i().versions.len() == v.i().versions.get_prefix(v.i().stable_index() + 1).len() );
-// //             assert( 1 == v.i().versions.get_prefix(v.i().stable_index() + 1).entries.len() );
-// //             assert( 1 == vp.i().versions.entries.len() );
-// 
-//             assert( vp.i().versions == vp.iversions_known_landed() );
-//             assert( vp.i().versions.entries[0] == MsgHistory::map_plus_history(
-//                     vp.mapadt.persistent, vp.journal.i().discard_recent(vp.journal.persistent.seq_end)).to_version() );
-//             assert( v.i().versions == v.iversions_known_inflight() );
-//             assert( v.i().versions.get_prefix(v.i().stable_index() + 1).entries[0]
-//                     == v.i().versions.entries[0] );
-// 
-//             vp.i().versions.extensionality(v.i().versions.get_prefix(v.i().stable_index() + 1));
-//             assert(vp.i().versions =~~= v.i().versions.get_prefix(v.i().stable_index() + 1));
-//         } else {
-//             assert(vp.i().versions =~~= v.i().versions.get_prefix(v.i().stable_index() + 1));
-//         }
 
         // GOAL
         assert(CrashTolerantAsyncMap::State::crash(v.i(), vp.i(), label->ctam_label));
