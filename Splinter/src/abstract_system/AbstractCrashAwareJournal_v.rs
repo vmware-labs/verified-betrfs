@@ -209,7 +209,7 @@ state_machine!{ CrashTolerantJournal {
             require lbl is CrashLabel;
             update ephemeral = Ephemeral::Unknown;
             update in_flight = Option::None;
-            update persistent = if lbl->keep_in_flight { pre.in_flight.unwrap() } else { pre.persistent };
+            update persistent = if lbl->keep_in_flight && pre.in_flight is Some { pre.in_flight.unwrap() } else { pre.persistent };
         }
     }
 }}

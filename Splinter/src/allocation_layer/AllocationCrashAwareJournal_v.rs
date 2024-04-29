@@ -208,6 +208,7 @@ state_machine!{AllocationCrashAwareJournal{
             require lbl is Crash;
             update ephemeral = Ephemeral::Unknown;
             update inflight = Option::None;
+            update persistent = if lbl->keep_in_flight && pre.inflight is Some { pre.inflight.unwrap() } else { pre.persistent };
         }
     }
 
