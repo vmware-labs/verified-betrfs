@@ -8,33 +8,17 @@ use builtin::*;
 use builtin_macros::*;
 use vstd::prelude::*;
 
+use crate::spec::AsyncDisk_t;
+
 verus!{
 
-/// The `AU` type is the type for a unique allocation unit identifier (thus we use `nat`s).
-/// 
-/// An Allocation Unit (AU) is the minimum disk unit the "external" (i.e.: top-level) allocator
-/// allocates to data structures like the Betree and Journal. Allocation Units
-/// are made up of contiguous disk sectors. AUs are specified as part of the
-/// Splinter implementation. The goal of having large allocation blocks is to
-/// amortize allocation costs efficiently for large amounts of data.
-pub type AU = nat;
-
-/// A page index within an AU (disk pages, so for SSDs these are on the order of 4KB).
-pub type Page = nat;
+pub type AU = AsyncDisk_t::AU;
+pub type Page = AsyncDisk_t::Page;
+pub type Address = AsyncDisk_t::Address;
 
 /// Returns the number of a disk pages in an Allocation Unit. Left as an uninterpreted function
 /// since it's implementation defined.
 pub closed spec(checked) fn page_count() -> nat;
-
-/// An Address specifies a specific disk address (i.e.: an address that identifies a disk sector (or whatever
-/// atomic addressing unit the disk in question uses)).
-/// It does this by combining an AU index with a page index within the AU.
-pub struct Address {
-    /// The Allocation Unit index this address resides within.
-    pub au: AU,
-    /// Page index within AU for this address. In the range [0,page_count).
-    pub page: Page,
-}
 
 impl Address {
     /// Returns true iff this Address is well formed.

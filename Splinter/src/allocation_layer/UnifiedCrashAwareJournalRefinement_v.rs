@@ -38,8 +38,9 @@ impl UnifiedCrashAwareJournal::Label {
             Self::CommitStart { new_boundary_lsn, max_lsn } => 
                 AllocationCrashAwareJournal::Label::CommitStart{ new_boundary_lsn, max_lsn },
             Self::CommitComplete { require_end, discarded } => 
-                AllocationCrashAwareJournal::Label::CommitComplete { require_end, discarded },
-            Self::Crash => AllocationCrashAwareJournal::Label::Crash,
+                AllocationCrashAwareJournal::Label::CommitComplete{ require_end, discarded },
+            Self::Crash{ keep_in_flight } =>
+                AllocationCrashAwareJournal::Label::Crash{ keep_in_flight },
         }
     }
 }

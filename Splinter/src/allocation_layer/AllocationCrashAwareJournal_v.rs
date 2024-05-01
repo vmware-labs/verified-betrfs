@@ -69,7 +69,7 @@ state_machine!{AllocationCrashAwareJournal{
         QueryLsnPersistence{ sync_lsn: LSN },
         CommitStart{ new_boundary_lsn: LSN, max_lsn: LSN },
         CommitComplete{ require_end: LSN, discarded: Set<AU> },
-        Crash,
+        Crash{ keep_in_flight: bool },
     }
 
     pub open spec(checked) fn fresh_label(self, lbl: Label) -> bool
@@ -208,6 +208,7 @@ state_machine!{AllocationCrashAwareJournal{
             require lbl is Crash;
             update ephemeral = Ephemeral::Unknown;
             update inflight = Option::None;
+            update persistent = if lbl->keep_in_flight && pre.inflight is Some { pre.inflight.unwrap() } else { pre.persistent };
         }
     }
 

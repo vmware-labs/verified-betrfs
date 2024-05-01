@@ -100,7 +100,7 @@ impl DiskView {
         assert( big.valid_ranking(big.the_ranking()) ); // witness; new in Verus
         self.sub_disk_ranking(big);
         if ptr is Some {
-            assert( self.entries.contains_key(ptr.unwrap()) );  // new trigger required with verus update
+            assert( big.entries.contains_key(ptr.unwrap()) );   // new trigger for valid_ranking
             self.sub_disk_interp(big, big.next(ptr));
         }
     }

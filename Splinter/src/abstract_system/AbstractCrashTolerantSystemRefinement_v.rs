@@ -84,6 +84,102 @@ verus! {
             self.journal.i().seq_end
         }
 
+        pub open spec(checked) fn inflight_is_on_disk(self) -> bool
+        {
+            &&& self.ephemeral matches Some(Known{..})
+
+            // self.commit_started
+            &&& self.journal.in_flight is Some
+
+            // the superblock has landed at the disk. That in-flight state should now define the
+            // oldest available version in the interpretation (it is indeed persistent), but the
+            // program hasn't learned about it yet, so we need to do the indirection in fn i().
+            &&& !self.superblock_in_flight
+        }
+
+        // This is the case where there's data in flight and (at the proof level) we know it has
+        // actually hit the disk, so the i() should point at the in-flight state in the program
+        // (which the program will re-label "persistent" once the it learns about the landing).
+        pub open spec/*(checked)*/ fn iversions_known_inflight(self) -> (versions: FloatingSeq<Version>)
+        recommends
+            self.inv(),
+            self.inflight_is_on_disk()
+        {
+            // Program thinks a superblock is still in-flight to the disk, but the disk
+            // knows it has actually landed. In that case, versions begins at the
+            // in-flight map.
+            let in_flight_map = self.mapadt.in_flight.unwrap();
+
+            // In that case, the program is still keeping more journal than it needs
+            // (because it hasn't yet heard about the write landing), so we need to
+            // trim off the irrevelant prefix before appending it to the more-recent
+            // in_flight_map.
+            let remaining_journal = self.journal.i().discard_old(in_flight_map.seq_end);
+//             let x = self.journal.i();
+//             let y = in_flight_map.seq_end;
+//             let _ = spec_affirm(x.can_discard_to(y));
+//             let _ = spec_affirm(x.discard_old(y).seq_start == y);
+//             let _ = spec_affirm(remaining_journal.seq_start == in_flight_map.seq_end);
+
+            let stable_lsn = self.journal.in_flight.unwrap().seq_end;
+//             let _ = spec_affirm(self.journal.i().wf());
+//             let _ = spec_affirm(self.journal.i().can_discard_to(in_flight_map.seq_end));
+//             let _ = spec_affirm(self.journal.i().seq_start <= in_flight_map.seq_end);
+//             let _ = spec_affirm(remaining_journal.seq_start <= remaining_journal.seq_end);
+//             Recommendation checks are borked.
+            let _ = spec_affirm(remaining_journal.wf());
+            floating_versions(in_flight_map, remaining_journal, stable_lsn)
+        }
+
+        // This is all the other cases where there's known ephemeral state, so the program's
+        // idea of the persistent state counts: either nothing is in flight, or there's something
+        // in flight but the superblock hasn't actually landed on disk yet.
+        pub open spec/*(checked)*/ fn iversions_known_landed(self) -> (versions: FloatingSeq<Version>)
+        recommends
+            self.inv()
+            // !self.inflight_is_on_disk()
+        {
+            let stable_lsn = self.journal.persistent.seq_end;
+            floating_versions(self.mapadt.persistent, self.journal.i(), stable_lsn)
+        }
+
+        pub open spec(checked) fn iversions_known(self) -> (versions: FloatingSeq<Version>)
+        recommends
+            self.inv(),
+            self.ephemeral matches Some(Known{..}),
+        {
+            if self.inflight_is_on_disk() {
+                self.iversions_known_inflight()
+            } else {
+                self.iversions_known_landed()
+            }
+        }
+
+        pub proof fn lemma_iversions_known_inflight_landed_relation(self)
+        requires
+            self.inv(),
+            self.inflight_is_on_disk()
+        ensures
+            self.iversions_known_landed().start <= self.iversions_known_inflight().start,
+            self.iversions_known_landed().len() == self.iversions_known_inflight().len(),
+            forall |lsn| self.iversions_known_inflight().start <= lsn < self.iversions_known_inflight().len()
+                ==> self.iversions_known_landed()[lsn] == self.iversions_known_inflight()[lsn]
+        {
+            assert forall |lsn| self.iversions_known_inflight().start <= lsn < self.iversions_known_inflight().len()
+            implies self.iversions_known_landed()[lsn] == self.iversions_known_inflight()[lsn] by {
+
+                let in_flight_map = self.mapadt.in_flight.unwrap();
+                let remaining_journal = self.journal.i().discard_old(in_flight_map.seq_end);
+                let in_flight_journal = self.journal.i().discard_recent(self.mapadt.in_flight.get_Some_0().seq_end);
+                let remaining_journal_discarded = remaining_journal.discard_recent(lsn as LSN);
+
+                journal_associativity(self.mapadt.persistent, in_flight_journal, remaining_journal_discarded);
+
+                // not sure why this is a trigger. I'd think extensionality, but ... I didn't need ~
+                assert( in_flight_journal.concat(remaining_journal_discarded) == self.journal.i().discard_recent(lsn as LSN) ); //trigger
+            }
+        }
+
         /// Return the CrashTolerantAsyncMap state that this CoordinationSystem state
         /// corresponds to. (Interpretation function).
         pub open spec(checked) fn i(self) -> CrashTolerantAsyncMap::State
@@ -93,15 +189,14 @@ verus! {
             let stable_lsn = self.journal.persistent.seq_end;
             match self.ephemeral {
                 Some(Known{ progress, sync_reqs, .. }) => {
-                    let _ = spec_affirm(self.journal.i() == self.journal.ephemeral->v.journal);
-                    let _ = spec_affirm(self.journal.i().can_follow(self.mapadt.persistent.seq_end));
-                    let _ = spec_affirm(self.journal.i().can_discard_to(stable_lsn));
-                        CrashTolerantAsyncMap::State{
-                    versions: floating_versions(self.mapadt.persistent, self.journal.i(), stable_lsn),
+                CrashTolerantAsyncMap::State{
+                    versions: self.iversions_known(),
                     async_ephemeral: progress,
                     sync_requests: sync_reqs,
                 }},
                 None => {
+                    // This is the case where the program has no ephemeral state, so i() has only a
+                    // single version to consider, whatever's actually on the disk persistently.
                     let _ = spec_affirm(self.journal.persistent.can_follow(self.mapadt.persistent.seq_end));
                     CrashTolerantAsyncMap::State{
                     // This recommends should be provable from the stable_lsn let binding. :v(
@@ -237,7 +332,7 @@ verus! {
         {
             self.journal.in_flight is Some
         }
-
+        
         pub open spec(checked) fn inv_frozen_map_geometry(self) -> bool
             recommends
                 self.wf(),
@@ -332,8 +427,10 @@ verus! {
                     &&& self.inv_frozen_map_value_agreement()
                 }
             }
+            &&& self.superblock_in_flight ==> self.commit_started()
             &&& self.commit_started() ==>
             {
+                &&& self.map_is_frozen()
                 &&& self.inv_commit_started_geometry()
                 &&& self.inv_commit_started_value_agreement()
             }
@@ -711,6 +808,10 @@ verus! {
             ej.discard_recent(im_end),
             ej.discard_old(im_end).discard_recent(em_end)
         );
+
+        assert( !v.superblock_in_flight );
+        assert( !vp.superblock_in_flight );
+        assert( vp.inv() );
     }
 
     pub proof fn inv_inductive(v: CoordinationSystem::State, vp: CoordinationSystem::State, label: CoordinationSystem::Label)
@@ -908,6 +1009,21 @@ verus! {
         let versions_prime = vp.i().versions;
         let versions = v.i().versions;
 
+        assert( versions_prime == vp.iversions_known() );
+        assert( versions == v.iversions_known() );
+
+        // need to tickle some trigger to get extensionality in the inflight case
+        if v.inflight_is_on_disk() {
+            let remaining_journal = v.journal.i().discard_old(v.mapadt.in_flight.unwrap().seq_end);
+            let remaining_journal_p = vp.journal.i().discard_old(vp.mapadt.in_flight.unwrap().seq_end);
+
+            let vpdl = versions_prime.drop_last();
+            assert forall |i| vpdl.is_active(i) implies #[trigger] vpdl[i].ext_equal(versions[i]) by {
+                assert( remaining_journal_p.discard_recent(i as LSN) == remaining_journal.discard_recent(i as LSN) );
+            }
+            assert(versions_prime.drop_last().ext_equal(versions));
+        }
+
         assert(versions_prime.drop_last().ext_equal(versions));
 
         assert(0 < versions_prime.len());
@@ -934,10 +1050,26 @@ verus! {
         let post_async = AsyncMap::State { persistent: versions_prime.last(), ephemeral: vp.i().async_ephemeral };
 
         // BEGIN - MapSpec
+//         let pre_map = versions.last().appv;
+//         let post_map = versions_prime.last().appv;
+
+        let pre_ignore_inflight_map = v.iversions_known_landed().last().appv;
+        let post_ignore_inflight_map = vp.iversions_known_landed().last().appv;
+//         let pre_map = pre_ignore_inflight_map;
+//         let post_map = post_ignore_inflight_map;
         let pre_map = versions.last().appv;
         let post_map = versions_prime.last().appv;
 
+        if v.inflight_is_on_disk() {
+            v.lemma_iversions_known_inflight_landed_relation();
+            vp.lemma_iversions_known_inflight_landed_relation();
+        }
+        // !v.inflight_is_on_disk() case is easy
+
         // END - Yet another proof goal: show that MapSpec transition works
+
+        assert( map_label == MapSpec::Label::Put{input, output} );
+
         assert(MapSpec::State::put(pre_map, post_map, map_label));
 
         // This was the KEY!!! WHY?!?!?!
@@ -960,6 +1092,36 @@ verus! {
         // assert(v.i().versions.ext_equal(vp.i().versions.drop_last()));
         assert(CrashTolerantAsyncMap::State::next_by(v.i(), vp.i(), label->ctam_label, ctam_step));
         assert(CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label->ctam_label));
+    }
+
+    pub proof fn superblock_write_lands_step_refines(
+        v: CoordinationSystem::State,
+        vp: CoordinationSystem::State,
+        label: CoordinationSystem::Label,
+        step: CoordinationSystem::Step
+    )
+        requires
+            v.inv(),
+            CoordinationSystem::State::next(v, vp, label),
+            CoordinationSystem::State::next_by(v, vp, label, step),
+            matches!(step, CoordinationSystem::Step::superblock_write_lands(..)),
+        ensures
+            vp.inv(),
+            CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label->ctam_label),
+    {
+        // TODO(verus): We have GOT to do something about these nasty boilerplate blocks.
+        // Maybe a good place to use Andrea's new automation-control knobs?
+        reveal(CoordinationSystem::State::next);
+        reveal(CoordinationSystem::State::next_by);
+
+        vp.lemma_iversions_known_inflight_landed_relation();
+        let new_stable_index = v.journal.in_flight.unwrap().seq_end as int;
+
+        // TODO(verus): We need a nice way to expose extensionality for FloatingSeq with elegant
+        // syntax.
+        vp.i().versions.extensionality(v.i().versions.get_suffix(new_stable_index));
+
+        CrashTolerantAsyncMap::show::sync(v.i(), vp.i(), CrashTolerantAsyncMap::Label::SyncOp{}, new_stable_index);
     }
 
     /// Proof that a "commit_complete" transition maps to a "sync" transition
@@ -1031,9 +1193,11 @@ verus! {
         // doesn't have `#[verifier::ext_equal]`? (We can't add it due to state_machine! macro rules))
         // assert(vers_p =~~= vers_s);
 
-        // Proof goal: Show that it refines to a sync operation.
-        assert(CrashTolerantAsyncMap::State::sync(v.i(), vp.i(), CrashTolerantAsyncMap::Label::SyncOp{}, new_stable_index));
-        CrashTolerantAsyncMap::show::sync(v.i(), vp.i(), CrashTolerantAsyncMap::Label::SyncOp{}, new_stable_index);
+        // Proof goal: Show that it refines to a noop operation.
+        // (sync happened back when superblock_write_lands)
+//         assert( v.i() =~= vp.i() );
+//         assert(CrashTolerantAsyncMap::State::noop(v.i(), vp.i(), CrashTolerantAsyncMap::Label::Noop{}));
+        CrashTolerantAsyncMap::show::noop(v.i(), vp.i(), CrashTolerantAsyncMap::Label::Noop{});
     }
 
     /// Proof that a "Crash" transition maps to a "Crash" transition
@@ -1094,14 +1258,51 @@ verus! {
 
             // GOAL: vp's persistent journal should be unchanged, and up until
             // stable_lsn it should match the interpretation of v's journal.
-            assert(vp.journal.persistent.discard_recent(stable_lsn)
-                    .ext_equal(v.journal.i().discard_recent(stable_lsn)));
+//             if landed_in_flight {
+//                 assert(vp.journal.persistent.discard_recent(stable_lsn)
+//                     .ext_equal(v.journal.i().discard_recent(stable_lsn)));
+//             } else {
+//                 assert(vp.journal.persistent.discard_recent(stable_lsn)
+//                     .ext_equal(v.journal.i().discard_recent(stable_lsn)));
+//             }
         }
 
         
         // GOAL (necessary): vp.i()'s versions should be truncated down to just v.i().versions[..stable_index+1]. (Which
         // by invariant should actually mean that the only index vp.i().versions contains is `stable_index`).
-        assert(vp.i().versions =~~= v.i().versions.get_prefix(v.i().stable_index() + 1));
+
+        let keep_in_flight = v.journal.in_flight is Some && !v.superblock_in_flight;
+
+        assert( CrashTolerantJournal::State::next(
+            v.journal,
+            vp.journal,
+            CrashTolerantJournal::Label::CrashLabel{ keep_in_flight }) );
+        assert( CrashTolerantMap::State::next(
+            v.mapadt,
+            vp.mapadt,
+            CrashTolerantMap::Label::CrashLabel{ keep_in_flight }) );
+
+        if v.ephemeral is None || !(v.ephemeral.unwrap() is Known) {
+            assert(vp.i().versions =~~= v.i().versions.get_prefix(v.i().stable_index() + 1));
+        } else if keep_in_flight {
+            // There was something in flight and we're moving it to persistent
+
+            assert(
+                vp.journal.persistent.discard_recent(vp.journal.persistent.seq_end)
+                =~=
+                v.journal.i().discard_old(v.mapadt.in_flight.unwrap().seq_end).discard_recent(v.journal.in_flight.unwrap().seq_end)
+            );
+
+            assert(vp.i().versions =~~= v.i().versions.get_prefix(v.i().stable_index() + 1));
+        } else {
+            // Something was in flight but it got discarded (v.journal.in_flight is Some)
+            // or nothing was in flight
+
+            assert( v.journal.persistent.discard_recent(v.journal.persistent.seq_end as LSN)
+                    =~=
+                    v.journal.i().discard_recent(v.journal.persistent.seq_end as LSN) );
+            assert(vp.i().versions =~~= v.i().versions.get_prefix(v.i().stable_index() + 1));
+        }
 
         // GOAL
         assert(CrashTolerantAsyncMap::State::crash(v.i(), vp.i(), label->ctam_label));
@@ -1256,6 +1457,10 @@ verus! {
 
         // END - GOAL 2 (MapSpec)
         // assert(MapSpec::State::query(map_pre, map_post, map_label));
+        if v.inflight_is_on_disk() {
+            v.lemma_iversions_known_inflight_landed_relation();
+            vp.lemma_iversions_known_inflight_landed_relation();
+        }
         MapSpec::show::query(map_pre, map_post, map_label);
 
         // END - GOAL 1 (AsyncMap)
@@ -1516,6 +1721,8 @@ verus! {
                 req_sync_step_and_reply_sync_step_refine(v, vp, label, step),
             CoordinationSystem::Step::commit_start(..) =>
                 noop_steps_refine(v, vp, label, step),
+            CoordinationSystem::Step::superblock_write_lands(..) =>
+                superblock_write_lands_step_refines(v, vp, label, step),
             CoordinationSystem::Step::commit_complete(..) =>
                 commit_complete_step_refines(v, vp, label, step),
             CoordinationSystem::Step::crash(..) =>
