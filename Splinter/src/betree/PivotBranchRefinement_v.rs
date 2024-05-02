@@ -464,12 +464,7 @@ pub proof fn lemma_split_index_interpretation1(old_index: Node, split_arg: Split
             let left_r = left_index.route(key);
             Key::largest_lte_subrange(old_index->pivots, key, r, 0, pivot_index, left_r);
             assert(left_r == r);
-            // Subgoal 1
             assert(left_index.i().map.contains_key(key));
-
-            assume(false);
-            // Subgoal 2
-            assert(Key::lt(key, pivot));
         } else {
             assert(0 <= r + 1 - (pivot_index + 1) < right_index->children.len());
             assert(right_index->children[r + 1 - (pivot_index + 1)] == old_index->children[r+1]);
@@ -477,17 +472,8 @@ pub proof fn lemma_split_index_interpretation1(old_index: Node, split_arg: Split
             Key::largest_lte_subrange(old_index->pivots, key, r,
                 pivot_index + 1, old_index->children.len() as int - 1, right_r);
             assert(right_r == r - (pivot_index + 1));
-            // Subgoal 3
             assert(right_index.i().map.contains_key(key));
-
-            assume(false);
-            // Subgoal 4
-            assert(Key::lte(pivot, key));
         }
-        assume(false);
-
-        // Subgoal 5
-        assert(old_index.i().map[key] == union_map[key]);
     }
 }
 
