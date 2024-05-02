@@ -169,14 +169,47 @@ impl Key {
     pub proof fn largest_lte_is_lemma(run: Seq<Key>, key: Key, r: int)
         requires
             -1 <= r < run.len(),
-            Key::is_strictly_sorted(run),
+            Key::is_sorted(run),
             r == -1 || Key::lte(run[r], key),
             r == run.len() - 1 || Key::lt(key, run[r+1]),
         ensures
             Key::largest_lte(run, key) == r,
     {
-        Key::strictly_sorted_implies_sorted(run);
         Key::largest_lte_ensures(run, key, Key::largest_lte(run, key));
+    }
+
+    pub proof fn largest_lte_subrange(run: Seq<Key>, key: Key, out: int, a: int, b: int, subrange_out: int)
+        requires
+            Key::is_sorted(run),
+            out == Key::largest_lte(run, key),
+            0 <= a <= b <= run.len(),
+            subrange_out == Key::largest_lte(run.subrange(a, b), key),
+        ensures
+            out < a ==> subrange_out == -1,
+            a <= out < b ==> subrange_out == out - a,
+            b <= out ==> subrange_out == run.subrange(a, b).len() - 1,
+    {
+        Key::largest_lte_ensures(run, key, out);
+        if out < a {
+            if run.len() > 0 && run.subrange(a, b).len() > 0 {
+                assert(Key::lt(key, run[a]));
+                assert(run[a] == run.subrange(a, b)[0]);
+            }
+            Key::largest_lte_is_lemma(run.subrange(a, b), key, -1);
+        } else if a <= out < b {
+            assert(Key::lte(run[out], key));
+            if out + 1 < run.subrange(a, b).len() {
+                assert(Key::lt(key, run[out + 1]));
+                assert(run[out + 1] == run.subrange(a, b)[out + 1 - a]);
+            }
+            Key::largest_lte_is_lemma(run.subrange(a, b), key, out - a);
+        } else if b <= out {
+            if b - a - 1 > -1 {
+                assert(Key::lte(run[b - 1], key));
+                assert(run[b - 1] == run.subrange(a, b)[b - 1 - a]);
+                Key::largest_lte_is_lemma(run.subrange(a, b), key, b - a - 1);
+            }
+        }
     }
 
     pub proof fn largest_lt_ensures(run: Seq<Key>, needle: Key, out: int)

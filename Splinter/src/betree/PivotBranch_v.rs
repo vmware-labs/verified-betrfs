@@ -217,17 +217,17 @@ impl Node {
             self is Leaf,
             self.wf()
     {
-        // Need largest_lte ensures to restore checked
-        let llte = Key::largest_lte(self->keys, key);
-        if 0 <= llte && self->keys[llte] == key {
+        // Need route ensures to restore checked
+        let r = self.route(key);
+        if 0 <= r && self->keys[r] == key {
             Node::Leaf{
                 keys: self->keys, 
-                msgs: self->msgs.update(llte, msg)
+                msgs: self->msgs.update(r, msg)
             }
         } else {
             Node::Leaf{
-                keys: self->keys.insert(llte+1, key),
-                msgs: self->msgs.insert(llte+1, msg)
+                keys: self->keys.insert(r+1, key),
+                msgs: self->msgs.insert(r+1, msg)
             }
         }
     }
