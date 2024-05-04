@@ -19,6 +19,7 @@ impl Node {
         recommends self.wf()
         decreases self
         // TODO(x9du): this when condition is kind of annoying to prove
+        // Usually lemma_route_auto & assert(self.wf()) works
         when self is Index ==> forall |key| 0 <= #[trigger] self.route(key) + 1 < self->children.len()
     {
         match self {
@@ -348,7 +349,7 @@ pub proof fn lemma_sub_index_preserves_wf(node: Node, from: int, to: int)
     }
 
     assert forall |i| 0 < i < sub->children.len() implies sub.all_keys_above_bound(i) by {
-        assume(node.all_keys_above_bound(from + i));
+        assert(node.all_keys_above_bound(from + i));
         assert(sub->pivots[i-1] == node->pivots[from + i - 1]);
     }
 }
@@ -430,72 +431,6 @@ pub proof fn lemma_split_leaf_interpretation(old_leaf: Node, split_arg: SplitArg
     assert(old_leaf.i().map =~~= union_map);
 }
 
-pub proof fn lemma_split_index_interpretation1(old_index: Node, split_arg: SplitArg)
-    requires
-        old_index.wf(),
-        old_index is Index,
-        split_arg.wf(old_index)
-    ensures ({
-        let (left_index, right_index) = old_index.split_index(split_arg);
-        &&& left_index.wf()
-        &&& right_index.wf()
-        &&& old_index.i().map.submap_of(
-            Key::map_pivoted_union(left_index.i().map, split_arg.get_pivot(), right_index.i().map))
-    })
-{
-    let (left_index, right_index) = old_index.split_index(split_arg);
-    lemma_split_node_preserves_wf(old_index, split_arg);
-    assert(left_index.wf() && right_index.wf());
-    lemma_route_auto();
-    let union_map = Key::map_pivoted_union(left_index.i().map, split_arg.get_pivot(), right_index.i().map);
-    let pivot_index = split_arg->pivot_index;
-    let pivot = split_arg.get_pivot();
-
-    assert forall |key| #[trigger] old_index.i().map.dom().contains(key)
-    implies union_map.dom().contains(key) && old_index.i().map[key] == union_map[key] by {
-        let r = old_index.route(key);
-        assert(0 <= r+1 < old_index->children.len());
-        assert(old_index->children[r+1].wf());
-        assert(old_index->children[r+1].i().map.contains_key(key));
-        Key::strictly_sorted_implies_sorted(old_index->pivots);
-        if r+1 <= pivot_index {
-            assert(0 <= r+1 < left_index->children.len());
-            assert(left_index->children[r+1] == old_index->children[r+1]);
-            let left_r = left_index.route(key);
-            Key::largest_lte_subrange(old_index->pivots, key, r, 0, pivot_index, left_r);
-            assert(left_r == r);
-            assert(left_index.i().map.contains_key(key));
-        } else {
-            assert(0 <= r + 1 - (pivot_index + 1) < right_index->children.len());
-            assert(right_index->children[r + 1 - (pivot_index + 1)] == old_index->children[r+1]);
-            let right_r = right_index.route(key);
-            Key::largest_lte_subrange(old_index->pivots, key, r,
-                pivot_index + 1, old_index->children.len() as int - 1, right_r);
-            assert(right_r == r - (pivot_index + 1));
-            assert(right_index.i().map.contains_key(key));
-        }
-    }
-}
-
-pub proof fn lemma_split_index_interpretation2(old_index: Node, split_arg: SplitArg)
-    requires
-        old_index.wf(),
-        old_index is Index,
-        split_arg.wf(old_index),
-        ({
-            let (left_index, right_index) = old_index.split_index(split_arg);
-            &&& left_index.wf()
-            &&& right_index.wf()
-        })
-    ensures ({
-        let (left_index, right_index) = old_index.split_index(split_arg);
-        Key::map_pivoted_union(left_index.i().map, split_arg.get_pivot(), right_index.i().map).dom()
-            <= old_index.i().map.dom()
-    })
-{
-    assume(false);
-}
-
 pub proof fn lemma_split_index_interpretation(old_index: Node, split_arg: SplitArg)
     requires
         old_index.wf(),
@@ -512,14 +447,64 @@ pub proof fn lemma_split_index_interpretation(old_index: Node, split_arg: SplitA
     })
 {
     let (left_index, right_index) = old_index.split_index(split_arg);
-    lemma_route_auto();
     lemma_split_node_preserves_wf(old_index, split_arg);
-    assert(left_index.wf());
-    assert(right_index.wf());
-    lemma_split_index_interpretation1(old_index, split_arg);
-    lemma_split_index_interpretation2(old_index, split_arg);
+    assert(left_index.wf() && right_index.wf());
+    lemma_route_auto();
     let union_map = Key::map_pivoted_union(left_index.i().map, split_arg.get_pivot(), right_index.i().map);
-    assert(old_index.i().map.dom() =~~= union_map.dom());
+    let pivot_index = split_arg->pivot_index;
+    let pivot = split_arg.get_pivot();
+
+    assert forall |key|
+    (#[trigger] old_index.i().map.dom().contains(key) ==>
+        union_map.dom().contains(key) && old_index.i().map[key] == union_map[key])
+    && (union_map.dom().contains(key) ==> old_index.i().map.dom().contains(key)) by {
+
+        let r = old_index.route(key);
+        assert(0 <= r+1 < old_index->children.len());
+        assert(old_index->children[r+1].wf());
+        Key::strictly_sorted_implies_sorted(old_index->pivots);
+        if r+1 <= pivot_index {
+            assert(0 <= r+1 < left_index->children.len());
+            assert(left_index->children[r+1] == old_index->children[r+1]);
+            let left_r = left_index.route(key);
+            Key::largest_lte_subrange(old_index->pivots, key, r, 0, pivot_index, left_r);
+            assert(left_r == r);
+        } else {
+            assert(0 <= r + 1 - (pivot_index + 1) < right_index->children.len());
+            assert(right_index->children[r + 1 - (pivot_index + 1)] == old_index->children[r+1]);
+            let right_r = right_index.route(key);
+            Key::largest_lte_subrange(old_index->pivots, key, r,
+                pivot_index + 1, old_index->children.len() as int - 1, right_r);
+            assert(right_r == r - (pivot_index + 1));
+        }
+
+        if old_index.i().map.dom().contains(key) {
+            assert(old_index->children[r+1].i().map.contains_key(key));
+            if r+1 <= pivot_index {
+                assert(left_index.i().map.contains_key(key));
+            } else {
+                assert(right_index.i().map.contains_key(key));
+            }
+            assert(union_map.dom().contains(key) && old_index.i().map[key] == union_map[key]);
+        }
+
+        if union_map.dom().contains(key) {
+            if Key::lt(key, pivot) {
+                assert(r < pivot_index) by {
+                    if r >= pivot_index {
+                        assert(Key::lte(pivot, key));
+                    }
+                }
+                assert(left_index.i().map.contains_key(key));
+            } else {
+                assert(r+1 > pivot_index);
+                assert(right_index.i().map.contains_key(key));
+            }
+            assert(old_index->children[r+1].i().map.contains_key(key));
+            assert(old_index.i().map.dom().contains(key));
+        }
+    }
+
     assert(old_index.i().map =~~= union_map);
 }
 
@@ -977,16 +962,6 @@ pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
             assert(forall |i| 0 <= i < post->children.len() ==> (#[trigger] post->children[i]).wf());
             assert(forall |i| 0 <= i < children.len() ==> (#[trigger] children[i]).wf());
 
-            // TODO(x9du): This assert forall is known to be flaky (can fail as you modify/add other lemmas).
-            // Required to trigger the route ensures for each of the children.
-            assert forall |i, key| 0 <= i < children.len() && children[i] is Index
-            implies 0 <= #[trigger] children[i].route(key) + 1 < children[i]->children.len() by {
-                lemma_route_ensures(children[i], key);
-            }
-
-            // Assert that other children don't change
-            assert(forall |i| #![auto] 0 <= i < children.len() && i != (r+1) ==> post->children[i].i() == children[i].i());
-
             // Assert that the changed child has original keys plus the new key-value pair.
             let child_label = InsertLabel{ key: lbl.key, msg: lbl.msg, path: lbl.path.subpath() };
             insert_refines(children[r+1], child_label);
@@ -1222,8 +1197,6 @@ pub proof fn append_refines(pre: Node, lbl: AppendLabel)
 {
     lemma_route_auto();
     lemma_append_keys_are_path_equiv(lbl.keys, lbl.path);
-
-    // Goal 1 - WF is preserved
     lemma_append_preserves_wf(pre, lbl.keys, lbl.msgs, lbl.path);
 
     lemma_path_target_is_wf(lbl.path);
@@ -1238,7 +1211,6 @@ pub proof fn append_refines(pre: Node, lbl: AppendLabel)
         |key| lbl.msgs[append_leaf.route(key)]);
     let pre_i_then_append = Buffer{map: pre.i().map.union_prefer_right(append_map)};
 
-    // Goal 2 - Appending to node then refine is same as refine then append.
     match pre {
         Node::Leaf{keys, msgs} => {
             assert(pre == lbl.path.target());
@@ -1290,28 +1262,12 @@ pub proof fn append_refines(pre: Node, lbl: AppendLabel)
         Node::Index{pivots, children} => {
             let r = pre.route(lbl.keys[0]);
 
-            // GOAL 1 START (prove by showing that all children are the same except children along
-            // modified path).
-
-            // Start copying insert_refines proof that unmodified children
-            // are unmodified.
-
-            // Trigger stuff to get that the post->children are wf() and more.
+            // Suppress recommends
             assert(0 <= r + 1 < children.len());
             assert(post.wf());
             assert(post->children.len() == children.len()); 
             assert(forall |i| 0 <= i < post->children.len() ==> (#[trigger] post->children[i]).wf());
             assert(forall |i| 0 <= i < children.len() ==> (#[trigger] children[i]).wf());
-
-            // TODO(x9du): flaky assert forall by
-            // Required to trigger the route ensures for each of the children.
-            assert forall |i, key| 0 <= i < children.len() && children[i] is Index
-            implies 0 <= #[trigger] children[i].route(key) + 1 < children[i]->children.len() by {
-                lemma_route_ensures(children[i], key);
-            }
-    
-            // Assert that the i() of all unchanged children are the same!
-            assert(forall |i| #![auto] 0 <= i < children.len() && i != (r+1) ==> post->children[i].i() == children[i].i());
 
             // Prove that the changed child still satisfies the append_refines.
             let child_label = AppendLabel{ keys: lbl.keys, msgs: lbl.msgs, path: lbl.path.subpath() };
@@ -1679,7 +1635,6 @@ ensures
 decreases
     path.depth,
 {
-    // TODO(x9du): can use this in lemma_split_child_of_index_preserves_wf?
     let children = pre->children;
     let pivots = pre->pivots;
     let pivot = split_arg.get_pivot();
