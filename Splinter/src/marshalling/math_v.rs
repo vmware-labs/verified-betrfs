@@ -62,4 +62,11 @@ pub proof fn lemma_seq_slice_slice<T>(s: Seq<T>, i: int, j: int, k: int, l: int)
 {
 }
 
+#[verifier(nonlinear)]
+pub proof fn div_plus_one(a: int, b: int, d: int)
+requires 0 < d, a == b / d
+ensures a + 1 == (b + d) / d
+{
+}
+
 }

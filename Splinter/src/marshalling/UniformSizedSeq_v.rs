@@ -627,6 +627,7 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
             self.parse(data@.subrange(start as int, end as int)) == value.deepv().subrange(0, i as int),
             // shouldn't need to pull this through from requires with spinoff_loop(false). grr.
             start as int + self.spec_size(value.deepv()) as int <= old(data).len(),
+            i == (end - start) / self.oblinfo.uniform_size() as int,
         {
             let ghost oldend = end;
             assert( oldend as int == start as int + self.spec_size(value.deepv().subrange(0, i as int)) as int );
@@ -670,72 +671,44 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
             //
             
             proof {
-                let u = self.oblinfo.uniform_size();
+                let u = self.oblinfo.uniform_size() as int;
 
                 assert( data@.subrange(start as int, oldend as int) == olddata );   // necessary trigger?
                 assert( self.parsable(data@.subrange(start as int, oldend as int)) );
 
                 assert( self.parsable(data@.subrange(start as int, end as int)) ) by {
                     let sdata = data@.subrange(start as int, end as int);
+                    assert( oldi == (oldend - start) / u );
+                    assert( i == oldi + 1 );
+                    assert( end == oldend + u );
+                    div_plus_one(oldi as int, oldend-start, u);
+                    assert( i == (end - start) / u );
+                    assert( i == self.length(sdata) );
                     assert forall |j: int| 0<=j<self.length(sdata) implies self.elt_parsable(sdata, j) by {
                         if j < oldi {
+                            mul_preserves_le(j + 1, oldi as int, u as int);
+                            assert( (j+1)*u == j*u +u ) by(nonlinear_arith);
+
                             let odata = data@.subrange(start as int, oldend as int);
-                            let oslice = self.get(SpecSlice::all(odata), odata, j);
-
-                            assert( oslice.end <= odata.len() ) by {
-                                assert( start as int + self.spec_size(value.deepv()) as int <= old(data).len() );
-
-                                // irrelevant because it's the end of the entire data, not the slice.
-                                //assert( start as int + value.len() * self.oblinfo.uniform_size() as int <= old(data).len() );
-
-                                assert( odata.len() == oldend - start );
-
-                                assert( oslice.end == j * self.oblinfo.uniform_size() + self.oblinfo.uniform_size() );
-                                assert( odata.len() == oldend - start );
-
-                                assert( oldend == start as int + oldi * self.oblinfo.uniform_size() );
-                                let u = self.oblinfo.uniform_size();
-                                assert( oldend - start == oldi * u );
-                                assert( odata.len() == oldi * u );
-                                assert( j + 1 <= oldi );
-                                assert( 0 < u );
-                                mul_preserves_le(j + 1, oldi as int, u as int);
-                                assert( (j+1)*u <= oldi * u);
-                                assert( (j+1)*u == j*u +u ) by(nonlinear_arith);
-                                assert( j * u + u <= oldi * u );
-                            }
-
-                            assert( self.parsable(odata) );
-                            let sslice = self.get(SpecSlice::all(sdata), sdata, j);
-                            assert( oslice.start == sslice.start );
-                            assert( oslice.end == sslice.end );
-                            assert( self.get(SpecSlice::all(odata), odata, j).i(odata)
-                                    == odata.subrange(oslice.start, oslice.end) );
-                            assert( self.get(SpecSlice::all(sdata), sdata, j).i(sdata)
-                                    == sdata.subrange(sslice.start, sslice.end) );
-    //                         assert forall |k| oslice.start <= k < oslice.end implies odata[k] == sdata[k] by {
-    //                         }
-                            let osub = odata.subrange(oslice.start, oslice.end);
-                            let ssub = sdata.subrange(oslice.start, oslice.end);
-                            assert( oslice.end <= odata.len() );
-                            assert( sslice.end <= odata.len() );
-                            assert forall |k| 0 <= k < osub.len() implies osub[k] == ssub[k] by {
-                            }
-                            assert( odata.subrange(oslice.start, oslice.end).len() == sdata.subrange(oslice.start, oslice.end).len() );
-                            assert( odata.subrange(oslice.start, oslice.end)
-                                    =~= sdata.subrange(oslice.start, oslice.end) );
-                            assert( odata.subrange(oslice.start, oslice.end)
-                                    =~= sdata.subrange(sslice.start, sslice.end) );
-                            assert(
-                                self.get(SpecSlice::all(odata), odata, j).i(odata)
-                                ==
-                                self.get(SpecSlice::all(sdata), sdata, j).i(sdata)
-                            );
-                            assert( self.get_data(odata, j) == self.get_data(sdata, j) );
-                            assume(false);
-                            assert( self.elt_parsable(sdata, j) ); // by loop invariant, prior iters
+                            assert( self.get_data(odata, j) == self.get_data(sdata, j) );   // trigger extn equality
+                            assert( self.elt_parsable(odata, j) ); // trigger loop invariant
+                            assert( self.elt_parsable(sdata, j) );
                         } else {
-                            assume(false);
+                            // exec_marshall gave us:
+                            assert( self.eltm.parsable(data@.subrange(oldend as int, end as int)) );
+                            let sslice = self.get(SpecSlice::all(sdata), sdata, j);
+                            //let send = j * u + u;
+                            assert( j == oldi );
+                            assert( j * u + u <= sdata.len() );
+                            assert( sslice.valid(sdata) );
+                            assert( self.get_data(sdata, j) == sslice.i(sdata) );
+                            assert( sslice.i(sdata) == sdata.subrange(sslice.start, sslice.end) );
+                            assert( data@.subrange(oldend as int, end as int).len() == end - oldend );
+                            assert( sdata.subrange(sslice.start, sslice.end).len() == sslice.end - sslice.start );
+                            assert( data@.subrange(oldend as int, end as int).len() == sdata.subrange(sslice.start, sslice.end).len() );
+                            assert( data@.subrange(oldend as int, end as int) =~= sdata.subrange(sslice.start, sslice.end) );
+                            assert( data@.subrange(oldend as int, end as int) =~= self.get_data(sdata, j) );
+                            assert( self.eltm.parsable(self.get_data(sdata, j)) );
                             assert( self.elt_parsable(sdata, j) ); // by we just did it
                         }
                     }
