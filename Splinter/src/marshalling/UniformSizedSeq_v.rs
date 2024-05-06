@@ -676,16 +676,16 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
                 assert( data@.subrange(start as int, oldend as int) == olddata );   // necessary trigger?
                 assert( self.parsable(data@.subrange(start as int, oldend as int)) );
 
+                let odata = data@.subrange(start as int, oldend as int);
                 let sdata = data@.subrange(start as int, end as int);
+                assert( i == self.length(sdata) ) by { div_plus_one(oldi as int, oldend-start, u); }
                 assert( self.parsable(sdata) ) by {
-                    assert( i == self.length(sdata) ) by { div_plus_one(oldi as int, oldend-start, u); }
                     assert forall |j: int| 0<=j<self.length(sdata) implies self.elt_parsable(sdata, j) by {
                         if j < oldi {
                             // j was from an earlier iteration; appeal to invariants
                             mul_preserves_le(j + 1, oldi as int, u as int);
                             assert( (j+1)*u == j*u +u ) by(nonlinear_arith);
 
-                            let odata = data@.subrange(start as int, oldend as int);
                             assert( self.get_data(odata, j) == self.get_data(sdata, j) );   // trigger extn equality
                             assert( self.elt_parsable(odata, j) ); // trigger loop invariant
                         } else {
@@ -695,8 +695,36 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
                     }
                     assert( self.seq_parsable(sdata) );
                 }
-                assert( self.parse(sdata) == value.deepv().subrange(0, i as int) ) by {
-                    assume(false);
+
+                assert( self.parse(olddata) == value.deepv().subrange(0, oldi as int) );
+                let osubv = value.deepv().subrange(0, oldi as int);
+                let subv = value.deepv().subrange(0, i as int);
+                assert( self.parse(sdata) == subv ) by {
+                    assert( self.parse(sdata) == self.parse_to_len(sdata, self.length(sdata) as usize) );
+                    assert( i == self.length(sdata) );
+//                     assert( self.parse(sdata).len() == self.parse_to_len(sdata, self.length(sdata) as usize).len() );
+                    assert( self.parse(sdata).len() == i );
+                    assert forall |j: int| 0<=j<i implies self.get_elt(sdata, j) == subv[j] by {
+                        if j < oldi {
+                            mul_preserves_le(j + 1, oldi as int, u as int);     // maybe unneeded
+                            assert( (j+1)*u == j*u +u ) by(nonlinear_arith);    // maybe unneeded
+                            assert( self.get_data(olddata, j) == self.get_data(odata, j) );   // trigger extn equality
+                            assert( self.get_data(odata, j) == self.get_data(sdata, j) );   // trigger extn equality
+                            assert( self.get_elt(odata, j) == self.get_elt(sdata, j) );
+                            assert( self.parse_to_len(olddata, oldi) == osubv );
+                            assert( self.eltm.parse(self.get_data(olddata, j)) == osubv[j] );    // trigger old parse_to_len
+                            assert( osubv[j] == subv[j] );
+
+                            // j was from an earlier iteration; appeal to invariants
+                            assert( self.eltm.parse(self.get_data(sdata, j)) == subv[j] );
+                            assert( self.get_elt(sdata, j) == subv[j] );
+                        } else {
+                            // we just marshalled j
+                            assume(false);
+                            assert( self.get_elt(sdata, j) == subv[j] );
+                        }
+                    }
+                    assert( self.parse(sdata) =~= subv );
                 }
             }
 
