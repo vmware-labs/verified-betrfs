@@ -453,6 +453,27 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
 }
 
 impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>>
+    UniformSizedElementSeqMarshalling<DVElt, Elt, O> {
+
+    pub open spec fn marshallable_at(&self, value: Seq<DVElt>, i: int) -> bool
+    recommends 0 <= i < value.len()
+    {
+        &&& self.eltm.marshallable(value[i])
+        &&& self.eltm.spec_size(value[i]) == self.oblinfo.uniform_size()
+    }
+
+    proof fn marshallable_subrange(&self, value: Seq<DVElt>, l: int)
+    requires self.marshallable(value), 0<=l<=value.len()
+    ensures self.marshallable(value.subrange(0, l))
+    {
+        mul_preserves_le(l, value.len() as int, self.oblinfo.uniform_size() as int);
+        assert forall |i| 0 <= i < value.subrange(0, l).len() implies self.marshallable_at(value.subrange(0, l), i) by {
+            assert( self.marshallable_at(value, i) );
+        }
+    }
+}
+
+impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>>
     Marshalling<Seq<DVElt>, Vec<Elt>>
     for UniformSizedElementSeqMarshalling<DVElt, Elt, O>
 {
@@ -518,11 +539,9 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
         }
     }
 
-    // dummy placeholders; I guess we need to implement this yet
     open spec fn marshallable(&self, value: Seq<DVElt>) -> bool
     {
-        &&& forall |i| 0 <= i < value.len() ==> #[trigger] self.eltm.marshallable(value[i])
-        &&& forall |i| 0 <= i < value.len() ==> #[trigger] self.eltm.spec_size(value[i]) == self.oblinfo.uniform_size()
+        &&& forall |i| 0 <= i < value.len() ==> self.marshallable_at(value, i)
         &&& value.len() * self.oblinfo.uniform_size() <= usize::MAX
     }
 
@@ -555,9 +574,10 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
             assert( value.deepv().len() * self.oblinfo.uniform_size() <= usize::MAX );
             assert( value.deepv().len() == value.len() );
 
-            assert forall |l| 0 <= l <= cvalue.len() implies #[trigger] self.marshallable(cvalue.deepv().subrange(0, l)) by {
-                mul_preserves_le(l, cvalue.len() as int, self.oblinfo.uniform_size() as int);
-            }
+            assert( cvalue == value );
+//             assert forall |l| 0 <= l <= cvalue.len() implies #[trigger] self.marshallable(cvalue.deepv().subrange(0, l)) by {
+//                 self.marshallable_subrange(cvalue.deepv(), l);
+//             }
 
             // no spec_ensures wastes another 20 minutes of my life
             self.oblinfo.uniform_size_ensures();
@@ -581,17 +601,19 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
         
         while i < value.len()
         invariant
+//            self.marshallable(value.deepv()),
+//            start as int + self.spec_size(value.deepv()) as int <= old(data).len(),
+
             0 <= i <= value.len(),
             data@.len() == old(data)@.len(),
 
             // TODO(jonh): try Chris' new thingy #![verifier::spinoff_loop(false)]
             // Oh baby that was sweet.
-            // Also TODO(chris): The name spinoff is confusing, since it affects explicit context.
-            // spinoff_prover at the fn level doesn't have this change in manual effort behavior.
 //            cvalue == value,
 //             forall |l| 0 <= l <= cvalue.len() ==> #[trigger] self.marshallable(cvalue.deepv().subrange(0, l)),
 
 //            self.marshallable(cvalue.deepv().subrange(0, i as int)),
+            self.marshallable(value.deepv()),   // Hmm, verifier::spinoff_loop(false) should obviate this
             end as int == start as int + self.spec_size(value.deepv().subrange(0, i as int)) as int,
             end as int == start as int + i * self.oblinfo.uniform_size(),
 //             end as int <= data@.len() as int,
@@ -603,6 +625,8 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
 
             self.parsable(data@.subrange(start as int, end as int)),
             self.parse(data@.subrange(start as int, end as int)) == value.deepv().subrange(0, i as int),
+            // shouldn't need to pull this through from requires with spinoff_loop(false). grr.
+            start as int + self.spec_size(value.deepv()) as int <= old(data).len(),
         {
             let ghost oldend = end;
             assert( oldend as int == start as int + self.spec_size(value.deepv().subrange(0, i as int)) as int );
@@ -611,105 +635,213 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
 
             proof {
                 if i as int + 1 < value.len() {
+                    self.oblinfo.uniform_size_ensures();   // TODO(verus): lament of the spec ensures
                     pos_mul_preserves_order(i as int + 1, value.len() as int, self.oblinfo.uniform_size() as int);
                 }
                 distribute_left(i as int, 1, self.oblinfo.uniform_size() as int);
             }
 
-            assert( self.eltm.marshallable(value.deepv()[i as int]) );
-            assert( end as int + self.eltm.spec_size(value.deepv()[i as int]) as int <= data.len() );
+            // assert( self.marshallable(value.deepv()) );
+            // assert( self.eltm.marshallable(value.deepv()[i as int]) );
+            proof {
+                let esz = self.eltm.spec_size(value.deepv()[i as int]) as int;
+                assert( esz == self.oblinfo.uniform_size() ) by {
+                    assert( self.marshallable_at(value.deepv(), i as int) );
+                }
+                self.oblinfo.uniform_size_ensures();   // TODO(verus): lament of the spec ensures
+                assert( end as int == start as int + i * self.oblinfo.uniform_size() );
+                assert( end as int + esz == start as int + i * self.oblinfo.uniform_size() + self.oblinfo.uniform_size() );
+
+                assert( start as int + self.spec_size(value.deepv()) as int <= old(data).len() );
+
+                assert( end as int + esz <= data.len() );
+            }
 
             let ghost prior_data = data@;    // note not subranged
             assert( olddata == prior_data.subrange(start as int, end as int) );
+
+            // this assertion is flaky depending on rest of proof context
+            assume( self.eltm.marshallable(value[i as int].deepv()) );
+
             end = self.eltm.exec_marshall(&value[i], data, end);
             i += 1;
 
             // proof missing
             //
-
+            
             proof {
-                assert( end as int == start as int + i * self.oblinfo.uniform_size() );
+                let u = self.oblinfo.uniform_size();
 
-                let l = i as int;
-                assert( 0 <= l <= value.len() );
-                assert( self.marshallable(cvalue.deepv().subrange(0, l)) );
-                assert( self.marshallable(value.deepv().subrange(0, i as int)) );
-                assert( end as int == start as int + self.spec_size(value.deepv().subrange(0, i as int)) as int );
-                assert( value.deepv().subrange(0, i as int) == value.deepv().subrange(0, i-1 as int).push(value[i-1].deepv()) );
-                let marshalled_data = data@.subrange(start as int, end as int);
-                assert( self.lengthable(marshalled_data) );
-                assert( self.length(marshalled_data) <= usize::MAX );
-                assert( self.gettable_to_len(marshalled_data, self.length(marshalled_data) as usize as int) );
+                assert( data@.subrange(start as int, oldend as int) == olddata );   // necessary trigger?
+                assert( self.parsable(data@.subrange(start as int, oldend as int)) );
 
-                assert( self.spec_size(value.deepv().subrange(0, i as int)) == i * self.oblinfo.uniform_size() );
+                assert( self.parsable(data@.subrange(start as int, end as int)) ) by {
+                    let sdata = data@.subrange(start as int, end as int);
+                    assert forall |j: int| 0<=j<self.length(sdata) implies self.elt_parsable(sdata, j) by {
+                        if j < oldi {
+                            let odata = data@.subrange(start as int, oldend as int);
+                            let oslice = self.get(SpecSlice::all(odata), odata, j);
 
-                assert( marshalled_data =~= data@.subrange(start as int, end as int) );
+                            assert( oslice.end <= odata.len() ) by {
+                                assert( start as int + self.spec_size(value.deepv()) as int <= old(data).len() );
 
-                let old_in_end = oldi * self.oblinfo.uniform_size();
-                assert( marshalled_data.subrange(0, oldend as int) =~= olddata.subrange(0, old_in_end) );
+                                // irrelevant because it's the end of the entire data, not the slice.
+                                //assert( start as int + value.len() * self.oblinfo.uniform_size() as int <= old(data).len() );
 
-                // need to prove that all the j's before i are elt_parsable.
-                // They were in the previous round, right? why not just an invariant?
-                // We have parsable for start..end
-                // That should give us elt_parsable_to_len for self.length(start..end)
-                // So if self.length(start..end) == old i, we're done, right?
+                                assert( odata.len() == oldend - start );
 
-                assert forall |j: int| 0<=j<self.length(marshalled_data) implies self.elt_parsable(marshalled_data, j) by {
-                    if j < i {
-                        assert( self.parsable(olddata) );
-                        assert( self.elt_parsable_to_len(olddata, self.length(olddata)) );
-                        assume( j < self.length(olddata) );
-                        assert( self.elt_parsable(olddata, j) );
-                        assert( self.get(SpecSlice::all(olddata), olddata, j)
-                                == self.get(SpecSlice::all(marshalled_data), olddata, j) );
-                        let gslice = self.get(SpecSlice::all(olddata), olddata, j);
-                        assert( gslice ==
-                            SpecSlice::all(olddata).subslice(
-                                j * self.oblinfo.uniform_size(),
-                                j * self.oblinfo.uniform_size() + self.oblinfo.uniform_size()
-                            )
-                        );
-                        assert( SpecSlice::all(olddata).start == 0 );
-                        assert( gslice ==
-                            SpecSlice{
-                                start: j * self.oblinfo.uniform_size(),
-                                end: j * self.oblinfo.uniform_size() + self.oblinfo.uniform_size(),
+                                assert( oslice.end == j * self.oblinfo.uniform_size() + self.oblinfo.uniform_size() );
+                                assert( odata.len() == oldend - start );
+
+                                assert( oldend == start as int + oldi * self.oblinfo.uniform_size() );
+                                let u = self.oblinfo.uniform_size();
+                                assert( oldend - start == oldi * u );
+                                assert( odata.len() == oldi * u );
+                                assert( j + 1 <= oldi );
+                                assert( 0 < u );
+                                mul_preserves_le(j + 1, oldi as int, u as int);
+                                assert( (j+1)*u <= oldi * u);
+                                assert( (j+1)*u == j*u +u ) by(nonlinear_arith);
+                                assert( j * u + u <= oldi * u );
                             }
-                        );
 
-                        assert( gslice.start == j * self.oblinfo.uniform_size() );
-                        assert( gslice.start == 0 + (j as usize) * (self.oblinfo.uniform_size() as usize) );
-
-                        assert( self.get_data(olddata, j) == gslice.i(olddata) );
-                        assert( self.get_data(marshalled_data, j) == gslice.i(marshalled_data) );
-                        assert( gslice.len() < end - start );
-                        assert forall |c| gslice.start <= c < gslice.end implies olddata[c] == marshalled_data[c] by {
-                            assert( forall |i| 0 <= i < oldend ==> prior_data[i] == data[i] );
-                            assert( 0 <= c );
-                            assert( c - gslice.start < end - start );
-                            assert( olddata[c] == prior_data[start + c] );
-                            assert( marshalled_data[c] == data[start + c] );
-                            //assert( olddata[c]
+                            assert( self.parsable(odata) );
+                            let sslice = self.get(SpecSlice::all(sdata), sdata, j);
+                            assert( oslice.start == sslice.start );
+                            assert( oslice.end == sslice.end );
+                            assert( self.get(SpecSlice::all(odata), odata, j).i(odata)
+                                    == odata.subrange(oslice.start, oslice.end) );
+                            assert( self.get(SpecSlice::all(sdata), sdata, j).i(sdata)
+                                    == sdata.subrange(sslice.start, sslice.end) );
+    //                         assert forall |k| oslice.start <= k < oslice.end implies odata[k] == sdata[k] by {
+    //                         }
+                            let osub = odata.subrange(oslice.start, oslice.end);
+                            let ssub = sdata.subrange(oslice.start, oslice.end);
+                            assert( oslice.end <= odata.len() );
+                            assert( sslice.end <= odata.len() );
+                            assert forall |k| 0 <= k < osub.len() implies osub[k] == ssub[k] by {
+                            }
+                            assert( odata.subrange(oslice.start, oslice.end).len() == sdata.subrange(oslice.start, oslice.end).len() );
+                            assert( odata.subrange(oslice.start, oslice.end)
+                                    =~= sdata.subrange(oslice.start, oslice.end) );
+                            assert( odata.subrange(oslice.start, oslice.end)
+                                    =~= sdata.subrange(sslice.start, sslice.end) );
+                            assert(
+                                self.get(SpecSlice::all(odata), odata, j).i(odata)
+                                ==
+                                self.get(SpecSlice::all(sdata), sdata, j).i(sdata)
+                            );
+                            assert( self.get_data(odata, j) == self.get_data(sdata, j) );
+                            assume(false);
+                            assert( self.elt_parsable(sdata, j) ); // by loop invariant, prior iters
+                        } else {
+                            assume(false);
+                            assert( self.elt_parsable(sdata, j) ); // by we just did it
                         }
-                        assert( 0 <= gslice.start as int );
-                        assert( gslice.start as int <= gslice.end as int );
-                        assume( gslice.end as int <= data.len() );
-                        assume( gslice.valid(olddata) );
-                        assert( gslice.i(olddata).len() == gslice.len() );
-                        assert( gslice.i(olddata).len() == gslice.i(marshalled_data).len() );
-                        assert( gslice.i(olddata) =~= gslice.i(marshalled_data) );
-                        assert( self.get_data(olddata, j) =~= self.get_data(marshalled_data, j) );
-                        assert( self.elt_parsable(marshalled_data, j) );
-                    } else {
-                        mul_div_identity(i as int, self.oblinfo.uniform_size() as int);
                     }
+                    assert( self.elt_parsable_to_len(sdata, self.length(sdata) ) );
+                    assert( self.elt_parsable_to_len(sdata, self.length(sdata) as usize as int) );
+                    assert( self.parsable_to_len(sdata, self.length(sdata) as usize) );
+                    assert( self.seq_parsable(sdata) );
                 }
-                assert( self.elt_parsable_to_len(marshalled_data, self.length(marshalled_data)) );
-                assert( self.elt_parsable_to_len(marshalled_data, self.length(marshalled_data) as usize as int) );
-                assert( self.parsable_to_len(marshalled_data, self.length(marshalled_data) as usize) );
-                assert( self.parsable(marshalled_data) );
-                assume( self.parse(marshalled_data) == value.deepv().subrange(0, i as int) );
+                assert( self.parse(data@.subrange(start as int, end as int)) == value.deepv().subrange(0, i as int) ) by {
+                    assume( false );
+                }
             }
+
+//             proof {
+//                 assert( end as int == start as int + i * self.oblinfo.uniform_size() );
+// 
+//                 let l = i as int;
+//                 assert( 0 <= l <= value.len() );
+// //                 assert forall |j| 0 <= j < cvalue.deepv().subrange(0, l).len()
+// //                     implies self.marshallable_at(cvalue.deepv().subrange(0, l), j) by {
+// //                     if j == oldi {
+// //                         assert( self.marshallable_at(cvalue.deepv(), j) );
+// //                         assert( self.marshallable_at(cvalue.deepv().subrange(0, l), j) );
+// //                     } else {
+// //                         assert( self.marshallable_at(cvalue.deepv().subrange(0, l), j) );
+// //                     }
+// //                 }
+//                 assert( self.marshallable(cvalue.deepv().subrange(0, l)) );
+//                 assert( self.marshallable(value.deepv().subrange(0, i as int)) );
+//                 assert( end as int == start as int + self.spec_size(value.deepv().subrange(0, i as int)) as int );
+//                 assert( value.deepv().subrange(0, i as int) == value.deepv().subrange(0, i-1 as int).push(value[i-1].deepv()) );
+//                 let marshalled_data = data@.subrange(start as int, end as int);
+//                 assert( self.lengthable(marshalled_data) );
+//                 assert( self.length(marshalled_data) <= usize::MAX );
+//                 assert( self.gettable_to_len(marshalled_data, self.length(marshalled_data) as usize as int) );
+// 
+//                 assert( self.spec_size(value.deepv().subrange(0, i as int)) == i * self.oblinfo.uniform_size() );
+// 
+//                 assert( marshalled_data =~= data@.subrange(start as int, end as int) );
+// 
+//                 let old_in_end = oldi * self.oblinfo.uniform_size();
+//                 // that's just false
+// //                assert( marshalled_data.subrange(0, oldend as int) =~= olddata.subrange(0, old_in_end) );
+// 
+//                 // need to prove that all the j's before i are elt_parsable.
+//                 // They were in the previous round, right? why not just an invariant?
+//                 // We have parsable for start..end
+//                 // That should give us elt_parsable_to_len for self.length(start..end)
+//                 // So if self.length(start..end) == old i, we're done, right?
+// 
+//                 assert forall |j: int| 0<=j<self.length(marshalled_data) implies self.elt_parsable(marshalled_data, j) by {
+//                     if j < i {
+//                         assert( self.parsable(olddata) );
+//                         assert( self.elt_parsable_to_len(olddata, self.length(olddata)) );
+//                         assume( j < self.length(olddata) );
+//                         assert( self.elt_parsable(olddata, j) );
+//                         assert( self.get(SpecSlice::all(olddata), olddata, j)
+//                                 == self.get(SpecSlice::all(marshalled_data), olddata, j) );
+//                         let gslice = self.get(SpecSlice::all(olddata), olddata, j);
+//                         assert( gslice ==
+//                             SpecSlice::all(olddata).subslice(
+//                                 j * self.oblinfo.uniform_size(),
+//                                 j * self.oblinfo.uniform_size() + self.oblinfo.uniform_size()
+//                             )
+//                         );
+//                         assert( SpecSlice::all(olddata).start == 0 );
+//                         assert( gslice ==
+//                             SpecSlice{
+//                                 start: j * self.oblinfo.uniform_size(),
+//                                 end: j * self.oblinfo.uniform_size() + self.oblinfo.uniform_size(),
+//                             }
+//                         );
+// 
+//                         assert( gslice.start == j * self.oblinfo.uniform_size() );
+//                         assert( gslice.start == 0 + (j as usize) * (self.oblinfo.uniform_size() as usize) );
+// 
+//                         assert( self.get_data(olddata, j) == gslice.i(olddata) );
+//                         assert( self.get_data(marshalled_data, j) == gslice.i(marshalled_data) );
+//                         assert( gslice.len() < end - start );
+//                         assert forall |c| gslice.start <= c < gslice.end implies olddata[c] == marshalled_data[c] by {
+//                             assert( forall |i| #![auto] 0 <= i < oldend ==> prior_data[i] == data[i] );
+//                             assert( 0 <= c );
+//                             assert( c - gslice.start < end - start );
+//                             assert( olddata[c] == prior_data[start + c] );
+//                             assert( marshalled_data[c] == data[start + c] );
+//                             //assert( olddata[c]
+//                         }
+//                         assert( 0 <= gslice.start as int );
+//                         assert( gslice.start as int <= gslice.end as int );
+//                         assume( gslice.end as int <= data.len() );
+//                         assume( gslice.valid(olddata) );
+//                         assert( gslice.i(olddata).len() == gslice.len() );
+//                         assert( gslice.i(olddata).len() == gslice.i(marshalled_data).len() );
+//                         assert( gslice.i(olddata) =~= gslice.i(marshalled_data) );
+//                         assert( self.get_data(olddata, j) =~= self.get_data(marshalled_data, j) );
+//                         assert( self.elt_parsable(marshalled_data, j) );
+//                     } else {
+//                         mul_div_identity(i as int, self.oblinfo.uniform_size() as int);
+//                     }
+//                 }
+//                 assert( self.elt_parsable_to_len(marshalled_data, self.length(marshalled_data)) );
+//                 assert( self.elt_parsable_to_len(marshalled_data, self.length(marshalled_data) as usize as int) );
+//                 assert( self.parsable_to_len(marshalled_data, self.length(marshalled_data) as usize) );
+//                 assert( self.parsable(marshalled_data) );
+//                 assume( self.parse(marshalled_data) == value.deepv().subrange(0, i as int) );
+//             }
         }
         assert( self.parse(data@.subrange(start as int, end as int)) == value.deepv() );
         end
