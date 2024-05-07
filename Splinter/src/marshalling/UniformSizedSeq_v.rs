@@ -560,74 +560,30 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
         let mut i: usize = 0;
         let mut end = start;
 
-        // TODO(verus): this is super clumsy, since we know value is a constant throughout the
-        // while loop
-        let ghost cvalue = value;
-
         proof {
-            assert( end as int <= data@.len() );    // bogus recommendation noise
-            let marshalled_data = data@.subrange(start as int, end as int);
-            assert( marshalled_data == Seq::<u8>::empty() );
-            assert( self.seq_valid() );
-            assert( self.lengthable(marshalled_data) );
-            assert( self.marshallable(value.deepv()) );
-            assert( value.deepv().len() * self.oblinfo.uniform_size() <= usize::MAX );
-            assert( value.deepv().len() == value.len() );
-
-            assert( cvalue == value );
-//             assert forall |l| 0 <= l <= cvalue.len() implies #[trigger] self.marshallable(cvalue.deepv().subrange(0, l)) by {
-//                 self.marshallable_subrange(cvalue.deepv(), l);
-//             }
-
-            // no spec_ensures wastes another 20 minutes of my life
             self.oblinfo.uniform_size_ensures();
 
-//             assert( marshalled_data.len() <= usize::MAX );
-            let a = marshalled_data.len() as int;
-            let b = self.oblinfo.uniform_size() as int;
-            assert( a <= usize::MAX );
-            assert( 0 < b );
-            assert( a / b <= usize::MAX );
-//             assert(
-//                 (marshalled_data.len() as int) / (self.oblinfo.uniform_size() as int) <= usize::MAX );
-
-//             assert( self.length(marshalled_data) <= usize::MAX );
-//             assert( self.parsable_to_len(marshalled_data, self.length(marshalled_data) as usize) );
-            assert( self.seq_parsable(marshalled_data) );
-
+            // trigger extn equality
             assert( self.parse(data@.subrange(start as int, end as int)) == value.deepv().subrange(0, i as int) );
         }
-        // proof missing
-        
+
         while i < value.len()
         invariant
-//            self.marshallable(value.deepv()),
-//            start as int + self.spec_size(value.deepv()) as int <= old(data).len(),
-
             0 <= i <= value.len(),
             data@.len() == old(data)@.len(),
-
-            // TODO(jonh): try Chris' new thingy #![verifier::spinoff_loop(false)]
-            // Oh baby that was sweet.
-//            cvalue == value,
-//             forall |l| 0 <= l <= cvalue.len() ==> #[trigger] self.marshallable(cvalue.deepv().subrange(0, l)),
-
-//            self.marshallable(cvalue.deepv().subrange(0, i as int)),
-            self.marshallable(value.deepv()),   // Hmm, verifier::spinoff_loop(false) should obviate this
             end as int == start as int + self.spec_size(value.deepv().subrange(0, i as int)) as int,
             end as int == start as int + i * self.oblinfo.uniform_size(),
-//             end as int <= data@.len() as int,
             forall |j| 0 <= j < start ==> data@[j] == old(data)@[j],
             forall |j| end as int <= j < old(data)@.len() ==> data@[j] == old(data)@[j],
 
             // TODO(verus): another decoy recommends failure that proves if you just ask for it
-            end as int <= data@.len(),
-
+//             end as int <= data@.len(),
             self.parsable(data@.subrange(start as int, end as int)),
             self.parse(data@.subrange(start as int, end as int)) == value.deepv().subrange(0, i as int),
-            // shouldn't need to pull this through from requires with spinoff_loop(false). grr.
+
+            // These should have been pulled through the loop via spinoff_loop(false); not sure why that didn't work.
+            self.marshallable(value.deepv()),
             start as int + self.spec_size(value.deepv()) as int <= old(data).len(),
-//            i == (end - start) / self.oblinfo.uniform_size() as int,
         {
             let ghost oldend = end;
             assert( oldend as int == start as int + self.spec_size(value.deepv().subrange(0, i as int)) as int );
@@ -635,35 +591,23 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
             let ghost oldi = i;
 
             proof {
+                // TODO(verus): lament of the spec ensures
+                // Also lament that this fact didn't get carried around the while invariants automatically. :v(
+                self.oblinfo.uniform_size_ensures();
+
                 if i as int + 1 < value.len() {
-                    self.oblinfo.uniform_size_ensures();   // TODO(verus): lament of the spec ensures
                     pos_mul_preserves_order(i as int + 1, value.len() as int, self.oblinfo.uniform_size() as int);
                 }
                 distribute_left(i as int, 1, self.oblinfo.uniform_size() as int);
-            }
 
-            // assert( self.marshallable(value.deepv()) );
-            // assert( self.eltm.marshallable(value.deepv()[i as int]) );
-            proof {
                 let esz = self.eltm.spec_size(value.deepv()[i as int]) as int;
                 assert( esz == self.oblinfo.uniform_size() ) by {
                     assert( self.marshallable_at(value.deepv(), i as int) );
                 }
-                self.oblinfo.uniform_size_ensures();   // TODO(verus): lament of the spec ensures
-                assert( end as int == start as int + i * self.oblinfo.uniform_size() );
-                assert( end as int + esz == start as int + i * self.oblinfo.uniform_size() + self.oblinfo.uniform_size() );
 
-                assert( start as int + self.spec_size(value.deepv()) as int <= old(data).len() );
-
-                assert( end as int + esz <= data.len() );
-            }
-
-            let ghost prior_data = data@;    // note not subranged
-            assert( olddata == prior_data.subrange(start as int, end as int) );
-
-            // this assertion is flaky depending on rest of proof context
-            assert( self.eltm.marshallable(value[i as int].deepv()) ) by {
-                assert( self.marshallable_at(value.deepv(), i as int) );
+                assert( self.eltm.marshallable(value[i as int].deepv()) ) by {
+                    assert( self.marshallable_at(value.deepv(), i as int) );
+                }
             }
 
             end = self.eltm.exec_marshall(&value[i], data, end);
@@ -676,38 +620,29 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
 
                 let odata = data@.subrange(start as int, oldend as int);
                 let sdata = data@.subrange(start as int, end as int);
-                assert( i == self.length(sdata) ) by { div_plus_one(oldi as int, oldend-start, u); }
-                assert( self.parsable(sdata) ) by {
-                    assert forall |j: int| 0<=j<self.length(sdata) implies self.elt_parsable(sdata, j) by {
-                        if j < oldi {
-                            // j was from an earlier iteration; appeal to invariants
-                            mul_preserves_le(j + 1, oldi as int, u as int);
-                            assert( (j+1)*u == j*u +u ) by(nonlinear_arith);
-                            assert( self.get_data(odata, j) == self.get_data(sdata, j) );   // trigger extn equality
-
-                            assert( self.elt_parsable(odata, j) ); // trigger loop invariant
-                        } else {
-                            // we just marshalled j
-                            assert( data@.subrange(oldend as int, end as int) =~= self.get_data(sdata, j) );    // trigger extn equality
-                        }
-                    }
-//                     assert( self.seq_parsable(sdata) );
-                }
-
-                // Frustratingly, this proof is almost entirely identical to the prior proof, with
-                // the exception of a different trigger for the different loop invariant. However,
-                // when I tried rolling them together, the 'assert forall' had two conjuncts, but I
-                // could only trigger on one or the other, so I couldn't extract both conclusions.
                 let osubv = value.deepv().subrange(0, oldi as int);
                 let subv = value.deepv().subrange(0, i as int);
-                assert( self.parse(sdata) =~= subv ) by {
-                    assert forall |j: int| #![auto] 0<=j<i implies self.get_elt(sdata, j) == subv[j] by {
+
+                assert( i == self.length(sdata) ) by { div_plus_one(oldi as int, oldend-start, u); }
+
+                // Prove two inductive steps together because they share most proof text.
+                assert( self.parsable(sdata) && self.parse(sdata) =~= subv ) by {
+                    assert forall |j: int|
+                        // Mention both triggers to be able to use both conjuncts of the forall
+                        // when we're done.
+                        #![trigger self.elt_parsable(sdata, j)]
+                        #![trigger self.get_elt(sdata, j)]
+                        0<=j<self.length(sdata)
+                        implies
+                        self.elt_parsable(sdata, j) && self.get_elt(sdata, j) == subv[j]
+                    by {
                         if j < oldi {
                             // j was from an earlier iteration; appeal to invariants
                             mul_preserves_le(j + 1, oldi as int, u as int);
                             assert( (j+1)*u == j*u +u ) by(nonlinear_arith);
                             assert( self.get_data(odata, j) == self.get_data(sdata, j) );   // trigger extn equality
 
+                            assert( self.elt_parsable(odata, j) ); // trigger old parsable
                             assert( self.eltm.parse(self.get_data(olddata, j)) == osubv[j] );    // trigger old parse_to_len
                         } else {
                             // we just marshalled j
@@ -717,7 +652,7 @@ impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DV
                 }
             }
         }
-        assert( self.parse(data@.subrange(start as int, end as int)) == value.deepv() );
+        assert( self.parse(data@.subrange(start as int, end as int)) == value.deepv() );    // trigger extn equality
         end
     }
 }
