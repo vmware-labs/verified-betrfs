@@ -1,13 +1,13 @@
 // Copyright 2018-2023 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-/// This file defines the PivotBranch data structure. Under the `betree/` folder, all "Branch" data structures are
-/// just B+-trees. They are called "Branches" to distinguish them from the Be-tree data structures, and because
-/// Be-tree nodes can point to B+-trees (thus making B+-trees "branches" of a Be-tree).
-/// 
-/// A PivotBranch is a B+-tree defined in its most natural form, where the pivots are Keys, and Index nodes directly
-/// contain sequences of their children (i.e.: in a concrete implementation its one massive nested data structure, instead
-/// of using pointers). AKA it's a "functional" tree (immutable, defined).
+// This file defines the PivotBranch data structure. Under the `betree/` folder, all "Branch" data structures are
+// just B+-trees. They are called "Branches" to distinguish them from the Be-tree data structures, and because
+// Be-tree nodes can point to B+-trees (thus making B+-trees "branches" of a Be-tree).
+// 
+// A PivotBranch is a B+-tree defined in its most natural form, where the pivots are Keys, and Index nodes directly
+// contain sequences of their children (i.e.: in a concrete implementation its one massive nested data structure, instead
+// of using pointers). AKA it's a "functional" tree (immutable, defined).
 
 use builtin::*;
 

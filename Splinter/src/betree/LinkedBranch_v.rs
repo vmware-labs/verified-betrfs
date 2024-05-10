@@ -13,8 +13,13 @@ use crate::spec::Messages_t::*;
 // use crate::betree::Domain_v::*;
 use crate::disk::GenericDisk_v::*;
 
-// LinkedBranch module stores each node in the b+tree on a different disk address
+// Refinement is a submodule of LinkedBranch so that it can access all internal details
+// of LinkedBranch.
+pub mod Refinement_v;
 
+// A LinkedBranch represents a B+-tree where nodes store the addresses of other nodes (rather
+// than functionally storing the other nodes recursively as PivotBranch does).
+// In our refinement `LinkedBranch`es refine to `PivotBranch`es.
 verus! {
 
 pub enum SplitArg {
@@ -53,9 +58,12 @@ impl SplitArg {
     }
 }
 
+/// A LinkedBranch node. See PivotBranch_v::Node for more details.
+/// A LinkedBranch node stores addresses of other nodes rather than
+/// storing the Nodes directly.
 pub enum Node {
+    Leaf{keys: Seq<Key>, msgs: Seq<Message>},
     Index{pivots: Seq<Key>, children: Seq<Address>},
-    Leaf{keys: Seq<Key>, msgs: Seq<Message>}
 }
 
 impl Node {
@@ -87,18 +95,23 @@ impl Node {
     }
 }
 
+/// A DiskView is, well, a view of the disk. We view the disk as a mapping from Addresses to LinkedBranch
+/// nodes. For LinkedBranch we assume all addresses map to LinkedBranch nodes.
 #[verifier::ext_equal]
 pub struct DiskView {
     pub entries: Map<Address, Node>
 }
 
 impl DiskView {
+    /// DiskView::wf() ensures that all LinkedBranch nodes in the disk are well formed, and that
+    /// all Addresses pointed to by all nodes are themselves valid addresses.
     pub open spec(checked) fn wf(self) -> bool
     {
         &&& self.entries_wf()
         &&& self.no_dangling_address()
     }
 
+    /// Returns true iff all Nodes mapped by this DiskView are well formed.
     pub open spec(checked) fn entries_wf(self) -> bool
     {
         forall |addr| #[trigger] self.entries.contains_key(addr) ==> self.entries[addr].wf()
@@ -212,7 +225,82 @@ pub struct LinkedBranch {
     pub disk_view: DiskView
 }
 
+// The "public" facing interface of LinkedBranch is meant to be just limited to
+// to the following functions: query, insert, grow, append, split.
+// However due to how we put every file into its own module and how
+// in this project we split out refinement proofs into separate files, this means we
+// can't keep just these functions public, and instead need to make all LinkedBranch
+// methods public so that the refinement proof module is able to access and reason about
+// all spec fn's listed here.
 impl LinkedBranch {
+    // ====================
+    // Public Transition Function (BEGIN)
+    // ====================
+    // These are the "state machine transitions" on the type which need to be refined.
+
+    pub closed spec/*XXX (checked)*/ fn query(self, key: Key) -> Message
+    {
+        // Need route ensures to satisfy query_internal when to restore checked
+        if self.acyclic() {
+            self.query_internal(key, self.the_ranking())
+        } else {
+            Message::Update{delta: nop_delta()}
+        }
+    }
+
+    pub open spec/*XXX (checked)*/ fn insert(self, key: Key, msg: Message, path: Path) -> LinkedBranch
+        recommends
+            self.wf(),
+            path.valid(),
+            path.branch == self,
+            path.key == key,
+            path.target().root() is Leaf,
+    {
+        // Need path.valid() ==> path.target().has_root() && path.target().wf() to restore checked
+        path.substitute(path.target().insert_leaf(key, msg))
+    }
+
+    pub open spec(checked) fn grow(self, addr: Address) -> LinkedBranch
+        recommends
+            self.wf(),
+            self.disk_view.is_fresh(set!{addr})
+    {
+        let new_root = Node::Index{pivots: seq![], children: seq![self.root]};
+        let new_disk_view = self.disk_view.modify_disk(addr, new_root);
+        LinkedBranch{root: addr, disk_view: new_disk_view}
+    }
+
+    pub open spec/*XXX (checked)*/ fn append(self, keys: Seq<Key>, msgs: Seq<Message>, path: Path) -> LinkedBranch
+        recommends
+            self.wf(),
+            path.valid(),
+            path.branch == self,
+            path.target().root() == (Node::Leaf{keys: seq![], msgs: seq![]}),
+            keys.len() > 0,
+            keys.len() == msgs.len(),
+            Key::is_strictly_sorted(keys),
+            path.key == keys[0],
+            path.path_equiv(keys.last())
+    {
+        // Need path.valid() ==> path.target().wf() to restore checked
+        path.substitute(path.target().append_to_new_leaf(keys, msgs))
+    }
+
+    pub open spec(checked) fn split(self, addr: Address, path: Path, split_arg: SplitArg) -> LinkedBranch
+        recommends
+            self.wf(),
+            path.valid(),
+            path.branch == self,
+            path.target().can_split_child_of_index(split_arg, addr),
+            self.disk_view.is_fresh(set!{addr})
+    {
+        path.substitute(path.target().split_child_of_index(split_arg, addr))
+    }
+
+    // ====================
+    // Public Transition Functions (END)
+    // ====================
+
     pub open spec(checked) fn wf(self) -> bool
     {
         &&& self.disk_view.wf()
@@ -446,26 +534,6 @@ impl LinkedBranch {
         }
     }
 
-    pub open spec/*XXX (checked)*/ fn query(self, key: Key) -> Message
-    {
-        // Need route ensures to satisfy query_internal when to restore checked
-        if self.acyclic() {
-            self.query_internal(key, self.the_ranking())
-        } else {
-            Message::Update{delta: nop_delta()}
-        }
-    }
-
-    pub open spec(checked) fn grow(self, addr: Address) -> LinkedBranch
-        recommends
-            self.wf(),
-            self.disk_view.is_fresh(set!{addr})
-    {
-        let new_root = Node::Index{pivots: seq![], children: seq![self.root]};
-        let new_disk_view = self.disk_view.modify_disk(addr, new_root);
-        LinkedBranch{root: addr, disk_view: new_disk_view}
-    }
-
     pub open spec/*XXX (checked)*/ fn insert_leaf(self, key: Key, msg: Message) -> LinkedBranch
         recommends
             self.wf(),
@@ -483,18 +551,6 @@ impl LinkedBranch {
         LinkedBranch{root: self.root, disk_view: self.disk_view.modify_disk(self.root, new_node)}
     }
 
-    pub open spec/*XXX (checked)*/ fn insert(self, key: Key, msg: Message, path: Path) -> LinkedBranch
-        recommends
-            self.wf(),
-            path.valid(),
-            path.branch == self,
-            path.key == key,
-            path.target().root() is Leaf,
-    {
-        // Need path.valid() ==> path.target().has_root() && path.target().wf() to restore checked
-        path.substitute(path.target().insert_leaf(key, msg))
-    }
-
     pub open spec(checked) fn append_to_new_leaf(self, new_keys: Seq<Key>, new_msgs: Seq<Message>) -> LinkedBranch
         recommends
             self.wf(),
@@ -505,22 +561,6 @@ impl LinkedBranch {
         let new_node = Node::Leaf{keys: new_keys, msgs: new_msgs};
         let new_disk_view = self.disk_view.modify_disk(self.root, new_node);
         LinkedBranch{root: self.root, disk_view: new_disk_view}
-    }
-
-    pub open spec/*XXX (checked)*/ fn append(self, keys: Seq<Key>, msgs: Seq<Message>, path: Path) -> LinkedBranch
-        recommends
-            self.wf(),
-            path.valid(),
-            path.branch == self,
-            path.target().root() == (Node::Leaf{keys: seq![], msgs: seq![]}),
-            keys.len() > 0,
-            keys.len() == msgs.len(),
-            Key::is_strictly_sorted(keys),
-            path.key == keys[0],
-            path.path_equiv(keys.last())
-    {
-        // Need path.valid() ==> path.target().wf() to restore checked
-        path.substitute(path.target().append_to_new_leaf(keys, msgs))
     }
 
     pub open spec(checked) fn split_leaf(self, split_arg: SplitArg, right_root_addr: Address) -> (LinkedBranch, LinkedBranch)
@@ -620,17 +660,6 @@ impl LinkedBranch {
             .merge_disk(left_branch.disk_view)
             .modify_disk(self.root, new_root);
         LinkedBranch{root: self.root, disk_view: new_disk_view}
-    }
-
-    pub open spec(checked) fn split(self, addr: Address, path: Path, split_arg: SplitArg) -> LinkedBranch
-        recommends
-            self.wf(),
-            path.valid(),
-            path.branch == self,
-            path.target().can_split_child_of_index(split_arg, addr),
-            self.disk_view.is_fresh(set!{addr})
-    {
-        path.substitute(path.target().split_child_of_index(split_arg, addr))
     }
 }
 
