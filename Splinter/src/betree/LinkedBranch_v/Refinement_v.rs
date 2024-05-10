@@ -13,57 +13,47 @@ use crate::disk::GenericDisk_v::Ranking;
 
 verus! {
 
-// Add intepretation function for each node in a LinkedBranch.
-impl Node {
-    /// Returns the PivotBranch_v::Node interpretation of the LinkedBranch::Node
-    /// located at the provided address in the provided disk_view.
-    // TODO: need to figure out why the decreases-when is not proving
-    // pub open spec fn i(disk_view: DiskView, addr: Address, ranking: Ranking) -> PivotBranch_v::Node
-    //     recommends
-    //         disk_view.wf(),
-    //         disk_view.valid_address(addr),
-    //         disk_view.valid_ranking(ranking),
-    //         ranking.contains_key(addr),
-    //     decreases ranking[addr] when disk_view.wf() && disk_view.valid_address(addr) && disk_view.valid_ranking(ranking) && ranking.contains_key(addr)
-    //         via Self::ranking_decreases
-    // {
-    //     let node = disk_view.entries[addr];
-    //     match node {
-    //         Node::Leaf{keys, msgs} => {
-    //             PivotBranch_v::Node::Leaf{ keys: keys, msgs: msgs }
-    //         },
-    //         Node::Index{pivots, children} => {
-    //             PivotBranch_v::Node::Index{
-    //                 pivots: pivots,
-    //                 children: Seq::new(
-    //                     children.len(),
-    //                     |i| Node::i(disk_view, children[i], ranking)
-    //                 ),
-    //             }
-    //         },
-    //     }
-    // }
+impl LinkedBranch {
+    /// Returns the PivotBranch_v::Node interpretation of the LinkedBranch
+    pub open spec/*XXX (checked)*/ fn i(self) -> PivotBranch_v::Node
+        recommends
+            self.acyclic(),
+    {
+        // Need the_ranking ensures to restore checked
+        let ranking = self.the_ranking();
+        self.i_internal(ranking)
+    }
 
-    // // Seems like a `decreases_by` gets its preconditions and postconditions from where it is called.
-    // // Ah, it's because the `decreases_by` needs to have the exact same arguments as the spec function,
-    // // and when passing you need to just pass function (not invoke it directly) 
-    // // otherwise you get really confusing VIR dump.
-    // #[verifier::decreases_by]
-    // proof fn ranking_decreases(disk_view: DiskView, addr: Address, ranking: Ranking)
-    // {
-    //     let node = disk_view.entries[addr];
-    //     assert(disk_view.valid_address(addr));
-    //     assert(disk_view.valid_ranking(ranking));
-    //     assert(ranking.contains_key(addr) && disk_view.entries.contains_key(addr));
-    //     assert(disk_view.node_children_respects_rank(ranking, addr));
-
-    //     match node {
-    //         Node::Leaf{keys, msgs} => {},
-    //         Node::Index{pivots, children} => {
-    //             assert(forall |i: nat| 0 <= i < children.len() ==> node.valid_child_index(i));
-    //         },
-    //     }
-    // }
+    pub open spec(checked) fn i_internal(self, ranking: Ranking) -> PivotBranch_v::Node
+        recommends
+            self.wf(),
+            self.valid_ranking(ranking),
+        decreases self.get_rank(ranking)
+        when self.wf() && self.valid_ranking(ranking)
+    {
+        match self.root() {
+            Node::Leaf{keys, msgs} => {
+                PivotBranch_v::Node::Leaf{ keys: keys, msgs: msgs }
+            },
+            Node::Index{pivots, children} => {
+                PivotBranch_v::Node::Index{
+                    pivots: pivots,
+                    children: Seq::new(
+                        children.len(),
+                        // Need this weird hack to prove decreases because valid_ranking triggers
+                        // on valid_child_index
+                        |i|
+                            // 0 <= i < children.len() ==> self.root().valid_child_index(i as nat)
+                            if self.root().valid_child_index(i as nat) {
+                                self.child_at_idx(i as nat).i_internal(ranking)
+                            } else {
+                                PivotBranch_v::invalid_node()
+                            }
+                    ),
+                }
+            },
+        }
+    }
 }
 
 } // verus!

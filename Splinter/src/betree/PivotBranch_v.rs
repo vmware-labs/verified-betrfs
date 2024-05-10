@@ -387,6 +387,10 @@ impl Node {
     }
 }
 
+pub open spec(checked) fn invalid_node() -> Node {
+    Node::Leaf{keys: seq![], msgs: seq![]}
+}
+
 /// A `Path` describes a target node from a given starting node (using a key to target as well
 /// as a number of steps to take).
 #[verifier::ext_equal]

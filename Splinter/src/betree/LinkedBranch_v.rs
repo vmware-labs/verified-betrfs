@@ -17,9 +17,8 @@ use crate::disk::GenericDisk_v::*;
 // of LinkedBranch.
 pub mod Refinement_v;
 
-// A LinkedBranch represents a B+-tree where nodes store the addresses of other nodes (rather
-// than functionally storing the other nodes recursively as PivotBranch does).
-// In our refinement `LinkedBranch`es refine to `PivotBranch`es.
+// A LinkedBranch represents a B+ tree where each node is stored at a different disk address.
+// LinkedBranch refines to PivotBranch.
 verus! {
 
 pub enum SplitArg {
@@ -40,10 +39,11 @@ impl SplitArg {
             }
             Self::SplitIndex{pivot, pivot_index} => {
                 &&& root is Index
-                &&& root->children.len() == root.arrow_Index_pivots().len() + 1
+                // &&& split_branch.wf() // TODO(x9du): not sure if this is needed/correct
+                &&& root->children.len() == root->pivots.len() + 1 // split_branch.wf() implies this
                 &&& split_branch.acyclic() ==> split_branch.all_keys_in_range()
-                &&& 0 <= pivot_index < root.arrow_Index_pivots().len()
-                &&& root.arrow_Index_pivots()[pivot_index] == pivot
+                &&& 0 <= pivot_index < root->pivots.len()
+                &&& root->pivots[pivot_index] == pivot
             }
         }
     }
@@ -59,8 +59,8 @@ impl SplitArg {
 }
 
 /// A LinkedBranch node. See PivotBranch_v::Node for more details.
-/// A LinkedBranch node stores addresses of other nodes rather than
-/// storing the Nodes directly.
+/// A LinkedBranch node stores addresses of child nodes rather than recursively storing the child
+/// nodes themselves as PivotBranch does.
 pub enum Node {
     Leaf{keys: Seq<Key>, msgs: Seq<Message>},
     Index{pivots: Seq<Key>, children: Seq<Address>},
@@ -90,7 +90,7 @@ impl Node {
     pub open spec(checked) fn route(self, key: Key) -> int
         recommends self.wf()
     {
-        let s = if self is Leaf { self->keys } else { self.arrow_Index_pivots() };
+        let s = if self is Leaf { self->keys } else { self->pivots };
         Key::largest_lte(s, key)
     }
 }
@@ -103,7 +103,7 @@ pub struct DiskView {
 }
 
 impl DiskView {
-    /// DiskView::wf() ensures that all LinkedBranch nodes in the disk are well formed, and that
+    /// Ensures that all LinkedBranch nodes in the disk are well formed, and that
     /// all Addresses pointed to by all nodes are themselves valid addresses.
     pub open spec(checked) fn wf(self) -> bool
     {
@@ -145,7 +145,7 @@ impl DiskView {
     {
         let node = self.get(addr);
         if node is Index {
-            node.arrow_Index_pivots().to_set()
+            node->pivots.to_set()
         } else {
             node->keys.to_set()
         }
@@ -219,6 +219,7 @@ pub open spec(checked) fn empty_disk() -> DiskView
     DiskView{entries: map!{}}
 }
 
+// A B+ tree represented by a disk that maps addresses to nodes and the address of its root node.
 #[verifier::ext_equal]
 pub struct LinkedBranch {
     pub root: Address,
@@ -291,6 +292,7 @@ impl LinkedBranch {
             self.wf(),
             path.valid(),
             path.branch == self,
+            path.key == split_arg.get_pivot(),
             path.target().can_split_child_of_index(split_arg, addr),
             self.disk_view.is_fresh(set!{addr})
     {
@@ -416,7 +418,7 @@ impl LinkedBranch {
         if self.root() is Leaf {
             self.root()->keys.to_set()
         } else {
-            let pivot_keys = self.root().arrow_Index_pivots().to_set();
+            let pivot_keys = self.root()->pivots.to_set();
             let index_keys = self.children_keys(ranking, 0);
             pivot_keys + index_keys
         }
@@ -437,11 +439,11 @@ impl LinkedBranch {
             self.wf(),
             self.valid_ranking(ranking),
             self.root() is Index,
-            0 <= i < self.root().arrow_Index_pivots().len()
+            0 <= i < self.root()->pivots.len()
         decreases self.get_rank(ranking)
     {
         // Need valid ranking implies child has valid ranking to restore checked
-        forall |key| self.child_at_idx(i as nat).all_keys(ranking).contains(key) ==> Key::lt(key, self.root().arrow_Index_pivots()[i])
+        forall |key| self.child_at_idx(i as nat).all_keys(ranking).contains(key) ==> Key::lt(key, self.root()->pivots[i])
     }
 
     pub open spec/*XXX (checked)*/ fn all_keys_above_bound(self, i: int, ranking: Ranking) -> bool
@@ -449,11 +451,11 @@ impl LinkedBranch {
             self.wf(),
             self.valid_ranking(ranking),
             self.root() is Index,
-            0 <= i - 1 < self.root().arrow_Index_pivots().len()
+            0 <= i - 1 < self.root()->pivots.len()
         decreases self.get_rank(ranking)
     {
         // Need valid ranking implies child has valid ranking to restore checked
-        forall |key| self.child_at_idx(i as nat).all_keys(ranking).contains(key) ==> #[trigger] Key::lte(self.root().arrow_Index_pivots()[i-1], key)
+        forall |key| self.child_at_idx(i as nat).all_keys(ranking).contains(key) ==> #[trigger] Key::lte(self.root()->pivots[i-1], key)
     }
 
     pub open spec(checked) fn child_at_idx(self, i: nat) -> LinkedBranch
@@ -591,11 +593,11 @@ impl LinkedBranch {
         recommends
             self.has_root(),
             self.root() is Index,
-            self.root()->children.len() == self.root().arrow_Index_pivots().len() + 1,
+            self.root()->children.len() == self.root()->pivots.len() + 1,
             0 <= from < to <= self.root()->children.len()
     {
         Node::Index{
-            pivots: self.root().arrow_Index_pivots().subrange(from, to-1),
+            pivots: self.root()->pivots.subrange(from, to-1),
             children: self.root()->children.subrange(from, to)
         }
     }
@@ -607,7 +609,7 @@ impl LinkedBranch {
             self.disk_view.is_fresh(set!{right_root_addr})
     {
         // Possibly lexical match failure for sub_index recommends
-        let pivot_index = split_arg.arrow_SplitIndex_pivot_index();
+        let pivot_index = split_arg->pivot_index;
         let left_root = self.sub_index(0, pivot_index + 1);
         let right_root = self.sub_index(pivot_index + 1, self.root()->children.len() as int);
         let new_disk_view = self.disk_view
@@ -653,7 +655,7 @@ impl LinkedBranch {
         let child_idx = self.root().route(pivot) + 1;
         let (left_branch, right_branch) = self.child_at_idx(child_idx as nat).split_node(split_arg, new_child_addr);
         let new_root = Node::Index{
-            pivots: self.root().arrow_Index_pivots().insert(child_idx, pivot),
+            pivots: self.root()->pivots.insert(child_idx, pivot),
             children: self.root()->children.insert(child_idx + 1, new_child_addr)
         };
         let new_disk_view = self.disk_view
