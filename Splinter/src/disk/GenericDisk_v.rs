@@ -16,16 +16,13 @@ pub type AU = AsyncDisk_t::AU;
 pub type Page = AsyncDisk_t::Page;
 pub type Address = AsyncDisk_t::Address;
 
-/// Returns the number of a disk pages in an Allocation Unit. Left as an uninterpreted function
-/// since it's implementation defined.
-pub closed spec(checked) fn page_count() -> nat;
+/// pass through function
+pub closed spec(checked) fn page_count() -> nat 
+{
+    AsyncDisk_t::page_count()
+}
 
 impl Address {
-    /// Returns true iff this Address is well formed.
-    pub open spec(checked) fn wf(self) -> bool {
-        self.page < page_count()
-    }
-
     /// Returns the Address for the first page of this AU.
     pub open spec(checked) fn first_page(self) -> Address {
         Address{page: 0, ..self}
