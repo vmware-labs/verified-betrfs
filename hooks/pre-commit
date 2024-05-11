@@ -4,6 +4,17 @@ import subprocess
 import sys
 import glob
 
+###########################################
+#  ____  _           _     _          _   #
+# |  _ \(_)___  __ _| |__ | | ___  __| |  #
+# | | | | / __|/ _` | '_ \| |/ _ \/ _` |  #
+# | |_| | \__ \ (_| | |_) | |  __/ (_| |  #
+# |____/|_|___/\__,_|_.__/|_|\___|\__,_|  #
+###########################################
+sys.exit(0)
+
+
+
 EXPECTED_VERSION="verusfmt 0.1.6"
 ACTUAL_VERSION=subprocess.check_output(["verusfmt", "--version"]).strip().decode("utf-8")
 

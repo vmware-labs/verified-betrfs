@@ -7,8 +7,8 @@ pub mod marshalling;
 use crate::marshalling::IntegerMarshalling_v::*;
 use crate::marshalling::Marshalling_v::*;
 use crate::marshalling::SeqMarshalling_v::*;
-use crate::marshalling::UniformSizedSeq_v::*;
 use crate::marshalling::Slice_v::*;
+use crate::marshalling::UniformSizedSeq_v::*;
 
 // fn m<M: Marshalling<int, u32>>(m: &M) {
 // }
@@ -44,8 +44,11 @@ exec fn test_int_marshalling() -> (Vec<u8>, usize) {
     (data, end)
 }
 
-exec fn u32_seq_marshaller_factory() -> UniformSizedElementSeqMarshalling<int, u32, IntegerSeqMarshallingOblinfo<u32, IntMarshalling<u32>>>
-{
+exec fn u32_seq_marshaller_factory() -> UniformSizedElementSeqMarshalling<
+    int,
+    u32,
+    IntegerSeqMarshallingOblinfo<u32, IntMarshalling<u32>>,
+> {
     let lengthm: IntMarshalling<u32> = IntMarshalling::new();
     let oblinfo = IntegerSeqMarshallingOblinfo::new(lengthm);
     let eltm: IntMarshalling<u32> = IntMarshalling::new();
@@ -54,7 +57,9 @@ exec fn u32_seq_marshaller_factory() -> UniformSizedElementSeqMarshalling<int, u
 }
 
 exec fn test_seq_marshalling() -> (outpr: (Vec<u8>, usize))
-    ensures outpr.0.len() == outpr.1, outpr.1 == 12
+    ensures
+        outpr.0.len() == outpr.1,
+        outpr.1 == 12,
 {
     let mut val = Vec::new();
     val.push(42 as u32);
@@ -69,34 +74,32 @@ exec fn test_seq_marshalling() -> (outpr: (Vec<u8>, usize))
 }
 
 exec fn test_seq_parse(data: &Vec<u8>, end: usize) -> (Vec<u32>)
-requires data.len() >= end
+    requires
+        data.len() >= end,
 {
     let usm = u32_seq_marshaller_factory();
-    let slice = Slice{start:0, end};
+    let slice = Slice { start: 0, end };
     let ovalue = usm.try_parse(&slice, data);
-
     // Why can't I see @ for Slice from here!?
-//     proof {
-//         let specslice = slice@;
-//         assert( usm.parsable(slice@.i(data@)) );
-//     }
-
+    //     proof {
+    //         let specslice = slice@;
+    //         assert( usm.parsable(slice@.i(data@)) );
+    //     }
     // This marshaller can't *NOT* parse any sequence of bytes.  If you give it a
     // funny end, it'll truncate the length to the nearest multiple of the uniform size.  And then
     // all the elements inside that length parse because every 4-byte sequence is a parsable u32.
     // There's a tree of predicates, but for this specialization of the Marshalling trait, we can
     // (statically) tell it always evaluates to true.
     assert(ovalue is Some);
-
     ovalue.unwrap()
 }
 
 exec fn test_seq_snarf(data: &Vec<u8>, end: usize) -> u32
-requires data.len() >= end >= 8,
+    requires
+        data.len() >= end >= 8,
 {
     let usm = u32_seq_marshaller_factory();
-    let slice = Slice{start:0, end};
-
+    let slice = Slice { start: 0, end };
     usm.exec_get_elt(&slice, data, 1)
 }
 
@@ -106,8 +109,7 @@ fn test_snarf() {
 }
 
 } // verus!
-
-// Disturbingly this exec fn isn't verified!
+  // Disturbingly this exec fn isn't verified!
 fn main() {
     let (data, end) = test_seq_marshalling();
     print!("end: {:?} data {:?}\n", end, data);
