@@ -143,18 +143,18 @@ impl <
 
     exec fn try_length(&self, dslice: &Slice, data: &Vec<u8>) -> (out: Option<usize>)
     {
-        if (dslice.exec_len() as usize) < self.total_size {
+        if (dslice.len() as usize) < self.total_size {
             return None;    // lengthable first conjunct is false
         }
 
-        let parsed_len = self.length_int.exec_parse(&dslice.exec_sub(0, LengthIntObligations::o_exec_size()), data);
+        let parsed_len = self.length_int.exec_parse(&dslice.subslice(0, LengthIntObligations::o_exec_size()), data);
 
         proof {
             // Took way too long to track down this lemma call. Decent automation would have been nice.
             LengthIntObligations::as_int_ensures();
 
-            assert( dslice.sub(0, LengthIntObligations::o_spec_size()).i(data@)
-                    == dslice.i(data@).subrange(0, self.size_of_length_field() as int) );   // subrange trigger
+            assert( dslice@.subslice(0, LengthIntObligations::o_spec_size() as int).i(data@)
+                    == dslice@.i(data@).subrange(0, self.size_of_length_field() as int) );   // subrange trigger
         }
 
         if !LengthIntObligations::exec_this_fits_in_usize(parsed_len) {
@@ -189,7 +189,7 @@ impl <
 
     open spec fn get(&self, dslice: SpecSlice, data: Seq<u8>, idx: int) -> (eslice: SpecSlice)
     {
-        dslice.sub(
+        dslice.subslice(
             self.size_of_length_field() + idx * self.oblinfo.uniform_size(),
             self.size_of_length_field() + idx * self.oblinfo.uniform_size() + self.oblinfo.uniform_size())
     }
@@ -202,7 +202,7 @@ impl <
     open spec fn get_data(&self, data: Seq<u8>, idx: int) -> (edata: Seq<u8>)
     // TODO factor out this common impl
     {
-        self.get(Slice::all(data), data, idx).i(data)
+        self.get(SpecSlice::all(data), data, idx).i(data)
     }
 
     open spec fn elt_parsable(&self, data: Seq<u8>, idx: int) -> bool
@@ -242,7 +242,7 @@ impl <
     exec fn exec_get(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (eslice: Slice)
     {
         proof { self.index_bounds_facts(idx as int); }
-        dslice.exec_sub(
+        dslice.subslice(
             self.exec_size_of_length_field() + (idx as usize) * self.oblinfo.exec_uniform_size(),
             self.exec_size_of_length_field() + (idx as usize) * self.oblinfo.exec_uniform_size() + self.oblinfo.exec_uniform_size())
     }
@@ -259,8 +259,8 @@ impl <
                 proof {
                     self.get_ensures(dslice@, data@, idx as int);   // TODO(verus): lament of spec ensures
                     self.index_bounds_facts(idx as int);
-                    let edslice = self.get(Slice::all(dslice.i(data@)), dslice.i(data@), idx as int);
-                    assert( edslice.i(dslice.i(data@)) == eslice.i(data@));   // trigger
+                    let edslice = self.get(SpecSlice::all(dslice@.i(data@)), dslice@.i(data@), idx as int);
+                    assert( edslice.i(dslice@.i(data@)) == eslice@.i(data@));   // trigger
                 }
                 let oelt = self.eltm.try_parse(&eslice, data);
                 oelt
@@ -275,8 +275,8 @@ impl <
         proof { // duplicated from try_get_elt
             self.get_ensures(dslice@, data@, idx as int);   // TODO(verus): lament of spec ensures
             self.index_bounds_facts(idx as int);
-            let edslice = self.get(Slice::all(dslice.i(data@)), dslice.i(data@), idx as int);
-            assert( edslice.i(dslice.i(data@)) == eslice.i(data@));   // trigger
+            let edslice = self.get(SpecSlice::all(dslice@.i(data@)), dslice@.i(data@), idx as int);
+            assert( edslice.i(dslice@.i(data@)) == eslice@.i(data@));   // trigger
         }
         self.eltm.exec_parse(&eslice, data)
     }
@@ -329,7 +329,7 @@ impl <
             &&& idx < self.exec_max_length()
             &&& sz == self.oblinfo.exec_uniform_size()
         };
-        assert( s == self.settable(dslice.i(data@), idx as int, value.deepv()) );
+        assert( s == self.settable(dslice@.i(data@), idx as int, value.deepv()) );
         s
     }
 
@@ -340,11 +340,11 @@ impl <
         let Ghost(elt_end) = self.eltm.exec_marshall(value, data, elt_start);
 
         // Extensionality trigger.
-        assert( dslice.i(data@).subrange(0, self.size_of_length_field() as int)
-                =~= dslice.i(old(data)@).subrange(0, self.size_of_length_field() as int) );
+        assert( dslice@.i(data@).subrange(0, self.size_of_length_field() as int)
+                =~= dslice@.i(old(data)@).subrange(0, self.size_of_length_field() as int) );
 
         // Extensionality trigger.
-        assert( data@.subrange(elt_start as int, elt_end as int) =~= self.get_data(dslice.i(data@), idx as int) );
+        assert( data@.subrange(elt_start as int, elt_end as int) =~= self.get_data(dslice@.i(data@), idx as int) );
     }
 
     /////////////////////////////////////////////////////////////////////////
@@ -377,32 +377,6 @@ impl <
     exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: Elt) -> (r: bool) { false }
 
     exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: Elt) {}
-
-
-    // TODO(delete): duplicate of trait default method (verus issue #1006)
-    open spec fn gettable_to_len(&self, data: Seq<u8>, len: int) -> bool
-    {
-        forall |i: int| 0<=i<len ==> self.gettable(data, i)
-    }
-
-    // TODO(delete): duplicate of trait default method (verus issue #1006)
-    open spec fn elt_parsable_to_len(&self, data: Seq<u8>, len: int) -> bool
-    {
-        forall |i: int| 0<=i<len ==> self.elt_parsable(data, i)
-    }
-
-    // TODO(delete): duplicate of trait default method (verus issue #1006)
-    open spec fn parsable_to_len(&self, data: Seq<u8>, len: usize) -> bool
-    {
-        &&& self.gettable_to_len(data, len as int)
-        &&& self.elt_parsable_to_len(data, len as int)
-    }
-
-    // TODO(delete): duplicate of trait default method (verus issue #1006)
-    open spec fn parse_to_len(&self, data: Seq<u8>, len: usize) -> Seq<DVElt>
-    {
-        Seq::new(len as nat, |i: int| self.get_elt(data, i))
-    }
 
 //     /////////////////////////////////////////////////////////////////////////
 //     // marshall

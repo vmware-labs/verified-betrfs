@@ -44,8 +44,10 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
         dslice@.valid(data@),
     ensures
         l == self.lengthable(dslice@.i(data@))
-    // TODO dfy has a default impl here based on try_length
     ;
+//     {
+//         self.try_length(dslice, data).is_some()
+//     }
 
     exec fn exec_length(&self, dslice: &Slice, data: &Vec<u8>) -> (len: usize)
     requires
