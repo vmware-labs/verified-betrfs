@@ -163,9 +163,9 @@ impl <
         Some(LengthIntObligations::to_usize(parsed_len))
     }
 
-    exec fn exec_lengthable(&self, dslice: &Slice, data: &Vec<u8>) -> (l: bool) {
-        self.try_length(dslice, data).is_some()
-    }
+//     exec fn exec_lengthable(&self, dslice: &Slice, data: &Vec<u8>) -> (l: bool) {
+//         self.try_length(dslice, data).is_some()
+//     }
 
     exec fn exec_length(&self, dslice: &Slice, data: &Vec<u8>) -> (len: usize)
     {
