@@ -147,7 +147,13 @@ impl <
             return None;    // lengthable first conjunct is false
         }
 
-        let parsed_len = self.length_int.exec_parse(&dslice.subslice(0, LengthIntObligations::o_exec_size()), data);
+        let sslice = dslice.subslice(0, LengthIntObligations::o_exec_size());
+
+        // TODO(verus): trait instability: this expression appears in exec_parse requires, but
+        // mentioning it completes the proof.
+        assert( self.length_int.parsable(sslice@.i(data@)) );
+
+        let parsed_len = self.length_int.exec_parse(&sslice, data);
 
         proof {
             // Took way too long to track down this lemma call. Decent automation would have been nice.
