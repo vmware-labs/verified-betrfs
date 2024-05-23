@@ -66,6 +66,11 @@ pub trait IntObligations<T: Deepview<int> + builtin::Integer> {
     // Helpers for SeqMarshalling
     open spec fn spec_this_fits_in_usize(v: int) -> bool { v <= usize::MAX as int }
 
+    // It would be cool if we could make a "final" (un-overridable) default spec fn!
+    proof fn spec_this_fits_in_usize_ensures(v: int)
+        ensures Self::spec_this_fits_in_usize(v) == { v <= usize::MAX as int }
+    ;
+
     exec fn exec_this_fits_in_usize(v: T) -> (rc: bool)
         ensures rc == Self::spec_this_fits_in_usize(Self::as_int(v))
     ;
@@ -74,6 +79,19 @@ pub trait IntObligations<T: Deepview<int> + builtin::Integer> {
         requires Self::spec_this_fits_in_usize(Self::as_int(v))
         ensures Self::as_int(v) == w as int
     ;
+
+    spec fn spec_fits_in_this(v: int) -> bool
+    ;
+
+    exec fn exec_fits_in_this(v: usize) -> (r: bool)
+        ensures r == Self::spec_fits_in_this(v as int)
+    ;
+
+    exec fn from_usize(v: usize) -> (w: T)
+        requires Self::spec_fits_in_this(v as int)
+        ensures Self::as_int(w) == v as int
+    ;
+
 }
 
 // impl Marshalling helper fn
@@ -268,14 +286,28 @@ impl IntObligations<u32> for IntMarshalling<u32> {
 
     proof fn as_int_ensures() { }
 
-    // TODO(delete): duplicate of trait default method (verus issue #1006)
-    open spec fn spec_this_fits_in_usize(v: int) -> bool { v <= usize::MAX as int }
+//    open spec fn spec_this_fits_in_usize(v: int) -> bool { v <= usize::MAX as int }
+
+    // proof that I didn't tamper with the default. Erk.
+    proof fn spec_this_fits_in_usize_ensures(v: int) { }
 
     exec fn exec_this_fits_in_usize(v: u32) -> (rc: bool) {
         if u32::BITS <= usize::BITS { true } else { v < usize::MAX as u32  }
     }
 
     exec fn to_usize(v: u32) -> (w: usize) { v as usize }
+
+    exec fn from_usize(v: usize) -> (w: u32) { v as u32 }
+
+    open spec fn spec_fits_in_this(v: int) -> bool
+    {
+        0 <= v <= u32::MAX
+    }
+
+    exec fn exec_fits_in_this(v: usize) -> (r: bool)
+    {
+        if usize::BITS <= u32::BITS { true } else { v <= (u32::MAX as usize) }
+    }
 }
 
 impl Deepview<int> for u64 {
@@ -319,14 +351,25 @@ impl IntObligations<u64> for IntMarshalling<u64> {
 
     proof fn as_int_ensures() { }
 
-    // TODO(delete): duplicate of trait default method (verus issue #1006)
-    open spec fn spec_this_fits_in_usize(v: int) -> bool { v <= usize::MAX as int }
+    proof fn spec_this_fits_in_usize_ensures(v: int) { }
 
     exec fn exec_this_fits_in_usize(v: u64) -> (rc: bool) {
         if u64::BITS <= usize::BITS { true } else { v <= usize::MAX as u64 }
     }
 
     exec fn to_usize(v: u64) -> (w: usize) { v as usize }
+
+    exec fn from_usize(v: usize) -> (w: u64) { v as u64 }
+
+    open spec fn spec_fits_in_this(v: int) -> bool
+    {
+        0 <= v <= u64::MAX
+    }
+
+    exec fn exec_fits_in_this(v: usize) -> (r: bool)
+    {
+        if usize::BITS <= u64::BITS { true } else { v <= (u64::MAX as usize) }
+    }
 }
 
 // Confirm that I really have built Marshalling<int, u32> and u64

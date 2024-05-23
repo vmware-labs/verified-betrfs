@@ -9,6 +9,7 @@ use crate::marshalling::Marshalling_v::*;
 use crate::marshalling::SeqMarshalling_v::*;
 use crate::marshalling::Slice_v::*;
 use crate::marshalling::UniformSizedSeq_v::*;
+use crate::marshalling::ResizableUniformSizedSeq_v::*;
 
 // fn m<M: Marshalling<int, u32>>(m: &M) {
 // }
@@ -49,8 +50,8 @@ exec fn u32_seq_marshaller_factory() -> UniformSizedElementSeqMarshalling<
     u32,
     IntegerSeqMarshallingOblinfo<u32, IntMarshalling<u32>>,
 > {
-    let lengthm: IntMarshalling<u32> = IntMarshalling::new();
-    let oblinfo = IntegerSeqMarshallingOblinfo::new(lengthm);
+    let intm: IntMarshalling<u32> = IntMarshalling::new();
+    let oblinfo = IntegerSeqMarshallingOblinfo::new(intm);
     let eltm: IntMarshalling<u32> = IntMarshalling::new();
     let usm = UniformSizedElementSeqMarshalling::new(oblinfo, eltm);
     usm
@@ -94,7 +95,7 @@ exec fn test_seq_parse(data: &Vec<u8>, end: usize) -> (Vec<u32>)
     ovalue.unwrap()
 }
 
-exec fn test_seq_snarf(data: &Vec<u8>, end: usize) -> u32
+exec fn test_seq_index(data: &Vec<u8>, end: usize) -> u32
     requires
         data.len() >= end >= 8,
 {
@@ -103,9 +104,57 @@ exec fn test_seq_snarf(data: &Vec<u8>, end: usize) -> u32
     usm.exec_get_elt(&slice, data, 1)
 }
 
-fn test_snarf() {
-    let (data, end) = test_seq_marshalling();
-    let elt = test_seq_snarf(&data, end);
+// fn test_index() {
+//     let (data, end) = test_seq_marshalling();
+//     let elt = test_seq_index(&data, end);
+// }
+
+exec fn u32_resizable_seq_marshaller_factory() -> (rusm: ResizableUniformSizedElementSeqMarshalling<
+    int,
+    u32,
+    IntegerSeqMarshallingOblinfo<u32, IntMarshalling<u32>>,
+    u32,
+    IntMarshalling<u32>
+>)
+    ensures rusm.valid(), rusm.total_size == 24
+{
+    let intm: IntMarshalling<u32> = IntMarshalling::new();
+    let oblinfo = IntegerSeqMarshallingOblinfo::new(intm);
+    let eltm: IntMarshalling<u32> = IntMarshalling::new();
+    let lengthm: IntMarshalling<u32> = IntMarshalling::new();
+    let rusm = ResizableUniformSizedElementSeqMarshalling::new(oblinfo, eltm, 24, lengthm);
+    rusm
+}
+
+exec fn test_resizable_seq_marshalling() -> (outpr: (Vec<u8>, usize))
+    ensures
+        outpr.0.len() == outpr.1,
+        //outpr.1 == 24,
+{
+    let mut val = Vec::new();
+    val.push(42 as u32);
+    val.push(7 as u32);
+    val.push(16 as u32);
+    let rusm = u32_resizable_seq_marshaller_factory();
+
+    assert( val.deepv().len() == 3);    // witness to the multiplicand in marshallable
+    assert( rusm.total_size == 24 );
+    assert( rusm.spec_size(val.deepv()) == rusm.total_size );
+    assert(rusm.marshallable(val.deepv()));
+    let req = rusm.exec_size(&val);
+    let mut data = prealloc(req);
+    let end = rusm.exec_marshall(&val, &mut data, 0);
+    (data, end)
+}
+
+exec fn test_resizable_seq_parse(data: &Vec<u8>, end: usize) -> (Option<Vec<u32>>)
+    requires
+        data.len() >= end,
+{
+    let usm = u32_resizable_seq_marshaller_factory();
+    let slice = Slice { start: 0, end };
+    let ovalue = usm.try_parse(&slice, data);
+    ovalue
 }
 
 } // verus!
@@ -117,6 +166,12 @@ fn main() {
     let v = test_seq_parse(&data, end);
     print!("v: {:?}\n", v);
 
-    let elt = test_seq_snarf(&data, end);
+    let elt = test_seq_index(&data, end);
     print!("elt: {:?}\n", elt);
+
+    let (data, end) = test_resizable_seq_marshalling();
+    print!("end: {:?} data {:?}\n", end, data);
+
+    let v = test_resizable_seq_parse(&data, end);
+    print!("v: {:?}\n", v);
 }
