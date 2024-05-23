@@ -69,4 +69,11 @@ ensures a + 1 == (b + d) / d
 {
 }
 
+#[verifier(nonlinear)]
+pub proof fn inequality_move_divisor(a: int, b: int, d: int)
+requires 0<=a, 0<=b, 0 < d
+ensures a <= b / d <==> a * d <= b
+{
+}
+
 }

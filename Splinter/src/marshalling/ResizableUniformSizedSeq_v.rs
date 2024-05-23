@@ -21,8 +21,8 @@ verus! {
 // }
 
 // In a ResizableUniformSizedElementSeqMarshallingOblinfo, the length (set of readable elements) is
-// limited by a dynamically-stored length field. The marshaller knows how to read that field and
-// prevent the caller from reading off the end of the valid data.
+// conveyed by a dynamically-stored length field. The marshaller knows how to read that field and
+// dissuade the caller from reading off the end of the valid data.
 pub struct ResizableUniformSizedElementSeqMarshalling <
     DVElt,
     Elt: Deepview<DVElt>,
@@ -30,7 +30,8 @@ pub struct ResizableUniformSizedElementSeqMarshalling <
     LengthInt: Deepview<int> + builtin::Integer + Copy, // Bleargh. Surely I could name this.
     LengthIntObligations: IntObligations<LengthInt>
 > {
-    pub total_size: usize,
+    // `total_size` is like a "capacity" -- the allocated space.  It's measured in bytes.
+    pub total_size: usize, 
     pub length_int: LengthIntObligations,
     pub oblinfo: O,
     pub eltm: O::EltMarshalling,
@@ -48,7 +49,9 @@ impl <
 {
     // TODO(verus): modify Verus to allow constructing default phantomdata fields
     #[verifier(external_body)]
-    pub fn new(oblinfo: O, eltm: O::EltMarshalling, total_size: usize, length_int: LengthIntObligations) -> Self {
+    pub fn new(oblinfo: O, eltm: O::EltMarshalling, total_size: usize, length_int: LengthIntObligations) -> (s: Self)
+        ensures s.total_size == total_size
+    {
         Self{ oblinfo, eltm, _p: Default::default(), total_size, length_int }
     }
 
@@ -173,11 +176,6 @@ impl <
 //         self.try_length(dslice, data).is_some()
 //     }
 
-    exec fn exec_length(&self, dslice: &Slice, data: &Vec<u8>) -> (len: usize)
-    {
-        self.try_length(dslice, data).unwrap()
-    }
-
     /////////////////////////////////////////////////////////////////////////
     // getting individual elements
     /////////////////////////////////////////////////////////////////////////
@@ -186,6 +184,7 @@ impl <
     // a too-long value; doesn't matter, if there's not enough data we won't let
     // you index it. Or you can access a field past the stored length field;
     // it's a sign, not a cop.
+    // TODO it's a bit weird that we need lengthable; that forces a try_length in try_get.
     open spec fn gettable(&self, data: Seq<u8>, idx: int) -> bool
     {
         // This conjunct forces data (and hence the slice arg to get) to be at least total_size
@@ -205,26 +204,19 @@ impl <
         self.index_bounds_facts(idx as int);
     }
 
-    open spec fn get_data(&self, data: Seq<u8>, idx: int) -> (edata: Seq<u8>)
-    // TODO factor out this common impl
-    {
-        self.get(SpecSlice::all(data), data, idx).i(data)
-    }
-
     open spec fn elt_parsable(&self, data: Seq<u8>, idx: int) -> bool
-    // TODO factor out this common impl
     {
         self.eltm.parsable(self.get_data(data, idx))
     }
 
     open spec fn get_elt(&self, data: Seq<u8>, idx: int) -> (elt: DVElt)
-    // TODO factor out this common impl
     {
         self.eltm.parse(self.get_data(data, idx))
     }
 
     exec fn try_get(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oeslice: Option<Slice>)
     {
+        // gettable requires lengthable, so I guess we better go check
         let olen = self.try_length(dslice, data);
         if olen.is_none() { return None; }
 
@@ -303,28 +295,6 @@ impl <
         &&& self.eltm.spec_size(value) == self.oblinfo.uniform_size()
     }
 
-    open spec fn preserves_entry(&self, data: Seq<u8>, idx: int, new_data: Seq<u8>) -> bool
-    {
-        &&& self.gettable(data, idx) ==> self.gettable(new_data, idx)
-        &&& (self.gettable(data, idx) && self.elt_parsable(new_data, idx)) ==> {
-            &&& self.elt_parsable(new_data, idx)
-            &&& self.get_elt(new_data, idx) == self.get_elt(new_data, idx)
-            }
-    }
-
-    open spec fn sets(&self, data: Seq<u8>, idx: int, value: DVElt, new_data: Seq<u8>) -> bool
-    {
-        &&& new_data.len() == data.len()
-        &&& self.lengthable(data) ==> {
-            &&& self.lengthable(new_data)
-            &&& self.length(new_data) == self.length(data)
-            }
-        &&& forall |i| i!=idx ==> self.preserves_entry(data, i, new_data)
-        &&& self.gettable(new_data, idx)
-        &&& self.elt_parsable(new_data, idx)
-        &&& self.get_elt(new_data, idx) == value
-    }
-
     exec fn exec_settable(&self, dslice: &Slice, data: &Vec<u8>, idx: usize, value: &Elt) -> (s: bool)
     {
         let olen = self.try_length(dslice, data);
@@ -357,13 +327,25 @@ impl <
     // resizing
     /////////////////////////////////////////////////////////////////////////
 
-    open spec fn resizable(&self, data: Seq<u8>, newlen: int) -> bool { false }
+    open spec fn resizable(&self, data: Seq<u8>, newlen: int) -> bool {
+        &&& self.lengthable(data)
+        &&& newlen <= self.max_length() as nat
+        &&& LengthIntObligations::spec_fits_in_this(newlen)
+    }
 
-    open spec fn resizes(&self, data: Seq<u8>, newlen: int, newdata: Seq<u8>) -> bool { false }
+    exec fn exec_resizable(&self, dslice: &Slice, data: &Vec<u8>, newlen: usize) -> (r: bool) {
+        &&& self.exec_lengthable(dslice, data)
+        &&& newlen <= self.exec_max_length()
+        &&& LengthIntObligations::exec_fits_in_this(newlen)
+    }
 
-    exec fn exec_resizable(&self, dslice: &Slice, data: &Vec<u8>, newlen: usize) -> (r: bool) { false }
+    exec fn resize(&self, dslice: &Slice, data: &mut Vec<u8>, newlen: usize) {
+        let new_end = self.length_int.exec_marshall(
+            &LengthIntObligations::from_usize(newlen), data, dslice.start);
 
-    exec fn resize(&self, dslice: &Slice, data: &mut Vec<u8>, newlen: usize) { }
+        // TODO: there are 31 lines of proof at MarshalledAccessors.i.dfy:1085 to translate
+        assume(false);
+    }
 
     /////////////////////////////////////////////////////////////////////////
     // append
@@ -383,132 +365,206 @@ impl <
     exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: Elt) -> (r: bool) { false }
 
     exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: Elt) {}
-
-//     /////////////////////////////////////////////////////////////////////////
-//     // marshall
-//     /////////////////////////////////////////////////////////////////////////
-// 
-//     open spec fn marshallable(&self, value: Seq<DVElt>) -> bool { false }
-// 
-//     open spec fn spec_size(&self, value: Seq<DVElt>) -> usize { 0 }
-// 
-//     exec fn exec_size(&self, value: &Vec<Elt>) -> (sz: usize) { 0 }
-// 
-//     exec fn exec_marshall(&self, value: &Vec<Elt>, data: &mut Vec<u8>, start: usize) -> (end: usize)
-//     {
-//         0
-//     }
-// 
-//         // TODO(jonh) [performance]: In Dafny this is a cast operation. We should do this with an
-//         // untrusted cast axiom in Rust, I guess.
-//         // For now, rely on Marshalling default trait method impl
-//     exec fn seq_exec_parse(&self, dslice: &Slice, data: &Vec<u8>) -> (value: Vec<Elt>)
 }
 
-// impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>>
-//     UniformSizedElementSeqMarshalling<DVElt, Elt, O>
-// {
-//     pub open spec fn seq_parsable(&self, data: Seq<u8>) -> bool
-//     {
-//         &&& self.seq_valid()
-//         &&& self.lengthable(data)
-//         &&& self.length(data) <= usize::MAX
-//         &&& self.parsable_to_len(data, self.length(data) as usize)
-//     }
-// 
-//     pub open spec fn seq_parse(&self, data: Seq<u8>) -> Seq<DVElt>
-//     {
-//         self.parse_to_len(data, self.length(data) as usize)
-//     }
-// }
-// 
-// impl<DVElt, Elt: Deepview<DVElt>, O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>>
-//     Marshalling<Seq<DVElt>, Vec<Elt>>
-//     for UniformSizedElementSeqMarshalling<DVElt, Elt, O>
-// {
-//     open spec fn valid(&self) -> bool { self.seq_valid() }
-// 
-//     exec fn exec_parsable(&self, dslice: &Slice, data: &Vec<u8>) -> (p: bool)
-//     {
-//         // TODO factor this into Marshalling trait default method
-//         let ovalue = self.try_parse(dslice, data);
-//         ovalue.is_some()
-//     }
-// 
-//     open spec fn parsable(&self, data: Seq<u8>) -> bool
-//     {
-//         self.seq_parsable(data)
-//     }
-// 
-//     open spec fn parse(&self, data: Seq<u8>) -> Seq<DVElt>
-//     {
-//         self.seq_parse(data)
-//     }
-// 
-//     exec fn try_parse(&self, dslice: &Slice, data: &Vec<u8>) -> (ovalue: Option<Vec<Elt>>)
-//     {
-//         match self.try_length(dslice, data) {
-//             None => {
-//                 proof {
-//                     let ghost idata = dslice.i(data@);
-//                     assert( !self.lengthable(idata) );
-//                 }
-//                 assert( !self.seq_parsable(dslice.i(data@)) );
-//                 assert( !self.parsable(dslice.i(data@)) );
-//                 return None;
-//             },
-//             Some(len) => {
-//                 assert( len as int == self.length(dslice.i(data@)) );
-//                 assert( len <= usize::MAX );
-//                 let mut i: usize = 0;
-//                 let mut result:Vec<Elt> = Vec::with_capacity(len);
-//                 while i < len
-//                     invariant i <= len,
-//                     self.valid(),   // TODO(verus #984): waste of my debugging time
-//                     dslice.valid(data@),   // TODO(verus #984): waste of my debugging time
-//                     len == self.length(dslice.i(data@)) as usize, // TODO(verus #984): waste of my debugging time
-//                         result.len() == i,
-//                         forall |j| 0<=j<i as nat ==> self.gettable(dslice.i(data@), j),
-//                         forall |j| 0<=j<i as nat ==> self.elt_parsable(dslice.i(data@), j),
-//                         forall |j| #![auto] 0<=j<i as nat ==> result[j].deepv() == self.get_elt(dslice.i(data@), j),
-//                 {
-//                     let ghost idata = dslice.i(data@);
-//                     let oelt = self.try_get_elt(dslice, data, i);
-//                     if oelt.is_none() {
-//                         return None;
-//                     }
-//                     result.push(oelt.unwrap());
-//                     i += 1;
-//                 }
-//                 // Looks like this wants extensionality, but no ~! Not sure why it's needed.
-//                 // Oh maybe it's the trait-ensures-don't-trigger bug?
-//                 assert( result.deepv() == self.parse(dslice.i(data@)) );    // trigger.
-//                 return Some(result);
-//             }
-//         }
-//     }
-// 
-//     // dummy placeholders; I guess we need to implement this yet
-//     open spec fn marshallable(&self, value: Seq<DVElt>) -> bool
-//     {
-//         false
-//     }
-// 
-//     open spec fn spec_size(&self, value: Seq<DVElt>) -> usize
-//     {
-//         0
-//     }
-// 
-//     exec fn exec_size(&self, value: &Vec<Elt>) -> (sz: usize)
-//     {
-//         0
-//     }
-// 
-//     exec fn exec_marshall(&self, value: &Vec<Elt>, data: &mut Vec<u8>, start: usize) -> (end: usize)
-//     {
-//         start
-//     }
-// }
+// TODO(jonh): A great deal of this type duplicates what's in UniformSizedSeq. I'm reasonably
+// confident we could shoehorn them together somehow, so that UniformSizedSeq is just a variant
+// of ResizableUniformSizedSeq with a 0-byte length field that knows to get its "dynamic"
+// length from the static length ("total_size") in the Marshalling object.
+
+impl <
+    DVElt,
+    Elt: Deepview<DVElt>,
+    O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>,
+    LengthInt: Deepview<int> + builtin::Integer + Copy,
+    LengthIntObligations: IntObligations<LengthInt>
+>
+    ResizableUniformSizedElementSeqMarshalling<DVElt, Elt, O, LengthInt, LengthIntObligations>
+{
+    pub open spec fn seq_parsable(&self, data: Seq<u8>) -> bool
+    {
+        &&& self.seq_valid()
+        &&& self.lengthable(data)
+        &&& self.length(data) <= usize::MAX
+        &&& self.parsable_to_len(data, self.length(data) as usize)
+    }
+
+    pub open spec fn seq_parse(&self, data: Seq<u8>) -> Seq<DVElt>
+    {
+        self.parse_to_len(data, self.length(data) as usize)
+    }
+
+    pub open spec fn marshallable_at(&self, value: Seq<DVElt>, i: int) -> bool
+    recommends 0 <= i < value.len()
+    {
+        &&& self.eltm.marshallable(value[i])
+        &&& self.eltm.spec_size(value[i]) == self.oblinfo.uniform_size()
+    }
+
+    proof fn marshallable_subrange(&self, value: Seq<DVElt>, l: int)
+    requires self.marshallable(value), 0<=l<=value.len()
+    ensures self.marshallable(value.subrange(0, l))
+    {
+        mul_preserves_le(l, value.len() as int, self.oblinfo.uniform_size() as int);
+        assert forall |i| 0 <= i < value.subrange(0, l).len() implies self.marshallable_at(value.subrange(0, l), i) by {
+            assert( self.marshallable_at(value, i) );
+        }
+        assume( false );
+    }
+}
+
+impl <
+    DVElt,
+    Elt: Deepview<DVElt>,
+    O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>,
+    LengthInt: Deepview<int> + builtin::Integer + Copy,
+    LengthIntObligations: IntObligations<LengthInt>
+>
+     Marshalling<Seq<DVElt>, Vec<Elt>>
+     for ResizableUniformSizedElementSeqMarshalling<DVElt, Elt, O, LengthInt, LengthIntObligations>
+{
+    open spec fn valid(&self) -> bool { self.seq_valid() }
+
+    exec fn exec_parsable(&self, dslice: &Slice, data: &Vec<u8>) -> (p: bool)
+    {
+        // TODO factor this into Marshalling trait default method
+        let ovalue = self.try_parse(dslice, data);
+        ovalue.is_some()
+    }
+
+    open spec fn parsable(&self, data: Seq<u8>) -> bool
+    {
+        self.seq_parsable(data)
+    }
+
+    open spec fn parse(&self, data: Seq<u8>) -> Seq<DVElt>
+    {
+        self.seq_parse(data)
+    }
+
+    exec fn try_parse(&self, dslice: &Slice, data: &Vec<u8>) -> (ovalue: Option<Vec<Elt>>)
+    {
+        match self.try_length(dslice, data) {
+            None => {
+                proof {
+                    let ghost idata = dslice@.i(data@);
+                    assert( !self.lengthable(idata) );
+                }
+                assert( !self.seq_parsable(dslice@.i(data@)) );
+                assert( !self.parsable(dslice@.i(data@)) );
+                return None;
+            },
+            Some(len) => {
+                assert( len as int == self.length(dslice@.i(data@)) );
+                assert( len <= usize::MAX );
+                let mut i: usize = 0;
+                let mut result:Vec<Elt> = Vec::with_capacity(len);
+                while i < len
+                    invariant i <= len,
+                    self.valid(),   // TODO(verus #984): waste of my debugging time
+                    dslice@.valid(data@),   // TODO(verus #984): waste of my debugging time
+                    len == self.length(dslice@.i(data@)) as usize, // TODO(verus #984): waste of my debugging time
+                        result.len() == i,
+                        forall |j| 0<=j<i as nat ==> self.gettable(dslice@.i(data@), j),
+                        forall |j| 0<=j<i as nat ==> self.elt_parsable(dslice@.i(data@), j),
+                        forall |j| #![auto] 0<=j<i as nat ==> result[j].deepv() == self.get_elt(dslice@.i(data@), j),
+                {
+                    let ghost idata = dslice@.i(data@);
+                    let oelt = self.try_get_elt(dslice, data, i);
+                    if oelt.is_none() {
+                        return None;
+                    }
+                    result.push(oelt.unwrap());
+                    i += 1;
+                }
+                // Looks like this wants extensionality, but no ~! Not sure why it's needed.
+                // Oh maybe it's the trait-ensures-don't-trigger bug?
+                assert( result.deepv() == self.parse(dslice@.i(data@)) );    // trigger.
+                return Some(result);
+            }
+        }
+    }
+
+    open spec fn marshallable(&self, value: Seq<DVElt>) -> bool
+    {
+        &&& forall |i| 0 <= i < value.len() ==> self.marshallable_at(value, i)
+        &&& LengthIntObligations::spec_fits_in_this(value.len() as int)
+
+        &&& self.size_of_length_field() + value.len() * self.oblinfo.uniform_size() <= self.total_size
+    }
+
+    open spec fn spec_size(&self, value: Seq<DVElt>) -> usize
+    {
+        self.total_size
+    }
+
+    exec fn exec_size(&self, value: &Vec<Elt>) -> (sz: usize)
+    {
+        self.total_size
+    }
+
+    exec fn exec_marshall(&self, value: &Vec<Elt>, data: &mut Vec<u8>, start: usize) -> (end: usize)
+    {
+        let end = start + self.total_size;
+        let slice = Slice{start, end};
+
+        // Just call resize instead? no, that requires the data already be well-formatted
+        // (such as lengthable)
+        let length_val = LengthIntObligations::from_usize(value.len());
+        let length_end = self.length_int.exec_marshall(&length_val, data, start);
+        proof {
+            // gosh golly darn lack of spec ensures
+            LengthIntObligations::spec_this_fits_in_usize_ensures(value.len() as int);
+
+            // Extensional equality between the thing we know holds length_val and the self.length defn
+            assert( slice@.i(data@).subrange(0, self.size_of_length_field() as int)
+                    == SpecSlice{start: start as int, end: length_end as int}.i(data@) );
+
+            // gosh golly darn lack of spec ensures
+            LengthIntObligations::as_int_ensures();
+
+            assert( self.lengthable(slice@.i(data@)) );
+        }
+
+        let mut i: usize = 0;
+
+        assert( value.len() <= self.max_length() as int ) by {
+            self.oblinfo.uniform_size_ensures();
+            inequality_move_divisor(
+                value.len() as int,
+                self.total_size as int - self.size_of_length_field() as int,
+                self.oblinfo.uniform_size() as int);
+        }
+        
+        assert forall |j| #![auto] 0 <= j < value.len() implies self.settable(slice@.i(data@), j, value[j].deepv()) by {
+            assert( self.marshallable_at(value.deepv(), j) );   // trigger
+        }
+
+        while i < value.len()
+        invariant
+            0 <= i <= value.len(),
+            data@.len() == old(data)@.len(),
+            forall |j| 0 <= j < start ==> data@[j] == old(data)@[j],
+            forall |j| end as int <= j < old(data)@.len() ==> data@[j] == old(data)@[j],
+            slice == (Slice{start, end}), // shouldn't need this; slice is bound immutably. Try deleting.
+            self.lengthable(slice@.i(data@)),
+            self.length(slice@.i(data@)) == value.len(),
+
+            forall |j| 0 <= j < i ==> self.gettable(slice@.i(data@), j),
+            forall |j| 0 <= j < i ==> self.elt_parsable(slice@.i(data@), j),
+            forall |j| #![auto] 0 <= j < i ==> self.get_elt(slice@.i(data@), j) == value[j].deepv(),
+            forall |j| #![auto] 0 <= j < value.len() ==> self.settable(slice@.i(data@), j, value[j].deepv()),
+        {
+            assume( false );
+            proof { self.oblinfo.uniform_size_ensures(); }
+            self.exec_set(&slice, data, i, &value[i]);
+            i += 1;
+        }
+        // This is just a postcondition; why wasn't it automatically triggered?
+        assert( self.parse(data@.subrange(start as int, end as int)) == value.deepv() );
+        end
+    }
+}
 
 }
 
