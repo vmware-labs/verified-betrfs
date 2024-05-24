@@ -210,10 +210,10 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
     recommends
         self.seq_valid()
     {
-        &&& self.gettable(data, idx) ==> self.gettable(new_data, idx)
-        &&& (self.gettable(data, idx) && self.elt_parsable(new_data, idx)) ==> {
+        &&& (self.gettable(data, idx) ==> self.gettable(new_data, idx))
+        &&& (self.gettable(data, idx) && self.elt_parsable(data, idx)) ==> {
             &&& self.elt_parsable(new_data, idx)
-            &&& self.get_elt(new_data, idx) == self.get_elt(new_data, idx)
+            &&& self.get_elt(new_data, idx) == self.get_elt(data, idx)
             }
     }
 
@@ -235,6 +235,24 @@ pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
         &&& self.elt_parsable(new_data, idx)
         &&& self.get_elt(new_data, idx) == value
     }
+
+//     proof fn sets_final(&self)
+//         ensures
+//         forall |data: Seq<u8>, idx: int, value: DVElt, new_data: Seq<u8>|
+//         self.sets(data, idx, value, new_data) == 
+//             {
+//                 &&& new_data.len() == data.len()
+//                 &&& self.lengthable(data) ==> {
+//                     &&& self.lengthable(new_data)
+//                     &&& self.length(new_data) == self.length(data)
+//                     }
+//                 &&& forall |i| i!=idx ==> self.preserves_entry(data, i, new_data)
+//                 &&& self.gettable(new_data, idx)
+//                 &&& self.elt_parsable(new_data, idx)
+//                 &&& self.get_elt(new_data, idx) == value
+//             }
+//     ;
+
 
     exec fn exec_settable(&self, dslice: &Slice, data: &Vec<u8>, idx: usize, value: &Elt) -> (s: bool)
     requires
