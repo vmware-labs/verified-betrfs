@@ -417,17 +417,6 @@ impl <
         &&& self.eltm.marshallable(value[i])
         &&& self.eltm.spec_size(value[i]) == self.oblinfo.uniform_size()
     }
-
-    proof fn marshallable_subrange(&self, value: Seq<DVElt>, l: int)
-    requires self.marshallable(value), 0<=l<=value.len()
-    ensures self.marshallable(value.subrange(0, l))
-    {
-        mul_preserves_le(l, value.len() as int, self.oblinfo.uniform_size() as int);
-        assert forall |i| 0 <= i < value.subrange(0, l).len() implies self.marshallable_at(value.subrange(0, l), i) by {
-            assert( self.marshallable_at(value, i) );
-        }
-        assume( false );
-    }
 }
 
 impl <
