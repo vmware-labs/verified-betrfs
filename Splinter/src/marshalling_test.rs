@@ -129,7 +129,7 @@ exec fn u32_resizable_seq_marshaller_factory() -> (rusm: ResizableUniformSizedEl
 exec fn test_resizable_seq_marshalling() -> (outpr: (Vec<u8>, usize))
     ensures
         outpr.0.len() == outpr.1,
-        //outpr.1 == 24,
+        outpr.1 == 24,
 {
     let mut val = Vec::new();
     val.push(42 as u32);
