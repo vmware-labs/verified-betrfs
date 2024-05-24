@@ -321,6 +321,105 @@ impl <
 
         // Extensionality trigger.
         assert( data@.subrange(elt_start as int, elt_end as int) =~= self.get_data(dslice@.i(data@), idx as int) );
+
+//         proof {
+//         self.sets_final();
+//         let old_data = dslice@.i(old(data)@);
+//         let new_data = dslice@.i(data@);
+//         let iidx = idx as int;
+//         let vvalue = value.deepv();
+//         assert( self.sets(dslice@.i(old(data)@), idx as int, value.deepv(), dslice@.i(data@))
+//                 == 
+//             {
+//                 &&& new_data.len() == old_data.len()
+//                 &&& self.lengthable(old_data) ==> {
+//                     &&& self.lengthable(new_data)
+//                     &&& self.length(new_data) == self.length(old_data)
+//                     }
+//                 &&& (forall |i| i!=iidx ==> self.preserves_entry(old_data, i, new_data))
+//                 &&& self.gettable(new_data, iidx)
+//                 &&& self.elt_parsable(new_data, iidx)
+//                 &&& self.get_elt(new_data, iidx) == vvalue
+//             } );
+//         assert(
+//             self.preserves_entry(old_data, iidx, new_data)
+//             ==
+//             {
+//                 &&& (self.gettable(old_data, iidx) ==> self.gettable(new_data, iidx))
+//                 &&& (self.gettable(old_data, iidx) && self.elt_parsable(old_data, iidx)) ==> {
+//                     &&& self.elt_parsable(new_data, iidx)
+//                     &&& self.get_elt(new_data, iidx) == self.get_elt(old_data, iidx)
+//                     }
+//             }
+//         );
+//         assert forall |i| i!=iidx implies
+//             {
+//                 &&& (self.gettable(old_data, i) ==> self.gettable(new_data, i))
+//                 &&& (self.gettable(old_data, i) && self.elt_parsable(old_data, i)) ==> {
+//                     &&& self.elt_parsable(new_data, i)
+//                     &&& self.get_elt(new_data, i) == self.get_elt(old_data, i)
+//                     }
+//             } by {
+//                 if self.gettable(old_data, i) && self.elt_parsable(old_data, i) {
+//         // Why does preserves_entry work?
+//         // the thing at i needs to still be elt_parsable.
+//         // We only touched things between elt_start and elt_end.
+//         // That means the data from i_start to i_end didn't get touched.
+// 
+// //                     assert( self.get_data(old_data, i)
+// //                                 == self.get(SpecSlice::all(old_data), old_data, i).i(old_data) );
+// // 
+//                     let old_data_x = SpecSlice::all(old_data);
+//                     let new_data_x = SpecSlice::all(new_data);
+// //                     assert( self.get(old_data_x, old_data, i) == self.get(new_data_x, new_data, i) );
+// 
+//                     assert( self.get_data(old_data, i) == self.get_data(new_data, i) );
+//                     assert( self.elt_parsable(old_data, i) );
+//                     assert( self.elt_parsable(new_data, i) );
+//                     assert( self.get_elt(new_data, i) == self.get_elt(old_data, i) );
+//                 }
+//             }
+//         assert forall |i| i!=iidx implies self.preserves_entry(old_data, i, new_data) by {}
+//         assert({
+//             &&& new_data.len() == old_data.len()
+//             &&& self.lengthable(old_data) ==> {
+//                 &&& self.lengthable(new_data)
+//                 &&& self.length(new_data) == self.length(old_data)
+//                 }
+//             &&& forall |i| i!=iidx ==> self.preserves_entry(old_data, i, new_data)
+//             &&& self.gettable(new_data, iidx)
+//             &&& self.elt_parsable(new_data, iidx)
+//             &&& self.get_elt(new_data, iidx) == vvalue
+//         });
+//         }
+                
+        assert forall |i: int| i != idx as int && self.gettable(dslice@.i(old(data)@), i)
+            implies self.get_data(dslice@.i(data@), i) == self.get_data(dslice@.i(old(data)@), i) by
+        {
+            self.index_bounds_facts(i);
+
+//             lemma_seq_slice_slice(data@,
+//                 dslice.start as int,
+//                 dslice.end as int,
+//                 self.size_of_length_field() as int + i * self.oblinfo.uniform_size() as int,
+//                 self.size_of_length_field() as int + i * self.oblinfo.uniform_size() as int + self.oblinfo.uniform_size() as int);
+//             lemma_seq_slice_slice(old(data)@,
+//                 dslice.start as int,
+//                 dslice.end as int,
+//                 self.size_of_length_field() as int + i * self.oblinfo.uniform_size() as int,
+//                 self.size_of_length_field() as int + i * self.oblinfo.uniform_size() as int + self.oblinfo.uniform_size() as int);
+
+            if i < idx as int {
+                mul_preserves_le(i + 1, idx as int, self.oblinfo.uniform_size() as int);
+            } else {
+                mul_preserves_le(idx as int + 1, i, self.oblinfo.uniform_size() as int);
+            }
+
+            // TODO(verus): shouldn't assert-by conclusion give us this trigger for free?
+            assert( self.get_data(dslice@.i(data@), i) == self.get_data(dslice@.i(old(data)@), i) );
+        }
+            
+        assert( self.sets(dslice@.i(old(data)@), idx as int, value.deepv(), dslice@.i(data@)) );
     }
 
     /////////////////////////////////////////////////////////////////////////
@@ -365,6 +464,8 @@ impl <
     exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: Elt) -> (r: bool) { false }
 
     exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: Elt) {}
+
+//     proof fn sets_final(&self) {}
 }
 
 // TODO(jonh): A great deal of this type duplicates what's in UniformSizedSeq. I'm reasonably
@@ -542,11 +643,16 @@ impl <
 
         while i < value.len()
         invariant
+            // come ON, #![verifier::spinoff_loop(false)]! Do your thing!
+            self.valid(),
+            slice == (Slice{start, end}), // shouldn't need this; slice is bound immutably. Try deleting.
+            slice@.valid(old(data)@),
+            self.marshallable(value.deepv()),
+
             0 <= i <= value.len(),
             data@.len() == old(data)@.len(),
             forall |j| 0 <= j < start ==> data@[j] == old(data)@[j],
             forall |j| end as int <= j < old(data)@.len() ==> data@[j] == old(data)@[j],
-            slice == (Slice{start, end}), // shouldn't need this; slice is bound immutably. Try deleting.
             self.lengthable(slice@.i(data@)),
             self.length(slice@.i(data@)) == value.len(),
 
@@ -555,10 +661,30 @@ impl <
             forall |j| #![auto] 0 <= j < i ==> self.get_elt(slice@.i(data@), j) == value[j].deepv(),
             forall |j| #![auto] 0 <= j < value.len() ==> self.settable(slice@.i(data@), j, value[j].deepv()),
         {
-            assume( false );
-            proof { self.oblinfo.uniform_size_ensures(); }
+            let ghost prev_data = data@;
+            let ghost old_i = i;
+            proof {
+                self.oblinfo.uniform_size_ensures();
+                assert( self.marshallable_at(value.deepv(), i as int) );
+            }
             self.exec_set(&slice, data, i, &value[i]);
             i += 1;
+
+            proof {
+//                 assert forall |j: int| 0 <= j < old_i
+//                     implies self.preserves_entry(slice@.i(prev_data), j as int, slice@.i(data@) ) by {}
+
+                assert forall |j| 0 <= j < i implies self.elt_parsable(slice@.i(data@), j) by {
+                    if j < old_i {
+                        assert( self.preserves_entry( slice@.i(prev_data), j, slice@.i(data@)) );    // trigger
+                    }
+                }
+                assert forall |j| #![auto] 0 <= j < i implies self.get_elt(slice@.i(data@), j) == value[j].deepv() by {
+                    if j < old_i {
+                        assert( self.preserves_entry( slice@.i(prev_data), j, slice@.i(data@)) );    // trigger
+                    }
+                }
+            }
         }
         // This is just a postcondition; why wasn't it automatically triggered?
         assert( self.parse(data@.subrange(start as int, end as int)) == value.deepv() );
