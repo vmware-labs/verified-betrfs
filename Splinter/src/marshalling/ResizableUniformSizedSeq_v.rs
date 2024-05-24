@@ -131,6 +131,10 @@ impl <
 
     open spec fn lengthable(&self, data: Seq<u8>) -> bool {
         &&& self.total_size <= data.len()
+        // One thing that makes this version harder than the dafny version is that
+        // we handle lengths as 'usize', which could conceivably be smaller than the LengthInt.
+        // (Dafny uses u64s for lengths, and I suppose has some constraint that the variable ints
+        // are never bigger than the u64?)
         &&& LengthIntObligations::spec_this_fits_in_usize(self.length(data))
     }
 
@@ -353,15 +357,38 @@ impl <
     exec fn exec_resizable(&self, dslice: &Slice, data: &Vec<u8>, newlen: usize) -> (r: bool) {
         &&& self.exec_lengthable(dslice, data)
         &&& newlen <= self.exec_max_length()
+        // Have to be able to write the length down in the alotted space
         &&& LengthIntObligations::exec_fits_in_this(newlen)
     }
 
     exec fn resize(&self, dslice: &Slice, data: &mut Vec<u8>, newlen: usize) {
-        let new_end = self.length_int.exec_marshall(
-            &LengthIntObligations::from_usize(newlen), data, dslice.start);
+        let length_val = LengthIntObligations::from_usize(newlen);
+        let length_end = self.length_int.exec_marshall(&length_val, data, dslice.start);
 
-        // TODO: there are 31 lines of proof at MarshalledAccessors.i.dfy:1085 to translate
-        assume(false);
+        proof {
+            let sdata_old = dslice@.i(old(data)@);
+            let sdata_new = dslice@.i(data@);
+
+            // We updated the length correctly
+            LengthIntObligations::spec_this_fits_in_usize_ensures(newlen as int);
+            // extensional equality to connect seq as given by exec_marshall to seq as expected by
+            // self.length
+            assert( data@.subrange(dslice.start as int, length_end as int)
+                    == sdata_new.subrange(0, self.size_of_length_field() as int) );
+            LengthIntObligations::as_int_ensures(); // newlen == length_val.deepv()
+            
+            // We didn't touch any of the actual indexed data
+            assert forall |i| self.gettable(sdata_old, i) && self.elt_parsable(sdata_old, i)
+                implies {
+                    &&& self.elt_parsable(sdata_new, i)
+                    &&& self.get_elt(sdata_new, i) == self.get_elt(sdata_old, i)
+            } by {
+                self.index_bounds_facts(i);
+                assert( self.get_data(sdata_new, i) == self.get_data(sdata_old, i) );
+            }
+
+            assert( self.resizes(dslice@.i(old(data)@), newlen as int, dslice@.i(data@)) );
+        }
     }
 
     /////////////////////////////////////////////////////////////////////////
@@ -527,6 +554,8 @@ impl <
                     == SpecSlice{start: start as int, end: length_end as int}.i(data@) );
 
             // gosh golly darn lack of spec ensures
+            // (Need this to unpack the deepv from exec_marshall's parse postcondition back to the
+            // length_val we passed in.)
             LengthIntObligations::as_int_ensures();
 
             assert( self.lengthable(slice@.i(data@)) );
