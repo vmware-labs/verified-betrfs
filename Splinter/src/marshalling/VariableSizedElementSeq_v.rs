@@ -297,9 +297,14 @@ impl <
 
     exec fn exec_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (elt: Elt)
     {
-        // TODO duplicates same method from Resizable*
-        assume( false );    // borrow/refactor proof from Resizable
         let eslice = self.exec_get(dslice, data, idx);
+        proof {
+            // TODO(verus): lament of spec ensures
+            self.get_ensures(dslice@, data@, idx as int);
+            SpecSlice::all_ensures::<u8>();
+            // extn equal trigger
+            assert( eslice@.i(data@) =~= self.get_data(dslice@.i(data@), idx as int) );
+        }
         self.eltm.exec_parse(&eslice, data)
     }
 
