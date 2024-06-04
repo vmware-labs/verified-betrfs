@@ -42,6 +42,11 @@ impl SpecSlice {
         SpecSlice{start: 0, end: data.len() as int}
     }
 
+    pub proof fn all_ensures<T>()
+        ensures forall |data: Seq<T>| (#[trigger] Self::all(data)).i(data) =~= data
+    {
+    }
+
     pub open spec fn agree_beyond_slice<T>(&self, data: Seq<T>, new_data: Seq<T>) -> bool
     {
         &&& data.len() == new_data.len()

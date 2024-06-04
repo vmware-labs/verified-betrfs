@@ -251,40 +251,17 @@ impl <
         let olen = self.try_length(dslice, data);
         if olen.is_some() && idx < self.exec_max_length() && idx < olen.unwrap() {
             proof {
-                // In the original, we knew that boundary_seq_marshalling
-                // was a ResizableIntegerSeqMarshalling, so elt_parsable
-                // is always going to be true.
-
-                // the original has some invariant that must say every element in the length is
-                // gettable
-                let vdata = dslice@.i(data@);
-                self.boundary_seq_easy_marshalling();
-//                 let bsm = self.boundary_seq_marshalling;
-//                 assert( bsm.eltm.parsable(bsm.get_data(vdata, idx as int)) );
-//                 assert( self.boundary_seq_marshalling.elt_parsable(vdata, idx as int) );
-                assert( self.element_gettable(dslice@.i(data@), idx as int) );
                 self.boundary_seq_easy_marshalling();
                 self.boundary_ints_fit_in_usize();
             }
             let start = self.exec_element_data_begin(dslice, data, idx);
             let end = self.exec_element_data_end(dslice, data, idx);
             if start <= end && end <= self.total_size && self.total_size <= dslice.len() {
-                // I guess your encoding could store a negative number?
-                // These should all be invariants on a correctly-encoded VSES
-//                 assert( 0 <= self.element_data_begin(gdata, idx as int) );
-//                 assert( self.element_data_begin(gdata, idx as int)
-//                         <= self.element_data_end(gdata, idx as int) );
-//                 assert( self.element_data_end(gdata, idx as int) <= self.total_size );
-//                 assert( self.gettable(gdata, idx as int) );
-//                 assert( dslice@.subslice(start as int, end as int) == self.get(dslice@, data@, idx as int) );
                 Some(dslice.subslice(start, end))
             } else {
-//                 assume( false );
-//                 assert( !self.gettable(gdata, idx as int) );
                 None
             }
         } else {
-//             assert( !self.gettable(gdata, idx as int) );
             None
         }
     }
@@ -293,24 +270,29 @@ impl <
     {
         let start = self.exec_element_data_begin(dslice, data, idx);
         let end = self.exec_element_data_end(dslice, data, idx);
-
-//         let len = self.exec_length(dslice, data);
-//         let istart = self.boundary_seq_marshalling.exec_get_elt(dslice, data, idx);
-//         let start = BoundaryIntObligations::to_usize(istart);
-//         let end =
-//         if 0 < idx {
-//             let iend = self.boundary_seq_marshalling.exec_get_elt(dslice, data, idx - 1);
-//             BoundaryIntObligations::to_usize(iend)
-//         } else {
-//             self.total_size
-//         };
         dslice.subslice(start, end)
     }
 
     exec fn try_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oelt: Option<Elt>)
     {
-        assume( false );
-        None
+        let oeslice = self.try_get(dslice, data, idx);
+        match oeslice {
+            None => {
+                assert( !self.gettable(dslice@.i(data@), idx as int) );
+                None
+            }
+            Some(eslice) => {
+                proof {
+                    // TODO(verus): lament of spec ensures
+                    self.get_ensures(dslice@, data@, idx as int);
+                    SpecSlice::all_ensures::<u8>();
+                    // extn equal trigger
+                    assert( eslice@.i(data@) =~= self.get_data(dslice@.i(data@), idx as int) );
+                }
+                let oelt = self.eltm.try_parse(&eslice, data);
+                oelt
+            }
+        }
     }
 
     exec fn exec_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (elt: Elt)
