@@ -10,6 +10,8 @@ use crate::marshalling::SeqMarshalling_v::*;
 use crate::marshalling::Slice_v::*;
 use crate::marshalling::UniformSizedSeq_v::*;
 use crate::marshalling::ResizableUniformSizedSeq_v::*;
+// use crate::marshalling::ResizableIntegerSeq_v::*;
+use crate::marshalling::VariableSizedElementSeq_v::*;
 
 // fn m<M: Marshalling<int, u32>>(m: &M) {
 // }

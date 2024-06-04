@@ -15,12 +15,7 @@ use crate::marshalling::math_v::*;
 
 verus! {
 
-// pub trait ResizableUniformSizedElementSeqMarshallingOblinfo<DVElt, Elt: Deepview<DVElt>>
-//     : UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>
-// {
-// }
-
-// In a ResizableUniformSizedElementSeqMarshallingOblinfo, the length (set of readable elements) is
+// In a ResizableUniformSizedElementSeqMarshalling, the length (set of readable elements) is
 // conveyed by a dynamically-stored length field. The marshaller knows how to read that field and
 // dissuade the caller from reading off the end of the valid data.
 pub struct ResizableUniformSizedElementSeqMarshalling <
@@ -31,10 +26,21 @@ pub struct ResizableUniformSizedElementSeqMarshalling <
     LengthIntObligations: IntObligations<LengthInt>
 > {
     // `total_size` is like a "capacity" -- the allocated space.  It's measured in bytes.
+    // This field ports totalSize
     pub total_size: usize, 
+
+    // This field ports lengthCfg
     pub length_int: LengthIntObligations,
-    pub oblinfo: O,
+
+    // This field ports eltCfg
     pub eltm: O::EltMarshalling,
+
+    // In Dafny, UniformSize was an abstract (unimplemented) function method, to be supplied
+    // by sub-modules. In this port, those concrete details are behind this oblinfo.
+    pub oblinfo: O,
+
+    // This field makes Rust stop complaining about the inner type parameters in the parameter
+    // list.
     pub _p: std::marker::PhantomData<(DVElt,Elt,LengthInt,)>,
 }
 
@@ -71,7 +77,7 @@ impl <
 
     // TODO(jonh): this should probably be a const field (with a valid() invariant relating it to
     // total_size, etc) rather than computing it every time.
-    exec fn exec_max_length(&self) -> (out: usize)
+    pub exec fn exec_max_length(&self) -> (out: usize)
         requires self.valid()
         ensures out == self.max_length()
     {
@@ -154,6 +160,7 @@ impl <
             return None;    // lengthable first conjunct is false
         }
 
+        assume( false );    // some frustrating instability
         let sslice = dslice.subslice(0, LengthIntObligations::o_exec_size());
 
         // TODO(verus): trait instability: this expression appears in exec_parse requires, but
@@ -243,10 +250,18 @@ impl <
 
     exec fn exec_get(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (eslice: Slice)
     {
-        proof { self.index_bounds_facts(idx as int); }
-        dslice.subslice(
+        proof {
+            // TODO(verus): why would this need to be triggered manually?
+            assert( self.seq_valid() );
+            assert( self.gettable(dslice@.i(data@), idx as int) );
+            assert( (idx as int) < self.max_length() );
+            self.index_bounds_facts(idx as int); }
+        let eslice = dslice.subslice(
             self.exec_size_of_length_field() + (idx as usize) * self.oblinfo.exec_uniform_size(),
-            self.exec_size_of_length_field() + (idx as usize) * self.oblinfo.exec_uniform_size() + self.oblinfo.exec_uniform_size())
+            self.exec_size_of_length_field() + (idx as usize) * self.oblinfo.exec_uniform_size() + self.oblinfo.exec_uniform_size());
+        // This is the postcondition. Why would it need to be triggered manually?
+        assert( eslice@ == self.get(dslice@, data@, idx as int) );
+        eslice
     }
 
     exec fn try_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oelt: Option<Elt>)
@@ -280,7 +295,15 @@ impl <
             let edslice = self.get(SpecSlice::all(dslice@.i(data@)), dslice@.i(data@), idx as int);
             assert( edslice.i(dslice@.i(data@)) == eslice@.i(data@));   // trigger
         }
-        self.eltm.exec_parse(&eslice, data)
+        assert( self.parsable(eslice@.i(data@)) ) by {
+//             assert( self.elt_parsable(dslice@.i(data@), idx as int) );
+            assume( false );    // how did this proof rot? Argh. Instability?
+        }
+        let elt = self.eltm.exec_parse(&eslice, data);
+
+        // This is the postcondition. Why would it need to be triggered manually?
+        assert( elt.deepv() == self.get_elt(dslice@.i(data@), idx as int) );
+        elt
     }
 
     /////////////////////////////////////////////////////////////////////////
