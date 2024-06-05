@@ -92,6 +92,9 @@ pub trait IntObligations<T: Deepview<int> + builtin::Integer> {
         ensures Self::as_int(w) == v as int
     ;
 
+    // Maybe this class should be NatObligations? Or have an additional Natty trait?
+    proof fn nonnegative()
+    ensures forall |t: T| 0 <= Self::as_int(t);
 }
 
 // impl Marshalling helper fn
@@ -309,6 +312,8 @@ impl IntObligations<u32> for IntMarshalling<u32> {
     {
         if usize::BITS <= u32::BITS { true } else { v <= (u32::MAX as usize) }
     }
+
+    proof fn nonnegative() {}
 }
 
 impl Deepview<int> for u64 {
@@ -371,6 +376,8 @@ impl IntObligations<u64> for IntMarshalling<u64> {
     {
         if usize::BITS <= u64::BITS { true } else { v <= (u64::MAX as usize) }
     }
+
+    proof fn nonnegative() {}
 }
 
 // Confirm that I really have built Marshalling<int, u32> and u64

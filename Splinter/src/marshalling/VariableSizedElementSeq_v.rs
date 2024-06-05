@@ -55,9 +55,6 @@ pub struct VariableSizedElementSeqMarshalling <
     // This field ports eltCfg
     pub eltm: EltMarshalling,
 
-    // The pre-allocated capacity (bytes)
-    pub total_size: usize,
-
     pub _p: std::marker::PhantomData<(DVElt,Elt,LengthInt,BoundaryIntObligations,)>,
 }
 
@@ -83,11 +80,30 @@ impl <
             LengthInt,
             LengthIntObligations,
         >,
-            eltm: EltMarshalling,
-            total_size: usize) -> (s: Self)
-        ensures s.total_size == total_size
+            eltm: EltMarshalling) -> (s: Self)
     {
-        Self{ boundary_seq_marshalling, eltm, total_size, _p: Default::default(), }
+        Self{ boundary_seq_marshalling, eltm, _p: Default::default(), }
+    }
+
+    // The pre-allocated capacity (bytes) is just whatever we preallocated to the
+    // boundary seq array.
+    // The idea is that we contain a boundary seq that is allocated to the total
+    // size. Each record we append gobbles up a bit of the "free space" at the
+    // far end of that allocation; we're careful (TODO: where?) not to let
+    // the used portion of the boundary array overlap with the used portion
+    // holding the elements.
+    // If we only append 0-length records, the boundary seq array could grow to fill the entire
+    // allocation. If we append one huge element, it can use all the space except the length field
+    // and that first boundary entry that records the length of that element.
+
+    pub open spec fn total_size(&self) -> usize {   // TODO maybe return an int?
+        self.boundary_seq_marshalling.total_size
+    }
+
+    pub exec fn exec_total_size(&self) -> (sz: usize)
+        ensures sz == self.total_size()
+    {
+        self.boundary_seq_marshalling.total_size
     }
 
     pub open spec fn max_length(&self) -> usize {
@@ -131,7 +147,7 @@ impl <
 
     pub open spec fn element_data_end(&self, data: Seq<u8>, idx: int) -> int
     {
-        if idx == 0 { self.total_size as int }
+        if idx == 0 { self.total_size() as int }
         else { self.boundary_seq_marshalling.get_elt(data, idx - 1) }
     }
 
@@ -153,7 +169,7 @@ impl <
             let iend = self.boundary_seq_marshalling.exec_get_elt(dslice, data, idx - 1);
             BoundaryIntObligations::to_usize(iend)
         } else {
-            self.total_size
+            self.exec_total_size()
         }
     }
 
@@ -173,6 +189,85 @@ impl <
         ensures forall |i| #![auto] BoundaryIntObligations::spec_this_fits_in_usize(BoundaryIntObligations::as_int(i))
     {
         assume(false);
+    }
+
+    pub open spec fn size_of_length_field(&self) -> usize
+    {
+        LengthIntObligations::o_spec_size()
+    }
+
+    pub open spec fn size_of_boundary_entry(&self) -> usize
+    {
+        BoundaryIntObligations::o_spec_size()
+    }
+
+    // Why isn't this method defined on ResizableSeq, instead of pieced together here?
+    pub open spec fn size_of_table(&self, len: int) -> int
+    {
+        self.size_of_length_field() as int + len * self.size_of_boundary_entry() as int
+    }
+
+    pub open spec fn tableable(&self, data: Seq<u8>) -> (b: bool)
+    recommends self.seq_valid()
+    {
+        self.boundary_seq_marshalling.parsable(data)
+    }
+
+    pub proof fn tableable_ensures(&self, data: Seq<u8>)
+    requires self.seq_valid()
+    ensures
+        self.tableable(data) ==> self.lengthable(data),
+        self.tableable(data) ==> self.size_of_table(self.length(data)) <= self.total_size() as int,
+    {
+        if self.boundary_seq_marshalling.parsable(data) {
+            self.boundary_seq_marshalling.parsable_length_bounds(data);
+        }
+        if self.tableable(data) {
+            self.boundary_seq_marshalling.parsable_length_bounds(data);
+            assert( self.boundary_seq_marshalling.parsable(data) );
+            assert( self.lengthable(data) );
+
+            assert( self.length(data) == self.boundary_seq_marshalling.length(data) );
+
+            assert( self.size_of_table(self.length(data)) ==
+                LengthIntObligations::o_spec_size() as int + self.length(data) * BoundaryIntObligations::o_spec_size() as int );
+            let bsm = self.boundary_seq_marshalling;
+            assert( 
+                bsm.length(data) * bsm.oblinfo.uniform_size() as int
+                    <= bsm.total_size as int - bsm.size_of_length_field() as int );
+            assert( 
+                bsm.size_of_length_field() as int + bsm.length(data) * bsm.oblinfo.uniform_size() as int
+                    <= bsm.total_size as int );
+            assert( bsm.size_of_length_field() == LengthIntObligations::o_spec_size() as int );
+            assert( bsm.length(data) == self.length(data) );
+
+            // Why do I think I know this? How can it *not* be? These traits are a mess.
+            assume( bsm.oblinfo.uniform_size() == BoundaryIntObligations::o_spec_size() );
+
+            assert( bsm.total_size as int <= self.total_size() as int );
+                
+                    
+            assert( self.size_of_table(self.length(data)) <= self.total_size() as int );
+        }
+    }
+
+    pub open spec fn table(&self, data: Seq<u8>) -> Seq<int>
+    recommends self.seq_valid(), self.tableable(data)
+    {
+        self.boundary_seq_marshalling.parse(data)
+    }
+
+    // A well-formed boundary seq table should be in reverse sequence
+    pub open spec fn valid_table(&self, data: Seq<u8>) -> (b: bool)
+    recommends self.seq_valid(), self.tableable(data)
+    {
+        let t = self.table(data);
+        // Every element has non-negative length
+        &&& forall |i, j| 0 <= i <= j < t.len() ==> t[j] <= t[i]
+        // The last element ends before the end of the VSES total byte allocation
+        &&& 0 < t.len() ==> t[0] <= self.total_size() as int
+        // The first element starts beyond the end of the table itself.
+        &&& 0 < t.len() ==> self.size_of_table(t.len() as int) <= t.last()
     }
 }
 
@@ -220,7 +315,7 @@ impl <
         &&& idx < self.length(data)
         &&& self.element_gettable(data, idx)
         &&& (0 < idx ==> self.element_gettable(data, idx-1))
-        &&& 0 <= self.element_data_begin(data, idx) <= self.element_data_end(data, idx) <= self.total_size as int <= data.len()
+        &&& 0 <= self.element_data_begin(data, idx) <= self.element_data_end(data, idx) <= self.total_size() as int <= data.len()
     }
 
     open spec fn get(&self, dslice: SpecSlice, data: Seq<u8>, idx: int) -> (eslice: SpecSlice)
@@ -256,7 +351,8 @@ impl <
             }
             let start = self.exec_element_data_begin(dslice, data, idx);
             let end = self.exec_element_data_end(dslice, data, idx);
-            if start <= end && end <= self.total_size && self.total_size <= dslice.len() {
+            let total_size = self.exec_total_size();
+            if start <= end && end <= total_size && total_size <= dslice.len() {
                 Some(dslice.subslice(start, end))
             } else {
                 None
@@ -310,6 +406,8 @@ impl <
 
     /////////////////////////////////////////////////////////////////////////
     // setting individual elements
+    // Disallowed for VariableSizedElementSeq, since that would involve
+    // creating holes or overlaps.
     /////////////////////////////////////////////////////////////////////////
 
     open spec fn elt_marshallable(&self, elt: DVElt) -> bool
@@ -326,6 +424,8 @@ impl <
 
     /////////////////////////////////////////////////////////////////////////
     // resizing
+    // Disallowed for VariableSizedElementSeq; the size is advanced
+    // exclusively through append operations.
     /////////////////////////////////////////////////////////////////////////
 
     open spec fn resizable(&self, data: Seq<u8>, newlen: int) -> bool { false }
@@ -338,19 +438,33 @@ impl <
     // append
     /////////////////////////////////////////////////////////////////////////
 
-    open spec fn well_formed(&self, data: Seq<u8>) -> bool { false }
+    open spec fn well_formed(&self, data: Seq<u8>) -> bool {
+        &&& self.tableable(data)
+        &&& self.valid_table(data)
+    }
 
-    proof fn well_formed_ensures(&self, data: Seq<u8>) {}
+    proof fn well_formed_ensures(&self, data: Seq<u8>)
+    {
+        assume( false );
+    }
 
     open spec fn appendable(&self, data: Seq<u8>, value: DVElt) -> bool { false }
 
     open spec fn appends(&self, data: Seq<u8>, value: DVElt, newdata: Seq<u8>) -> bool { false }
 
-    exec fn exec_well_formed(&self, dslice: &Slice, data: &Vec<u8>) -> (w: bool) { false }
+    exec fn exec_well_formed(&self, dslice: &Slice, data: &Vec<u8>) -> (w: bool) {
+        assume( false );
+        false
+    }
 
-    exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: Elt) -> (r: bool) { false }
+    exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: Elt) -> (r: bool) {
+        assume( false );
+        false
+    }
 
-    exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: Elt) {}
+    exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: Elt) {
+        assume( false );
+    }
 
 }
 
