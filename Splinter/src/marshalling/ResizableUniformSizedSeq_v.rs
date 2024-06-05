@@ -467,6 +467,26 @@ impl <
         &&& self.eltm.marshallable(value[i])
         &&& self.eltm.spec_size(value[i]) == self.oblinfo.uniform_size()
     }
+
+    pub proof fn parsable_length_bounds(&self, data: Seq<u8>)
+    requires self.seq_valid(), self.parsable(data),
+    ensures
+        self.length(data) <= self.max_length() as int,
+        self.length(data) * self.oblinfo.uniform_size() as int
+            <= self.total_size as int - self.size_of_length_field() as int,
+    {
+        LengthIntObligations::nonnegative();
+        let len = self.length(data);
+        if 0 < len {
+            assert( self.gettable(data, len-1) );
+            self.index_bounds_facts(len - 1);
+        } else {
+            // trigger nonnegative ... but I have no idea how! length mentions
+            // IntegerMarshalling::parse, which has no ensures and never mentions
+            // type T. Weird.
+            assert( len == 0 );
+        }
+    }
 }
 
 impl <
@@ -649,5 +669,4 @@ impl <
     }
 }
 
-}
-
+} //verus!
