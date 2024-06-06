@@ -13,9 +13,13 @@ verus! {
 
 //////////////////////////////////////////////////////////////////////////////
 // Sequence marshalling
+//
+// A format that implements SeqMarshal knows how to parse and marshall
+// a sequence-like type one element at a time: set and get at an index, or
+// append to the end of the sequence.
 //////////////////////////////////////////////////////////////////////////////
 
-pub trait SeqMarshalling<DVElt, Elt: Deepview<DVElt>> {
+pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
     spec fn seq_valid(&self) -> bool;
 
     spec fn lengthable(&self, data: Seq<u8>) -> bool

@@ -19,9 +19,10 @@ verus! {
 // conveyed by a dynamically-stored length field. The marshaller knows how to read that field and
 // dissuade the caller from reading off the end of the valid data.
 pub struct ResizableUniformSizedElementSeqMarshalling <
-    DVElt,
-    Elt: Deepview<DVElt>,
-    O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>,
+//     DVElt,
+//     Elt: Deepview<DVElt>,
+    EltMarshal: Marshal,
+    O: UniformSizedElementSeqMarshallingOblinfo<EltMarshal>,
     LengthInt: Deepview<int> + builtin::Integer + Copy, // Bleargh. Surely I could name this.
     LengthIntObligations: IntObligations<LengthInt>
 > {
@@ -33,7 +34,7 @@ pub struct ResizableUniformSizedElementSeqMarshalling <
     pub length_int: LengthIntObligations,
 
     // This field ports eltCfg
-    pub eltm: O::EltMarshalling,
+    pub eltm: EltMarshal,
 
     // In Dafny, UniformSize was an abstract (unimplemented) function method, to be supplied
     // by sub-modules. In this port, those concrete details are behind this oblinfo.
@@ -41,7 +42,7 @@ pub struct ResizableUniformSizedElementSeqMarshalling <
 
     // This field makes Rust stop complaining about the inner type parameters in the parameter
     // list.
-    pub _p: std::marker::PhantomData<(DVElt,Elt,LengthInt,)>,
+    pub _p: std::marker::PhantomData<(LengthInt,)>,
 }
 
 impl <
@@ -128,7 +129,7 @@ impl <
     LengthInt: Deepview<int> + builtin::Integer + Copy, // Bleargh. Surely I could name this.
     LengthIntObligations: IntObligations<LengthInt>
 >
-    SeqMarshalling<DVElt, Elt>
+    SeqMarshal<DVElt, Elt>
     for ResizableUniformSizedElementSeqMarshalling<DVElt, Elt, O, LengthInt, LengthIntObligations>
 {
     open spec fn seq_valid(&self) -> bool {
@@ -437,7 +438,7 @@ impl <
 // TODO(jonh): A great deal of this type duplicates what's in UniformSizedSeq. I'm reasonably
 // confident we could shoehorn them together somehow, so that UniformSizedSeq is just a variant
 // of ResizableUniformSizedSeq with a 0-byte length field that knows to get its "dynamic"
-// length from the static length ("total_size") in the Marshalling object.
+// length from the static length ("total_size") in the Marshal object.
 
 impl <
     DVElt,
@@ -496,14 +497,17 @@ impl <
     LengthInt: Deepview<int> + builtin::Integer + Copy,
     LengthIntObligations: IntObligations<LengthInt>
 >
-     Marshalling<Seq<DVElt>, Vec<Elt>>
+     Marshal
      for ResizableUniformSizedElementSeqMarshalling<DVElt, Elt, O, LengthInt, LengthIntObligations>
 {
+    type DV = Seq<DVElt>;
+    type U = Vec<Elt>;
+
     open spec fn valid(&self) -> bool { self.seq_valid() }
 
     exec fn exec_parsable(&self, dslice: &Slice, data: &Vec<u8>) -> (p: bool)
     {
-        // TODO factor this into Marshalling trait default method
+        // TODO factor this into Marshal trait default method
         let ovalue = self.try_parse(dslice, data);
         ovalue.is_some()
     }

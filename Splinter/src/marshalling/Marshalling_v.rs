@@ -34,7 +34,12 @@ impl<DVE, Elt: Deepview<DVE>> Deepview<Seq<DVE>> for Vec<Elt> {
 //     fn deepv(&self) -> Self::DV;
 // }
 
-pub trait Marshalling<DV, U: Deepview<DV>> {
+// Marshal is the most basic behavior: A format that implements Marshal
+// knows how to parse and marshall the type all at once.
+pub trait Marshal {
+    type DV;                // The view (spec) type
+    type U: Deepview<Self::DV>;    // The runtime type
+
     spec fn valid(&self) -> bool;
 
     spec fn parsable(&self, data: Seq<u8>) -> bool
@@ -49,16 +54,16 @@ pub trait Marshalling<DV, U: Deepview<DV>> {
         p == self.parsable(slice@.i(data@))
     ;
 
-    spec fn marshallable(&self, value: DV) -> bool
+    spec fn marshallable(&self, value: Self::DV) -> bool
     ;
 
-    spec fn spec_size(&self, value: DV) -> usize
+    spec fn spec_size(&self, value: Self::DV) -> usize
     recommends 
         self.valid(),
         self.marshallable(value)
     ;
 
-    exec fn exec_size(&self, value: &U) -> (sz: usize)
+    exec fn exec_size(&self, value: &Self::U) -> (sz: usize)
     requires 
         self.valid(),
         self.marshallable(value.deepv()),
@@ -66,13 +71,13 @@ pub trait Marshalling<DV, U: Deepview<DV>> {
         sz == self.spec_size(value.deepv())
     ;
 
-    spec fn parse(&self, data: Seq<u8>) -> DV
+    spec fn parse(&self, data: Seq<u8>) -> Self::DV
     recommends 
         self.valid(),
         self.parsable(data)
     ;
 
-    exec fn try_parse(&self, slice: &Slice, data: &Vec<u8>) -> (ov: Option<U>)
+    exec fn try_parse(&self, slice: &Slice, data: &Vec<u8>) -> (ov: Option<Self::U>)
     requires
         self.valid(),
         slice@.valid(data@),
@@ -81,7 +86,7 @@ pub trait Marshalling<DV, U: Deepview<DV>> {
         self.parsable(slice@.i(data@)) ==> ov.unwrap().deepv() == self.parse(slice@.i(data@))
     ;
 
-    exec fn exec_parse(&self, slice: &Slice, data: &Vec<u8>) -> (value: U)
+    exec fn exec_parse(&self, slice: &Slice, data: &Vec<u8>) -> (value: Self::U)
     requires
         self.valid(),
         slice@.valid(data@),
@@ -95,7 +100,7 @@ pub trait Marshalling<DV, U: Deepview<DV>> {
     // jonh skipping translation of Parse -- does it ever save more than
     // a cheap if condition?
 
-    exec fn exec_marshall(&self, value: &U, data: &mut Vec<u8>, start: usize) -> (end: usize)
+    exec fn exec_marshall(&self, value: &Self::U, data: &mut Vec<u8>, start: usize) -> (end: usize)
     requires 
         self.valid(),
         self.marshallable(value.deepv()),
