@@ -32,9 +32,7 @@ verus! {
 
 pub struct VariableSizedElementSeqMarshalling <
     // The values we're marshalling and how to marshall each
-    DVElt,
-    Elt: Deepview<DVElt>,
-    EltMarshalling: Marshalling<DVElt, Elt>,
+    EltMarshalling: Marshal,
 
     // The ints we'll use to track the lengths of each value
     LengthInt: Deepview<int> + builtin::Integer + Copy,
@@ -55,21 +53,19 @@ pub struct VariableSizedElementSeqMarshalling <
     // This field ports eltCfg
     pub eltm: EltMarshalling,
 
-    pub _p: std::marker::PhantomData<(DVElt,Elt,LengthInt,BoundaryIntObligations,)>,
+    pub _p: std::marker::PhantomData<(LengthInt,BoundaryIntObligations,)>,
 }
 
 
 impl <
-    DVElt,
-    Elt: Deepview<DVElt>,
-    EltMarshalling: Marshalling<DVElt, Elt>,
+    EltMarshalling,
     LengthInt: Deepview<int> + builtin::Integer + Copy,
     LengthIntObligations: IntObligations<LengthInt>,
     BoundaryInt: Deepview<int> + builtin::Integer + Copy,
     BoundaryIntObligations: IntObligations<BoundaryInt>,
     BoundarySeqO: UniformSizedElementSeqMarshallingOblinfo<int, BoundaryInt>,
 >
-    VariableSizedElementSeqMarshalling<DVElt, Elt, EltMarshalling, LengthInt, LengthIntObligations, BoundaryInt, BoundaryIntObligations, BoundarySeqO>
+    VariableSizedElementSeqMarshalling<EltMarshalling, LengthInt, LengthIntObligations, BoundaryInt, BoundaryIntObligations, BoundarySeqO>
 {
     // TODO(verus): modify Verus to allow constructing default phantomdata fields
     #[verifier(external_body)]
@@ -272,18 +268,16 @@ impl <
 }
 
 impl <
-    DVElt,
-    Elt: Deepview<DVElt>,
-    EltMarshalling: Marshalling<DVElt, Elt>,
+    EltMarshalling: Marshal,
     LengthInt: Deepview<int> + builtin::Integer + Copy,
     LengthIntObligations: IntObligations<LengthInt>,
     BoundaryInt: Deepview<int> + builtin::Integer + Copy,
     BoundaryIntObligations: IntObligations<BoundaryInt>,
     BoundarySeqO: UniformSizedElementSeqMarshallingOblinfo<int, BoundaryInt>,
 >
-    SeqMarshalling<DVElt, Elt>
+    SeqMarshal<EltMarshalling::DV, EltMarshalling::U>
     for
-    VariableSizedElementSeqMarshalling<DVElt, Elt, EltMarshalling, LengthInt, LengthIntObligations, BoundaryInt, BoundaryIntObligations, BoundarySeqO>
+    VariableSizedElementSeqMarshalling<EltMarshalling, LengthInt, LengthIntObligations, BoundaryInt, BoundaryIntObligations, BoundarySeqO>
 {
     open spec fn seq_valid(&self) -> bool {
         &&& self.boundary_seq_marshalling.valid()
@@ -328,14 +322,14 @@ impl <
     proof fn get_ensures(&self, dslice: SpecSlice, data: Seq<u8>, idx: int)
     {}
 
-    // TODO: want to use common impl in SeqMarshalling, but can't refactor due to eltm dispatch problem
+    // TODO: want to use common impl in SeqMarshal, but can't refactor due to eltm dispatch problem
     open spec fn elt_parsable(&self, data: Seq<u8>, idx: int) -> bool
     {
         self.eltm.parsable(self.get_data(data, idx))
     }
 
-    // TODO: want to use common impl in SeqMarshalling, but can't refactor due to eltm dispatch problem
-    open spec fn get_elt(&self, data: Seq<u8>, idx: int) -> (elt: DVElt)
+    // TODO: want to use common impl in SeqMarshal, but can't refactor due to eltm dispatch problem
+    open spec fn get_elt(&self, data: Seq<u8>, idx: int) -> (elt: EltMarshalling::DV)
     {
         self.eltm.parse(self.get_data(data, idx))
     }
@@ -369,7 +363,7 @@ impl <
         dslice.subslice(start, end)
     }
 
-    exec fn try_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oelt: Option<Elt>)
+    exec fn try_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oelt: Option<EltMarshalling::U>)
     {
         let oeslice = self.try_get(dslice, data, idx);
         match oeslice {
@@ -391,7 +385,7 @@ impl <
         }
     }
 
-    exec fn exec_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (elt: Elt)
+    exec fn exec_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (elt: EltMarshalling::U)
     {
         let eslice = self.exec_get(dslice, data, idx);
         proof {
@@ -410,16 +404,16 @@ impl <
     // creating holes or overlaps.
     /////////////////////////////////////////////////////////////////////////
 
-    open spec fn elt_marshallable(&self, elt: DVElt) -> bool
+    open spec fn elt_marshallable(&self, elt: EltMarshalling::DV) -> bool
     {false}
 
-    open spec fn settable(&self, data: Seq<u8>, idx: int, value: DVElt) -> bool
+    open spec fn settable(&self, data: Seq<u8>, idx: int, value: EltMarshalling::DV) -> bool
     {false}
 
-    exec fn exec_settable(&self, dslice: &Slice, data: &Vec<u8>, idx: usize, value: &Elt) -> (s: bool)
+    exec fn exec_settable(&self, dslice: &Slice, data: &Vec<u8>, idx: usize, value: &EltMarshalling::U) -> (s: bool)
     {false}
 
-    exec fn exec_set(&self, dslice: &Slice, data: &mut Vec<u8>, idx: usize, value: &Elt)
+    exec fn exec_set(&self, dslice: &Slice, data: &mut Vec<u8>, idx: usize, value: &EltMarshalling::U)
     {}
 
     /////////////////////////////////////////////////////////////////////////
@@ -448,21 +442,21 @@ impl <
         assume( false );
     }
 
-    open spec fn appendable(&self, data: Seq<u8>, value: DVElt) -> bool { false }
+    open spec fn appendable(&self, data: Seq<u8>, value: EltMarshalling::DV) -> bool { false }
 
-    open spec fn appends(&self, data: Seq<u8>, value: DVElt, newdata: Seq<u8>) -> bool { false }
+    open spec fn appends(&self, data: Seq<u8>, value: EltMarshalling::DV, newdata: Seq<u8>) -> bool { false }
 
     exec fn exec_well_formed(&self, dslice: &Slice, data: &Vec<u8>) -> (w: bool) {
         assume( false );
         false
     }
 
-    exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: Elt) -> (r: bool) {
+    exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: EltMarshalling::U) -> (r: bool) {
         assume( false );
         false
     }
 
-    exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: Elt) {
+    exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: EltMarshalling::U) {
         assume( false );
     }
 
