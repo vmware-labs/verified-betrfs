@@ -5,8 +5,8 @@ use builtin_macros::*;
 
 verus! {
 
-// A marshalling Format is UniformSized if it always marshals to exactly
-// the same number of bytes regardless of the value being marshalled.
+// A marshalling Format *instance* is UniformSized if it always marshals to exactly the same number
+// of bytes regardless of the value being marshalled.
 //
 // Note that these sizes are &self properties because there may be different
 // instances of a UniformSized Format configured for different sizes, such

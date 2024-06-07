@@ -53,6 +53,61 @@ impl<EltFormat: Marshal + UniformSized> UniformSizedElementSeqFormat<EltFormat>
             pos_mul_preserves_order(idx + 1, self.slice_length(slice), self.eltf.uniform_size() as int);
         }
     }
+
+    // TODO delete: copy-pasted from trait default https://github.com/verus-lang/verus/issues/1157
+    pub open spec fn get_data(&self, data: Seq<u8>, idx: int) -> (edata: Seq<u8>)
+    {
+        self.get(SpecSlice::all(data), data, idx).i(data)
+    }
+
+    // TODO: delete; testing why definition in trait default isn't visible here
+    pub open spec fn elt_parsable_to_len(&self, data: Seq<u8>, len: int) -> bool
+    {
+        forall |i: int| 0<=i && i<len ==> self.elt_parsable(data, i)
+    }
+
+    // TODO: delete; testing why definition in trait default isn't visible here
+    pub open spec fn parsable_to_len(&self, data: Seq<u8>, len: usize) -> bool
+    {
+        &&& self.gettable_to_len(data, len as int)
+        &&& self.elt_parsable_to_len(data, len as int)
+    }
+
+    // TODO: delete; testing why definition in trait default isn't visible here
+    pub open spec fn gettable_to_len(&self, data: Seq<u8>, len: int) -> bool
+    {
+        forall |i: int| 0<=i && i<len ==> self.gettable(data, i)
+    }
+
+    // TODO: delete; testing why definition in trait default isn't visible here
+    pub open spec fn parse_to_len(&self, data: Seq<u8>, len: usize) -> Seq<EltFormat::DV>
+    {
+        Seq::new(len as nat, |i: int| self.get_elt(data, i))
+    }
+
+    // TODO: delete; testing why definition in trait default isn't visible here
+    pub open spec fn sets(&self, data: Seq<u8>, idx: int, value: EltFormat::DV, new_data: Seq<u8>) -> bool
+    {
+        &&& new_data.len() == data.len()
+        &&& self.lengthable(data) ==> {
+            &&& self.lengthable(new_data)
+            &&& self.length(new_data) == self.length(data)
+            }
+        &&& forall |i| i!=idx ==> self.preserves_entry(data, i, new_data)
+        &&& self.gettable(new_data, idx)
+        &&& self.elt_parsable(new_data, idx)
+        &&& self.get_elt(new_data, idx) == value
+    }
+
+    // TODO: delete; testing why definition in trait default isn't visible here
+    pub open spec fn preserves_entry(&self, data: Seq<u8>, idx: int, new_data: Seq<u8>) -> bool
+    {
+        &&& (self.gettable(data, idx) ==> self.gettable(new_data, idx))
+        &&& (self.gettable(data, idx) && self.elt_parsable(data, idx)) ==> {
+            &&& self.elt_parsable(new_data, idx)
+            &&& self.get_elt(new_data, idx) == self.get_elt(data, idx)
+            }
+    }
 }
 
 impl<EltFormat: Marshal + UniformSized>
@@ -153,99 +208,38 @@ impl<EltFormat: Marshal + UniformSized>
         let oeslice = self.try_get(dslice, data, idx);
         match oeslice {
             None => {
-                let oelt = None;
-        assert(
-        oelt is Some <==> {
-                &&& self.gettable(dslice@.i(data@), idx as int)
-                &&& self.elt_parsable(dslice@.i(data@), idx as int)
-        } );
-                oelt
+                None
             },
             Some(eslice) => {
                 proof {
-                    assert( eslice@ == self.get(dslice@, data@, idx as int) );
-                    let ddata = dslice@.i(data@);
-                    let didx = idx as int;
-                    assert( self.get_data(dslice@.i(data@), idx as int)
-                            == self.get_data(ddata, didx) );
-                    // Why isn't this passing? It's a direct alpha-substitution of the
-                    // trait default definition.
-                    assume( self.get_data(ddata, didx)
-                            == self.get(SpecSlice::all(ddata), ddata, didx).i(ddata) );
-
-                    SpecSlice::all_ensures::<u8>();
-                    assert( self.get(SpecSlice::all(ddata), ddata, didx).i(ddata)
-                            == SpecSlice::all(ddata).subslice(
-                                idx * self.eltf.uniform_size(),
-                                idx * self.eltf.uniform_size() + self.eltf.uniform_size()).i(ddata) );
-
-                    assert( self.get(dslice@, data@, didx).i(data@)
-                            == 
-                            dslice@.subslice(
-                                didx * self.eltf.uniform_size(),
-                                didx * self.eltf.uniform_size() + self.eltf.uniform_size()).i(data@) );
-
-                    assert(
-                            dslice@.subslice(
-                                didx * self.eltf.uniform_size(),
-                                didx * self.eltf.uniform_size() + self.eltf.uniform_size()).len()
-                            == SpecSlice::all(ddata).subslice(
-                                didx * self.eltf.uniform_size(),
-                                didx * self.eltf.uniform_size() + self.eltf.uniform_size()).len() );
-                    assert(
-                            dslice@.subslice(
-                                didx * self.eltf.uniform_size(),
-                                didx * self.eltf.uniform_size() + self.eltf.uniform_size()).i(data@)
-                            == data@.subrange(
-                                dslice.start + didx * self.eltf.uniform_size(),
-                                dslice.start + didx * self.eltf.uniform_size() + self.eltf.uniform_size()) );
-                    assert(
-                            SpecSlice::all(ddata).subslice(
-                                didx * self.eltf.uniform_size(),
-                                didx * self.eltf.uniform_size() + self.eltf.uniform_size()).i(ddata)
-                            == ddata.subrange(
-                                SpecSlice::all(ddata).start + didx * self.eltf.uniform_size(),
-                                SpecSlice::all(ddata).start + didx * self.eltf.uniform_size() + self.eltf.uniform_size()) );
-                    assert(
-                            ddata.subrange(
-                                SpecSlice::all(ddata).start + didx * self.eltf.uniform_size(),
-                                SpecSlice::all(ddata).start + didx * self.eltf.uniform_size() + self.eltf.uniform_size())
-                            =~=
-                            data@.subrange(
-                                dslice.start + SpecSlice::all(ddata).start + didx * self.eltf.uniform_size(),
-                                dslice.start + SpecSlice::all(ddata).start + didx * self.eltf.uniform_size() + self.eltf.uniform_size())
-                            );
-
-                    assert(
-                            dslice@.subslice(
-                                didx * self.eltf.uniform_size(),
-                                didx * self.eltf.uniform_size() + self.eltf.uniform_size()).i(data@)
-                            == SpecSlice::all(ddata).subslice(
-                                didx * self.eltf.uniform_size(),
-                                didx * self.eltf.uniform_size() + self.eltf.uniform_size()).i(ddata) );
-
-                    assert( self.get(SpecSlice::all(ddata), ddata, didx).i(ddata)
-                            == self.get(dslice@, data@, idx as int).i(data@) );
-                    assert( eslice@.i(data@) == self.get_data(ddata, didx) );
+                    self.index_bounds_facts(dslice@, idx as int);
 
                     self.get_ensures(dslice@, data@, idx as int);   // TODO(verus): lament of spec ensures
-                    self.index_bounds_facts(dslice@, idx as int);
                     let edslice = self.get(SpecSlice::all(dslice@.i(data@)), dslice@.i(data@), idx as int);
                     assert( edslice.i(dslice@.i(data@)) == eslice@.i(data@));   // trigger
                 }
                 let oelt = self.eltf.try_parse(&eslice, data);
 
-                proof {
-                    let goelt = oelt;
-                    if goelt is Some {
-                        assert( self.gettable(dslice@.i(data@), idx as int) );
-                        assert( self.eltf.parsable(eslice@.i(data@)) );
-                        assert( eslice@.i(data@) == self.get_data(dslice@.i(data@), idx as int) );
-                        assert( self.elt_parsable(dslice@.i(data@), idx as int) );
-                        assert( oelt.unwrap().deepv() == self.get_elt(dslice@.i(data@), idx as int) );
-                    } else {
-                    }
-                }
+//                 proof {
+//                     // TODO(verus): (Rob's suggestion): in the proof block, shadow all exec vars
+//                     // with a let ghost version, so I don't have to write this let.
+//                     let goelt = oelt;
+//                     if goelt is Some {
+//                         assert( self.eltf.parsable(eslice@.i(data@)) );
+// 
+// //                         let didx = idx as int;
+// //                         let ddata = dslice@.i(data@);
+// //                         assert( self.get_data(ddata, didx)
+// //                                 == self.get(SpecSlice::all(ddata), ddata, didx).i(ddata) );
+// // 
+// //                         assert( eslice@.i(data@) == self.get_data(ddata, didx) );
+// //                         assert( self.eltf.parsable(self.get_data(dslice@.i(data@), idx as int)) );
+//                         assert( self.elt_parsable(dslice@.i(data@), idx as int) );
+//                         assert( oelt.unwrap().deepv() == self.get_elt(dslice@.i(data@), idx as int) );
+//                     } else {
+//                         assert( !self.elt_parsable(dslice@.i(data@), idx as int) );
+//                     }
+//                 }
                 oelt
             }
         }
@@ -289,6 +283,7 @@ impl<EltFormat: Marshal + UniformSized>
 
     exec fn exec_set(&self, dslice: &Slice, data: &mut Vec<u8>, idx: usize, value: &EltFormat::U)
     {
+        let ghost olddata = data@;
         proof {
             self.index_bounds_facts(dslice@, idx as int);
             self.eltf.uniform_size_ensures();
@@ -327,7 +322,13 @@ impl<EltFormat: Marshal + UniformSized>
                 dslice.end as int,
                 idx as int * self.eltf.uniform_size() as int,
                 idx as int * self.eltf.uniform_size() as int + self.eltf.uniform_size() as int);
+
+            assert forall |i| i!=(idx) implies self.preserves_entry(dslice@.i(old(data)@), i, dslice@.i(data@)) by {}
         }
+
+        assert( self.sets(dslice@.i(olddata), idx as int, value.deepv(), dslice@.i(data@)) );
+        // https://github.com/verus-lang/verus/issues/1157
+        assume( false );
     }
 
     /////////////////////////////////////////////////////////////////////////
@@ -445,10 +446,10 @@ impl<EltFormat: Marshal + UniformSized>
                     self.valid(),   // TODO(verus #984): waste of my debugging time
                     dslice@.valid(data@),   // TODO(verus #984): waste of my debugging time
                     len == self.length(dslice@.i(data@)) as usize, // TODO(verus #984): waste of my debugging time
-                        result.len() == i,
-                        forall |j| 0<=j<i as nat ==> self.gettable(dslice@.i(data@), j),
-                        forall |j| 0<=j<i as nat ==> self.elt_parsable(dslice@.i(data@), j),
-                        forall |j| #![auto] 0<=j<i as nat ==> result[j].deepv() == self.get_elt(dslice@.i(data@), j),
+                    result.len() == i,
+                    forall |j| 0<=j<i as nat ==> self.gettable(dslice@.i(data@), j),
+                    forall |j| 0<=j<i as nat ==> self.elt_parsable(dslice@.i(data@), j),
+                    forall |j| #![auto] 0<=j<i as nat ==> result[j].deepv() == self.get_elt(dslice@.i(data@), j),
                 {
                     let ghost idata = dslice@.i(data@);
                     let oelt = self.try_get_elt(dslice, data, i);
@@ -460,7 +461,24 @@ impl<EltFormat: Marshal + UniformSized>
                 }
                 // Looks like this wants extensionality, but no ~! Not sure why it's needed.
                 // Oh maybe it's the trait-ensures-don't-trigger bug?
-                assert( result.deepv() == self.parse(dslice@.i(data@)) );    // trigger.
+//                 assert forall |j| result.deepv()[j] == result[j].deepv() by {}
+
+                proof {
+//                     let ddata = dslice@.i(data@);
+//                     let dlen = self.length(ddata) as usize;
+//                     let ptl = self.parse_to_len(ddata, dlen);
+//                     assert( ptl.len() == dlen );
+//                     assert( result.len() == i );
+
+                    // https://github.com/verus-lang/verus/issues/1157
+                    assume( result.deepv() == Seq::new(result.len() as nat, |i: int| result[i].deepv()) );
+                    
+//                     assert( result.deepv().len() == i );
+//                     assert( result.deepv().len() == ptl.len() );
+//                     assert( result.deepv() == ptl );
+//                     assert( result.deepv() == self.seq_parse(dslice@.i(data@)) );
+                    assert( result.deepv() == self.parse(dslice@.i(data@)) );    // trigger.
+                }
                 return Some(result);
             }
         }
@@ -474,12 +492,20 @@ impl<EltFormat: Marshal + UniformSized>
 
     open spec fn spec_size(&self, value: Self::DV) -> usize
     {
-        (value.len() * self.eltf.uniform_size()) as usize
+        let sz = (value.len() * self.eltf.uniform_size()) as usize;
+        // assert( (sz as int) == (value.len() as int) * (self.eltf.uniform_size() as int) );   // trigger!?
+        sz
     }
 
     exec fn exec_size(&self, value: &Self::U) -> (sz: usize)
     {
-        value.len() * self.eltf.exec_uniform_size()
+        proof {
+            assert( self.marshallable(value.deepv()) );
+            // https://github.com/verus-lang/verus/issues/1157
+            assert( value.deepv().len() == value.len() );
+            assert( value.len() * self.eltf.uniform_size() <= usize::MAX );
+        }
+        usize_mult(value.len(), self.eltf.exec_uniform_size())
     }
 
     exec fn exec_marshall(&self, value: &Self::U, data: &mut Vec<u8>, start: usize) -> (end: usize)

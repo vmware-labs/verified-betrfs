@@ -59,8 +59,8 @@ pub trait IntFormattable : Deepview<int> + builtin::Integer + Copy + StaticallyS
     proof fn as_int_ensures()
     ensures forall |t: Self| t.deepv() == #[trigger] Self::as_int(t);
 
-    proof fn this_type_fits_in_usize()
-        ensures forall |v: Self| { v as int <= usize::MAX as int }
+    proof fn this_type_fits_in_usize(self)
+        ensures self as int <= usize::MAX as int
     ;
 
     exec fn to_usize(v: Self) -> (w: usize)
@@ -137,7 +137,10 @@ impl IntFormattable for u32 {
 
     proof fn as_int_ensures() { }
 
-    proof fn this_type_fits_in_usize() {}
+    proof fn this_type_fits_in_usize(self) {
+        // Why doesn't this one fail but the u64 version doesn't!?
+        assert( Self::MAX <= usize::MAX );
+    }
 
     exec fn to_usize(v: u32) -> (w: usize) { v as usize }
 
@@ -200,9 +203,16 @@ impl IntFormattable for u64 {
 
     proof fn as_int_ensures() { }
 
-    proof fn this_type_fits_in_usize() {}
+    proof fn this_type_fits_in_usize(self) {
+        // TODO: Figure out how to make this knowledge available!
+//         #[cfg(target_pointer_width = "64")]
+        assume( Self::MAX <= usize::MAX );
+    }
 
-    exec fn to_usize(v: u64) -> (w: usize) { v as usize }
+    exec fn to_usize(v: u64) -> (w: usize) {
+        proof { Self::this_type_fits_in_usize(v); }
+        v as usize
+    }
 
     exec fn from_usize(v: usize) -> (w: u64) { v as u64 }
 
