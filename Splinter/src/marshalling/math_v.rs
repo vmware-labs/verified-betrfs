@@ -55,6 +55,13 @@ pub proof fn nat_mul_nat_is_nat(x: int, y: int)
     requires 0 <= x, 0 <= y
     ensures 0 <= x*y {}
 
+pub exec fn usize_mult(a: usize, b: usize) -> (c: usize)
+    requires (a as int) * (b as int) <= (usize::MAX as int)
+    ensures (c as int) == (a as int) * (b as int)
+{
+    a * b
+}
+
 pub proof fn lemma_seq_slice_slice<T>(s: Seq<T>, i: int, j: int, k: int, l: int)
     requires 0 <= i <= j <= s.len(),
         0 <= k <= l <= j-i

@@ -36,6 +36,16 @@ impl<DVE, Elt: Deepview<DVE>> Deepview<Seq<DVE>> for Vec<Elt> {
 
 // Marshal is the most basic behavior: A format that implements Marshal
 // knows how to parse and marshall the type all at once.
+//
+// Design note: Exec fns manipulate slices-of-seqs, so we can borrow a "big" seq
+// and operate on some smaller part of it that stores a particular field.
+//
+// Spec fns manipulate standalone seqs, the slice.i(seq) of the slice,seq pair from
+// the exec fn. This is deliberate: at the spec level, we want f.parse(a) == f.parse(a)
+// even if f is some other opaque formatter. If we used slices, we'd have
+// f.parse(s, x+a+y) == f.parse(s, x'+a+y'). Even though s is "selecting" out just the
+// a part, we don't know from the outside that f only looks at that region of the data.
+//
 pub trait Marshal {
     type DV;                // The view (spec) type
     type U: Deepview<Self::DV>;    // The runtime type

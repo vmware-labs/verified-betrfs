@@ -257,7 +257,7 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
         self.settable(dslice@.i(old(data)@), idx as int, value.deepv()),
     ensures
         dslice@.agree_beyond_slice(old(data)@, data@),
-        self.sets(dslice@.i(old(data)@), idx as int, value.deepv(), dslice@.i(data@))
+        self.sets(dslice@.i(old(data)@), idx as int, value.deepv(), dslice@.i(data@)),
     ;
 
 
