@@ -71,6 +71,7 @@ impl Node {
     {
         match self {
             Self::Leaf{keys, msgs} => {
+                &&& keys.len() > 0
                 &&& keys.len() == msgs.len()
                 &&& Key::is_strictly_sorted(keys)
             }
@@ -356,16 +357,16 @@ impl LinkedBranch {
         recommends
             self.wf(),
             self.valid_ranking(ranking),
-            decreases self.get_rank(ranking), 1int
+        decreases self.get_rank(ranking), 1int
     {
         self.root() is Index ==> {
-            &&& forall |i| 0 <= i < self.root()->children.len() ==> self.child_all_keys_in_range_internal(ranking, i)
-            &&& forall |i| 0 <= i < self.root()->children.len() - 1 ==> self.all_keys_below_bound(i, ranking)
-            &&& forall |i| 0 < i < self.root()->children.len() ==> self.all_keys_above_bound(i, ranking)
+            &&& (forall |i| #[trigger] self.root().valid_child_index(i) ==> self.child_all_keys_in_range_internal(ranking, i))
+            &&& (forall |i| 0 <= i < self.root()->children.len() - 1 ==> self.all_keys_below_bound(i, ranking))
+            &&& (forall |i| 0 < i < self.root()->children.len() ==> self.all_keys_above_bound(i, ranking))
         }
     }
 
-    pub open spec/*XXX (checked)*/ fn child_all_keys_in_range_internal(self, ranking: Ranking, i: nat) -> bool
+    pub open spec(checked) fn child_all_keys_in_range_internal(self, ranking: Ranking, i: nat) -> bool
         recommends
             self.wf(),
             self.valid_ranking(ranking),
@@ -373,17 +374,16 @@ impl LinkedBranch {
             0 <= i < self.root()->children.len()
         decreases self.get_rank(ranking), 0int
         when {
-            &&& self.root() is Index
+            &&& self.wf()
+            &&& self.valid_ranking(ranking)
             &&& self.root().valid_child_index(i)
-            &&& self.child_at_idx(i).get_rank(ranking) < self.get_rank(ranking)
         }
     {
-        // Need valid ranking implies child has valid ranking to restore checked
         self.child_at_idx(i).all_keys_in_range_internal(ranking)
     }
 
     // Union of sets of all keys of children[i..]
-    pub open spec(checked) fn children_keys(self, ranking: Ranking, i: nat) -> Set<Key>
+    pub open spec/*XXX (checked)*/ fn children_keys(self, ranking: Ranking, i: nat) -> Set<Key>
         recommends
             self.wf(),
             self.valid_ranking(ranking),
@@ -394,15 +394,15 @@ impl LinkedBranch {
             0int,
             self.root()->children.len() - i
         when {
-            &&& self.root() is Index
-            &&& 0 <= i <= self.root()->children.len()
-            &&& self.root().valid_child_index(i) ==>
-                self.child_at_idx(i).get_rank(ranking) < self.get_rank(ranking)
+            &&& self.wf()
+            &&& self.valid_ranking(ranking)
+            &&& (i != self.root()->children.len() ==> self.root().valid_child_index(i))
         }
     {
         if i == self.root()->children.len() {
             set!{}
         } else {
+            // Need to prove recursive when condition to restore checked
             self.child_at_idx(i).all_keys(ranking) + self.children_keys(ranking, i + 1)
         }
     }
@@ -497,8 +497,9 @@ impl LinkedBranch {
             0 <= i < self.root()->children.len()
         decreases self.get_rank(ranking), 0int
         when {
-            &&& 0 <= i < self.root()->children.len()
-            &&& self.child_at_idx(i).get_rank(ranking) < self.get_rank(ranking)
+            &&& self.wf()
+            &&& self.valid_ranking(ranking)
+            &&& self.root().valid_child_index(i)
         }
     {
         self.child_at_idx(i).reachable_addrs_using_ranking(ranking)
@@ -517,8 +518,9 @@ impl LinkedBranch {
         when {
             self.root() is Index ==> {
                 let r = self.root().route(key);
+                &&& self.wf()
+                &&& self.valid_ranking(ranking)
                 &&& self.root().valid_child_index((r + 1) as nat)
-                &&& self.child_at_idx((r + 1) as nat).get_rank(ranking) < self.get_rank(ranking)
             }
         }
     {
