@@ -7,6 +7,7 @@ use vstd::prelude::*;
 
 use crate::betree::LinkedBranch_v::*;
 use crate::betree::PivotBranch_v;
+use crate::betree::PivotBranchRefinement_v;
 // use crate::spec::KeyType_t::*;
 // use crate::spec::Messages_t::*;
 use crate::disk::GenericDisk_v::Ranking;
@@ -192,16 +193,32 @@ pub proof fn i_internal_wf(branch: LinkedBranch, ranking: Ranking)
             let child = branch.child_at_idx(i as nat);
             assert(child.wf());
             assert(child.valid_ranking(ranking));
-            assert(children_i[i] == child.i_internal(ranking));
             lemma_i_preserves_all_keys(child, ranking);
-            assert(children_i[i].all_keys() == child.all_keys(ranking));
             lemma_all_keys_finite_and_nonempty(child, ranking);
-            assert(child.all_keys(ranking).finite());
-            assert(!child.all_keys(ranking).is_empty());
         }
-        assume(false);
-        assert(forall |i| 0 <= i < children_i.len() - 1 ==> branch_i.all_keys_below_bound(i));
-        assert(forall |i| 0 < i < children_i.len() ==> branch_i.all_keys_above_bound(i));
+
+        assert forall |i| 0 <= i < children_i.len() - 1
+        implies branch_i.all_keys_below_bound(i) by {
+            assert(branch.root()->pivots.len() == children_i.len() - 1);
+            assert(branch.all_keys_in_range_internal(ranking));
+            assert(branch.all_keys_below_bound(i, ranking));
+            assert(branch.root().valid_child_index(i as nat));
+            let child = branch.child_at_idx(i as nat);
+            assert(child.wf());
+            assert(child.valid_ranking(ranking));
+            lemma_i_preserves_all_keys(child, ranking);
+        }
+
+        assert forall |i| 0 < i < children_i.len()
+        implies branch_i.all_keys_above_bound(i) by {
+            assert(branch.all_keys_in_range_internal(ranking));
+            assert(branch.all_keys_above_bound(i, ranking));
+            assert(branch.root().valid_child_index(i as nat));
+            let child = branch.child_at_idx(i as nat);
+            assert(child.wf());
+            assert(child.valid_ranking(ranking));
+            lemma_i_preserves_all_keys(child, ranking);
+        }
     }
 }
 
@@ -211,9 +228,26 @@ pub proof fn lemma_i_preserves_all_keys(branch: LinkedBranch, ranking: Ranking)
         branch.valid_ranking(ranking),
     ensures
         branch.all_keys(ranking) == branch.i_internal(ranking).all_keys()
-    // decreases branch.get_rank(ranking)
+    decreases branch.get_rank(ranking)
 {
-    assume(false);
+    if branch.root() is Index {
+        let branch_i = branch.i_internal(ranking);
+        // TODO: make this a helper function
+        let branch_i_children_keys = Set::new(|key| 
+            exists |i| 0 <= i < branch_i->children.len() 
+            && (#[trigger] branch_i->children[i]).all_keys().contains(key));
+        assert(branch.all_keys(ranking) == branch.root()->pivots.to_set() + branch.children_keys(ranking));
+        assert(branch_i.all_keys() == branch_i->pivots.to_set() + branch_i_children_keys);
+        
+        assert forall |i| 0 <= i < branch.root()->children.len()
+        implies branch.map_all_keys(ranking)[i] == PivotBranchRefinement_v::map_all_keys(branch_i->children)[i] by {
+            assert(branch.root().valid_child_index(i as nat));
+            lemma_i_preserves_all_keys(branch.child_at_idx(i as nat), ranking);
+        }
+        assert(branch.map_all_keys(ranking) == PivotBranchRefinement_v::map_all_keys(branch_i->children));
+        PivotBranchRefinement_v::lemma_children_all_keys_equivalence(branch_i->children);
+        assert(branch.children_keys(ranking) == branch_i_children_keys);
+    }
 }
 
 pub proof fn lemma_all_keys_finite_and_nonempty(branch: LinkedBranch, ranking: Ranking)
@@ -230,36 +264,42 @@ pub proof fn lemma_all_keys_finite_and_nonempty(branch: LinkedBranch, ranking: R
     if branch.root() is Leaf {
         assert(branch.all_keys(ranking).contains(branch.root()->keys[0]));
     } else {
-        lemma_children_keys_finite_and_nonempty(branch, ranking, 0);
+        lemma_children_keys_finite_and_nonempty(branch, ranking);
         assert(0 < branch.root()->children.len());
-        let key = choose |key| branch.children_keys(ranking, 0).contains(key);
+        let key = choose |key| branch.children_keys(ranking).contains(key);
         assert(branch.all_keys(ranking).contains(key));
     }
 }
 
-pub proof fn lemma_children_keys_finite_and_nonempty(branch: LinkedBranch, ranking: Ranking, i: nat)
+pub proof fn lemma_children_keys_finite_and_nonempty(branch: LinkedBranch, ranking: Ranking)
     requires
         branch.wf(),
         branch.valid_ranking(ranking),
         branch.root() is Index,
-        0 <= i <= branch.root()->children.len(),
     ensures
-        branch.children_keys(ranking, i).finite(),
-        i < branch.root()->children.len() ==> !branch.children_keys(ranking, i).is_empty(),
+        branch.children_keys(ranking).finite(),
+        !branch.children_keys(ranking).is_empty(),
     decreases
         branch.get_rank(ranking),
         0int,
-        branch.root()->children.len() - i,
 {
-    if i == branch.root()->children.len() {
-    } else {
-        assert(branch.root().valid_child_index(i));
-        assert(branch.child_at_idx(i).valid_ranking(ranking));
-        lemma_all_keys_finite_and_nonempty(branch.child_at_idx(i), ranking);
-        lemma_children_keys_finite_and_nonempty(branch, ranking, i+1);
-        let key = choose |key| branch.child_at_idx(i).all_keys(ranking).contains(key);
-        assert(branch.children_keys(ranking, i).contains(key));
+    let sets = branch.map_all_keys(ranking);
+    assert forall |i| 0 <= i < sets.len() implies (#[trigger] sets[i]).finite() && !sets[i].is_empty() by {
+        assert(branch.root().valid_child_index(i as nat));
+        let child = branch.child_at_idx(i as nat);
+        assert(child.wf());
+        assert(child.valid_ranking(ranking));
+        if child.root() is Index {
+            lemma_all_keys_finite_and_nonempty(child, ranking);
+        } else {
+            assert(child.root()->keys.len() > 0);
+            assert(child.all_keys(ranking).contains(child.root()->keys[0]));
+        }
     }
+    PivotBranchRefinement_v::lemma_union_seq_of_sets_finite(sets);
+    assert(sets.len() > 0);
+    let key = choose |key| sets[0].contains(key);
+    PivotBranchRefinement_v::lemma_set_subset_of_union_seq_of_sets(sets, key);
 }
 
 } // verus!

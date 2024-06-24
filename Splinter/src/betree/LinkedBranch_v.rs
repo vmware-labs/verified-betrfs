@@ -12,6 +12,7 @@ use crate::spec::Messages_t::*;
 // use crate::betree::Buffer_v::*;
 // use crate::betree::Domain_v::*;
 use crate::disk::GenericDisk_v::*;
+use crate::betree::PivotBranchRefinement_v;
 
 // Refinement is a submodule of LinkedBranch so that it can access all internal details
 // of LinkedBranch.
@@ -382,36 +383,45 @@ impl LinkedBranch {
         self.child_at_idx(i).all_keys_in_range_internal(ranking)
     }
 
-    // Union of sets of all keys of children[i..]
-    pub open spec/*XXX (checked)*/ fn children_keys(self, ranking: Ranking, i: nat) -> Set<Key>
+    pub open spec(checked) fn map_all_keys(self, ranking: Ranking) -> Seq<Set<Key>>
         recommends
             self.wf(),
             self.valid_ranking(ranking),
             self.root() is Index,
-            0 <= i <= self.root()->children.len()
         decreases
             self.get_rank(ranking),
             0int,
-            self.root()->children.len() - i
         when {
             &&& self.wf()
             &&& self.valid_ranking(ranking)
-            &&& (i != self.root()->children.len() ==> self.root().valid_child_index(i))
         }
     {
-        if i == self.root()->children.len() {
-            set!{}
-        } else {
-            // Need to prove recursive when condition to restore checked
-            self.child_at_idx(i).all_keys(ranking) + self.children_keys(ranking, i + 1)
-        }
+        self.root()->children.map(|i: int, addr: Address|
+            if self.root().valid_child_index(i as nat) {
+                self.child_at_idx(i as nat).all_keys(ranking)
+            } else {
+                set!{} // dummy value 
+            })
+    }
+
+    // Union of sets of all keys of children[i..]
+    pub open spec(checked) fn children_keys(self, ranking: Ranking) -> Set<Key>
+        recommends
+            self.wf(),
+            self.valid_ranking(ranking),
+            self.root() is Index,
+        decreases
+            self.get_rank(ranking),
+            1int,
+    {
+        PivotBranchRefinement_v::union_seq_of_sets(self.map_all_keys(ranking))
     }
 
     pub open spec(checked) fn all_keys(self, ranking: Ranking) -> Set<Key>
         recommends
             self.wf(),
             self.valid_ranking(ranking)
-        decreases self.get_rank(ranking), 1int
+        decreases self.get_rank(ranking), 2int
     {
         // TODO (x9du): the match doesn't satisfy the self.root() is Index recommends
         // but the if does?
@@ -419,7 +429,7 @@ impl LinkedBranch {
             self.root()->keys.to_set()
         } else {
             let pivot_keys = self.root()->pivots.to_set();
-            let index_keys = self.children_keys(ranking, 0);
+            let index_keys = self.children_keys(ranking);
             pivot_keys + index_keys
         }
         // match self.root() {
@@ -428,7 +438,7 @@ impl LinkedBranch {
         //     }
         //     Node::Index{pivots, children} => {
         //         let pivot_keys = pivots.to_set();
-        //         let index_keys = self.children_keys(ranking, 0);
+        //         let index_keys = self.children_keys(ranking);
         //         pivot_keys + index_keys
         //     }
         // }
