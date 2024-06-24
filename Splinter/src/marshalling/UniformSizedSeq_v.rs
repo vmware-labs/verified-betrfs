@@ -54,60 +54,60 @@ impl<EltFormat: Marshal + UniformSized> UniformSizedElementSeqFormat<EltFormat>
         }
     }
 
-    // TODO delete: copy-pasted from trait default https://github.com/verus-lang/verus/issues/1157
-    pub open spec fn get_data(&self, data: Seq<u8>, idx: int) -> (edata: Seq<u8>)
-    {
-        self.get(SpecSlice::all(data), data, idx).i(data)
-    }
-
-    // TODO: delete; testing why definition in trait default isn't visible here
-    pub open spec fn elt_parsable_to_len(&self, data: Seq<u8>, len: int) -> bool
-    {
-        forall |i: int| 0<=i && i<len ==> self.elt_parsable(data, i)
-    }
-
-    // TODO: delete; testing why definition in trait default isn't visible here
-    pub open spec fn parsable_to_len(&self, data: Seq<u8>, len: usize) -> bool
-    {
-        &&& self.gettable_to_len(data, len as int)
-        &&& self.elt_parsable_to_len(data, len as int)
-    }
-
-    // TODO: delete; testing why definition in trait default isn't visible here
-    pub open spec fn gettable_to_len(&self, data: Seq<u8>, len: int) -> bool
-    {
-        forall |i: int| 0<=i && i<len ==> self.gettable(data, i)
-    }
-
-    // TODO: delete; testing why definition in trait default isn't visible here
-    pub open spec fn parse_to_len(&self, data: Seq<u8>, len: usize) -> Seq<EltFormat::DV>
-    {
-        Seq::new(len as nat, |i: int| self.get_elt(data, i))
-    }
-
-    // TODO: delete; testing why definition in trait default isn't visible here
-    pub open spec fn sets(&self, data: Seq<u8>, idx: int, value: EltFormat::DV, new_data: Seq<u8>) -> bool
-    {
-        &&& new_data.len() == data.len()
-        &&& self.lengthable(data) ==> {
-            &&& self.lengthable(new_data)
-            &&& self.length(new_data) == self.length(data)
-            }
-        &&& forall |i| i!=idx ==> self.preserves_entry(data, i, new_data)
-        &&& self.gettable(new_data, idx)
-        &&& self.elt_parsable(new_data, idx)
-        &&& self.get_elt(new_data, idx) == value
-    }
-
-    // TODO: delete; testing why definition in trait default isn't visible here
-    pub open spec fn preserves_entry(&self, data: Seq<u8>, idx: int, new_data: Seq<u8>) -> bool
-    {
-        &&& (self.gettable(data, idx) ==> self.gettable(new_data, idx))
-        &&& (self.gettable(data, idx) && self.elt_parsable(data, idx)) ==> {
-            &&& self.elt_parsable(new_data, idx)
-            &&& self.get_elt(new_data, idx) == self.get_elt(data, idx)
-            }
-    }
+//     // TODO delete: copy-pasted from trait default https://github.com/verus-lang/verus/issues/1157
+//     pub open spec fn get_data(&self, data: Seq<u8>, idx: int) -> (edata: Seq<u8>)
+//     {
+//         self.get(SpecSlice::all(data), data, idx).i(data)
+//     }
+// 
+//     // TODO: delete; testing why definition in trait default isn't visible here
+//     pub open spec fn elt_parsable_to_len(&self, data: Seq<u8>, len: int) -> bool
+//     {
+//         forall |i: int| 0<=i && i<len ==> self.elt_parsable(data, i)
+//     }
+// 
+//     // TODO: delete; testing why definition in trait default isn't visible here
+//     pub open spec fn parsable_to_len(&self, data: Seq<u8>, len: usize) -> bool
+//     {
+//         &&& self.gettable_to_len(data, len as int)
+//         &&& self.elt_parsable_to_len(data, len as int)
+//     }
+// 
+//     // TODO: delete; testing why definition in trait default isn't visible here
+//     pub open spec fn gettable_to_len(&self, data: Seq<u8>, len: int) -> bool
+//     {
+//         forall |i: int| 0<=i && i<len ==> self.gettable(data, i)
+//     }
+// 
+//     // TODO: delete; testing why definition in trait default isn't visible here
+//     pub open spec fn parse_to_len(&self, data: Seq<u8>, len: usize) -> Seq<EltFormat::DV>
+//     {
+//         Seq::new(len as nat, |i: int| self.get_elt(data, i))
+//     }
+// 
+//     // TODO: delete; testing why definition in trait default isn't visible here
+//     pub open spec fn sets(&self, data: Seq<u8>, idx: int, value: EltFormat::DV, new_data: Seq<u8>) -> bool
+//     {
+//         &&& new_data.len() == data.len()
+//         &&& self.lengthable(data) ==> {
+//             &&& self.lengthable(new_data)
+//             &&& self.length(new_data) == self.length(data)
+//             }
+//         &&& forall |i| i!=idx ==> self.preserves_entry(data, i, new_data)
+//         &&& self.gettable(new_data, idx)
+//         &&& self.elt_parsable(new_data, idx)
+//         &&& self.get_elt(new_data, idx) == value
+//     }
+// 
+//     // TODO: delete; testing why definition in trait default isn't visible here
+//     pub open spec fn preserves_entry(&self, data: Seq<u8>, idx: int, new_data: Seq<u8>) -> bool
+//     {
+//         &&& (self.gettable(data, idx) ==> self.gettable(new_data, idx))
+//         &&& (self.gettable(data, idx) && self.elt_parsable(data, idx)) ==> {
+//             &&& self.elt_parsable(new_data, idx)
+//             &&& self.get_elt(new_data, idx) == self.get_elt(data, idx)
+//             }
+//     }
 }
 
 impl<EltFormat: Marshal + UniformSized>
@@ -327,8 +327,8 @@ impl<EltFormat: Marshal + UniformSized>
         }
 
         assert( self.sets(dslice@.i(olddata), idx as int, value.deepv(), dslice@.i(data@)) );
-        // https://github.com/verus-lang/verus/issues/1157
-        assume( false );
+//         // https://github.com/verus-lang/verus/issues/1157
+//         assume( false );
     }
 
     /////////////////////////////////////////////////////////////////////////
@@ -470,8 +470,8 @@ impl<EltFormat: Marshal + UniformSized>
 //                     assert( ptl.len() == dlen );
 //                     assert( result.len() == i );
 
-                    // https://github.com/verus-lang/verus/issues/1157
-                    assume( result.deepv() == Seq::new(result.len() as nat, |i: int| result[i].deepv()) );
+//                     // https://github.com/verus-lang/verus/issues/1157
+//                     assume( result.deepv() == Seq::new(result.len() as nat, |i: int| result[i].deepv()) );
                     
 //                     assert( result.deepv().len() == i );
 //                     assert( result.deepv().len() == ptl.len() );
@@ -499,12 +499,12 @@ impl<EltFormat: Marshal + UniformSized>
 
     exec fn exec_size(&self, value: &Self::U) -> (sz: usize)
     {
-        proof {
-            assert( self.marshallable(value.deepv()) );
-            // https://github.com/verus-lang/verus/issues/1157
-            assert( value.deepv().len() == value.len() );
-            assert( value.len() * self.eltf.uniform_size() <= usize::MAX );
-        }
+//         proof {
+// //             assert( self.marshallable(value.deepv()) );
+// //             // https://github.com/verus-lang/verus/issues/1157
+// //             assert( value.deepv().len() == value.len() );
+// //             assert( value.len() * self.eltf.uniform_size() <= usize::MAX );
+//         }
         usize_mult(value.len(), self.eltf.exec_uniform_size())
     }
 
