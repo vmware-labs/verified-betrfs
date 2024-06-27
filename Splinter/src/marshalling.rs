@@ -3,8 +3,9 @@
 pub mod IntegerMarshalling_v;
 pub mod Marshalling_v;
 pub mod UniformSized_v;
+pub mod LenFormat_v;
 pub mod StaticallySized_v;
-// pub mod ResizableUniformSizedSeq_v;
+pub mod ResizableUniformSizedSeq_v;
 // pub mod ResizableIntegerSeq_v;
 // pub mod VariableSizedElementSeq_v;
 pub mod SeqMarshalling_v;

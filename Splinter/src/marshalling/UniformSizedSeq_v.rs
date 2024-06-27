@@ -20,8 +20,6 @@ pub struct UniformSizedElementSeqFormat<EltFormat: Marshal + UniformSized> {
 
 impl<EltFormat: Marshal + UniformSized> UniformSizedElementSeqFormat<EltFormat>
 {
-    // TODO(verus): modify Verus to allow constructing default phantomdata fields
-    #[verifier(external_body)]
     pub fn new(eltf: EltFormat) -> (s: Self)
     requires eltf.valid()
     ensures s.seq_valid()

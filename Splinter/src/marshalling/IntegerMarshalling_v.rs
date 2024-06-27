@@ -14,11 +14,11 @@ use crate::marshalling::UniformSized_v::*;
 verus! {
 
 
-// An int type T can be IntFormat<T> if we know these things about it:
-
-// TODO: clean up the usize mess. Require att IntFormattable types to be no bigger than usize.
+// TODO: clean up the usize mess. Require all IntFormattable types to be no bigger than usize.
 // (We don't need to support marshalling u64s on a 32-bit-usize platform.)
 // TODO: factor out the unsigned (nonnegative) subtrait.
+
+// An int type T can be IntFormat<T> if we know these things about it:
 
 pub trait IntFormattable : Deepview<int> + builtin::Integer + Copy + StaticallySized {
 
