@@ -10,7 +10,10 @@ use crate::marshalling::Slice_v::*;
 use crate::marshalling::Marshalling_v::*;
 use crate::marshalling::IntegerMarshalling_v::*;
 use crate::marshalling::SeqMarshalling_v::*;
+use crate::marshalling::StaticallySized_v::*;
 use crate::marshalling::UniformSizedSeq_v::*;
+use crate::marshalling::UniformSized_v::*;
+use crate::marshalling::LenFormat_v::*;
 use crate::marshalling::math_v::*;
 
 verus! {
@@ -18,62 +21,43 @@ verus! {
 // In a ResizableUniformSizedElementSeqMarshalling, the length (set of readable elements) is
 // conveyed by a dynamically-stored length field. The marshaller knows how to read that field and
 // dissuade the caller from reading off the end of the valid data.
-pub struct ResizableUniformSizedElementSeqMarshalling <
-//     DVElt,
-//     Elt: Deepview<DVElt>,
-    EltMarshal: Marshal,
-    O: UniformSizedElementSeqMarshallingOblinfo<EltMarshal>,
-    LengthInt: Deepview<int> + builtin::Integer + Copy, // Bleargh. Surely I could name this.
-    LengthIntObligations: IntObligations<LengthInt>
-> {
+
+pub struct ResizableUniformSizedElementSeqMarshalling
+    <EltFormat: Marshal + UniformSized, LenType: IntFormattable>
+{
+    pub eltf: EltFormat,
+    pub lenf: IntFormat<LenType>,
+
     // `total_size` is like a "capacity" -- the allocated space.  It's measured in bytes.
     // This field ports totalSize
     pub total_size: usize, 
-
-    // This field ports lengthCfg
-    pub length_int: LengthIntObligations,
-
-    // This field ports eltCfg
-    pub eltm: EltMarshal,
-
-    // In Dafny, UniformSize was an abstract (unimplemented) function method, to be supplied
-    // by sub-modules. In this port, those concrete details are behind this oblinfo.
-    pub oblinfo: O,
-
-    // This field makes Rust stop complaining about the inner type parameters in the parameter
-    // list.
-    pub _p: std::marker::PhantomData<(LengthInt,)>,
 }
 
-impl <
-    DVElt,
-    Elt: Deepview<DVElt>,
-    O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>,
-    LengthInt: Deepview<int> + builtin::Integer + Copy, // Bleargh. Surely I could name this.
-    LengthIntObligations: IntObligations<LengthInt>
->
-    ResizableUniformSizedElementSeqMarshalling<DVElt, Elt, O, LengthInt, LengthIntObligations>
+impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
+    ResizableUniformSizedElementSeqMarshalling<EltFormat, LenType>
 {
-    // TODO(verus): modify Verus to allow constructing default phantomdata fields
-    #[verifier(external_body)]
-    pub fn new(oblinfo: O, eltm: O::EltMarshalling, total_size: usize, length_int: LengthIntObligations) -> (s: Self)
-        ensures s.total_size == total_size
+    pub fn new(eltf: EltFormat, lenf: IntFormat<LenType>, total_size: usize) -> (s: Self)
+    requires
+        eltf.valid(),
+        lenf.valid(),
+    ensures
+        s.seq_valid(),
+        s.total_size == total_size,
     {
-        Self{ oblinfo, eltm, _p: Default::default(), total_size, length_int }
+        Self{ eltf, lenf, total_size }
     }
 
     pub open spec fn valid(&self) -> bool {
+        &&& self.eltf.valid()
+        &&& self.lenf.valid()
         &&& self.size_of_length_field() <= self.total_size
-        &&& self.length_int.valid()
-        &&& self.oblinfo.valid()    // this field is new wrt dafny baseline
-        &&& self.eltm.valid()
     }
 
     pub open spec fn max_length(&self) -> usize
     recommends self.valid()
     {
         // Why does subtraction of usizes produce an int?
-        (self.total_size - self.size_of_length_field()) as usize / self.oblinfo.uniform_size()
+        (self.total_size - self.size_of_length_field()) as usize / self.eltf.uniform_size()
     }
 
     // TODO(jonh): this should probably be a const field (with a valid() invariant relating it to
@@ -82,55 +66,50 @@ impl <
         requires self.valid()
         ensures out == self.max_length()
     {
-        proof { self.oblinfo.uniform_size_ensures(); };
-        (self.total_size - self.exec_size_of_length_field()) as usize / self.oblinfo.exec_uniform_size()
+        proof { self.eltf.uniform_size_ensures(); };
+        (self.total_size - self.exec_size_of_length_field()) as usize / self.eltf.exec_uniform_size()
     }
 
+    // TODO(jonh): inline this defn away
     pub open spec fn size_of_length_field(&self) -> usize
     {
-        LengthIntObligations::o_spec_size()
+        self.eltf.uniform_size()
     }
 
     exec fn exec_size_of_length_field(&self) -> (out: usize)
     ensures out == self.size_of_length_field()
     {
-        LengthIntObligations::o_exec_size()
+        self.eltf.exec_uniform_size()
     }
 
     proof fn index_bounds_facts(&self, idx: int)
     requires self.valid(), 0 <= idx, idx < self.max_length()
     ensures
         self.size_of_length_field() as int
-            <= self.size_of_length_field() as int + idx * (self.oblinfo.uniform_size() as int)
-            <  self.size_of_length_field() as int + idx * (self.oblinfo.uniform_size() as int) + (self.oblinfo.uniform_size() as int)
-            == self.size_of_length_field() as int + (idx+1) * (self.oblinfo.uniform_size() as int)
-            <= self.size_of_length_field() + (self.max_length() as int) * (self.oblinfo.uniform_size() as int)
+            <= self.size_of_length_field() as int + idx * (self.eltf.uniform_size() as int)
+            <  self.size_of_length_field() as int + idx * (self.eltf.uniform_size() as int) + (self.eltf.uniform_size() as int)
+            == self.size_of_length_field() as int + (idx+1) * (self.eltf.uniform_size() as int)
+            <= self.size_of_length_field() + (self.max_length() as int) * (self.eltf.uniform_size() as int)
             <= self.total_size
     {
-        self.oblinfo.uniform_size_ensures();   // TODO(verus): lament of the spec ensures
-        nat_mul_nat_is_nat(idx, self.oblinfo.uniform_size() as int);
-        pos_mul_preserves_order(idx, idx+1, self.oblinfo.uniform_size() as int);
-        distribute_left(idx, 1, self.oblinfo.uniform_size() as int);
-        div_mul_order(self.total_size as int, self.oblinfo.uniform_size() as int);
+        self.eltf.uniform_size_ensures();   // TODO(verus): lament of the spec ensures
+        nat_mul_nat_is_nat(idx, self.eltf.uniform_size() as int);
+        pos_mul_preserves_order(idx, idx+1, self.eltf.uniform_size() as int);
+        distribute_left(idx, 1, self.eltf.uniform_size() as int);
+        div_mul_order(self.total_size as int, self.eltf.uniform_size() as int);
         if idx + 1 < self.max_length() {
-            pos_mul_preserves_order(idx + 1, self.max_length() as int, self.oblinfo.uniform_size() as int);
+            pos_mul_preserves_order(idx + 1, self.max_length() as int, self.eltf.uniform_size() as int);
             // (idx+1)*us < m * us
         }
         euclidean_div_truncates(
             (self.total_size - self.size_of_length_field()) as usize as int,
-            self.oblinfo.uniform_size() as int);
+            self.eltf.uniform_size() as int);
     }
 }
 
-impl <
-    DVElt,
-    Elt: Deepview<DVElt>,
-    O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>,
-    LengthInt: Deepview<int> + builtin::Integer + Copy, // Bleargh. Surely I could name this.
-    LengthIntObligations: IntObligations<LengthInt>
->
-    SeqMarshal<DVElt, Elt>
-    for ResizableUniformSizedElementSeqMarshalling<DVElt, Elt, O, LengthInt, LengthIntObligations>
+impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
+    SeqMarshal< EltFormat::DV, EltFormat::U >
+    for ResizableUniformSizedElementSeqMarshalling<EltFormat, LenType>
 {
     open spec fn seq_valid(&self) -> bool {
         self.valid()
@@ -142,12 +121,12 @@ impl <
         // we handle lengths as 'usize', which could conceivably be smaller than the LengthInt.
         // (Dafny uses u64s for lengths, and I suppose has some constraint that the variable ints
         // are never bigger than the u64?)
-        &&& LengthIntObligations::spec_this_fits_in_usize(self.length(data))
+        &&& self.length(data) <= IntFormat::max()
     }
 
     open spec fn length(&self, data: Seq<u8>) -> int
     {
-        self.length_int.parse(data.subrange(0, self.size_of_length_field() as int))
+        self.lenf.parse(data.subrange(0, self.size_of_length_field() as int)) as int
     }
 
 //     proof fn length_ensures(&self, data: Seq<u8>)
@@ -162,7 +141,7 @@ impl <
         }
 
         assume( false );    // some frustrating instability
-        let sslice = dslice.subslice(0, LengthIntObligations::o_exec_size());
+        let sslice = dslice.subslice(0, self.lenf.exec_uniform_size());
 
         // TODO(verus): trait instability: this expression appears in exec_parse requires, but
         // mentioning it completes the proof.
@@ -172,16 +151,11 @@ impl <
 
         proof {
             // Took way too long to track down this lemma call. Decent automation would have been nice.
-            LengthIntObligations::as_int_ensures();
-
-            assert( dslice@.subslice(0, LengthIntObligations::o_spec_size() as int).i(data@)
+            assert( dslice@.subslice(0, self.lenf.uniform_size() as int).i(data@)
                     == dslice@.i(data@).subrange(0, self.size_of_length_field() as int) );   // subrange trigger
         }
 
-        if !LengthIntObligations::exec_this_fits_in_usize(parsed_len) {
-            return None;
-        }
-        Some(LengthIntObligations::to_usize(parsed_len))
+        Some(self.lenf.to_usize(parsed_len))
     }
 
 //     exec fn exec_lengthable(&self, dslice: &Slice, data: &Vec<u8>) -> (l: bool) {
@@ -221,7 +195,7 @@ impl <
         self.eltm.parsable(self.get_data(data, idx))
     }
 
-    open spec fn get_elt(&self, data: Seq<u8>, idx: int) -> (elt: DVElt)
+    open spec fn get_elt(&self, data: Seq<u8>, idx: int) -> (elt: EltFormat::DV)
     {
         self.eltm.parse(self.get_data(data, idx))
     }
@@ -265,7 +239,7 @@ impl <
         eslice
     }
 
-    exec fn try_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oelt: Option<Elt>)
+    exec fn try_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oelt: Option<EltFormat::U>)
     // TODO factor out this common impl
     {
         //proof { self.oblinfo.spec_elt_marshalling_ensures() };  // :v(
@@ -286,7 +260,7 @@ impl <
         }
     }
 
-    exec fn exec_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (elt: Elt)
+    exec fn exec_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (elt: EltFormat::U)
     // TODO factor out this common impl
     {
         let eslice = self.exec_get(dslice, data, idx);
@@ -311,19 +285,19 @@ impl <
     // setting individual elements
     /////////////////////////////////////////////////////////////////////////
 
-    open spec fn elt_marshallable(&self, elt: DVElt) -> bool
+    open spec fn elt_marshallable(&self, elt: EltFormat::DV) -> bool
     {
         self.eltm.marshallable(elt)
     }
 
-    open spec fn settable(&self, data: Seq<u8>, idx: int, value: DVElt) -> bool
+    open spec fn settable(&self, data: Seq<u8>, idx: int, value: EltFormat::DV) -> bool
     {
         &&& self.lengthable(data)
         &&& 0 <= idx < self.max_length() as int
         &&& self.eltm.spec_size(value) == self.oblinfo.uniform_size()
     }
 
-    exec fn exec_settable(&self, dslice: &Slice, data: &Vec<u8>, idx: usize, value: &Elt) -> (s: bool)
+    exec fn exec_settable(&self, dslice: &Slice, data: &Vec<u8>, idx: usize, value: &EltFormat::U) -> (s: bool)
     {
         let olen = self.try_length(dslice, data);
         let sz = self.eltm.exec_size(value);
@@ -337,7 +311,7 @@ impl <
         s
     }
 
-    exec fn exec_set(&self, dslice: &Slice, data: &mut Vec<u8>, idx: usize, value: &Elt)
+    exec fn exec_set(&self, dslice: &Slice, data: &mut Vec<u8>, idx: usize, value: &EltFormat::U)
     {
         proof { self.index_bounds_facts(idx as int); }
         let elt_start = dslice.start + self.exec_size_of_length_field() + idx * self.oblinfo.exec_uniform_size();
@@ -375,18 +349,18 @@ impl <
     open spec fn resizable(&self, data: Seq<u8>, newlen: int) -> bool {
         &&& self.lengthable(data)
         &&& newlen <= self.max_length() as nat
-        &&& LengthIntObligations::spec_fits_in_this(newlen)
+        &&& newlen <= IntFormat::max()
     }
 
     exec fn exec_resizable(&self, dslice: &Slice, data: &Vec<u8>, newlen: usize) -> (r: bool) {
         &&& self.exec_lengthable(dslice, data)
         &&& newlen <= self.exec_max_length()
         // Have to be able to write the length down in the alotted space
-        &&& LengthIntObligations::exec_fits_in_this(newlen)
+        &&& newlen <= IntFormat::exec_max()
     }
 
     exec fn resize(&self, dslice: &Slice, data: &mut Vec<u8>, newlen: usize) {
-        let length_val = LengthIntObligations::from_usize(newlen);
+        let length_val = IntFormat::from_usize(newlen);
         let length_end = self.length_int.exec_marshall(&length_val, data, dslice.start);
 
         proof {
@@ -394,12 +368,10 @@ impl <
             let sdata_new = dslice@.i(data@);
 
             // We updated the length correctly
-            LengthIntObligations::spec_this_fits_in_usize_ensures(newlen as int);
             // extensional equality to connect seq as given by exec_marshall to seq as expected by
             // self.length
             assert( data@.subrange(dslice.start as int, length_end as int)
                     == sdata_new.subrange(0, self.size_of_length_field() as int) );
-            LengthIntObligations::as_int_ensures(); // newlen == length_val.deepv()
             
             // We didn't touch any of the actual indexed data
             assert forall |i| self.gettable(sdata_old, i) && self.elt_parsable(sdata_old, i)
@@ -423,16 +395,16 @@ impl <
 
     proof fn well_formed_ensures(&self, data: Seq<u8>) {}
 
-    open spec fn appendable(&self, data: Seq<u8>, value: DVElt) -> bool { false }
+    open spec fn appendable(&self, data: Seq<u8>, value: EltFormat::DV) -> bool { false }
 
-    open spec fn appends(&self, data: Seq<u8>, value: DVElt, newdata: Seq<u8>) -> bool { false }
+    open spec fn appends(&self, data: Seq<u8>, value: EltFormat::DV, newdata: Seq<u8>) -> bool { false }
 
 
     exec fn exec_well_formed(&self, dslice: &Slice, data: &Vec<u8>) -> (w: bool) { false }
 
-    exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: Elt) -> (r: bool) { false }
+    exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: EltFormat::U) -> (r: bool) { false }
 
-    exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: Elt) {}
+    exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: EltFormat::U) {}
 }
 
 // TODO(jonh): A great deal of this type duplicates what's in UniformSizedSeq. I'm reasonably
@@ -440,14 +412,8 @@ impl <
 // of ResizableUniformSizedSeq with a 0-byte length field that knows to get its "dynamic"
 // length from the static length ("total_size") in the Marshal object.
 
-impl <
-    DVElt,
-    Elt: Deepview<DVElt>,
-    O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>,
-    LengthInt: Deepview<int> + builtin::Integer + Copy,
-    LengthIntObligations: IntObligations<LengthInt>
->
-    ResizableUniformSizedElementSeqMarshalling<DVElt, Elt, O, LengthInt, LengthIntObligations>
+impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
+    ResizableUniformSizedElementSeqMarshalling<EltFormat, LenType>
 {
     pub open spec fn seq_parsable(&self, data: Seq<u8>) -> bool
     {
@@ -457,12 +423,12 @@ impl <
         &&& self.parsable_to_len(data, self.length(data) as usize)
     }
 
-    pub open spec fn seq_parse(&self, data: Seq<u8>) -> Seq<DVElt>
+    pub open spec fn seq_parse(&self, data: Seq<u8>) -> Seq<EltFormat::DV>
     {
         self.parse_to_len(data, self.length(data) as usize)
     }
 
-    pub open spec fn marshallable_at(&self, value: Seq<DVElt>, i: int) -> bool
+    pub open spec fn marshallable_at(&self, value: Seq<EltFormat::DV>, i: int) -> bool
     recommends 0 <= i < value.len()
     {
         &&& self.eltm.marshallable(value[i])
@@ -476,7 +442,7 @@ impl <
         self.length(data) * self.oblinfo.uniform_size() as int
             <= self.total_size as int - self.size_of_length_field() as int,
     {
-        LengthIntObligations::nonnegative();
+        IntFormat::nonnegative();
         let len = self.length(data);
         if 0 < len {
             assert( self.gettable(data, len-1) );
@@ -490,18 +456,12 @@ impl <
     }
 }
 
-impl <
-    DVElt,
-    Elt: Deepview<DVElt>,
-    O: UniformSizedElementSeqMarshallingOblinfo<DVElt, Elt>,
-    LengthInt: Deepview<int> + builtin::Integer + Copy,
-    LengthIntObligations: IntObligations<LengthInt>
->
-     Marshal
-     for ResizableUniformSizedElementSeqMarshalling<DVElt, Elt, O, LengthInt, LengthIntObligations>
+impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
+    Marshal
+    for ResizableUniformSizedElementSeqMarshalling<EltFormat, LenType>
 {
-    type DV = Seq<DVElt>;
-    type U = Vec<Elt>;
+    type DV = Seq<EltFormat::DV>;
+    type U = Vec<EltFormat::U>;
 
     open spec fn valid(&self) -> bool { self.seq_valid() }
 
@@ -517,12 +477,12 @@ impl <
         self.seq_parsable(data)
     }
 
-    open spec fn parse(&self, data: Seq<u8>) -> Seq<DVElt>
+    open spec fn parse(&self, data: Seq<u8>) -> Seq<EltFormat::DV>
     {
         self.seq_parse(data)
     }
 
-    exec fn try_parse(&self, dslice: &Slice, data: &Vec<u8>) -> (ovalue: Option<Vec<Elt>>)
+    exec fn try_parse(&self, dslice: &Slice, data: &Vec<u8>) -> (ovalue: Option<Vec<EltFormat::U>>)
     {
         match self.try_length(dslice, data) {
             None => {
@@ -538,7 +498,7 @@ impl <
                 assert( len as int == self.length(dslice@.i(data@)) );
                 assert( len <= usize::MAX );
                 let mut i: usize = 0;
-                let mut result:Vec<Elt> = Vec::with_capacity(len);
+                let mut result:Vec<EltFormat::U> = Vec::with_capacity(len);
                 while i < len
                     invariant i <= len,
                     self.valid(),   // TODO(verus #984): waste of my debugging time
@@ -565,45 +525,37 @@ impl <
         }
     }
 
-    open spec fn marshallable(&self, value: Seq<DVElt>) -> bool
+    open spec fn marshallable(&self, value: Seq<EltFormat::DV>) -> bool
     {
         &&& forall |i| 0 <= i < value.len() ==> self.marshallable_at(value, i)
-        &&& LengthIntObligations::spec_fits_in_this(value.len() as int)
+        &&& value.len() as int <= IntFormat::max()
 
         &&& self.size_of_length_field() + value.len() * self.oblinfo.uniform_size() <= self.total_size
     }
 
-    open spec fn spec_size(&self, value: Seq<DVElt>) -> usize
+    open spec fn spec_size(&self, value: Seq<EltFormat::DV>) -> usize
     {
         self.total_size
     }
 
-    exec fn exec_size(&self, value: &Vec<Elt>) -> (sz: usize)
+    exec fn exec_size(&self, value: &Vec<EltFormat::U>) -> (sz: usize)
     {
         self.total_size
     }
 
-    exec fn exec_marshall(&self, value: &Vec<Elt>, data: &mut Vec<u8>, start: usize) -> (end: usize)
+    exec fn exec_marshall(&self, value: &Vec<EltFormat::U>, data: &mut Vec<u8>, start: usize) -> (end: usize)
     {
         let end = start + self.total_size;
         let slice = Slice{start, end};
 
         // Just call resize instead? no, that requires the data already be well-formatted
         // (such as lengthable)
-        let length_val = LengthIntObligations::from_usize(value.len());
+        let length_val = IntFormat::from_usize(value.len());
         let length_end = self.length_int.exec_marshall(&length_val, data, start);
         proof {
-            // gosh golly darn lack of spec ensures
-            LengthIntObligations::spec_this_fits_in_usize_ensures(value.len() as int);
-
             // Extensional equality between the thing we know holds length_val and the self.length defn
             assert( slice@.i(data@).subrange(0, self.size_of_length_field() as int)
                     == SpecSlice{start: start as int, end: length_end as int}.i(data@) );
-
-            // gosh golly darn lack of spec ensures
-            // (Need this to unpack the deepv from exec_marshall's parse postcondition back to the
-            // length_val we passed in.)
-            LengthIntObligations::as_int_ensures();
 
             assert( self.lengthable(slice@.i(data@)) );
         }

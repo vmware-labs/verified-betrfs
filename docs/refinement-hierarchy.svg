@@ -31,9 +31,9 @@
      inkscape:showpageshadow="2"
      inkscape:deskcolor="#d1d1d1"
      showguides="true"
-     inkscape:zoom="1"
-     inkscape:cx="767"
-     inkscape:cy="536"
+     inkscape:zoom="0.70710678"
+     inkscape:cx="717.00628"
+     inkscape:cy="608.11183"
      inkscape:window-width="1920"
      inkscape:window-height="1131"
      inkscape:window-x="0"
@@ -727,15 +727,15 @@
        y="0"><tspan
          x="372"
          y="326"
-         id="tspan1027"><tspan
+         id="tspan871"><tspan
            style="text-align:start"
-           id="tspan1025">Superblock updates
+           id="tspan869">Superblock updates
 </tspan></tspan><tspan
          x="372"
          y="344.39999"
-         id="tspan1031"><tspan
+         id="tspan875"><tspan
            style="text-align:start"
-           id="tspan1029">protect journaled data.</tspan></tspan></text>
+           id="tspan873">protect journaled data.</tspan></tspan></text>
     <text
        xml:space="preserve"
        transform="matrix(0.26458334,0,0,0.26458334,118.48101,-6.6145823)"
@@ -745,7 +745,7 @@
        y="0"><tspan
          x="396.87206"
          y="326"
-         id="tspan1033">Linked list of pages is a long list; discard</tspan></text>
+         id="tspan877">Linked list of pages is a long list; discard</tspan></text>
     <path
        style="fill:#ececec;fill-opacity:0.5;stroke:#000000;stroke-width:0.264583px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
        d="m 79.375002,82.550003 1e-6,-9.525001 h -3.175 l 6.35,-6.35 6.35,6.35 h -3.175 l -10e-7,9.525001 z"
@@ -770,7 +770,7 @@
        y="0"><tspan
          x="463.71207"
          y="326"
-         id="tspan1035">Tree of mappy pages is a big map</tspan></text>
+         id="tspan879">Tree of mappy pages is a big map</tspan></text>
     <text
        xml:space="preserve"
        transform="matrix(0.26458334,0,0,0.26458334,-136.35275,5.4535961)"
@@ -780,7 +780,7 @@
        y="0"><tspan
          x="467.95206"
          y="326"
-         id="tspan1037">Pivot nodes act like infinite nodes</tspan></text>
+         id="tspan881">Pivot nodes act like infinite nodes</tspan></text>
     <text
        xml:space="preserve"
        transform="matrix(0.26458334,0,0,0.26458334,-136.35275,18.445054)"
@@ -790,7 +790,7 @@
        y="0"><tspan
          x="448.00009"
          y="326"
-         id="tspan1039">Immutable buffers reused with filters</tspan></text>
+         id="tspan883">Immutable buffers reused with filters</tspan></text>
     <text
        xml:space="preserve"
        transform="matrix(0.26458334,0,0,0.26458334,-136.35275,57.391309)"
@@ -800,11 +800,11 @@
        y="0"><tspan
          x="487.23212"
          y="326"
-         id="tspan1041">Labels report Δs to page likes;
+         id="tspan885">Labels report Δs to page likes;
 </tspan><tspan
          x="490.65613"
          y="344.39999"
-         id="tspan1043">disk keys is projection of likes</tspan></text>
+         id="tspan887">disk keys is projection of likes</tspan></text>
     <text
        xml:space="preserve"
        transform="matrix(0.26458334,0,0,0.26458334,-137.56409,42.471209)"
@@ -814,11 +814,11 @@
        y="0"><tspan
          x="544.44809"
          y="326"
-         id="tspan1045">Buffer representation
+         id="tspan889">Buffer representation
 </tspan><tspan
          x="533.52008"
          y="344.39999"
-         id="tspan1047">as immutable B+ trees</tspan></text>
+         id="tspan891">as immutable B+ trees</tspan></text>
     <text
        xml:space="preserve"
        transform="matrix(0.26458334,0,0,0.26458334,-136.09023,71.453257)"
@@ -828,11 +828,11 @@
        y="0"><tspan
          x="461.19995"
          y="326"
-         id="tspan1049">Efficient allocation data structures
+         id="tspan893">Efficient allocation data structures
 </tspan><tspan
          x="461.72794"
          y="344.39999"
-         id="tspan1051">(AU granularity; summary tables)</tspan></text>
+         id="tspan895">(AU granularity; summary tables)</tspan></text>
     <g
        id="g4669">
       <path
@@ -849,9 +849,9 @@
          y="0"><tspan
            x="467.72803"
            y="326"
-           id="tspan1055"><tspan
+           id="tspan899"><tspan
              style="font-style:italic;font-family:FreeSerif;-inkscape-font-specification:'FreeSerif Italic';text-align:center;baseline-shift:baseline;text-anchor:middle;opacity:1;vector-effect:none;stop-color:#000000;stop-opacity:1"
-             id="tspan1053">roll up refinement</tspan></tspan></text>
+             id="tspan897">roll up refinement</tspan></tspan></text>
     </g>
     <g
        id="g4677">
@@ -869,9 +869,9 @@
          y="0"><tspan
            x="467.72803"
            y="326"
-           id="tspan1059"><tspan
+           id="tspan903"><tspan
              style="font-style:italic;font-family:FreeSerif;-inkscape-font-specification:'FreeSerif Italic';text-align:center;baseline-shift:baseline;text-anchor:middle;opacity:1;vector-effect:none;stop-color:#000000;stop-opacity:1"
-             id="tspan1057">roll up refinement</tspan></tspan></text>
+             id="tspan901">roll up refinement</tspan></tspan></text>
     </g>
     <text
        xml:space="preserve"
@@ -882,7 +882,7 @@
        y="0"><tspan
          x="566.28802"
          y="326"
-         id="tspan1061">unify 3 disks to 1</tspan></text>
+         id="tspan905">unify 3 disks to 1</tspan></text>
     <g
        id="g298"
        transform="translate(104.775,38.100016)">
@@ -1124,7 +1124,7 @@
        y="0"><tspan
          x="490.03214"
          y="326"
-         id="tspan1063">separate disk from transitions</tspan></text>
+         id="tspan907">separate disk from transitions</tspan></text>
     <g
        id="g2529"
        transform="translate(6.3499987)">
@@ -1166,7 +1166,7 @@
        y="0"><tspan
          x="455.92014"
          y="326"
-         id="tspan1065">Mutable updates to store; acyclicity</tspan></text>
+         id="tspan909">Mutable updates to store; acyclicity</tspan></text>
     <path
        style="fill:#ececec;fill-opacity:0.5;stroke:#808080;stroke-width:0.264583px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
        d="m 149.225,206.37503 v -12.70001 h 3.175 l -6.35,-6.35 -6.35,6.35 h 3.175 c 0.15577,12.5835 -12.77397,8.35722 -13.06097,12.70001 z"
@@ -1188,9 +1188,9 @@
          y="0"><tspan
            x="467.72803"
            y="326"
-           id="tspan1069"><tspan
+           id="tspan913"><tspan
              style="font-style:italic;font-family:FreeSerif;-inkscape-font-specification:'FreeSerif Italic';text-align:center;baseline-shift:baseline;text-anchor:middle;opacity:1;vector-effect:none;stop-color:#000000;stop-opacity:1"
-             id="tspan1067">roll up refinement</tspan></tspan></text>
+             id="tspan911">roll up refinement</tspan></tspan></text>
     </g>
     <text
        xml:space="preserve"
@@ -1201,11 +1201,11 @@
        y="0"><tspan
          x="457.93817"
          y="326"
-         id="tspan1071">switch from union type to byte disk
+         id="tspan915">switch from union type to byte disk
 </tspan><tspan
          x="574.83414"
          y="344.39999"
-         id="tspan1073">happens in impl</tspan></text>
+         id="tspan917">happens in impl</tspan></text>
     <g
        id="g3208"
        transform="translate(53.975008,133.35002)"
@@ -1287,7 +1287,7 @@
        y="0"><tspan
          x="551.02405"
          y="326"
-         id="tspan1075">cache: absent pages</tspan></text>
+         id="tspan919">cache: absent pages</tspan></text>
     <path
        style="fill:#ececec;fill-opacity:0.5;stroke:#000000;stroke-width:0.264583px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
        d="m 177.8,82.550003 10e-6,-9.525001 h -3.175 l 6.35,-6.35 6.35,6.35 h -3.175 l -1e-5,9.525001 z"
@@ -1307,11 +1307,11 @@
        y="0"><tspan
          x="372"
          y="326"
-         id="tspan1077">Labels report Δs to page likes;
+         id="tspan921">Labels report Δs to page likes;
 </tspan><tspan
          x="372"
          y="344.39999"
-         id="tspan1079">disk keys is projection of likes</tspan></text>
+         id="tspan923">disk keys is projection of likes</tspan></text>
     <text
        xml:space="preserve"
        transform="matrix(0.26458334,0,0,0.26458334,123.80847,71.453257)"
@@ -1321,11 +1321,11 @@
        y="0"><tspan
          x="372"
          y="326"
-         id="tspan1081">Efficient allocation data structures
+         id="tspan925">Efficient allocation data structures
 </tspan><tspan
          x="372"
          y="344.39999"
-         id="tspan1083">(AU granularity; summary tables)</tspan></text>
+         id="tspan927">(AU granularity; summary tables)</tspan></text>
     <text
        xml:space="preserve"
        transform="matrix(0.26458334,0,0,0.26458334,123.47877,32.423674)"
@@ -1335,7 +1335,7 @@
        y="0"><tspan
          x="372"
          y="326"
-         id="tspan1085">Mutable updates to store; acyclicity</tspan></text>
+         id="tspan929">Mutable updates to store; acyclicity</tspan></text>
     <text
        xml:space="preserve"
        transform="matrix(0.26458334,0,0,0.26458334,123.52528,94.746349)"
@@ -1345,7 +1345,7 @@
        y="0"><tspan
          x="372"
          y="326"
-         id="tspan1087">unify 3 disks to 1</tspan></text>
+         id="tspan931">unify 3 disks to 1</tspan></text>
     <text
        xml:space="preserve"
        transform="matrix(0.26458334,0,0,0.26458334,125.55912,119.33942)"
@@ -1355,7 +1355,7 @@
        y="0"><tspan
          x="372"
          y="326"
-         id="tspan1089">efficient system-wide free set management</tspan></text>
+         id="tspan933">efficient system-wide free set management</tspan></text>
     <g
        id="g5090">
       <rect
@@ -1374,7 +1374,7 @@
          y="0"><tspan
            x="372"
            y="326"
-           id="tspan1091">Legend</tspan></text>
+           id="tspan935">Legend</tspan></text>
       <text
          xml:space="preserve"
          transform="matrix(0.26458334,0,0,0.26458334,130.175,-35.454167)"
@@ -1384,11 +1384,11 @@
          y="0"><tspan
            x="372"
            y="326"
-           id="tspan1093">Italic text: which part of correctness
+           id="tspan937">Italic text: which part of correctness
 </tspan><tspan
            x="372"
            y="344.39999"
-           id="tspan1095">argument captured by this refinement</tspan></text>
+           id="tspan939">argument captured by this refinement</tspan></text>
       <g
          id="g4720"
          transform="translate(177.79998,-80.962496)">
@@ -1450,22 +1450,25 @@
            y="0"><tspan
              x="493.10269"
              y="324.8"
-             id="tspan1099"><tspan
+             id="tspan943"><tspan
                style="font-style:italic;font-family:FreeSerif;-inkscape-font-specification:'FreeSerif Italic';text-align:center;baseline-shift:baseline;text-anchor:middle;opacity:1;vector-effect:none;stop-color:#000000;stop-opacity:1"
-               id="tspan1097">refinement
+               id="tspan941">refinement
 </tspan></tspan><tspan
              x="501.67072"
              y="341.042"
-             id="tspan1103"><tspan
+             id="tspan947"><tspan
                style="font-style:italic;font-family:FreeSerif;-inkscape-font-specification:'FreeSerif Italic';text-align:center;baseline-shift:baseline;text-anchor:middle;opacity:1;vector-effect:none;stop-color:#000000;stop-opacity:1"
-               id="tspan1101">relation</tspan></tspan></text>
+               id="tspan945">relation</tspan></tspan></text>
       </g>
     </g>
     <text
        xml:space="preserve"
        transform="matrix(0.26458334,0,0,0.26458334,-44.582292,-12.832292)"
        id="text1889"
-       style="font-size:18.6667px;line-height:1.15;font-family:Courier;-inkscape-font-specification:Courier;text-decoration-color:#000000;letter-spacing:0px;word-spacing:0px;white-space:pre;shape-inside:url(#rect1891);display:inline;fill:#000000;stroke:none;stroke-width:7;stroke-miterlimit:10;stop-color:#000000" />
+       style="font-size:18.6667px;line-height:1.15;font-family:Courier;-inkscape-font-specification:Courier;text-decoration-color:#000000;letter-spacing:0px;word-spacing:0px;white-space:pre;shape-inside:url(#rect1891);display:inline;fill:#000000;stroke:none;stroke-width:7;stroke-miterlimit:10;stop-color:#000000"
+       inkscape:export-filename="refinement-sample.png"
+       inkscape:export-xdpi="240"
+       inkscape:export-ydpi="240" />
   </g>
   <g
      inkscape:groupmode="layer"
@@ -1487,9 +1490,9 @@
          style="font-size:13.3333px;line-height:1.15;font-family:Courier;-inkscape-font-specification:Courier;text-decoration-color:#000000;letter-spacing:0px;word-spacing:0px;white-space:pre;shape-inside:url(#rect1052);display:inline;fill:none;stroke:#808080;stroke-width:1.56682;stroke-miterlimit:10;stop-color:#000000"><tspan
            x="1190.6953"
            y="775.18256"
-           id="tspan1107"><tspan
+           id="tspan951"><tspan
              style="fill:#000000;stroke:none"
-             id="tspan1105">!</tspan></tspan></text>
+             id="tspan949">!</tspan></tspan></text>
     </g>
     <use
        x="0"
@@ -1554,21 +1557,21 @@
          style="font-size:18.6667px;line-height:1;font-family:Courier;-inkscape-font-specification:Courier;text-decoration-color:#000000;letter-spacing:0px;word-spacing:0px;white-space:pre;shape-inside:url(#rect1773);display:inline;fill:#f2f2f2;stroke:#ffcc00;stroke-width:7;stroke-miterlimit:10;stop-color:#000000"><tspan
            x="1104.5"
            y="911.75602"
-           id="tspan1111"><tspan
+           id="tspan955"><tspan
              style="fill:#000000;stroke:none"
-             id="tspan1109">Needs spec
+             id="tspan953">Needs spec
 </tspan></tspan><tspan
            x="1104.5"
            y="930.42271"
-           id="tspan1115"><tspan
+           id="tspan959"><tspan
              style="fill:#000000;stroke:none"
-             id="tspan1113"> &amp; refinement
+             id="tspan957"> &amp; refinement
 </tspan></tspan><tspan
            x="1104.5"
            y="949.08939"
-           id="tspan1119"><tspan
+           id="tspan963"><tspan
              style="fill:#000000;stroke:none"
-             id="tspan1117">(CZ &amp; TL)</tspan></tspan></text>
+             id="tspan961">(CZ &amp; TL)</tspan></tspan></text>
     </g>
     <g
        id="g1781-8"
@@ -1585,20 +1588,20 @@
          style="font-size:18.6667px;line-height:1;font-family:Courier;-inkscape-font-specification:Courier;text-decoration-color:#000000;letter-spacing:0px;word-spacing:0px;white-space:pre;shape-inside:url(#rect1773-1);display:inline;fill:#f2f2f2;stroke:#ffcc00;stroke-width:7;stroke-miterlimit:10;stop-color:#000000"><tspan
            x="1104.5"
            y="911.75602"
-           id="tspan1123"><tspan
+           id="tspan967"><tspan
              style="fill:#1a1a1a;stroke:none"
-             id="tspan1121">Marshalling </tspan></tspan><tspan
+             id="tspan965">Marshalling </tspan></tspan><tspan
            x="1104.5"
            y="930.42271"
-           id="tspan1127"><tspan
+           id="tspan971"><tspan
              style="fill:#1a1a1a;stroke:none"
-             id="tspan1125">library
+             id="tspan969">library
 </tspan></tspan><tspan
            x="1104.5"
            y="949.08939"
-           id="tspan1131"><tspan
+           id="tspan975"><tspan
              style="fill:#1a1a1a;stroke:none"
-             id="tspan1129">(JH)</tspan></tspan></text>
+             id="tspan973">(JH)</tspan></tspan></text>
       <text
          xml:space="preserve"
          transform="matrix(0.26458334,0,0,0.26458334,-13.313528,-87.362384)"
@@ -1606,34 +1609,34 @@
          style="font-size:16px;line-height:1.15;font-family:Courier;-inkscape-font-specification:Courier;text-decoration-color:#000000;letter-spacing:0px;word-spacing:0px;white-space:pre;shape-inside:url(#rect2135);display:inline;fill:#1a1a1a;stroke:none;stroke-width:7;stroke-miterlimit:10;stop-color:#000000"><tspan
            x="1248.5"
            y="647.348"
-           id="tspan1133">implementation issues:
+           id="tspan977">implementation issues:
 </tspan><tspan
            x="1248.5"
            y="665.74802"
-           id="tspan1135">- integrating with stdlib
+           id="tspan979">- integrating with stdlib
 </tspan><tspan
            x="1248.5"
            y="684.14805"
-           id="tspan1137">- interface to TCB
+           id="tspan981">- interface to TCB
 </tspan><tspan
            x="1248.5"
            y="702.54807"
-           id="tspan1139">- performance measurement
+           id="tspan983">- performance measurement
 </tspan><tspan
            x="1248.5"
            y="720.9481"
-           id="tspan1141">- experimental framework
+           id="tspan985">- experimental framework
 </tspan><tspan
            x="1248.5"
            y="739.34812"
-           id="tspan1143">- CI to make this diagram </tspan><tspan
+           id="tspan987">- CI to make this diagram </tspan><tspan
            x="1248.5"
            y="757.74815"
-           id="tspan1145">automatic
+           id="tspan989">automatic
 </tspan><tspan
            x="1248.5"
            y="776.14817"
-           id="tspan1147">
+           id="tspan991">
 </tspan></text>
     </g>
     <g
@@ -1651,20 +1654,20 @@
          style="font-size:18.6667px;line-height:1;font-family:Courier;-inkscape-font-specification:Courier;text-decoration-color:#000000;letter-spacing:0px;word-spacing:0px;white-space:pre;shape-inside:url(#rect1773-0);display:inline;fill:#f2f2f2;stroke:#ffcc00;stroke-width:7;stroke-miterlimit:10;stop-color:#000000"><tspan
            x="1104.5"
            y="911.75602"
-           id="tspan1151"><tspan
+           id="tspan995"><tspan
              style="fill:#000000;stroke:none"
-             id="tspan1149">Needs tree spec
+             id="tspan993">Needs tree spec
 </tspan></tspan><tspan
            x="1104.5"
            y="930.42271"
-           id="tspan1155"><tspan
+           id="tspan999"><tspan
              style="fill:#000000;stroke:none"
-             id="tspan1153"> &amp; both </tspan></tspan><tspan
+             id="tspan997"> &amp; both </tspan></tspan><tspan
            x="1104.5"
            y="949.08939"
-           id="tspan1159"><tspan
+           id="tspan1003"><tspan
              style="fill:#000000;stroke:none"
-             id="tspan1157">refinements (JL)</tspan></tspan></text>
+             id="tspan1001">refinements (JL)</tspan></tspan></text>
     </g>
   </g>
 </svg>

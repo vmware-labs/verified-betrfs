@@ -67,8 +67,6 @@ impl <
 >
     VariableSizedElementSeqMarshalling<EltMarshalling, LengthInt, LengthIntObligations, BoundaryInt, BoundaryIntObligations, BoundarySeqO>
 {
-    // TODO(verus): modify Verus to allow constructing default phantomdata fields
-    #[verifier(external_body)]
     pub fn new(boundary_seq_marshalling: ResizableUniformSizedElementSeqMarshalling<
             int,
             BoundaryInt,
@@ -432,6 +430,7 @@ impl <
     // append
     /////////////////////////////////////////////////////////////////////////
 
+    // well_formed seems to be an append-specific concept; rename.
     open spec fn well_formed(&self, data: Seq<u8>) -> bool {
         &&& self.tableable(data)
         &&& self.valid_table(data)
@@ -439,7 +438,14 @@ impl <
 
     proof fn well_formed_ensures(&self, data: Seq<u8>)
     {
-        assume( false );
+    }
+
+    // index into buffer where element data begins (growing from end)
+    open spec fn elements_start(&self, data: Seq<u8>) -> int {
+        let t = self.table(data);
+        if t.len() == 0 { self.total_size() }
+        else { Last(t) }
+        oh left off here
     }
 
     open spec fn appendable(&self, data: Seq<u8>, value: EltMarshalling::DV) -> bool { false }
