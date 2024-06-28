@@ -20,8 +20,8 @@ verus! {
 
 // An int type T can be IntFormat<T> if we know these things about it:
 
-pub trait IntFormattable : Deepview<int> + builtin::Integer + Copy + StaticallySized {
-
+pub trait IntFormattable : Deepview<int> + builtin::Integer + SpecOrd + Copy + StaticallySized
+{
     // generic wrappers over vstd::bytes, which should probably be rewritten this way.
     spec fn spec_from_le_bytes(s: Seq<u8>) -> Self
     ;
@@ -52,36 +52,37 @@ pub trait IntFormattable : Deepview<int> + builtin::Integer + Copy + StaticallyS
           s.len() == Self::uniform_size() ==> #[trigger] Self::spec_to_le_bytes(Self::spec_from_le_bytes(s)) == s
     ;
 
-    // workaround for #979
-    spec fn as_int(t: Self) -> (i: int)
-        ;
+    proof fn deepv_is_as_int(v: Self)
+    ensures v.deepv() == v as int;
 
-    proof fn as_int_ensures()
-    ensures forall |t: Self| t.deepv() == #[trigger] Self::as_int(t);
+    // This type fits in usize
 
-    proof fn this_type_fits_in_usize(self)
-        ensures self as int <= usize::MAX as int
+    spec fn max() -> (m: usize)
     ;
+
+    proof fn max_ensures()
+// why don't we need this?
+//     ensures forall |v: Self| v as int <= Self::max() as int
+    ;
+
+    exec fn exec_max() -> (m: usize)
+    ensures m == Self::max()
+    ;
+
+    // To and from usize
 
     exec fn to_usize(v: Self) -> (w: usize)
-        ensures Self::as_int(v) == w as int
-    ;
-
-    spec fn spec_fits_in_this(v: int) -> bool
-    ;
-
-    exec fn exec_fits_in_this(v: usize) -> (r: bool)
-        ensures r == Self::spec_fits_in_this(v as int)
+        ensures v as int == w as int
     ;
 
     exec fn from_usize(v: usize) -> (w: Self)
-        requires Self::spec_fits_in_this(v as int)
-        ensures Self::as_int(w) == v as int
+        requires v <= Self::max()
+        ensures w as int == v as int
     ;
 
     // Maybe this class should be NatObligations? Or have an additional Natty trait?
-    proof fn nonnegative()
-    ensures forall |t: Self| 0 <= Self::as_int(t);
+    proof fn nonnegative(t: Self)
+    ensures 0 <= t as int;
 }
 
 impl Deepview<int> for u32 {
@@ -133,30 +134,19 @@ impl IntFormattable for u32 {
         }
     }
 
-    open spec fn as_int(t: u32) -> int { t as int }
+    proof fn deepv_is_as_int(v: Self) {}
 
-    proof fn as_int_ensures() { }
+    open spec fn max() -> (m: usize) { Self::MAX as usize }
 
-    proof fn this_type_fits_in_usize(self) {
-        // Why doesn't this one fail but the u64 version doesn't!?
-        assert( Self::MAX <= usize::MAX );
-    }
+    proof fn max_ensures() {}
 
-    exec fn to_usize(v: u32) -> (w: usize) { v as usize }
+    exec fn exec_max() -> (m: usize) { Self::MAX as usize }
 
-    exec fn from_usize(v: usize) -> (w: u32) { v as u32 }
+    exec fn to_usize(v: Self) -> (w: usize) { v as usize }
 
-    open spec fn spec_fits_in_this(v: int) -> bool
-    {
-        0 <= v <= u32::MAX
-    }
+    exec fn from_usize(v: usize) -> (w: Self) { v as Self }
 
-    exec fn exec_fits_in_this(v: usize) -> (r: bool)
-    {
-        if usize::BITS <= u32::BITS { true } else { v <= (u32::MAX as usize) }
-    }
-
-    proof fn nonnegative() {}
+    proof fn nonnegative(v: Self) {}
 }
 
 impl Deepview<int> for u64 {
@@ -171,6 +161,12 @@ impl StaticallySized for u64 {
     proof fn uniform_size_ensures() {}
 
     exec fn exec_uniform_size() -> usize { 8 } 
+}
+
+#[cfg(target_pointer_width = "64")]
+proof fn usize64_workaround() ensures usize::MAX==u64::MAX {
+    // TODO: Why can't Verus see value of usize::MAX?
+    assume( usize::MAX==u64::MAX );
 }
 
 impl IntFormattable for u64 {
@@ -199,34 +195,22 @@ impl IntFormattable for u64 {
         lemma_auto_spec_u64_to_from_le_bytes();
     }
 
-    open spec fn as_int(t: u64) -> int { t as int }
+    proof fn deepv_is_as_int(v: Self) {}
 
-    proof fn as_int_ensures() { }
+    open spec fn max() -> (m: usize) { Self::MAX as usize }
 
-    proof fn this_type_fits_in_usize(self) {
-        // TODO: Figure out how to make this knowledge available!
-//         #[cfg(target_pointer_width = "64")]
-        assume( Self::MAX <= usize::MAX );
-    }
+    proof fn max_ensures() {}
 
-    exec fn to_usize(v: u64) -> (w: usize) {
-        proof { Self::this_type_fits_in_usize(v); }
+    exec fn exec_max() -> (m: usize) { Self::MAX as usize }
+
+    exec fn to_usize(v: Self) -> (w: usize) {
+        proof { usize64_workaround() };
         v as usize
     }
 
-    exec fn from_usize(v: usize) -> (w: u64) { v as u64 }
+    exec fn from_usize(v: usize) -> (w: Self) { v as Self }
 
-    open spec fn spec_fits_in_this(v: int) -> bool
-    {
-        0 <= v <= u64::MAX
-    }
-
-    exec fn exec_fits_in_this(v: usize) -> (r: bool)
-    {
-        if usize::BITS <= u64::BITS { true } else { v <= (u64::MAX as usize) }
-    }
-
-    proof fn nonnegative() {}
+    proof fn nonnegative(v: Self) {}
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -277,6 +261,15 @@ impl<T: IntFormattable> IntFormat<T>
         }
         assert( data@.subrange(start as int, end as int) =~= source@ );  // extensionality: it's what's for ~.
         end
+    }
+
+    // IntFormattable should be called NatFormattable since nonnegative is baked into it.
+    // (Or, really, we should split out the unsigned trait, and split out this trait.
+    pub proof fn parse_nat(&self, data: Seq<u8>)
+    ensures 0 <= self.parse(data)
+    {
+        let parsed = T::spec_from_le_bytes(data.subrange(0, T::uniform_size() as int));
+        T::nonnegative(parsed);
     }
 }
 
@@ -330,12 +323,11 @@ impl<T: IntFormattable> Marshal for IntFormat<T>
 
     open spec fn parse(&self, data: Seq<u8>) -> int
     {
-        T::as_int(T::spec_from_le_bytes(data.subrange(0, T::uniform_size() as int)))
+        T::spec_from_le_bytes(data.subrange(0, T::uniform_size() as int)) as int
     }
 
     exec fn try_parse(&self, slice: &Slice, data: &Vec<u8>) -> (ov: Option<T>)
     {
-        proof { T::as_int_ensures(); }
         // TODO(verus): shouldn't need to trigger this; it's in our (inherited) requires
         assert( slice@.valid(data@) );
 
@@ -343,6 +335,7 @@ impl<T: IntFormattable> Marshal for IntFormat<T>
             let sr = slice_subrange(data.as_slice(), slice.start, slice.start+T::exec_uniform_size());
             let parsed = T::from_le_bytes(sr);
             assert( sr@ == slice@.i(data@).subrange(0, T::uniform_size() as int) ); // trigger
+            proof { T::deepv_is_as_int(parsed); }
             assert( parsed.deepv() == self.parse(slice@.i(data@)) );
             Some(parsed)
         } else {
@@ -355,7 +348,6 @@ impl<T: IntFormattable> Marshal for IntFormat<T>
     {
         assume( false );    // I think there's instability here
         
-        proof { T::as_int_ensures(); }
         let sr = slice_subrange(data.as_slice(), slice.start, slice.start+T::exec_uniform_size());
         assert( sr@ == slice@.i(data@).subrange(0, T::uniform_size() as int) ); // trigger
         T::from_le_bytes(sr)
@@ -363,8 +355,6 @@ impl<T: IntFormattable> Marshal for IntFormat<T>
 
     exec fn exec_marshall(&self, value: &T, data: &mut Vec<u8>, start: usize) -> (end: usize)
     {
-        proof { T::as_int_ensures(); }
-
         let s = T::to_le_bytes(*value);
         assert( s@.subrange(0, T::uniform_size() as int) =~= s@ ); // need a little extensionality? Do it by hand!
         let end = Self::install_bytes(&s, data, start);
@@ -373,6 +363,7 @@ impl<T: IntFormattable> Marshal for IntFormat<T>
         assert( T::spec_from_le_bytes(T::spec_to_le_bytes(*value)) == *value )
             by { T::lemma_auto_spec_to_from_le_bytes(); }
 
+        proof { T::deepv_is_as_int(*value); }
         end
     }
 }
@@ -392,7 +383,10 @@ impl<T: IntFormattable> UniformSized for IntFormat<T> {
     exec fn exec_uniform_size(&self) -> (sz: usize)
     ensures sz == T::uniform_size()
     {
-        T::exec_uniform_size()
+        let sz = T::exec_uniform_size();
+        // TODO(verus): postcondition didn't trigger but assert did.
+        assert( sz == self.uniform_size() );
+        sz
     }
 }
 
