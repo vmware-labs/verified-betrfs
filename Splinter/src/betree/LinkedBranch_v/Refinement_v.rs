@@ -153,6 +153,148 @@ pub proof fn query_internal_refines(pre: LinkedBranch, ranking: Ranking, key: Ke
     }
 }
 
+pub proof fn grow_refines(pre: LinkedBranch, addr: Address)
+    requires
+        inv(pre),
+        pre.disk_view.is_fresh(set!{addr}),
+    ensures
+        inv(pre.grow(addr)),
+        pre.grow(addr).i() == pre.i().grow(),
+{
+    let ranking = pre.the_ranking();
+    let post = pre.grow(addr);
+    let post_ranking = ranking.insert(addr, ranking[pre.root] + 1);
+    assert(post.valid_ranking(post_ranking));
+    grow_refines_internal(pre, pre.the_ranking(), post.the_ranking(), addr);
+}
+
+pub proof fn grow_refines_internal(pre: LinkedBranch, ranking: Ranking, post_ranking: Ranking, addr: Address)
+    requires
+        inv_internal(pre, ranking),
+        pre.disk_view.is_fresh(set!{addr}),
+        pre.grow(addr).valid_ranking(post_ranking),
+    ensures
+        inv_internal(pre.grow(addr), post_ranking),
+        pre.grow(addr).i_internal(post_ranking) == pre.i_internal(ranking).grow(),
+    decreases pre.get_rank(ranking)
+{
+    let post = pre.grow(addr);
+    let post_i = post.i_internal(post_ranking);
+    let i_then_grow = pre.i_internal(ranking).grow();
+    assert(post.wf());
+    i_internal_wf(pre, ranking);
+
+    assert(post_i->children.len() == i_then_grow->children.len() == 1);
+    assert(post.root().valid_child_index(0));
+    assert(post_i->children[0] == post.child_at_idx(0).i_internal(post_ranking));
+    assert(post.child_at_idx(0) == LinkedBranch{root: pre.root, disk_view: post.disk_view});
+    assert(pre.disk_view.is_subset_of(post.disk_view));
+    assert(pre.valid_ranking(post_ranking));
+    lemma_subdisk_same_i_internal(pre, post.child_at_idx(0), post_ranking);
+    assert(post_i->children[0] == pre.i_internal(post_ranking));
+
+    lemma_i_internal_ignores_ranking(pre, ranking, post_ranking);
+    assert(pre.i_internal(post_ranking) == pre.i_internal(ranking));
+    assert(i_then_grow->children[0] == pre.i_internal(ranking));
+    assert(post_i->children =~~= i_then_grow->children);
+    assert(post_i == i_then_grow);
+
+    assert(post_i.wf());
+    lemma_i_wf_implies_all_keys_in_range(post, post_ranking);
+    assert(post.all_keys_in_range_internal(post_ranking));
+}
+
+pub proof fn lemma_i_wf_implies_all_keys_in_range(branch: LinkedBranch, ranking: Ranking)
+    requires
+        branch.wf(),
+        branch.valid_ranking(ranking),
+        branch.i_internal(ranking).wf(),
+    ensures
+        branch.all_keys_in_range_internal(ranking),
+    decreases branch.get_rank(ranking),
+{
+    if branch.root() is Index {
+        let branch_i = branch.i_internal(ranking);
+
+        assert forall |i| #[trigger] branch.root().valid_child_index(i)
+        implies branch.child_all_keys_in_range_internal(ranking, i) by {
+            let child = branch.child_at_idx(i);
+            assert(child.i_internal(ranking) == branch_i->children[i as int]);
+            assert(child.i_internal(ranking).wf());
+            lemma_i_wf_implies_all_keys_in_range(child, ranking);
+        }
+        
+        assert forall |i| 0 <= i < branch.root()->children.len() - 1
+        implies branch.all_keys_below_bound(i, ranking) by {
+            assert(branch.root().valid_child_index(i as nat));
+            let child = branch.child_at_idx(i as nat);
+            assert(branch_i.all_keys_below_bound(i));
+            assert forall |key| #[trigger] child.all_keys(ranking).contains(key)
+            implies Key::lt(key, branch.root()->pivots[i]) by {
+                lemma_i_preserves_all_keys(child, ranking);
+                assert(branch_i->children[i].all_keys().contains(key));
+                assert(Key::lt(key, branch_i->pivots[i]));
+            }
+        }
+
+        assert forall |i| 0 < i < branch.root()->children.len()
+        implies branch.all_keys_above_bound(i, ranking) by {
+            assert(branch.root().valid_child_index(i as nat));
+            let child = branch.child_at_idx(i as nat);
+            assert(branch_i.all_keys_above_bound(i));
+            assert forall |key| child.all_keys(ranking).contains(key)
+            implies #[trigger] Key::lte(branch.root()->pivots[i-1], key) by {
+                lemma_i_preserves_all_keys(child, ranking);
+                assert(branch_i->children[i].all_keys().contains(key));
+                assert(Key::lte(branch_i->pivots[i-1], key));
+            }
+        }
+    }
+}
+
+pub proof fn lemma_i_internal_ignores_ranking(branch: LinkedBranch, ranking1: Ranking, ranking2: Ranking)
+    requires
+        branch.wf(),
+        branch.valid_ranking(ranking1),
+        branch.valid_ranking(ranking2),
+    ensures
+        branch.i_internal(ranking1) == branch.i_internal(ranking2),
+    decreases branch.get_rank(ranking1),
+{
+    if branch.root() is Index {
+        assert forall |i: nat| #[trigger] branch.root().valid_child_index(i)
+        implies branch.child_at_idx(i).i_internal(ranking1)
+            == branch.child_at_idx(i).i_internal(ranking2) by {
+            lemma_i_internal_ignores_ranking(branch.child_at_idx(i), ranking1, ranking2);
+        }
+        assert(branch.i_internal(ranking1)->children =~~= branch.i_internal(ranking2)->children);
+    }
+}
+
+pub proof fn lemma_subdisk_same_i_internal(branch1: LinkedBranch, branch2: LinkedBranch, ranking: Ranking)
+    requires
+        branch1.wf(),
+        branch2.wf(),
+        branch1.valid_ranking(ranking),
+        branch2.valid_ranking(ranking),
+        branch1.root() == branch2.root(),
+        branch1.disk_view.is_subset_of(branch2.disk_view),
+    ensures
+        branch1.i_internal(ranking) == branch2.i_internal(ranking),
+    decreases branch1.get_rank(ranking),
+{
+    if branch1.root() is Index {
+        assert forall |i: nat| #[trigger] branch1.root().valid_child_index(i)
+        implies
+            branch2.root().valid_child_index(i)
+            && (branch1.child_at_idx(i).i_internal(ranking)
+                == branch2.child_at_idx(i).i_internal(ranking)) by {
+            lemma_subdisk_same_i_internal(branch1.child_at_idx(i), branch2.child_at_idx(i), ranking);
+        }
+        assert(branch1.i_internal(ranking)->children =~~= branch2.i_internal(ranking)->children);
+    }
+}
+
 pub proof fn i_wf(branch: LinkedBranch)
     requires
         inv(branch),
