@@ -163,8 +163,6 @@ impl Node {
                 &&& pivots.len() == children.len() - 1
                 &&& Key::is_strictly_sorted(pivots)
                 &&& forall |i| 0 <= i < children.len() ==> (#[trigger] children[i]).wf()
-                &&& forall |i| 0 <= i < children.len() ==> (#[trigger] children[i].all_keys()).finite()
-                &&& forall |i| 0 <= i < children.len() ==> !(#[trigger] children[i].all_keys()).is_empty()
                 // For children[0:-1], all keys they contain should be < their upper pivot.
                 // This also gives us that children[i]'s pivots are < pivots[i] (if children are index nodes)
                 &&& forall |i| 0 <= i < children.len() - 1 ==> self.all_keys_below_bound(i)

@@ -107,8 +107,6 @@ pub proof fn lemma_index_all_keys(node: Node, key: Key)
             && (#[trigger] node->children[i]).all_keys().contains(key))
 {}
 
-// TODO(x9du): lemma_all_keys_finite() remove finite from wf
-
 pub open spec(checked) fn union_seq_of_sets<A>(sets: Seq<Set<A>>) -> Set<A>
 {
     sets.fold_left(Set::empty(), |u: Set<A>, s| u.union(s))
@@ -195,17 +193,17 @@ pub proof fn lemma_children_all_keys_equivalence(children: Seq<Node>)
     assert(children_all_keys == union_all_keys(children));
 }
 
-pub proof fn lemma_grow_preserves_wf(node: Node)
+pub proof fn lemma_wf_implies_all_keys_finite_and_not_empty(node: Node)
     requires
         node.wf(),
-        node.all_keys().len() > 0
-    ensures node.grow().wf()
+    ensures
+        node.all_keys().finite(),
+        !node.all_keys().is_empty(),
+    decreases node,
 {
-    let post = node.grow();
-    assert(post is Index);
-    assert(post->children.len() == 1);
-    assert(post->children[0] == node);
-    if node is Index {
+    if node is Leaf {
+        assert(node.all_keys().contains(node->keys[0]));
+    } else {
         let pivotKeys = node->pivots.to_set();
         let indexKeys = Set::new(|key| 
             exists |i| 0 <= i < node->children.len() 
@@ -214,19 +212,21 @@ pub proof fn lemma_grow_preserves_wf(node: Node)
         assert(pivotKeys.finite());
         lemma_children_all_keys_equivalence(node->children);
         assert(indexKeys == children_all_keys);
+        assert forall |i| 0 <= i < node->children.len()
+        implies (#[trigger] node->children[i].all_keys()).finite() by {
+            lemma_wf_implies_all_keys_finite_and_not_empty(node->children[i]);
+        }
         lemma_union_all_keys_finite(node->children);
         assert(indexKeys.finite());
         assert(node.all_keys() == pivotKeys + indexKeys);
         assert(node.all_keys().finite());
-    }
-}
 
-pub proof fn lemma_grow_preserves_all_keys(node: Node)
-    requires node.wf()
-    ensures node.grow().all_keys() == node.all_keys()
-{
-    let post = node.grow();
-    assert(post.all_keys() == post->children[0].all_keys());
+        assert(node->children.len() > 0);
+        lemma_wf_implies_all_keys_finite_and_not_empty(node->children[0]);
+        assert(!node->children[0].all_keys().is_empty());
+        let key = choose |key| node->children[0].all_keys().contains(key);
+        assert(node.all_keys().contains(key));
+    }
 }
 
 // Proves that insert() on a leaf node refines (as well as other useful and
@@ -975,12 +975,10 @@ pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
 pub proof fn grow_refines(pre: Node, lbl: InternalLabel)
     requires
         pre.wf(),
-        pre.all_keys().len() > 0
     ensures
         pre.grow().wf(),
         pre.grow().i() == pre.i()
 {
-    lemma_grow_preserves_wf(pre);
     lemma_route_auto();
     let post = pre.grow();
     assert(post.wf());
@@ -1136,15 +1134,10 @@ pub proof fn lemma_append_preserves_wf(pre: Node, keys: Seq<Key>, msgs: Seq<Mess
 
         lemma_append_appends_to_all_keys(children[r+1], keys, msgs, path.subpath());
 
-        // Subgoal 1
-        assert(!post->children[r+1].all_keys().is_empty()) by {
-            assert(post->children[r+1].all_keys().contains(keys[0]));
-        }
-
-        // Subgoal 2, needed for asserting that unchanged keys in children[r+1].all_keys() still satisfy bounds
+        // Subgoal 1, needed for asserting that unchanged keys in children[r+1].all_keys() still satisfy bounds
         assert(post->children[r+1].all_keys() =~~= children[r+1].all_keys().union(keys.to_set()));
 
-        // Subgoal 3: the only changed child, r+1, satisfies all keys bounds
+        // Subgoal 2: the only changed child, r+1, satisfies all keys bounds
 
         if (r+1 < children.len() - 1) {
             assert(pre.all_keys_below_bound(r+1));
@@ -1158,7 +1151,7 @@ pub proof fn lemma_append_preserves_wf(pre: Node, keys: Seq<Key>, msgs: Seq<Mess
             assert(post.all_keys_above_bound(r+1));
         }
 
-        // Subgoal 4: the unchanged children still satisfy all keys bounds
+        // Subgoal 3: the unchanged children still satisfy all keys bounds
 
         assert forall |i| 0 <= i < post->children.len() - 1 && i != r+1
         implies post.all_keys_below_bound(i) by
@@ -1369,6 +1362,7 @@ ensures
                 assert(split_arg is SplitIndex);
                 assert(children[r+1] is Index);
                 let pivot_index = split_arg->pivot_index;
+                lemma_wf_implies_all_keys_finite_and_not_empty(children[r+1]->children[pivot_index]);
                 let key = children[r+1]->children[pivot_index].all_keys().choose();
                 assert(Key::lt(key, pivot)) by {
                     assert(children[r+1].all_keys_below_bound(pivot_index));
@@ -1467,37 +1461,6 @@ ensures
     assert(right_node == post->children[r+2]);
     lemma_split_node_all_keys(children[r+1], split_arg);
 
-    // Goal 2
-    lemma_subset_finite(children[r+1].all_keys(), post->children[r+1].all_keys());
-    lemma_subset_finite(children[r+1].all_keys(), post->children[r+2].all_keys());
-
-    // Goal 3
-    if (children[r+1] is Leaf) {
-        assert(post->children[r+1] is Leaf);
-        assert(post->children[r+2] is Leaf);
-        assert(!post->children[r+1].all_keys().is_empty()) by {
-            assert(post->children[r+1]->keys.len() > 0);
-            assert(post->children[r+1]->keys.to_set().contains(post->children[r+1]->keys[0]));
-        }
-        assert(!post->children[r+2].all_keys().is_empty()) by {
-            assert(post->children[r+2]->keys.len() > 0);
-            assert(post->children[r+2]->keys.to_set().contains(post->children[r+2]->keys[0]));
-        }
-    } else {
-        assert(post->children[r+1] is Index);
-        assert(post->children[r+2] is Index);
-        assert(split_arg is SplitIndex);
-        let pivot_index = split_arg->pivot_index;
-        assert(!post->children[r+1].all_keys().is_empty()) by {
-            assert(post->children[r+1]->children[0] == children[r+1]->children[0]);
-            assert(post->children[r+1].all_keys().contains(children[r+1]->children[0].all_keys().choose()));
-        }
-        assert(!post->children[r+2].all_keys().is_empty()) by {
-            assert(post->children[r+2]->children[0] == children[r+1]->children[pivot_index + 1]);
-            assert(post->children[r+2].all_keys().contains(children[r+1]->children[pivot_index + 1].all_keys().choose()));
-        }
-    }
-
     assert(post.all_keys_below_bound(r+1));
     assert(post.all_keys_above_bound(r+2));
 
@@ -1521,9 +1484,9 @@ ensures
         assert(post.all_keys_above_bound(r+1));
     }
 
-    // Goal 4
+    // Goal 2
     assert(forall |i| 0 <= i < post->children.len() - 1 ==> post.all_keys_below_bound(i));
-    // Goal 5
+    // Goal 3
     assert(forall |i| 0 < i < post->children.len() ==> post.all_keys_above_bound(i));
 }
 
