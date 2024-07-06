@@ -74,13 +74,18 @@ impl Node {
             Self::Leaf{keys, msgs} => {
                 &&& keys.len() > 0
                 &&& keys.len() == msgs.len()
-                &&& Key::is_strictly_sorted(keys)
             }
             Self::Index{pivots, children} => {
                 &&& pivots.len() == children.len() - 1
-                &&& Key::is_strictly_sorted(pivots)
             }
         }
+    }
+
+    // TODO(x9du): use get_keys_or_pivots
+    pub open spec(checked) fn keys_strictly_sorted(self) -> bool
+    {
+        let s = if self is Leaf { self->keys } else { self->pivots };
+        Key::is_strictly_sorted(s)
     }
 
     pub open spec(checked) fn valid_child_index(self, i: nat) -> bool
@@ -90,7 +95,7 @@ impl Node {
     }
 
     pub open spec(checked) fn route(self, key: Key) -> int
-        recommends self.wf()
+        recommends self.wf(),
     {
         let s = if self is Leaf { self->keys } else { self->pivots };
         Key::largest_lte(s, key)
@@ -253,7 +258,6 @@ impl LinkedBranch {
 
     pub open spec/*XXX (checked)*/ fn insert(self, key: Key, msg: Message, path: Path) -> LinkedBranch
         recommends
-            self.wf(),
             path.valid(),
             path.branch == self,
             path.key == key,
@@ -275,7 +279,6 @@ impl LinkedBranch {
 
     pub open spec/*XXX (checked)*/ fn append(self, keys: Seq<Key>, msgs: Seq<Message>, path: Path) -> LinkedBranch
         recommends
-            self.wf(),
             path.valid(),
             path.branch == self,
             path.target().root() == (Node::Leaf{keys: seq![], msgs: seq![]}),
@@ -291,7 +294,6 @@ impl LinkedBranch {
 
     pub open spec(checked) fn split(self, addr: Address, path: Path, split_arg: SplitArg) -> LinkedBranch
         recommends
-            self.wf(),
             path.valid(),
             path.branch == self,
             path.key == split_arg.get_pivot(),
@@ -348,6 +350,25 @@ impl LinkedBranch {
         &&& exists |ranking| self.valid_ranking(ranking)
     }
 
+    pub open spec(checked) fn keys_strictly_sorted_internal(self, ranking: Ranking) -> bool
+        recommends
+            self.wf(),
+            self.valid_ranking(ranking),
+        decreases self.get_rank(ranking),
+        when self.wf() && self.valid_ranking(ranking)
+    {
+        match self.root() {
+            Node::Leaf{keys, msgs} => {
+                Key::is_strictly_sorted(keys)
+            }
+            Node::Index{pivots, children} => {
+                &&& Key::is_strictly_sorted(pivots)
+                &&& forall |i| #[trigger] self.root().valid_child_index(i)
+                    ==> self.child_at_idx(i).keys_strictly_sorted_internal(ranking)
+            }
+        }
+    }
+
     pub open spec(checked) fn all_keys_in_range(self) -> bool
         recommends self.acyclic()
     {
@@ -358,29 +379,14 @@ impl LinkedBranch {
         recommends
             self.wf(),
             self.valid_ranking(ranking),
-        decreases self.get_rank(ranking), 1int
+        decreases self.get_rank(ranking)//, 1int
+        when self.wf() && self.valid_ranking(ranking)
     {
         self.root() is Index ==> {
-            &&& (forall |i| #[trigger] self.root().valid_child_index(i) ==> self.child_all_keys_in_range_internal(ranking, i))
+            &&& (forall |i| #[trigger] self.root().valid_child_index(i) ==> self.child_at_idx(i).all_keys_in_range_internal(ranking))
             &&& (forall |i| 0 <= i < self.root()->children.len() - 1 ==> self.all_keys_below_bound(i, ranking))
             &&& (forall |i| 0 < i < self.root()->children.len() ==> self.all_keys_above_bound(i, ranking))
         }
-    }
-
-    pub open spec(checked) fn child_all_keys_in_range_internal(self, ranking: Ranking, i: nat) -> bool
-        recommends
-            self.wf(),
-            self.valid_ranking(ranking),
-            self.root() is Index,
-            0 <= i < self.root()->children.len()
-        decreases self.get_rank(ranking), 0int
-        when {
-            &&& self.wf()
-            &&& self.valid_ranking(ranking)
-            &&& self.root().valid_child_index(i)
-        }
-    {
-        self.child_at_idx(i).all_keys_in_range_internal(ranking)
     }
 
     pub open spec(checked) fn map_all_keys(self, ranking: Ranking) -> Seq<Set<Key>>
@@ -523,7 +529,7 @@ impl LinkedBranch {
     pub open spec/*XXX (checked)*/ fn query_internal(self, key: Key, ranking: Ranking) -> Message
         recommends
             self.wf(),
-            self.valid_ranking(ranking)
+            self.valid_ranking(ranking),
         decreases self.get_rank(ranking)
         when {
             self.root() is Index ==> {
@@ -551,7 +557,7 @@ impl LinkedBranch {
     pub open spec/*XXX (checked)*/ fn insert_leaf(self, key: Key, msg: Message) -> LinkedBranch
         recommends
             self.wf(),
-            self.root() is Leaf
+            self.root() is Leaf,
     {
         // Need largest_lte ensures to restore checked
         let node = self.root();
@@ -705,7 +711,7 @@ impl Path {
         recommends
             0 < self.depth,
             self.branch.wf(),
-            self.branch.root() is Index
+            self.branch.root() is Index,
     {
         // Need route ensures to restore checked
         let r = self.branch.root().route(self.key) + 1;
