@@ -8,7 +8,7 @@ use vstd::prelude::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 use crate::disk::GenericDisk_v::*;
-use crate::betree::PivotBranchRefinement_v;
+use crate::betree::Utils_v::*;
 
 // Refinement is a submodule of LinkedBranch so that it can access all internal details
 // of LinkedBranch.
@@ -419,7 +419,7 @@ impl LinkedBranch {
             self.get_rank(ranking),
             1int,
     {
-        PivotBranchRefinement_v::union_seq_of_sets(self.map_all_keys(ranking))
+        union_seq_of_sets(self.map_all_keys(ranking))
     }
 
     pub open spec(checked) fn all_keys(self, ranking: Ranking) -> Set<Key>
@@ -499,8 +499,7 @@ impl LinkedBranch {
             set!{self.root}
         } else {
             let subtree_addrs = self.children_reachable_addrs_using_ranking(ranking);
-            // TODO(x9du): move this to a utils file
-            PivotBranchRefinement_v::union_seq_of_sets(subtree_addrs).insert(self.root)
+            union_seq_of_sets(subtree_addrs).insert(self.root)
         }
     }
 
@@ -697,17 +696,6 @@ impl LinkedBranch {
 pub open spec(checked) fn empty_linked_branch(root: Address) -> LinkedBranch
 {
     LinkedBranch{root: root, disk_view: empty_disk().modify_disk(root, Node::Leaf{keys: seq![], msgs: seq![]})}
-}
-
-// TODO (x9du): may want to move this to a utils file
-pub open spec(checked) fn union_seq_of_sets<T>(s: Seq<Set<T>>) -> Set<T>
-    decreases s.len()
-{
-    if s.len() == 0 {
-        set!{}
-    } else {
-        s[0] + union_seq_of_sets(s.skip(1))
-    }
 }
 
 #[verifier::ext_equal]

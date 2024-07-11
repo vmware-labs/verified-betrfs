@@ -476,7 +476,7 @@ pub proof fn lemma_target_all_keys(pre: LinkedBranch, ranking: Ranking, path: Pa
             assert(pre.root().valid_child_index(r));
             lemma_target_all_keys(pre.child_at_idx(r), ranking, path.subpath(), key);
             assert(pre.map_all_keys(ranking)[r as int].contains(key));
-            PivotBranchRefinement_v::lemma_set_subset_of_union_seq_of_sets(pre.map_all_keys(ranking), key);
+            lemma_set_subset_of_union_seq_of_sets(pre.map_all_keys(ranking), key);
             assert(pre.all_keys(ranking).contains(key));
         }
     }
@@ -590,13 +590,13 @@ pub proof fn lemma_reachable_implies_all_keys_contains(branch: LinkedBranch, ran
     implies branch.all_keys(ranking).contains(key) by {
         if branch.root() is Index && addr != branch.root {
             let subtree_addrs = branch.children_reachable_addrs_using_ranking(ranking);
-            assert(PivotBranchRefinement_v::union_seq_of_sets(subtree_addrs).contains(addr));
-            PivotBranchRefinement_v::lemma_union_seq_of_sets_contains(subtree_addrs, addr);
+            assert(union_seq_of_sets(subtree_addrs).contains(addr));
+            lemma_union_seq_of_sets_contains(subtree_addrs, addr);
             let i = choose |i| 0 <= i < subtree_addrs.len() && (#[trigger] subtree_addrs[i]).contains(addr);
             assert(branch.root().valid_child_index(i as nat));
             lemma_reachable_implies_all_keys_contains(branch.child_at_idx(i as nat), ranking, addr);
             assert(branch.map_all_keys(ranking)[i].contains(key));
-            PivotBranchRefinement_v::lemma_set_subset_of_union_seq_of_sets(branch.map_all_keys(ranking), key);
+            lemma_set_subset_of_union_seq_of_sets(branch.map_all_keys(ranking), key);
         }
     }
 }
@@ -615,7 +615,7 @@ pub proof fn lemma_reachable_addrs_subset(branch: LinkedBranch, ranking: Ranking
         if branch.root() is Index {
             if addr != branch.root {
                 let subtree_addrs = branch.children_reachable_addrs_using_ranking(ranking);
-                PivotBranchRefinement_v::lemma_union_seq_of_sets_contains(subtree_addrs, addr);
+                lemma_union_seq_of_sets_contains(subtree_addrs, addr);
                 let i = choose |i| 0 <= i < subtree_addrs.len()
                     && (#[trigger] subtree_addrs[i]).contains(addr);
                 assert(branch.root().valid_child_index(i as nat));
@@ -640,7 +640,7 @@ pub proof fn lemma_reachable_disjoint_implies_child_reachable_disjoint(branch: L
         let addr = choose |addr| child_reachable.contains(addr) && s.contains(addr);
         let subtree_addrs = branch.children_reachable_addrs_using_ranking(ranking);
         assert(subtree_addrs[i as int].contains(addr));
-        PivotBranchRefinement_v::lemma_set_subset_of_union_seq_of_sets(subtree_addrs, addr);
+        lemma_set_subset_of_union_seq_of_sets(subtree_addrs, addr);
     }
 }
 
@@ -818,10 +818,10 @@ pub proof fn lemma_children_keys_finite_and_nonempty(branch: LinkedBranch, ranki
             assert(child.all_keys(ranking).contains(child.root()->keys[0]));
         }
     }
-    PivotBranchRefinement_v::lemma_union_seq_of_sets_finite(sets);
+    lemma_union_seq_of_sets_finite(sets);
     assert(sets.len() > 0);
     let key = choose |key| sets[0].contains(key);
-    PivotBranchRefinement_v::lemma_set_subset_of_union_seq_of_sets(sets, key);
+    lemma_set_subset_of_union_seq_of_sets(sets, key);
 }
 
 } // verus!
