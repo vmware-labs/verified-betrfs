@@ -5,12 +5,8 @@ use builtin::*;
 use builtin_macros::*;
 
 use vstd::prelude::*;
-// use vstd::seq::*;
-// use vstd::seq_lib::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
-// use crate::betree::Buffer_v::*;
-// use crate::betree::Domain_v::*;
 use crate::disk::GenericDisk_v::*;
 use crate::betree::PivotBranchRefinement_v;
 
@@ -81,11 +77,14 @@ impl Node {
         }
     }
 
-    // TODO(x9du): use get_keys_or_pivots
+    pub open spec(checked) fn keys_or_pivots(self) -> Seq<Key>
+    {
+        if self is Leaf { self->keys } else { self->pivots }
+    }
+
     pub open spec(checked) fn keys_strictly_sorted(self) -> bool
     {
-        let s = if self is Leaf { self->keys } else { self->pivots };
-        Key::is_strictly_sorted(s)
+        Key::is_strictly_sorted(self.keys_or_pivots())
     }
 
     pub open spec(checked) fn valid_child_index(self, i: nat) -> bool

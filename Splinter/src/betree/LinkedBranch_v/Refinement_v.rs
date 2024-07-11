@@ -1,15 +1,12 @@
 // Copyright 2018-2024 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-// use builtin::*;
 use builtin_macros::*;
 use vstd::prelude::*;
 
 use crate::betree::LinkedBranch_v::*;
 use crate::betree::PivotBranch_v;
 use crate::betree::PivotBranchRefinement_v;
-// use crate::spec::KeyType_t::*;
-// use crate::spec::Messages_t::*;
 use crate::disk::GenericDisk_v::Ranking;
 
 verus! {
@@ -89,33 +86,27 @@ pub open spec(checked) fn inv_internal(branch: LinkedBranch, ranking: Ranking) -
 }
 
 // TODO(x9du): dedup with pivotbranch route?
-// create get_keys_or_pivots for each Node type, pass into route
-pub open spec(checked) fn get_keys_or_pivots(node: Node) -> Seq<Key>
-{
-    if node is Leaf { node->keys } else { node->pivots }
-}
-
 /// Ensures clause for `Node::route()` method.
 pub proof fn lemma_route_ensures(node: Node, key: Key)
     requires
         node.wf(),
         node.keys_strictly_sorted(),
     ensures ({
-        let s = get_keys_or_pivots(node);
+        let s = node.keys_or_pivots();
         &&& -1 <= #[trigger] node.route(key) < s.len()
         &&& forall |i| 0 <= i <= node.route(key) ==> #[trigger] Key::lte(s[i], key)
         &&& forall |i| node.route(key) < i < s.len() ==> #[trigger] Key::lt(key, s[i])
         &&& s.contains(key) ==> 0 <= node.route(key) && s[node.route(key)] == key
     })
 {
-    let s = if node is Leaf { node->keys } else { node->pivots };
+    let s = node.keys_or_pivots();
     Key::strictly_sorted_implies_sorted(s);
     Key::largest_lte_ensures(s, key, Key::largest_lte(s, key));
 }
 
 pub proof fn lemma_route_auto()
     ensures forall |node: Node, key: Key| node.wf() && node.keys_strictly_sorted() ==> {
-        let s = get_keys_or_pivots(node);
+        let s = node.keys_or_pivots();
         &&& -1 <= #[trigger] node.route(key) < s.len()
         &&& forall |i| #![trigger Key::lte(s[i], key)] 0 <= i <= node.route(key) ==> Key::lte(s[i], key)
         &&& forall |i| #![trigger Key::lt(key, s[i])] node.route(key) < i < s.len() ==> Key::lt(key, s[i])
@@ -123,7 +114,7 @@ pub proof fn lemma_route_auto()
     }
 {
     assert forall |node: Node, key: Key| node.wf() && node.keys_strictly_sorted() implies {
-        let s = get_keys_or_pivots(node);
+        let s = node.keys_or_pivots();
         &&& -1 <= #[trigger] node.route(key) < s.len()
         &&& forall |i| #![trigger Key::lte(s[i], key)] 0 <= i <= node.route(key) ==> Key::lte(s[i], key)
         &&& forall |i| #![trigger Key::lt(key, s[i])] node.route(key) < i < s.len() ==> Key::lt(key, s[i])
