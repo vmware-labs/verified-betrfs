@@ -492,17 +492,28 @@ impl LinkedBranch {
         recommends
             self.wf(),
             self.valid_ranking(ranking)
-        decreases self.get_rank(ranking), 1int
+        decreases self.get_rank(ranking), 2int
     {
         if !self.has_root() {
             set!{}
         } else if self.root() is Leaf {
             set!{self.root}
         } else {
-            let num_children = self.root()->children.len();
-            let subtree_addrs = Seq::new(num_children, |i: int| self.child_reachable_addrs_using_ranking(ranking, i as nat));
-            union_seq_of_sets(subtree_addrs).insert(self.root)
+            let subtree_addrs = self.children_reachable_addrs_using_ranking(ranking);
+            // TODO(x9du): move this to a utils file
+            PivotBranchRefinement_v::union_seq_of_sets(subtree_addrs).insert(self.root)
         }
+    }
+
+    // TODO(x9du): do we need 3 functions for this?
+    pub open spec(checked) fn children_reachable_addrs_using_ranking(self, ranking: Ranking) -> Seq<Set<Address>>
+        recommends
+            self.wf(),
+            self.valid_ranking(ranking),
+            self.root() is Index,
+        decreases self.get_rank(ranking), 1int
+    {
+        Seq::new(self.root()->children.len(), |i: int| self.child_reachable_addrs_using_ranking(ranking, i as nat))
     }
 
     pub open spec(checked) fn child_reachable_addrs_using_ranking(self, ranking: Ranking, i: nat) -> Set<Address>
@@ -676,6 +687,7 @@ impl LinkedBranch {
             pivots: self.root()->pivots.insert(child_idx, pivot),
             children: self.root()->children.insert(child_idx + 1, new_child_addr)
         };
+        // TODO(x9du): this assumes left branch disk view has new right branch addr
         let new_disk_view = self.disk_view
             .merge_disk(left_branch.disk_view)
             .modify_disk(self.root, new_root);
