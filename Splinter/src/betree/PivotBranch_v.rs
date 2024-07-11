@@ -109,18 +109,24 @@ impl Node {
     /// - For index nodes, this is the set union of all pivot keys + keys contained
     ///   under all leaf nodes under this index node.
     pub open spec(checked) fn all_keys(self) -> Set<Key>
-        decreases self
+        decreases self, 1int,
     {
         match self {
             Node::Leaf{keys, msgs} => keys.to_set(),
             Node::Index{pivots, children} => {
-                let pivotKeys = pivots.to_set();
-                let indexKeys = Set::new(|key| 
-                    exists |i| 0 <= i < children.len() 
-                    && (#[trigger] children[i]).all_keys().contains(key));
-                pivotKeys + indexKeys
+                pivots.to_set() + self.children_keys()
             }
         }
+    }
+
+    pub open spec(checked) fn children_keys(self) -> Set<Key>
+        recommends self is Index
+        decreases self, 0int,
+        when self is Index
+    {
+        Set::new(|key|
+            exists |i| 0 <= i < self->children.len()
+                && (#[trigger] self->children[i]).all_keys().contains(key))
     }
 
     /// Returns true iff all keys under node child[i] are less than pivots[i] 

@@ -97,16 +97,6 @@ pub proof fn lemma_key_lte_implies_route_lte(node: Node, key1: Key, key2: Key)
     }
 }
 
-pub proof fn lemma_index_all_keys(node: Node, key: Key)
-    requires
-        node is Index,
-        node.all_keys().contains(key)
-    ensures
-        node->pivots.contains(key)
-        || (exists |i| 0 <= i < node->children.len()
-            && (#[trigger] node->children[i]).all_keys().contains(key))
-{}
-
 pub open spec(checked) fn map_all_keys(children: Seq<Node>) -> Seq<Set<Key>>
 {
     children.map(|i, child: Node| child.all_keys())
@@ -124,16 +114,13 @@ pub proof fn lemma_union_all_keys_finite(children: Seq<Node>)
     lemma_union_seq_of_sets_finite(map_all_keys(children));
 }
 
-pub proof fn lemma_children_all_keys_equivalence(children: Seq<Node>)
-    ensures
-        Set::new(|key| exists |i| 0 <= i < children.len()
-            && (#[trigger] children[i]).all_keys().contains(key)) ==
-        union_all_keys(children)
+pub proof fn lemma_children_keys_equivalence(node: Node)
+    requires node is Index
+    ensures node.children_keys() == union_all_keys(node->children)
 {
-    let children_all_keys = Set::new(|key| exists |i| 0 <= i < children.len()
-        && (#[trigger] children[i]).all_keys().contains(key));
+    let children = node->children;
 
-    assert forall |key| #[trigger] children_all_keys.contains(key)
+    assert forall |key| #[trigger] node.children_keys().contains(key)
     implies union_all_keys(children).contains(key) by
     {
         let i = choose |i| 0 <= i < children.len()
@@ -143,12 +130,12 @@ pub proof fn lemma_children_all_keys_equivalence(children: Seq<Node>)
     }
 
     assert forall |key| union_all_keys(children).contains(key)
-    implies #[trigger] children_all_keys.contains(key) by
+    implies #[trigger] node.children_keys().contains(key) by
     {
         lemma_union_seq_of_sets_contains(map_all_keys(children), key);
     }
 
-    assert(children_all_keys == union_all_keys(children));
+    assert(node.children_keys() == union_all_keys(children));
 }
 
 pub proof fn lemma_wf_implies_all_keys_finite_and_not_empty(node: Node)
@@ -162,21 +149,16 @@ pub proof fn lemma_wf_implies_all_keys_finite_and_not_empty(node: Node)
     if node is Leaf {
         assert(node.all_keys().contains(node->keys[0]));
     } else {
-        let pivotKeys = node->pivots.to_set();
-        let indexKeys = Set::new(|key| 
-            exists |i| 0 <= i < node->children.len() 
-            && (#[trigger] node->children[i]).all_keys().contains(key));
-        let children_all_keys = union_all_keys(node->children);
-        assert(pivotKeys.finite());
-        lemma_children_all_keys_equivalence(node->children);
-        assert(indexKeys == children_all_keys);
+        let pivot_keys = node->pivots.to_set();
+        assert(pivot_keys.finite());
+        lemma_children_keys_equivalence(node);
         assert forall |i| 0 <= i < node->children.len()
         implies (#[trigger] node->children[i].all_keys()).finite() by {
             lemma_wf_implies_all_keys_finite_and_not_empty(node->children[i]);
         }
         lemma_union_all_keys_finite(node->children);
-        assert(indexKeys.finite());
-        assert(node.all_keys() == pivotKeys + indexKeys);
+        assert(node.children_keys().finite());
+        assert(node.all_keys() == pivot_keys + node.children_keys());
         assert(node.all_keys().finite());
 
         assert(node->children.len() > 0);
@@ -408,9 +390,9 @@ pub proof fn lemma_split_index_interpretation(old_index: Node, split_arg: SplitA
     lemma_split_node_preserves_wf(old_index, split_arg);
     assert(left_index.wf() && right_index.wf());
     lemma_route_auto();
-    let union_map = Key::map_pivoted_union(left_index.i().map, split_arg.get_pivot(), right_index.i().map);
-    let pivot_index = split_arg->pivot_index;
     let pivot = split_arg.get_pivot();
+    let union_map = Key::map_pivoted_union(left_index.i().map, pivot, right_index.i().map);
+    let pivot_index = split_arg->pivot_index;
 
     assert forall |key|
     (#[trigger] old_index.i().map.dom().contains(key) ==>
@@ -440,10 +422,13 @@ pub proof fn lemma_split_index_interpretation(old_index: Node, split_arg: SplitA
             assert(old_index->children[r+1].i().map.contains_key(key));
             if r+1 <= pivot_index {
                 assert(left_index.i().map.contains_key(key));
+                assert(Key::lt(key, pivot));
             } else {
                 assert(right_index.i().map.contains_key(key));
+                assert(Key::lte(pivot, key));
             }
-            assert(union_map.dom().contains(key) && old_index.i().map[key] == union_map[key]);
+            assert(union_map.dom().contains(key));
+            assert(old_index.i().map[key] == union_map[key]);
         }
 
         if union_map.dom().contains(key) {
@@ -563,7 +548,7 @@ pub proof fn lemma_split_index_all_keys(old_index: Node, split_arg: SplitArg)
     assert forall |key| left_index.all_keys().contains(key)
     implies #[trigger] Key::lt(key, pivot) && old_index.all_keys().contains(key) by {
         if (!left_index->pivots.contains(key)) {
-            lemma_index_all_keys(left_index, key);
+            assert(left_index.children_keys().contains(key));
             let i = choose |i| 0 <= i < left_index->children.len()
                 && (#[trigger] left_index->children[i]).all_keys().contains(key);
             assert(left_index->children[i] == old_index->children[i]);
@@ -607,7 +592,7 @@ pub proof fn lemma_split_index_all_keys(old_index: Node, split_arg: SplitArg)
         } else if (right_index->pivots.contains(key)) {
             assert(Key::lt(pivot, key));
         } else {
-            lemma_index_all_keys(right_index, key);
+            assert(right_index.children_keys().contains(key));
             let i = choose |i| 0 <= i < right_index->children.len()
                 && (#[trigger] right_index->children[i]).all_keys().contains(key);
             assert(right_index->children[i] == old_index->children[i + pivot_index + 1]);

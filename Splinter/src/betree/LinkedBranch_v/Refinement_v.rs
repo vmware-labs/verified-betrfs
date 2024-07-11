@@ -754,21 +754,18 @@ pub proof fn lemma_i_preserves_all_keys(branch: LinkedBranch, ranking: Ranking)
 {
     if branch.root() is Index {
         let branch_i = branch.i_internal(ranking);
-        // TODO: make this a helper function
-        let branch_i_children_keys = Set::new(|key| 
-            exists |i| 0 <= i < branch_i->children.len() 
-            && (#[trigger] branch_i->children[i]).all_keys().contains(key));
+        let branch_i_children_keys = branch_i.children_keys();
         assert(branch.all_keys(ranking) == branch.root()->pivots.to_set() + branch.children_keys(ranking));
-        assert(branch_i.all_keys() == branch_i->pivots.to_set() + branch_i_children_keys);
-        
+        assert(branch_i.all_keys() == branch_i->pivots.to_set() + branch_i.children_keys());
+
         assert forall |i| 0 <= i < branch.root()->children.len()
         implies branch.map_all_keys(ranking)[i] == PivotBranchRefinement_v::map_all_keys(branch_i->children)[i] by {
             assert(branch.root().valid_child_index(i as nat));
             lemma_i_preserves_all_keys(branch.child_at_idx(i as nat), ranking);
         }
         assert(branch.map_all_keys(ranking) == PivotBranchRefinement_v::map_all_keys(branch_i->children));
-        PivotBranchRefinement_v::lemma_children_all_keys_equivalence(branch_i->children);
-        assert(branch.children_keys(ranking) == branch_i_children_keys);
+        PivotBranchRefinement_v::lemma_children_keys_equivalence(branch_i);
+        assert(branch.children_keys(ranking) == branch_i.children_keys());
     }
 }
 
