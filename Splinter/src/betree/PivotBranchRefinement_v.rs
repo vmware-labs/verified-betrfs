@@ -35,6 +35,23 @@ impl Node {
             }
         }
     }
+
+    pub open spec(checked) fn append_via_insert(self, keys: Seq<Key>, msgs: Seq<Message>, path: Path) -> Node
+        recommends
+            path.valid(),
+            path.node == self,
+            keys.len() > 0,
+            keys.len() == msgs.len(),
+            Key::is_strictly_sorted(keys),
+            path.target() is Leaf,
+            path.target().wf(), // comes from path.valid(), but not having this here causes recommendation not met
+            Key::lt(path.target()->keys.last(), keys[0]),
+            path.key == keys[0],
+            path.path_equiv(keys.last()),
+    {
+        keys.zip_with(msgs).fold_left_alt(self, |node: Node, pair: (Key, Message)|
+            node.insert(pair.0, pair.1, Path{node: node, key: pair.0, depth: path.depth}))
+    }
 }
 
 pub open spec(checked) fn get_keys_or_pivots(node: Node) -> Seq<Key>
@@ -76,6 +93,21 @@ pub proof fn lemma_route_auto()
         &&& s.contains(key) ==> 0 <= node.route(key) && s[node.route(key)] == key
     } by {
         lemma_route_ensures(node, key);
+    }
+}
+
+pub proof fn lemma_route_to_end(node: Node, key: Key)
+    requires
+        node.wf(),
+        Key::lte(get_keys_or_pivots(node).last(), key),
+    ensures
+        node.route(key) == get_keys_or_pivots(node).len() - 1,
+{
+    let r = node.route(key);
+    let s = get_keys_or_pivots(node);
+    lemma_route_auto();
+    if r < s.len() - 1 {
+        assert(Key::lt(key, s.last()));
     }
 }
 
@@ -1085,6 +1117,162 @@ pub proof fn lemma_append_preserves_wf(pre: Node, keys: Seq<Key>, msgs: Seq<Mess
         {
             assert(pre.all_keys_above_bound(i));
         }
+    }
+}
+
+pub proof fn lemma_append_via_insert_path(path: Path, new_keys: Seq<Key>, new_msgs: Seq<Message>)
+    requires
+        path.valid(),
+        path.target() is Leaf,
+        new_keys.len() > 1,
+        new_keys.len() == new_msgs.len(),
+        Key::is_strictly_sorted(new_keys),
+        Key::lt(path.target()->keys.last(), new_keys[0]),
+        path.key == new_keys[0],
+        path.path_equiv(new_keys.last()),
+    ensures ({
+            let path1 = Path{node: path.node.insert(new_keys[0], new_msgs[0], path), key: new_keys[1], depth: path.depth};
+            &&& path1.valid()
+            &&& path1.target() == path.target().insert_leaf(new_keys[0], new_msgs[0])
+            &&& path1.path_equiv(new_keys.last())
+        })
+    decreases path.depth,
+{
+    let post = path.node.insert(new_keys[0], new_msgs[0], path);
+    lemma_insert_preserves_wf(path.node, new_keys[0], new_msgs[0], path);
+    let path1 = Path{node: post, key: new_keys[1], depth: path.depth};
+    lemma_route_auto();
+    lemma_append_keys_are_path_equiv(new_keys, path);
+    assert(path.path_equiv(new_keys[1]));
+    if path.depth == 0 {
+        assert(path1.depth == 0);
+
+        lemma_route_to_end(path.target(), new_keys[0]);
+        assert(path1.node->keys.last() == new_keys[0]);
+
+        let r1_key1 = path1.node.route(new_keys[1]);
+        assert(r1_key1 == path1.node->keys.len() - 1) by {
+            assert(Key::lt(new_keys[0], new_keys[1]));
+            if r1_key1 < path1.node->keys.len() - 1 {
+                assert(Key::lt(new_keys[1], path1.node->keys.last()));
+            }
+        }
+        let r1_key2 = path1.node.route(new_keys.last());
+        assert(r1_key2 == path1.node->keys.len() - 1) by {
+            assert(Key::lt(new_keys[0], new_keys.last()));
+            if r1_key2 < path1.node->keys.len() - 1 {
+                assert(Key::lt(new_keys.last(), path1.node->keys.last()));
+            }
+        }
+        assert(r1_key1 == r1_key2);
+    } else {
+        lemma_append_via_insert_path(path.subpath(), new_keys, new_msgs);
+    }
+}
+
+pub proof fn lemma_append_incremental(new_keys: Seq<Key>, new_msgs: Seq<Message>, path: Path, path1: Path)
+    requires
+        path.valid(),
+        path.target() is Leaf,
+        new_keys.len() > 1,
+        new_keys.len() == new_msgs.len(),
+        Key::is_strictly_sorted(new_keys),
+        Key::lt(path.target()->keys.last(), new_keys[0]),
+        path.key == new_keys[0],
+        path.path_equiv(new_keys.last()),
+        path1 == (Path{node: path.node.append(new_keys.take(1), new_msgs.take(1), path),
+            key: new_keys[1], depth: path.depth}),
+    ensures
+        path.node.append(new_keys, new_msgs, path)
+            == path1.node.append(new_keys.skip(1), new_msgs.skip(1), path1),
+    decreases path.depth,
+{
+    let post = path.node.append(new_keys, new_msgs, path);
+    let post1 = path1.node.append(new_keys.skip(1), new_msgs.skip(1), path1);
+    if path.depth == 0 {
+        assert(path.node->keys + new_keys == path.node->keys + new_keys.take(1) + new_keys.skip(1));
+        assert(path.node->msgs + new_msgs == path.node->msgs + new_msgs.take(1) + new_msgs.skip(1));
+    } else {
+        let r1 = path1.node.route(new_keys[1]);
+        let r = path.node.route(new_keys[0]);
+        lemma_route_auto();
+        lemma_append_keys_are_path_equiv(new_keys, path);
+        assert(path.path_equiv(new_keys[1]));
+        assert(r == path.node.route(new_keys[1]));
+        assert(r == r1);
+        assert(path1.subpath().node == path1.node->children[r+1]);
+        assert(path1.subpath().node == path.node->children[r+1].append(new_keys.take(1), new_msgs.take(1), path.subpath()));
+        lemma_append_incremental(new_keys, new_msgs, path.subpath(), path1.subpath());
+        // changed children equal
+        assert(post->children[r+1]
+            == path.subpath().node.append(new_keys, new_msgs, path.subpath()));
+        assert(post1->children[r+1]
+            == path1.subpath().node.append(new_keys.skip(1), new_msgs.skip(1), path1.subpath()));
+        
+        // unchanged children equal
+        assert(post->children.len() == path.node->children.len() == post1->children.len());
+        assert(forall |i| 0 <= i < post->children.len() && i != r+1
+            ==> #[trigger] post->children[i] == path.node->children[i] && post1->children[i] == path.node->children[i]);
+
+        assert(post->children =~~= post1->children);
+    }
+}
+
+pub proof fn lemma_append_via_insert_equiv(node: Node, new_keys: Seq<Key>, new_msgs: Seq<Message>, path: Path)
+    requires
+        path.valid(),
+        path.node == node,
+        path.target() is Leaf,
+        new_keys.len() > 0,
+        new_keys.len() == new_msgs.len(),
+        Key::is_strictly_sorted(new_keys),
+        Key::lt(path.target()->keys.last(), new_keys[0]),
+        path.key == new_keys[0],
+        path.path_equiv(new_keys.last()),
+    ensures
+        node.append(new_keys, new_msgs, path) == node.append_via_insert(new_keys, new_msgs, path),
+    decreases new_keys.len(),
+{
+    lemma_path_target_is_wf(path);
+    let post = node.append(new_keys, new_msgs, path);
+    let via_insert = node.append_via_insert(new_keys, new_msgs, path);
+    let keys_msgs = new_keys.zip_with(new_msgs);
+    let insert0 = node.insert(new_keys[0], new_msgs[0], path);
+    let r = path.target().route(new_keys[0]);
+    lemma_route_auto();
+    lemma_route_to_end(path.target(), new_keys[0]);
+    assert(r == path.target()->keys.len() - 1);
+    assert(path.target()->keys.insert(r+1, new_keys[0]) == path.target()->keys + new_keys.take(1));
+    assert(path.target()->msgs.insert(r+1, new_msgs[0]) == path.target()->msgs + new_msgs.take(1));
+
+    if new_keys.len() == 1 {
+        reveal_with_fuel(vstd::prelude::Seq::fold_left_alt, 2);
+        assert(via_insert == insert0);
+        assert(new_keys.take(1) == new_keys);
+        assert(new_msgs.take(1) == new_msgs);
+        assert(insert0 == post);
+    } else {
+        let path1 = Path{node: insert0, key: new_keys[1], depth: path.depth};
+        lemma_append_keys_are_path_equiv(new_keys, path);
+        if new_keys.len() > 2 {
+            assert(Key::lt(new_keys[1], new_keys.last()));
+        }
+        lemma_append_via_insert_path(path, new_keys, new_msgs);
+        assert(path1.valid());
+
+        assert(path1.target()->keys.last() == new_keys[0]);
+        assert(Key::lt(path1.target()->keys.last(), new_keys[1]));
+
+        lemma_append_via_insert_equiv(insert0, new_keys.skip(1), new_msgs.skip(1), path1);
+
+        assert(insert0 == node.append(new_keys.take(1), new_msgs.take(1), path));
+        lemma_append_incremental(new_keys, new_msgs, path, path1);
+        assert(post == insert0.append(new_keys.skip(1), new_msgs.skip(1), path1));
+
+        assert(keys_msgs.skip(1) == new_keys.skip(1).zip_with(new_msgs.skip(1)));
+        assert(via_insert == insert0.append_via_insert(new_keys.skip(1), new_msgs.skip(1), path1));
+
+        assert(post == via_insert);
     }
 }
 

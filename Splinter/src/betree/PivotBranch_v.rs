@@ -273,7 +273,19 @@ impl Node {
             path.key == keys[0],
             path.path_equiv(keys.last()) // all new keys must route to the same location
     {
-        path.substitute(Node::Leaf{ keys: path.target()->keys + keys, msgs: path.target()->msgs + msgs })
+        path.substitute(path.target().append_leaf(keys, msgs))
+    }
+
+    pub open spec(checked) fn append_leaf(self, keys: Seq<Key>, msgs: Seq<Message>) -> Node
+        recommends
+            self.wf(),
+            self is Leaf,
+            keys.len() > 0,
+            keys.len() == msgs.len(),
+            Key::is_strictly_sorted(keys),
+            Key::lt(self->keys.last(), keys[0]),
+    {
+        Node::Leaf{ keys: self->keys + keys, msgs: self->msgs + msgs }
     }
 
     /// Returns two leaf nodes formed by splitting `self` into two Leaf nodes, where

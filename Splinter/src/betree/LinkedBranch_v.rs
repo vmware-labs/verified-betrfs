@@ -280,15 +280,16 @@ impl LinkedBranch {
         recommends
             path.valid(),
             path.branch == self,
-            path.target().root() == (Node::Leaf{keys: seq![], msgs: seq![]}),
+            path.target().root() is Leaf,
             keys.len() > 0,
             keys.len() == msgs.len(),
             Key::is_strictly_sorted(keys),
+            Key::lt(path.target().root()->keys.last(), keys[0]),
             path.key == keys[0],
-            path.path_equiv(keys.last())
+            path.path_equiv(keys.last()),
     {
         // Need path.valid() ==> path.target().wf() to restore checked
-        path.substitute(path.target().append_to_new_leaf(keys, msgs))
+        path.substitute(path.target().append_to_leaf(keys, msgs))
     }
 
     pub open spec(checked) fn split(self, addr: Address, path: Path, split_arg: SplitArg) -> LinkedBranch
@@ -580,14 +581,16 @@ impl LinkedBranch {
         LinkedBranch{root: self.root, disk_view: self.disk_view.modify_disk(self.root, new_node)}
     }
 
-    pub open spec(checked) fn append_to_new_leaf(self, new_keys: Seq<Key>, new_msgs: Seq<Message>) -> LinkedBranch
+    pub open spec(checked) fn append_to_leaf(self, new_keys: Seq<Key>, new_msgs: Seq<Message>) -> LinkedBranch
         recommends
             self.wf(),
             self.root() is Leaf,
+            new_keys.len() > 0,
             new_keys.len() == new_msgs.len(),
-            Key::is_strictly_sorted(new_keys)
+            Key::is_strictly_sorted(new_keys),
+            Key::lt(self.root()->keys.last(), new_keys[0]),
     {
-        let new_node = Node::Leaf{keys: new_keys, msgs: new_msgs};
+        let new_node = Node::Leaf{ keys: self.root()->keys + new_keys, msgs: self.root()->msgs + new_msgs };
         let new_disk_view = self.disk_view.modify_disk(self.root, new_node);
         LinkedBranch{root: self.root, disk_view: new_disk_view}
     }
