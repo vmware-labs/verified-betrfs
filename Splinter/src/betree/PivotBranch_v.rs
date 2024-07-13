@@ -261,14 +261,13 @@ impl Node {
     /// specified by `keys` and `msgs`.
     pub open spec(checked) fn append(self, keys: Seq<Key>, msgs: Seq<Message>, path: Path) -> Node
         recommends
-            self.wf(),
             path.valid(),
             path.node == self,
             keys.len() > 0,
             keys.len() == msgs.len(),
             Key::is_strictly_sorted(keys),
+            path.target().wf(), // TODO(x9du): remove. Comes from path.valid(), but not having this here causes recommendation not met
             path.target() is Leaf,
-            path.target().wf(), // comes from path.valid(), but not having this here causes recommendation not met
             Key::lt(path.target()->keys.last(), keys[0]),
             path.key == keys[0],
             path.path_equiv(keys.last()) // all new keys must route to the same location
