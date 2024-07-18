@@ -280,16 +280,16 @@ impl LinkedBranch {
         recommends
             path.valid(),
             path.branch == self,
-            path.target().root() is Leaf,
             keys.len() > 0,
             keys.len() == msgs.len(),
             Key::is_strictly_sorted(keys),
+            path.target().root() is Leaf,
             Key::lt(path.target().root()->keys.last(), keys[0]),
             path.key == keys[0],
             path.path_equiv(keys.last()),
     {
         // Need path.valid() ==> path.target().wf() to restore checked
-        path.substitute(path.target().append_to_leaf(keys, msgs))
+        path.substitute(path.target().append_leaf(keys, msgs))
     }
 
     pub open spec(checked) fn split(self, addr: Address, path: Path, split_arg: SplitArg) -> LinkedBranch
@@ -357,16 +357,11 @@ impl LinkedBranch {
         decreases self.get_rank(ranking),
         when self.wf() && self.valid_ranking(ranking)
     {
-        match self.root() {
-            Node::Leaf{keys, msgs} => {
-                Key::is_strictly_sorted(keys)
-            }
-            Node::Index{pivots, children} => {
-                &&& Key::is_strictly_sorted(pivots)
-                &&& forall |i| #[trigger] self.root().valid_child_index(i)
-                    ==> self.child_at_idx(i).keys_strictly_sorted_internal(ranking)
-            }
-        }
+        self.root().keys_strictly_sorted()
+        && (self.root() is Index ==> (
+            forall |i| #[trigger] self.root().valid_child_index(i)
+                ==> self.child_at_idx(i).keys_strictly_sorted_internal(ranking)
+        ))
     }
 
     pub open spec(checked) fn all_keys_in_range(self) -> bool
@@ -581,7 +576,7 @@ impl LinkedBranch {
         LinkedBranch{root: self.root, disk_view: self.disk_view.modify_disk(self.root, new_node)}
     }
 
-    pub open spec(checked) fn append_to_leaf(self, new_keys: Seq<Key>, new_msgs: Seq<Message>) -> LinkedBranch
+    pub open spec(checked) fn append_leaf(self, new_keys: Seq<Key>, new_msgs: Seq<Message>) -> LinkedBranch
         recommends
             self.wf(),
             self.root() is Leaf,

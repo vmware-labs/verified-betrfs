@@ -52,6 +52,23 @@ impl LinkedBranch {
             },
         }
     }
+
+    pub open spec/*XXX (checked)*/ fn append_via_insert(self, keys: Seq<Key>, msgs: Seq<Message>, path: Path) -> LinkedBranch
+        recommends
+            path.valid(),
+            path.branch == self,
+            keys.len() > 0,
+            keys.len() == msgs.len(),
+            Key::is_strictly_sorted(keys),
+            path.target().root() is Leaf,
+            Key::lt(path.target().root()->keys.last(), keys[0]),
+            path.key == keys[0],
+            path.path_equiv(keys.last()),
+    {
+        // Need path.valid() ==> path.target().wf() to restore checked
+        keys.zip_with(msgs).fold_left_alt(self, |branch: LinkedBranch, pair: (Key, Message)|
+            branch.insert(pair.0, pair.1, Path{branch: branch, key: pair.0, depth: path.depth}))
+    }
 }
 
 impl Path {
@@ -121,6 +138,41 @@ pub proof fn lemma_route_auto()
         &&& s.contains(key) ==> 0 <= node.route(key) && s[node.route(key)] == key
     } by {
         lemma_route_ensures(node, key);
+    }
+}
+
+pub proof fn lemma_route_to_end(node: Node, key: Key)
+    requires
+        node.wf(),
+        node.keys_strictly_sorted(),
+        Key::lte(node.keys_or_pivots().last(), key),
+    ensures
+        node.route(key) == node.keys_or_pivots().len() - 1,
+{
+    let r = node.route(key);
+    let s = node.keys_or_pivots();
+    lemma_route_auto();
+    if r < s.len() - 1 {
+        assert(Key::lt(key, s.last()));
+    }
+}
+
+pub proof fn lemma_key_lte_implies_route_lte(node: Node, key1: Key, key2: Key)
+    requires
+        node.wf(),
+        node.keys_strictly_sorted(),
+        Key::lte(key1, key2),
+    ensures
+        node.route(key1) <= node.route(key2)
+{
+    let s = node.keys_or_pivots();
+    Key::strictly_sorted_implies_sorted(s);
+    Key::largest_lte_ensures(s, key1, Key::largest_lte(s, key1));
+    Key::largest_lte_ensures(s, key2, Key::largest_lte(s, key2));
+    // Proof by contradiction
+    if (Key::largest_lte(s, key1) > Key::largest_lte(s, key2)) {
+        assert(Key::lt(key2, s[Key::largest_lte(s, key1)]));
+        assert(Key::lt(key2, key1));
     }
 }
 
@@ -244,7 +296,6 @@ pub proof fn lemma_insert_preserves_ranking(pre: LinkedBranch, ranking: Ranking,
         pre.insert(key, msg, path).valid_ranking(ranking),
     decreases pre.get_rank(ranking),
 {
-    let post = pre.insert(key, msg, path);
     if path.depth > 0 {
         let r = pre.root().route(key) + 1;
         lemma_route_auto();
@@ -343,6 +394,206 @@ pub proof fn insert_refines_internal(pre: LinkedBranch, ranking: Ranking, post_r
     lemma_i_wf_implies_inv(post, post_ranking);
 }
 
+pub proof fn lemma_append_keys_are_path_equiv(keys: Seq<Key>, path: Path, ranking: Ranking)
+    requires
+        path.branch.valid_ranking(ranking),
+        path.branch.keys_strictly_sorted_internal(ranking),
+        path.valid(),
+        keys.len() > 0,
+        Key::is_strictly_sorted(keys),
+        path.key == keys[0],
+        path.path_equiv(keys.last())
+    ensures
+        forall |key| keys.contains(key) ==> path.path_equiv(key)
+    decreases path.depth
+{
+    lemma_route_auto();
+
+    if 0 < path.depth {
+        let r = path.branch.root().route(path.key) + 1;
+        assert(path.branch.root().valid_child_index(r as nat));
+        lemma_append_keys_are_path_equiv(keys, path.subpath(), ranking);
+    }
+
+    Key::strictly_sorted_implies_sorted(keys);
+
+    let node = path.branch.root();
+    assert forall |key| keys.contains(key) implies path.path_equiv(key) by {
+        lemma_key_lte_implies_route_lte(node, keys[0], key);
+        lemma_key_lte_implies_route_lte(node, key, keys.last());
+        assert(node.route(path.key) == node.route(key));
+    }
+}
+
+pub proof fn lemma_append_incremental(keys: Seq<Key>, msgs: Seq<Message>, path: Path, path1: Path, ranking: Ranking)
+    requires
+        path.branch.valid_ranking(ranking),
+        path.branch.keys_strictly_sorted_internal(ranking),
+        path.valid(),
+        keys.len() > 1,
+        keys.len() == msgs.len(),
+        Key::is_strictly_sorted(keys),
+        path.target().root() is Leaf,
+        Key::lt(path.target().root()->keys.last(), keys[0]),
+        path.key == keys[0],
+        path.path_equiv(keys.last()),
+        path1 == (Path{branch: path.branch.append(keys.take(1), msgs.take(1), path),
+            key: keys[1], depth: path.depth}),
+    ensures
+        path.branch.append(keys, msgs, path)
+            == path1.branch.append(keys.skip(1), msgs.skip(1), path1),
+    decreases path.depth,
+{
+    let post = path.branch.append(keys, msgs, path);
+    let post1 = path1.branch.append(keys.skip(1), msgs.skip(1), path1);
+
+    let except = set!{path.target().root};
+    lemma_target_preserves_disk(path);
+    assert(path.branch.disk_view.entries.remove_keys(except) == post.disk_view.entries.remove_keys(except));
+    assert(path.branch.disk_view.same_except(post.disk_view, except));
+
+    if path.depth == 0 {
+        assert(path.branch.root()->keys + keys == path.branch.root()->keys + keys.take(1) + keys.skip(1));
+        assert(path.branch.root()->msgs + msgs == path.branch.root()->msgs + msgs.take(1) + msgs.skip(1));
+        assert(post =~~= post1);
+    } else {
+        let r = path.branch.root().route(path.key);
+        let r1 = path1.branch.root().route(keys[1]);
+        lemma_route_auto();
+        lemma_append_keys_are_path_equiv(keys, path, ranking);
+        assert(path.path_equiv(keys[1]));
+        assert(r == path.branch.root().route(keys[1]));
+        assert(r == r1);
+        assert(path.branch.root().valid_child_index((r+1) as nat));
+        assert(path1.subpath().branch == path1.branch.child_at_idx((r+1) as nat));
+        assert(path1.subpath().branch == path.branch.child_at_idx((r+1) as nat).append(keys.take(1), msgs.take(1), path.subpath()));
+        assert(path1.subpath().branch == path.subpath().branch.append(keys.take(1), msgs.take(1), path.subpath()));
+        lemma_append_incremental(keys, msgs, path.subpath(), path1.subpath(), ranking);
+
+        assert(post =~~= post1);
+    }
+}
+
+pub proof fn lemma_append_via_insert_path(path: Path, ranking: Ranking, keys: Seq<Key>, msgs: Seq<Message>)
+    requires
+        path.branch.valid_ranking(ranking),
+        path.branch.keys_strictly_sorted_internal(ranking),
+        path.valid(),
+        keys.len() > 1,
+        keys.len() == msgs.len(),
+        Key::is_strictly_sorted(keys),
+        path.target().root() is Leaf,
+        Key::lt(path.target().root()->keys.last(), keys[0]),
+        path.key == keys[0],
+        path.path_equiv(keys.last()),
+    ensures ({
+            let path1 = Path{branch: path.branch.insert(keys[0], msgs[0], path), key: keys[1], depth: path.depth};
+            &&& path1.valid()
+            &&& path1.target() == path.target().insert_leaf(keys[0], msgs[0])
+            &&& path1.path_equiv(keys.last())
+        })
+    decreases path.depth,
+{
+    let post = path.branch.insert(keys[0], msgs[0], path);
+
+    let except = set!{path.target().root};
+    lemma_target_preserves_disk(path);
+    assert(path.branch.disk_view.entries.remove_keys(except) == post.disk_view.entries.remove_keys(except));
+    assert(path.branch.disk_view.same_except(post.disk_view, except));
+
+    let path1 = Path{branch: post, key: keys[1], depth: path.depth};
+    lemma_insert_preserves_wf(path.branch, ranking, keys[0], msgs[0], path);
+    lemma_route_auto();
+    lemma_append_keys_are_path_equiv(keys, path, ranking);
+    assert(path.path_equiv(keys[1]));
+
+    lemma_path_target_is_wf(path);
+    lemma_path_target_valid_ranking_and_keys_strictly_sorted(path, ranking);
+
+    if path.depth == 0 {
+        lemma_route_to_end(path.target().root(), keys[0]);
+        assert(path1.branch.root()->keys.last() == keys[0]);
+
+        let r1_key1 = path1.branch.root().route(keys[1]);
+        assert(r1_key1 == path1.branch.root()->keys.len() - 1) by {
+            assert(Key::lt(keys[0], keys[1]));
+            if r1_key1 < path1.branch.root()->keys.len() - 1 {
+                assert(Key::lt(keys[1], path1.branch.root()->keys.last()));
+            }
+        }
+        let r1_key2 = path1.branch.root().route(keys.last());
+        assert(r1_key2 == path1.branch.root()->keys.len() - 1) by {
+            assert(Key::lt(keys[0], keys.last()));
+            if r1_key2 < path1.branch.root()->keys.len() - 1 {
+                assert(Key::lt(keys.last(), path1.branch.root()->keys.last()));
+            }
+        }
+        assert(r1_key1 == r1_key2);
+    } else {
+        let r = path.branch.root().route(path.key);
+        assert(path.branch.root().valid_child_index((r+1) as nat));
+        lemma_append_via_insert_path(path.subpath(), ranking, keys, msgs);
+    }
+}
+
+pub proof fn lemma_append_via_insert_equiv(branch: LinkedBranch, keys: Seq<Key>, msgs: Seq<Message>, path: Path, ranking: Ranking)
+    requires
+        inv_internal(branch, ranking),
+        path.valid(),
+        path.branch == branch,
+        keys.len() > 0,
+        keys.len() == msgs.len(),
+        Key::is_strictly_sorted(keys),
+        path.target().root() is Leaf,
+        Key::lt(path.target().root()->keys.last(), keys[0]),
+        path.key == keys[0],
+        path.path_equiv(keys.last()),
+    ensures
+        branch.append(keys, msgs, path) == branch.append_via_insert(keys, msgs, path),
+    decreases keys.len(),
+{
+    lemma_path_target_is_wf(path);
+    let post = branch.append(keys, msgs, path);
+    let via_insert = branch.append_via_insert(keys, msgs, path);
+    let keys_msgs = keys.zip_with(msgs);
+    let insert0 = branch.insert(keys[0], msgs[0], path);
+    let r = path.target().root().route(keys[0]);
+    lemma_route_auto();
+    lemma_path_target_valid_ranking_and_keys_strictly_sorted(path, ranking);
+    assert(path.target().root().keys_strictly_sorted());
+    lemma_route_to_end(path.target().root(), keys[0]);
+    assert(r == path.target().root()->keys.len() - 1);
+    assert(path.target().root()->keys.insert(r+1, keys[0]) == path.target().root()->keys + keys.take(1));
+    assert(path.target().root()->msgs.insert(r+1, msgs[0]) == path.target().root()->msgs + msgs.take(1));
+
+    if keys.len() == 1 {
+        reveal_with_fuel(vstd::prelude::Seq::fold_left_alt, 2);
+        assert(via_insert == insert0);
+        assert(keys.take(1) == keys);
+        assert(msgs.take(1) == msgs);
+        assert(insert0 == post);
+    } else {
+        let path1 = Path{branch: insert0, key: keys[1], depth: path.depth};
+        lemma_append_via_insert_path(path, ranking, keys, msgs);
+        assert(path1.valid());
+        assert(path1.target().root()->keys.last() == keys[0]);
+        assert(Key::lt(path1.target().root()->keys.last(), keys[1]));
+
+        lemma_insert_preserves_ranking(branch, ranking, keys[0], msgs[0], path);
+        insert_refines_internal(branch, ranking, ranking, keys[0], msgs[0], path);
+        lemma_append_via_insert_equiv(insert0, keys.skip(1), msgs.skip(1), path1, ranking);
+
+        assert(insert0 == branch.append(keys.take(1), msgs.take(1), path));
+        lemma_append_incremental(keys, msgs, path, path1, ranking);
+        assert(post == insert0.append(keys.skip(1), msgs.skip(1), path1));
+
+        assert(keys_msgs.skip(1) == keys.skip(1).zip_with(msgs.skip(1)));
+        assert(via_insert == insert0.append_via_insert(keys.skip(1), msgs.skip(1), path1));
+
+        assert(post == via_insert);
+    }
+}
+
 pub proof fn lemma_children_share_key_contradiction(branch: LinkedBranch, ranking: Ranking, i: nat, j: nat, key: Key)
     requires
         inv_internal(branch, ranking),
@@ -374,7 +625,8 @@ pub proof fn lemma_children_share_key_contradiction(branch: LinkedBranch, rankin
 
 pub proof fn lemma_insert_preserves_wf(pre: LinkedBranch, ranking: Ranking, key: Key, msg: Message, path: Path)
     requires
-        inv_internal(pre, ranking),
+        pre.valid_ranking(ranking),
+        pre.keys_strictly_sorted_internal(ranking),
         path.valid(),
         path.branch == pre,
         path.key == key,
@@ -405,6 +657,38 @@ pub proof fn lemma_insert_preserves_wf(pre: LinkedBranch, ranking: Ranking, key:
             // Goal 3
             assert(post.disk_view.wf());
         }
+    }
+}
+
+pub proof fn lemma_path_target_is_wf(path: Path)
+    requires
+        path.valid(),
+    ensures
+        path.target().wf(),
+    decreases
+        path.depth,
+{
+    if path.depth > 0 {
+        lemma_path_target_is_wf(path.subpath());
+    }
+}
+
+pub proof fn lemma_path_target_valid_ranking_and_keys_strictly_sorted(path: Path, ranking: Ranking)
+    requires
+        path.valid(),
+        path.branch.valid_ranking(ranking),
+        path.branch.keys_strictly_sorted_internal(ranking),
+    ensures
+        path.target().valid_ranking(ranking),
+        path.target().keys_strictly_sorted_internal(ranking),
+    decreases
+        path.depth,
+{
+    if path.depth > 0 {
+        lemma_route_auto();
+        let r = path.branch.root().route(path.key) + 1;
+        assert(path.branch.root().valid_child_index(r as nat));
+        lemma_path_target_valid_ranking_and_keys_strictly_sorted(path.subpath(), ranking);
     }
 }
 
