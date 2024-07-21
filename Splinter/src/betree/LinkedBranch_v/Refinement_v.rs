@@ -88,6 +88,20 @@ impl Path {
     }
 }
 
+impl SplitArg {
+    pub open spec(checked) fn i(self) -> PivotBranch_v::SplitArg
+    {
+        match self {
+            SplitArg::SplitLeaf{pivot} => {
+                PivotBranch_v::SplitArg::SplitLeaf{pivot: pivot}
+            }
+            SplitArg::SplitIndex{pivot, pivot_index} => {
+                PivotBranch_v::SplitArg::SplitIndex{pivot: pivot, pivot_index: pivot_index}
+            }
+        }
+    }
+}
+
 pub open spec(checked) fn inv(branch: LinkedBranch) -> bool
 {
     &&& branch.acyclic()
@@ -400,6 +414,96 @@ pub proof fn append_refines(pre: LinkedBranch, keys: Seq<Key>, msgs: Seq<Message
     lemma_path_target_valid_ranking_and_keys_strictly_sorted(path, pre.the_ranking());
     PivotBranchRefinement_v::lemma_append_via_insert_equiv(pre.i(), keys, msgs, path.i());
 }
+
+pub proof fn split_refines(pre: LinkedBranch, new_child_addr: Address, path: Path, split_arg: SplitArg)
+    requires
+        inv(pre),
+        path.valid(),
+        path.branch == pre,
+        path.key == split_arg.get_pivot(),
+        path.target().can_split_child_of_index(split_arg, new_child_addr),
+        pre.disk_view.is_fresh(set!{new_child_addr}),
+    ensures
+        inv(pre.split(new_child_addr, path, split_arg)),
+        pre.split(new_child_addr, path, split_arg).i() == pre.i().split(path.i(), split_arg.i()),
+{
+    let post = pre.split(new_child_addr, path, split_arg);
+    let pivot = split_arg.get_pivot();
+    let split_child_idx = path.target().root().route(pivot) + 1;
+    // TODO(x9du): combine path target lemmas
+    lemma_path_target_is_wf(path);
+    lemma_path_target_valid_ranking_and_keys_strictly_sorted(path, pre.the_ranking());
+    lemma_route_auto();
+    assert(path.target().root().valid_child_index(split_child_idx as nat));
+    let split_child = path.target().child_at_idx(split_child_idx as nat);
+    let split_child_addr = path.target().root()->children[split_child_idx];
+    let post_ranking = pre.the_ranking().insert(new_child_addr, pre.the_ranking()[split_child_addr]);
+    lemma_target_preserves_disk(path);
+    let except = set!{path.target().root, split_child_addr, new_child_addr};
+    let (left_branch, right_branch) = split_child.split_node(split_arg, new_child_addr);
+    let split_except = set!{split_child_addr, new_child_addr};
+    assert(pre.disk_view.entries.remove_keys(split_except) == left_branch.disk_view.entries.remove_keys(split_except));
+    assert(pre.disk_view.entries.remove_keys(except) == post.disk_view.entries.remove_keys(except));
+
+    assert forall |a| #[trigger] post_ranking.contains_key(a) && post.disk_view.entries.contains_key(a)
+    implies post.disk_view.node_children_respects_rank(post_ranking, a) by {
+        let node = pre.disk_view.entries[a];
+        let post_node = post.disk_view.entries[a];
+        assert forall |i: nat| #[trigger] post_node.valid_child_index(i) implies {
+            &&& post_ranking.contains_key(post_node->children[i as int])
+            &&& post_ranking[post_node->children[i as int]] < post_ranking[a]
+        } by {
+            if a == path.target().root {
+                if i <= split_child_idx {
+                    assert(node.valid_child_index(i));
+                    assert(post_node->children[i as int] == node->children[i as int]);
+                } else if i == split_child_idx + 1 {
+                    assert(post_node->children[i as int] == new_child_addr);
+                } else {
+                    assert(node.valid_child_index((i-1) as nat));
+                    assert(post_node->children[i as int] == node->children[i-1]);
+                }
+            } else if a == split_child_addr {
+                assert(node.valid_child_index(i));
+                assert(post_node->children[i as int] == node->children[i as int]);
+            } else if a == new_child_addr {
+                if split_child.root() is Leaf {
+                    let split_index = Key::largest_lt(split_child.root()->keys, pivot) + 1;
+                    Key::strictly_sorted_implies_sorted(split_child.root()->keys);
+                    Key::largest_lt_ensures(split_child.root()->keys, pivot, split_index);
+                    assert(node.valid_child_index((split_index + i) as nat));
+                    assert(post_node->children[i as int] == node->children[split_index + i]);
+                } else {
+                    let split_index = split_arg->pivot_index + 1;
+                    assert(split_child.root().valid_child_index((split_index + i) as nat));
+                    assert(post_node->children[i as int] == split_child.root()->children[split_index + i]);
+                }
+            } else {
+                assert(node.valid_child_index(i));
+                assert(post_node->children[i as int] == node->children[i as int]);
+            }
+        }
+    }
+
+    assert(post.valid_ranking(post_ranking));
+    split_refines_internal(pre, pre.the_ranking(), post.the_ranking(), new_child_addr, path, split_arg);
+}
+
+pub proof fn split_refines_internal(pre: LinkedBranch, ranking: Ranking, post_ranking: Ranking, addr: Address, path: Path, split_arg: SplitArg)
+    requires
+        inv_internal(pre, ranking),
+        pre.split(addr, path, split_arg).valid_ranking(post_ranking),
+        path.valid(),
+        path.branch == pre,
+        path.key == split_arg.get_pivot(),
+        path.target().can_split_child_of_index(split_arg, addr),
+        pre.disk_view.is_fresh(set!{addr}),
+    ensures
+        inv_internal(pre.split(addr, path, split_arg), post_ranking),
+        pre.split(addr, path, split_arg).i_internal(post_ranking)
+            == pre.i_internal(ranking).split(path.i_internal(ranking), split_arg.i()),
+    decreases pre.get_rank(ranking),
+{}
 
 pub proof fn lemma_path_i_internal(path: Path, ranking: Ranking, key: Key)
     requires

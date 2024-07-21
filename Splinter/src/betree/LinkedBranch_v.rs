@@ -37,7 +37,8 @@ impl SplitArg {
             Self::SplitIndex{pivot, pivot_index} => {
                 &&& root is Index
                 // &&& split_branch.wf() // TODO(x9du): not sure if this is needed/correct
-                &&& root->children.len() == root->pivots.len() + 1 // split_branch.wf() implies this
+                &&& root->children.len() == root->pivots.len() + 1
+                // do we need this?
                 &&& split_branch.acyclic() ==> split_branch.all_keys_in_range()
                 &&& 0 <= pivot_index < root->pivots.len()
                 &&& root->pivots[pivot_index] == pivot
@@ -683,7 +684,6 @@ impl LinkedBranch {
             pivots: self.root()->pivots.insert(child_idx, pivot),
             children: self.root()->children.insert(child_idx + 1, new_child_addr)
         };
-        // TODO(x9du): this assumes left branch disk view has new right branch addr
         let new_disk_view = self.disk_view
             .merge_disk(left_branch.disk_view)
             .modify_disk(self.root, new_root);
