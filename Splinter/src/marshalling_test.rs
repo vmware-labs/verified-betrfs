@@ -114,7 +114,7 @@ exec fn test_seq_index(data: &Vec<u8>, end: usize) -> u32
 
 exec fn u32_resizable_seq_marshaller_factory()
     -> (rusm: ResizableUniformSizedElementSeqMarshalling<IntFormat<u32>, u32>)
-    ensures rusm.valid(), rusm.total_size == 24
+    ensures rusm.valid(), rusm.total_size == 24, rusm.seq_valid()
 {
     let eltf: IntFormat<u32> = IntFormat::new();
     let lenf: IntFormat<u32> = IntFormat::new();
@@ -153,6 +153,22 @@ exec fn test_resizable_seq_parse(data: &Vec<u8>, end: usize) -> (Option<Vec<u32>
     ovalue
 }
 
+exec fn test_resizable_seq_marshalling_append() -> (outpr: (Vec<u8>, usize))
+    ensures
+        outpr.0.len() == outpr.1
+{
+    let rusm = u32_resizable_seq_marshaller_factory();
+
+    let mut data = prealloc(31);
+    let slice = Slice::all(&data);
+    rusm.initialize(&slice, &mut data);
+    rusm.exec_append(&slice, &mut data, 43);
+    rusm.exec_append(&slice, &mut data, 8);
+    rusm.exec_append(&slice, &mut data, 17);
+    let dummy_vec = Vec::new(); // for Resizable*, exec_size doesn't depend on vec len
+    (data, rusm.exec_size(&dummy_vec))
+}
+
 } // verus!
   // Disturbingly this exec fn isn't verified!
 fn main() {
@@ -171,6 +187,13 @@ fn main() {
     let (data, end) = test_resizable_seq_marshalling();
     print!("end: {:?} data {:?}\n", end, data);
 
+    let v = test_resizable_seq_parse(&data, end);
+    print!("v: {:?}\n", v);
+
+    print!("\n");
+    print!("resizable_seq_marshalling append...\n");
+    let (data, end) = test_resizable_seq_marshalling_append();
+    print!("end: {:?} data {:?}\n", end, data);
     let v = test_resizable_seq_parse(&data, end);
     print!("v: {:?}\n", v);
 }
