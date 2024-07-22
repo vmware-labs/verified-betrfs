@@ -340,7 +340,7 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
         dslice@.valid(old(data)@),
         self.well_formed(old(data)@),
         self.elt_marshallable(value.deepv()),
-        self.appendable(old(data)@, value.deepv()),
+        self.appendable(dslice@.i(old(data)@), value.deepv()),
     ensures
         data@.len() == old(data)@.len(),
         forall |i: int| 0 <= i < dslice.start as int ==> data@[i] == old(data)@[i],

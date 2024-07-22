@@ -11,6 +11,8 @@ use crate::marshalling::SeqMarshalling_v::*;
 use crate::marshalling::Slice_v::*;
 use crate::marshalling::UniformSizedSeq_v::*;
 use crate::marshalling::ResizableUniformSizedSeq_v::*;
+use vstd::string::View;
+use crate::marshalling::UniformSized_v::UniformSized;
 // use crate::marshalling::ResizableIntegerSeq_v::*;
 // use crate::marshalling::VariableSizedElementSeq_v::*;
 
@@ -100,7 +102,7 @@ exec fn test_seq_index(data: &Vec<u8>, end: usize) -> u32
 {
     let usm = u32_seq_marshaller_factory();
     let slice = Slice { start: 0, end };
-    assume(false);
+    assume(false);  // TODO something borked in here
 //     assert( 2 <= usm.length(slice@.i(data@)) ) by { assume(false); } // (nonlinear_arith);
 //     assume( usm.gettable(slice@.i(data@), 1) ); // flaky!
 //     assert( usm.elt_parsable(slice@.i(data@), 1) );
@@ -160,8 +162,22 @@ exec fn test_resizable_seq_marshalling_append() -> (outpr: (Vec<u8>, usize))
     let rusm = u32_resizable_seq_marshaller_factory();
 
     let mut data = prealloc(31);
-    let slice = Slice::all(&data);
+    let slice: marshalling::Slice_v::Slice = Slice::all(&data);
     rusm.initialize(&slice, &mut data);
+
+    let ghost v43 = (43 as u32).deepv();
+    assert(rusm.appendable(slice@.i(data@), v43) ) by {
+        // TODO(verus): flakiness. Possibly trait related?
+// NOTE: Verus failed to prove an assertion even though all of its
+//           sub-assertions succeeded. This is usually unexpected, and it may
+//           indicate that the proof is "flaky". It might also be a result
+//           of additional expressions in the triggering context in the expanded
+//           version.
+        // Any single one of these sub-asserts wakes it up.
+        assert( rusm.length(slice.view().i(data.view())) < rusm.max_length() );
+//         assert( rusm.eltf.spec_size(v43) == rusm.eltf.uniform_size() );
+//         assert( rusm.length(slice.view().i(data.view())) + 1 <= <u32 as IntFormattable>::max() );
+    }
     rusm.exec_append(&slice, &mut data, 43);
     rusm.exec_append(&slice, &mut data, 8);
     rusm.exec_append(&slice, &mut data, 17);
