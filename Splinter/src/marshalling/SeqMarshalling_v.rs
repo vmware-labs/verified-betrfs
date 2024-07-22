@@ -320,6 +320,7 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
     exec fn exec_well_formed(&self, dslice: &Slice, data: &Vec<u8>) -> (w: bool)
     requires
         self.seq_valid(),
+        dslice@.valid(data@),
     ensures
             w == self.well_formed(dslice@.i(data@))
         ;
@@ -328,10 +329,10 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
     requires
         self.seq_valid(),
         dslice@.valid(data@),
-        self.well_formed(data@),
+        self.well_formed(dslice@.i(data@)),
         self.elt_marshallable(value.deepv()),
     ensures
-        r == self.appendable(data@, value.deepv())
+        r == self.appendable(dslice@.i(data@), value.deepv())
     ;
 
     exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: Elt)
@@ -343,9 +344,10 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
         self.appendable(dslice@.i(old(data)@), value.deepv()),
     ensures
         data@.len() == old(data)@.len(),
+        // TODO name "preserves-outside-slice", to go with preserves_entry
         forall |i: int| 0 <= i < dslice.start as int ==> data@[i] == old(data)@[i],
         forall |i: int| dslice.end as int <= i < data.len() ==> data@[i] == old(data)@[i],
-        self.appends(old(data)@, value.deepv(), data@)
+        self.appends(dslice@.i(old(data)@), value.deepv(), dslice@.i(data@))
     ;
 
     /////////////////////////////////////////////////////////////////////////
