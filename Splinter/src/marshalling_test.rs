@@ -1,4 +1,5 @@
 #![verifier::loop_isolation(false)]
+#![allow(non_snake_case)]   // we should probably fix up the module names to be rust-snakey
 
 use builtin::*;
 use builtin_macros::*;
