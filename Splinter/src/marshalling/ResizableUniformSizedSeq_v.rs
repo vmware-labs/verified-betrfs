@@ -108,7 +108,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
     }
 
     proof fn length_ensures(&self, data: Seq<u8>)
-    ensures 0 <= self.length(data)
+    ensures 0 <= self.length(data) <= LenType::max()
     {
         self.lenf.parse_nat(data.subrange(0, self.size_of_length_field() as int));
     }
@@ -124,6 +124,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
 
     open spec fn lengthable(&self, data: Seq<u8>) -> bool {
         &&& self.total_size <= data.len()
+
         // One thing that makes this version harder than the dafny version is that
         // we handle lengths as 'usize', which could conceivably be smaller than the LengthInt.
         // (Dafny uses u64s for lengths, and I suppose has some constraint that the variable ints
@@ -147,7 +148,6 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
             return None;    // lengthable first conjunct is false
         }
 
-        assume( false );    // some frustrating instability
         let sslice = dslice.subslice(0, self.lenf.exec_uniform_size());
 
         // TODO(verus): trait instability: this expression appears in exec_parse requires, but
@@ -160,6 +160,10 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
             // Took way too long to track down this lemma call. Decent automation would have been nice.
             assert( dslice@.subslice(0, self.lenf.uniform_size() as int).i(data@)
                     == dslice@.i(data@).subrange(0, self.size_of_length_field() as int) );   // subrange trigger
+            LenType::deepv_is_as_int(parsed_len);
+
+            self.length_ensures(dslice@.i(data@));  // trigger for lengthable LenType::max() conjunct
+            assert( self.lengthable(dslice@.i(data@)) );
         }
 
         Some(LenType::to_usize(parsed_len))
