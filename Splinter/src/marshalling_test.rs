@@ -1,4 +1,4 @@
-#![verifier::spinoff_loop(false)]
+#![verifier::loop_isolation(false)]
 
 use builtin::*;
 use builtin_macros::*;
