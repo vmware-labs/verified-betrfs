@@ -60,9 +60,9 @@ pub trait IntFormattable : Deepview<int> + builtin::Integer + SpecOrd + Copy + S
     spec fn max() -> (m: usize)
     ;
 
-    proof fn max_ensures()
-// why don't we need this?
-//     ensures forall |v: Self| v as int <= Self::max() as int
+    proof fn max_ensures(v: Self)
+    ensures v as int <= Self::max() as int
+    //ensures forall |v: Self| v as int <= Self::max() as int
     ;
 
     exec fn exec_max() -> (m: usize)
@@ -138,7 +138,7 @@ impl IntFormattable for u32 {
 
     open spec fn max() -> (m: usize) { Self::MAX as usize }
 
-    proof fn max_ensures() {}
+    proof fn max_ensures(v: Self) {}
 
     exec fn exec_max() -> (m: usize) { Self::MAX as usize }
 
@@ -199,7 +199,9 @@ impl IntFormattable for u64 {
 
     open spec fn max() -> (m: usize) { Self::MAX as usize }
 
-    proof fn max_ensures() {}
+    proof fn max_ensures(v: Self) {
+        usize64_workaround();
+    }
 
     exec fn exec_max() -> (m: usize) { Self::MAX as usize }
 
@@ -266,10 +268,11 @@ impl<T: IntFormattable> IntFormat<T>
     // IntFormattable should be called NatFormattable since nonnegative is baked into it.
     // (Or, really, we should split out the unsigned trait, and split out this trait.
     pub proof fn parse_nat(&self, data: Seq<u8>)
-    ensures 0 <= self.parse(data)
+    ensures 0 <= self.parse(data) <= T::max()
     {
         let parsed = T::spec_from_le_bytes(data.subrange(0, T::uniform_size() as int));
         T::nonnegative(parsed);
+        T::max_ensures(parsed);
     }
 }
 
