@@ -112,6 +112,15 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
     {
         self.lenf.parse_nat(data.subrange(0, self.size_of_length_field() as int));
     }
+
+    // How you get an uninitialized Vec<u8> into a condition where you can begin append()ing
+    pub exec fn initialize(&self, dslice: &Slice, data: &mut Vec<u8>)
+    ensures
+        self.well_formed(dslice@.i(data@)),
+        self.length(dslice@.i(data@)) == 0,
+    {
+        assume(false);  // TODO unimpl
+    }
 }
 
 impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
