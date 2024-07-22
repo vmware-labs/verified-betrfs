@@ -510,9 +510,6 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
                 let mut result:Vec<EltFormat::U> = Vec::with_capacity(len);
                 while i < len
                     invariant i <= len,
-//                     self.valid(),   // TODO(verus #984): waste of my debugging time
-//                     dslice@.valid(data@),   // TODO(verus #984): waste of my debugging time
-//                     len == self.length(dslice@.i(data@)) as usize, // TODO(verus #984): waste of my debugging time
                     result.len() == i,
                     forall |j| 0<=j<i as nat ==> self.gettable(dslice@.i(data@), j),
                     forall |j| 0<=j<i as nat ==> self.elt_parsable(dslice@.i(data@), j),
