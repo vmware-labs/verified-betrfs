@@ -10,7 +10,7 @@ use crate::marshalling::Slice_v::*;
 use crate::marshalling::Marshalling_v::*;
 use crate::marshalling::IntegerMarshalling_v::*;
 use crate::marshalling::SeqMarshalling_v::*;
-use crate::marshalling::StaticallySized_v::*;
+// use crate::marshalling::StaticallySized_v::*;
 // use crate::marshalling::UniformSizedSeq_v::*;
 use crate::marshalling::UniformSized_v::*;
 // use crate::marshalling::LenFormat_v::*;
