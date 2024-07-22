@@ -281,10 +281,6 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
             let edslice = self.get(SpecSlice::all(dslice@.i(data@)), dslice@.i(data@), idx as int);
             assert( edslice.i(dslice@.i(data@)) == eslice@.i(data@));   // trigger
         }
-        assert( self.parsable(eslice@.i(data@)) ) by {
-//             assert( self.elt_parsable(dslice@.i(data@), idx as int) );
-            assume( false );    // how did this proof rot? Argh. Instability?
-        }
         let elt = self.eltf.exec_parse(&eslice, data);
 
         // This is the postcondition. Why would it need to be triggered manually?
