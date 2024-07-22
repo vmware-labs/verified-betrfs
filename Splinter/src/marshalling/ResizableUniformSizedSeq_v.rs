@@ -115,11 +115,17 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
 
     // How you get an uninitialized Vec<u8> into a condition where you can begin append()ing
     pub exec fn initialize(&self, dslice: &Slice, data: &mut Vec<u8>)
+    requires
+        self.valid(),
+        dslice@.valid(old(data)@),
+        self.total_size <= dslice@.len(),
     ensures
         self.well_formed(dslice@.i(data@)),
         self.length(dslice@.i(data@)) == 0,
+        data.len() == old(data).len(),
     {
-        assume(false);  // TODO unimpl
+        proof { self.length_ensures(dslice@.i(old(data)@)); };
+        self.resize(dslice, data, 0);
     }
 }
 
@@ -409,20 +415,36 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
     // append
     /////////////////////////////////////////////////////////////////////////
 
-    open spec fn well_formed(&self, data: Seq<u8>) -> bool { false }
+    open spec fn well_formed(&self, data: Seq<u8>) -> bool {
+        self.lengthable(data)
+    }
 
     proof fn well_formed_ensures(&self, data: Seq<u8>) {}
 
-    open spec fn appendable(&self, data: Seq<u8>, value: EltFormat::DV) -> bool { false }
+    open spec fn appendable(&self, data: Seq<u8>, value: EltFormat::DV) -> bool {
+        &&& self.length(data) < self.max_length() as nat
+        &&& self.eltf.spec_size(value) == self.eltf.uniform_size()
+
+        // dafny does this computation in a u64; why is it okay with overflow!?
+        &&& self.length(data) + 1 <= LenType::max()
+    }
 
     open spec fn appends(&self, data: Seq<u8>, value: EltFormat::DV, newdata: Seq<u8>) -> bool { false }
 
 
-    exec fn exec_well_formed(&self, dslice: &Slice, data: &Vec<u8>) -> (w: bool) { false }
+    exec fn exec_well_formed(&self, dslice: &Slice, data: &Vec<u8>) -> (w: bool) {
+        assume(false);
+        false   // unimpl
+    }
 
-    exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: EltFormat::U) -> (r: bool) { false }
+    exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: EltFormat::U) -> (r: bool) {
+        assume(false);
+        false   // unimpl
+    }
 
-    exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: EltFormat::U) {}
+    exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: EltFormat::U) {
+        assume(false); // unimpl
+    }
 }
 
 // TODO(jonh): A great deal of this type duplicates what's in UniformSizedSeq. I'm reasonably
