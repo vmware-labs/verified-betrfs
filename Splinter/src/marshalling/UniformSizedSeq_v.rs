@@ -440,12 +440,13 @@ impl<EltFormat: Marshal + UniformSized>
                 let mut i: usize = 0;
                 let mut result:Self::U = Vec::with_capacity(len);
                 while i < len
-                    invariant i <= len,
-                    self.valid(),   // TODO(verus #984): waste of my debugging time
-                    dslice@.valid(data@),   // TODO(verus #984): waste of my debugging time
-                    len == self.length(dslice@.i(data@)) as usize, // TODO(verus #984): waste of my debugging time
+                invariant
+                    i <= len,
+//                     self.valid(),   // TODO(verus #984): waste of my debugging time
+//                     dslice@.valid(data@),   // TODO(verus #984): waste of my debugging time
+//                     len == self.length(dslice@.i(data@)) as usize, // TODO(verus #984): waste of my debugging time
                     result.len() == i,
-                    forall |j| 0<=j<i as nat ==> self.gettable(dslice@.i(data@), j),
+//                     forall |j| 0<=j<i as nat ==> self.gettable(dslice@.i(data@), j),
                     forall |j| 0<=j<i as nat ==> self.elt_parsable(dslice@.i(data@), j),
                     forall |j| #![auto] 0<=j<i as nat ==> result[j].deepv() == self.get_elt(dslice@.i(data@), j),
                 {
@@ -522,7 +523,7 @@ impl<EltFormat: Marshal + UniformSized>
         invariant
             0 <= i <= value.len(),
             data@.len() == old(data)@.len(),
-            end as int == start as int + self.spec_size(value.deepv().subrange(0, i as int)) as int,
+//             end as int == start as int + self.spec_size(value.deepv().subrange(0, i as int)) as int,
             end as int == start as int + i * self.eltf.uniform_size(),
             forall |j| 0 <= j < start ==> data@[j] == old(data)@[j],
             forall |j| end as int <= j < old(data)@.len() ==> data@[j] == old(data)@[j],
@@ -532,9 +533,9 @@ impl<EltFormat: Marshal + UniformSized>
             self.parsable(data@.subrange(start as int, end as int)),
             self.parse(data@.subrange(start as int, end as int)) == value.deepv().subrange(0, i as int),
 
-            // These should have been pulled through the loop via spinoff_loop(false); not sure why that didn't work.
-            self.marshallable(value.deepv()),
-            start as int + self.spec_size(value.deepv()) as int <= old(data).len(),
+            // These should have been pulled through the loop via spinoff_loop(false); not sure why that didn't work. --> because that feature got renamed when it was merged.
+//             self.marshallable(value.deepv()),
+//             start as int + self.spec_size(value.deepv()) as int <= old(data).len(),
         {
             let ghost oldend = end;
             assert( oldend as int == start as int + self.spec_size(value.deepv().subrange(0, i as int)) as int );

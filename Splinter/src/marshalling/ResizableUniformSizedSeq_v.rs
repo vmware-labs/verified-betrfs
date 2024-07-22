@@ -514,13 +514,13 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
                 let mut result:Vec<EltFormat::U> = Vec::with_capacity(len);
                 while i < len
                     invariant i <= len,
-                    self.valid(),   // TODO(verus #984): waste of my debugging time
-                    dslice@.valid(data@),   // TODO(verus #984): waste of my debugging time
-                    len == self.length(dslice@.i(data@)) as usize, // TODO(verus #984): waste of my debugging time
-                        result.len() == i,
-                        forall |j| 0<=j<i as nat ==> self.gettable(dslice@.i(data@), j),
-                        forall |j| 0<=j<i as nat ==> self.elt_parsable(dslice@.i(data@), j),
-                        forall |j| #![auto] 0<=j<i as nat ==> result[j].deepv() == self.get_elt(dslice@.i(data@), j),
+//                     self.valid(),   // TODO(verus #984): waste of my debugging time
+//                     dslice@.valid(data@),   // TODO(verus #984): waste of my debugging time
+//                     len == self.length(dslice@.i(data@)) as usize, // TODO(verus #984): waste of my debugging time
+                    result.len() == i,
+                    forall |j| 0<=j<i as nat ==> self.gettable(dslice@.i(data@), j),
+                    forall |j| 0<=j<i as nat ==> self.elt_parsable(dslice@.i(data@), j),
+                    forall |j| #![auto] 0<=j<i as nat ==> result[j].deepv() == self.get_elt(dslice@.i(data@), j),
                 {
                     let ghost idata = dslice@.i(data@);
                     let oelt = self.try_get_elt(dslice, data, i);
@@ -590,23 +590,24 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
 
         while i < value.len()
         invariant
-            // come ON, #![verifier::spinoff_loop(false)]! Do your thing!
-            self.valid(),
-            slice == (Slice{start, end}), // shouldn't need this; slice is bound immutably. Try deleting.
-            slice@.valid(old(data)@),
-            self.marshallable(value.deepv()),
+//             // come ON, #![verifier::spinoff_loop(false)]! Do your thing! -> turns out it got
+//             renamed during the merge.
+//             self.valid(),
+//             slice == (Slice{start, end}), // shouldn't need this; slice is bound immutably. Try deleting.
+//             slice@.valid(old(data)@),
+//             self.marshallable(value.deepv()),
 
-            0 <= i <= value.len(),
+//             0 <= i <= value.len(),
             data@.len() == old(data)@.len(),
             forall |j| 0 <= j < start ==> data@[j] == old(data)@[j],
             forall |j| end as int <= j < old(data)@.len() ==> data@[j] == old(data)@[j],
-            self.lengthable(slice@.i(data@)),
+//             self.lengthable(slice@.i(data@)),
             self.length(slice@.i(data@)) == value.len(),
 
-            forall |j| 0 <= j < i ==> self.gettable(slice@.i(data@), j),
+//             forall |j| 0 <= j < i ==> self.gettable(slice@.i(data@), j),
             forall |j| 0 <= j < i ==> self.elt_parsable(slice@.i(data@), j),
             forall |j| #![auto] 0 <= j < i ==> self.get_elt(slice@.i(data@), j) == value[j].deepv(),
-            forall |j| #![auto] 0 <= j < value.len() ==> self.settable(slice@.i(data@), j, value[j].deepv()),
+//             forall |j| #![auto] 0 <= j < value.len() ==> self.settable(slice@.i(data@), j, value[j].deepv()),
         {
             let ghost prev_data = data@;
             let ghost old_i = i;
