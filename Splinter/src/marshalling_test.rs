@@ -164,8 +164,10 @@ exec fn test_resizable_seq_marshalling_append() -> (outpr: (Vec<u8>, usize))
     let mut data = prealloc(31);
     let slice: marshalling::Slice_v::Slice = Slice::all(&data);
     rusm.initialize(&slice, &mut data);
+    assert( rusm.length(slice@.i(data@)) == 0 );
 
     let ghost v43 = (43 as u32).deepv();
+    let ghost data0 = slice@.i(data@);
     assert(rusm.appendable(slice@.i(data@), v43) ) by {
         // TODO(verus): flakiness. Possibly trait related?
 // NOTE: Verus failed to prove an assertion even though all of its
@@ -174,15 +176,15 @@ exec fn test_resizable_seq_marshalling_append() -> (outpr: (Vec<u8>, usize))
 //           of additional expressions in the triggering context in the expanded
 //           version.
         // Any single one of these sub-asserts wakes it up.
-        assert( rusm.length(slice.view().i(data.view())) < rusm.max_length() );
+        assert( rusm.length(slice@.i(data@)) < rusm.max_length() );
 //         assert( rusm.eltf.spec_size(v43) == rusm.eltf.uniform_size() );
-//         assert( rusm.length(slice.view().i(data.view())) + 1 <= <u32 as IntFormattable>::max() );
+//         assert( rusm.length(slice@.i(data@)) + 1 <= <u32 as IntFormattable>::max() );
     }
     rusm.exec_append(&slice, &mut data, 43);
     rusm.exec_append(&slice, &mut data, 8);
     rusm.exec_append(&slice, &mut data, 17);
-    let dummy_vec = Vec::new(); // for Resizable*, exec_size doesn't depend on vec len
-    (data, rusm.exec_size(&dummy_vec))
+    let len = data.len();
+    (data, len)
 }
 
 } // verus!

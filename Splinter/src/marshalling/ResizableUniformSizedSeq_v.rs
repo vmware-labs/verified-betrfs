@@ -429,17 +429,36 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
         &&& self.length(data) + 1 <= LenType::max()
     }
 
-    open spec fn appends(&self, data: Seq<u8>, value: EltFormat::DV, newdata: Seq<u8>) -> bool { false }
+    open spec fn appends(&self, data: Seq<u8>, value: EltFormat::DV, newdata: Seq<u8>) -> bool {
+        let oldlen = self.length(data);
+        &&& newdata.len() == data.len()
+        &&& self.lengthable(newdata)
+        &&& self.length(newdata) == oldlen + 1
+
+        // TODO: Dafny original didn't particularly bound i because preserves_entry's body has
+        // *able(i) on the LHS of all implications. Kinda mysteriously magical, tho. Not a fan.
+        &&& forall |i| i != oldlen ==> self.preserves_entry(data, i, newdata)
+
+        &&& self.gettable(newdata, oldlen)
+        &&& self.elt_parsable(newdata, oldlen)
+        &&& self.get_elt(newdata, oldlen) == value
+        &&& self.well_formed(newdata)
+    }
 
 
     exec fn exec_well_formed(&self, dslice: &Slice, data: &Vec<u8>) -> (w: bool) {
-        assume(false);
-        false   // unimpl
+        self.exec_lengthable(dslice, data)
     }
 
     exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: EltFormat::U) -> (r: bool) {
-        assume(false);
-        false   // unimpl
+        let len = self.exec_length(dslice, data);
+        let sz = self.eltf.exec_size(&value);
+        let r = {
+            &&& len < self.exec_max_length()
+            &&& sz == self.eltf.exec_uniform_size()
+            &&& len + 1 <= LenType::exec_max()
+        };
+        r
     }
 
     exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: EltFormat::U) {
