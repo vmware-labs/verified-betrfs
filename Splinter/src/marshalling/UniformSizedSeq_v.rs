@@ -356,9 +356,9 @@ impl<EltFormat: Marshal + UniformSized>
 
     exec fn exec_well_formed(&self, dslice: &Slice, data: &Vec<u8>) -> (w: bool) { false }
 
-    exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: EltFormat::U) -> (r: bool) { false }
+    exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: &EltFormat::U) -> (r: bool) { false }
 
-    exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: EltFormat::U) {}
+    exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: &EltFormat::U) {}
 }
 
 impl<EltFormat: Marshal + UniformSized>

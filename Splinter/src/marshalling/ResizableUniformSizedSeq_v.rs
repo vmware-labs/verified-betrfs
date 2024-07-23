@@ -450,9 +450,9 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
         self.exec_lengthable(dslice, data)
     }
 
-    exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: EltFormat::U) -> (r: bool) {
+    exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: &EltFormat::U) -> (r: bool) {
         let len = self.exec_length(dslice, data);
-        let sz = self.eltf.exec_size(&value);
+        let sz = self.eltf.exec_size(value);
         let r = {
             &&& len < self.exec_max_length()
             &&& sz == self.eltf.exec_uniform_size()
@@ -461,8 +461,17 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
         r
     }
 
-    exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: EltFormat::U) {
-        assume(false); // unimpl
+    exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: &EltFormat::U) {
+        let len = self.exec_length(dslice, data);
+        self.exec_set(dslice, data, len, value);
+        let ghost middle = dslice@.i(data@);
+        self.resize(dslice, data, len + 1);
+
+        assert( self.preserves_entry(middle, len as int, dslice@.i(data@)) );   // trigger
+        assert forall |i| i != len implies self.preserves_entry(dslice@.i(old(data)@), i, dslice@.i(data@)) by {
+            assert( self.preserves_entry(dslice@.i(old(data)@), i, middle) );   // trigger
+            assert( self.preserves_entry(middle, i, dslice@.i(data@)) );        // trigger
+        }
     }
 }
 
