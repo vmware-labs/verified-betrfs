@@ -10,9 +10,9 @@ use crate::marshalling::Slice_v::*;
 use crate::marshalling::Marshalling_v::*;
 use crate::marshalling::IntegerMarshalling_v::*;
 use crate::marshalling::SeqMarshalling_v::*;
-use crate::marshalling::UniformSizedSeq_v::*;
+// use crate::marshalling::UniformSizedSeq_v::*;
 use crate::marshalling::ResizableUniformSizedSeq_v::*;
-use crate::marshalling::math_v::*;
+// use crate::marshalling::math_v::*;
 
 verus! {
 
@@ -52,6 +52,7 @@ impl <
 {
     pub fn new(eltf: EltFormat, bdy_int_format: IntFormat<BdyType>, lenf: IntFormat<LenType>, total_size: usize) -> (s: Self)
     {
+        assume( false ); // left off here
         Self{ eltf: eltf, bdyf: ResizableUniformSizedElementSeqMarshalling::new(bdy_int_format, lenf, total_size) }
     }
 
@@ -106,6 +107,7 @@ impl <
         self.element_gettable(dslice@.i(data@), idx as int),
     ensures start as int == self.element_data_begin(dslice@.i(data@), idx as int)
     {
+        assume( false ); // left off here
         let istart: BdyType = self.bdyf.exec_get_elt(dslice, data, idx);
 //         proof {
 //             BdyType::as_int_ensures();
@@ -131,6 +133,7 @@ impl <
     ensures
         end as int == self.element_data_end(dslice@.i(data@), idx as int)
     {
+        assume( false ); // left off here
 //         proof {
 //             BdyType::as_int_ensures();
 //             self.boundary_ints_fit_in_usize();
@@ -275,6 +278,8 @@ impl <
     {
 //         assert( self.seq_valid() );
 //         assert( self.bdyf.seq_valid() );    // TODO remove; issue #1150
+        assume( false );    // left off here
+        assert( self.bdyf.seq_valid() );
         let out = self.bdyf.try_length(dslice, data);
         assert( out is Some ==> out.unwrap() as int == self.length(dslice@.i(data@)) );    // TODO remove; issue #1150
         out
@@ -313,6 +318,7 @@ impl <
     
     exec fn try_get(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oeslice: Option<Slice>)
     {
+        assume( false ); // left off here
         let ghost gdata = dslice@.i(data@);
         let olen = self.try_length(dslice, data);
         if olen.is_some() && idx < self.exec_max_length() && idx < olen.unwrap() {
