@@ -286,8 +286,7 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
     exec fn resize(&self, dslice: &Slice, data: &mut Vec<u8>, newlen: usize)
         requires self.seq_valid(), dslice@.valid(old(data)@), self.resizable(dslice@.i(old(data)@), newlen as int)
         ensures data@.len() == old(data)@.len(),
-            forall |i| 0 <= i < dslice.start ==> data[i] == old(data)@[i],
-            forall |i| dslice.end <= i < data.len() ==> data[i] == old(data)@[i],
+            dslice@.agree_beyond_slice(old(data)@, data@),
             self.resizes(dslice@.i(old(data)@), newlen as int, dslice@.i(data@)),
     ;
 
@@ -325,7 +324,7 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
             w == self.well_formed(dslice@.i(data@))
         ;
 
-    exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: Elt) -> (r: bool)
+    exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: &Elt) -> (r: bool)
     requires
         self.seq_valid(),
         dslice@.valid(data@),
@@ -335,18 +334,16 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
         r == self.appendable(dslice@.i(data@), value.deepv())
     ;
 
-    exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: Elt)
+    exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: &Elt)
     requires
         self.seq_valid(),
         dslice@.valid(old(data)@),
-        self.well_formed(old(data)@),
+        self.well_formed(dslice@.i(old(data)@)),
         self.elt_marshallable(value.deepv()),
         self.appendable(dslice@.i(old(data)@), value.deepv()),
     ensures
         data@.len() == old(data)@.len(),
-        // TODO name "preserves-outside-slice", to go with preserves_entry
-        forall |i: int| 0 <= i < dslice.start as int ==> data@[i] == old(data)@[i],
-        forall |i: int| dslice.end as int <= i < data.len() ==> data@[i] == old(data)@[i],
+        dslice@.agree_beyond_slice(old(data)@, data@),
         self.appends(dslice@.i(old(data)@), value.deepv(), dslice@.i(data@))
     ;
 

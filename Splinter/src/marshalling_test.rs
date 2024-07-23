@@ -180,9 +180,13 @@ exec fn test_resizable_seq_marshalling_append() -> (outpr: (Vec<u8>, usize))
 //         assert( rusm.eltf.spec_size(v43) == rusm.eltf.uniform_size() );
 //         assert( rusm.length(slice@.i(data@)) + 1 <= <u32 as IntFormattable>::max() );
     }
-    rusm.exec_append(&slice, &mut data, 43);
-    rusm.exec_append(&slice, &mut data, 8);
-    rusm.exec_append(&slice, &mut data, 17);
+    rusm.exec_append(&slice, &mut data, &43);
+    rusm.exec_append(&slice, &mut data, &8);
+    rusm.exec_append(&slice, &mut data, &17);
+    rusm.exec_append(&slice, &mut data, &33);
+    rusm.exec_append(&slice, &mut data, &34);
+//     rusm.exec_append(&slice, &mut data, &35); // fails appendable, as it should: no space left in
+//     array.
     let len = data.len();
     (data, len)
 }
