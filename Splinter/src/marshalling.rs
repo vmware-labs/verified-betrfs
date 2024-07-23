@@ -6,7 +6,7 @@ pub mod UniformSized_v;
 pub mod StaticallySized_v;
 pub mod ResizableUniformSizedSeq_v;
 // pub mod ResizableIntegerSeq_v;
-// pub mod VariableSizedElementSeq_v;
+pub mod VariableSizedElementSeq_v;
 pub mod SeqMarshalling_v;
 pub mod Slice_v;
 pub mod UniformSizedSeq_v;
