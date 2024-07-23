@@ -34,12 +34,6 @@ pub struct Address {
     pub page: Page,
 }
 
-// can be anything
-pub type UnmarshalledPage = Seq<u8>;
-
-pub struct DiskView{
-    pub entries: Map<Address, UnmarshalledPage>,
-}
 
 // disk model takes any number of disk ops
 pub struct ReadRequest{

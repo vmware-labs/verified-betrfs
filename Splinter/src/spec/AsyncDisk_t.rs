@@ -83,7 +83,7 @@ state_machine!{ AsyncDisk {
         DiskOps{requests: Map<ID, DiskRequest>, responses: Map<ID, DiskResponse>},  
         // models disk internal operation that actually read/write data
         Internal,
-        // models the crash event   
+        // models the crash event
         Crash,
     }
 

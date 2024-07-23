@@ -42,7 +42,7 @@ IO Perm
 - what we can use to 
 
 
-- [ ] AsyncDisk_t ( model of disk )
+- [X] AsyncDisk_t ( model of disk )
 
 - [ ] System_t (system model) < AsyncStateMachine >
     - [ ] this should actually take a Async SM
@@ -51,21 +51,28 @@ IO Perm
 - [] Main_t (player 1 calling player 2's entry point)
     - main(<P2Trait>)
 
-
 - P2Trait [ Obligation_t.rs ] must be implemented by player 2
     - [X] p2 main 
     - [X] Program Model
-    - [X] System Refinemnt proof (based on the program model?)
+    - [X] System Refinement proof (based on the program model?)
 
 - P2 
-    - [ ] Trait for application correspondence (APPIO_Perm)
-    - [ ] Trait for IO correspondence 
+    - [X] Trait for application correspondence (APPIO_Perm)
+    - [X] impl to model refinement (Transition<PM>)
+    - [X] Trait for IO correspondence 
         - [ ] can invoke op on struct 
     - [ ] Trait for IO linearization rules
         - [ ] without linearization rules, there might be execution in the chunky state machine that have no refinement
+        - different IO rules may lead to different syntax
+            - issue & learn (tokens)
+            -  iron fleet system state does not update each other
+            - hear all disk responses before you can send any
+        - types of issues 
+
 
 - [ ] Program => Implementation
     - struct variables ?
+
 
 
 2 types of concurrency 

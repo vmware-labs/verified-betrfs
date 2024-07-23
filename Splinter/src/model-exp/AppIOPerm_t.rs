@@ -110,6 +110,8 @@ impl<T> Transition{
         &&& d.init() 
     }
 
+    // learn and then issue
+    
     proof fn next(&mut self, new_s: ProgramModel.State, in: Option<ghost_token_read>, string_out: ghost<String>) -> out: Option<ghost_token_write>
         requires 
             ProgramModel.next(self.curr_state(), new_s, ProgramModel.Label{in.string, string_out}),// to label takes care of option

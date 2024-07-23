@@ -11,10 +11,12 @@ verus!{
     // SystemModel<ProgramModel> is a state machine defining the bottom layer
     // interaction  of player 2's program model and the disk model
     // has the same set of label as the top layer spec CrashTolerantAsyncMap
+
+    // program model can take 
     
     state_machine!{ SystemModel<ProgramModel> {
 
-        // ProgramModel: a state machine that interacts with application request and IO controller
+        // ProgramModel: a player 2 state machine that interacts with application request and IO controller
         type ProgramModel: APPIODriver; 
         type DiskModel = AsyncDisk;
 
@@ -25,11 +27,14 @@ verus!{
 
         pub enum Label
         {
+            // restriction on the application visible labels
+            // player 2 can perform any arbitrary label translation
+
             OperateOp{ base_op: ProgramModel::Label },
             CrashOp,
 
             // maybe we don't want exactly the same label 
-            SyncOp,
+            SyncOp, // should this be present here?
             ReqSyncOp{ request_info },
             ReplySyncOp{ reply_info },
             // -----------------------------------------
@@ -97,13 +102,6 @@ verus!{
             }
         }
 
-        transition!{
-            program_internal(label: Label, new_p: ProgramModel::State) {
-                require let Label::Noop = label;
-                require ProgramModel::State::next(pre.p, new_p, ProgramModel::Label::Internal{});
-                update p = new_p;
-            }
-        }
     
     }}
 
@@ -117,7 +115,21 @@ verus!{
             can refine to the AsyncMap.State state machine
         */
 
-        spec fn i(s: SystemModel<ProgramModel>) -> AsyncMap.State
+        spec fn i(s: SystemModel<ProgramModel>) -> AsyncMap::State
+
+        spec fn i_lbl(lbl: SystemModel::Label) -> AsyncMap::Label
+            requires lbl is XXX
+        {
+            match lbl {
+                ...
+            }
+        }
+
+        // freedom for p2
+        spec fn i_p2_lbl(lbl: SystemModel::Label) -> (result: AsyncMap::Label)
+            requires lbl !is XXX
+            ensures result !is XXX
+        ;
 
         spec fn inv(s: SystemModel<ProgramModel>) -> bool
 
