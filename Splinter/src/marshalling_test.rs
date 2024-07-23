@@ -14,7 +14,7 @@ use crate::marshalling::ResizableUniformSizedSeq_v::*;
 use vstd::string::View;
 use crate::marshalling::UniformSized_v::UniformSized;
 // use crate::marshalling::ResizableIntegerSeq_v::*;
-// use crate::marshalling::VariableSizedElementSeq_v::*;
+use crate::marshalling::VariableSizedElementSeq_v::*;
 
 // fn m<M: Marshalling<int, u32>>(m: &M) {
 // }
