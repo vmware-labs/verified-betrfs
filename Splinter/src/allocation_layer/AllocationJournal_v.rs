@@ -1376,7 +1376,7 @@ state_machine!{ AllocationJournal {
         update journal = post_linked_journal;
         update lsn_au_index = lsn_au_index_append_record(pre.lsn_au_index, marshalled_msgs, addr.au);
         update first = if pre.journal.truncated_journal.freshest_rec is Some { pre.first } else { addr.au };
-        update mini_allocator = pre.mini_allocator.allocate_and_observe(addr);
+        update mini_allocator = pre.mini_allocator.allocate(addr).observe(addr);
     } }
 
     transition!{ internal_mini_allocator_fill(lbl: Label) {

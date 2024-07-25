@@ -9,5 +9,6 @@ mod disk;
 mod journal;
 mod marshalling;
 mod spec;
+mod exec;
 
 fn main() {}

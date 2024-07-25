@@ -123,7 +123,9 @@ impl PageAllocator {
     }
 
     pub open spec(checked) fn all_pages_allocated(self) -> bool {
-        &&& (self.reserved + self.observed).len() == page_count()
+        forall |addr: Address| #![auto] addr.wf() && addr.au == self.au 
+            ==> ( self.reserved.contains(addr) || self.observed.contains(addr) )
+        // &&& (self.reserved + self.observed).len() == page_count()
     }
 
     pub open spec(checked) fn all_pages_free(self) -> bool {
@@ -178,78 +180,26 @@ impl MiniAllocator {
         &&& self.allocs[addr.au].is_free_addr(addr)
     }
 
-    pub open spec(checked) fn allocate_and_observe(self, addr: Address) -> Self
-        recommends
-            self.wf(),
-            self.can_allocate(addr),  // ensures out.wf()
-
-    {
-        let result = self.allocs[addr.au].observe(set![addr]);
-        let new_curr = if result.all_pages_allocated() { None } else { Some(addr.au) };
-        Self{ allocs: self.allocs.insert(addr.au, result), curr: new_curr }
-    }
-
-    pub proof fn allocate_and_observe_wf(self, addr: Address)
-    requires
-        self.wf(),
-        self.can_allocate(addr),
-        addr.wf(),
-    ensures
-        self.allocate_and_observe(addr).wf(),
-    {
-//         let alloc = self.allocs[addr.au];
-//         let addrs = set![addr];
-//         assert forall |addr| #[trigger] addrs.contains(addr) implies addr.wf() && addr.au == alloc.au by {
-//         }
-//         let presult = self.allocs[addr.au];
-//         assert( presult.wf() );
-//         let result = presult.observe(set![addr]);
-//         assert( result.reserved == presult.reserved );
-//         assert( result.observed == result.observed + set![addr] );
-//         assert forall |addrx| (#[trigger] (result.observed + result.reserved).contains(addrx)) implies addrx.wf() by {
-//             if result.reserved.contains(addrx) {
-//                 assert( (presult.observed + presult.reserved).contains(addr) );
-//                 assert(addrx.wf());
-//             } else {
-//                 assert( result.observed.contains(addrx) );
-//                 if addrx == addr {
-//                     assert(addrx.wf());
-//                 } else {
-//                     assert( (presult.observed + presult.reserved).contains(addr) );
-//                    assert(addrx.wf());
-//                 }
-//             }
-//         }
-//         assert( result.wf() );
-//         let post = self.allocate_and_observe(addr);
-//         assert forall |au| #[trigger] post.allocs.contains_key(au)
-//             implies post.allocs[au].wf() && post.allocs[au].au == au by {
-//             if au == addr.au {
-//                 assert( post.allocs[au] == result );
-//                 assert( result.wf() );
-//                 assert( post.allocs[au].wf() );
-//                 assert( post.allocs[au].au == au );
-//             } else {
-//                 assert( post.allocs[au].wf() );
-//                 assert( post.allocs[au].au == au );
-//             }
-//         }
-    }
-
     pub open spec(checked) fn allocate(self, addr: Address) -> Self
         recommends
             self.wf(),
             self.can_allocate(addr),  // ensures out.wf()
-
     {
         let result = self.allocs[addr.au].reserve(set![addr]);
         let new_curr = if result.all_pages_allocated() { None } else { Some(addr.au) };
         Self{ allocs: self.allocs.insert(addr.au, result), curr: new_curr }
     }
 
-    // TODO(jailin): is it okay to prune any old thing? No check necessary?
-    // remove AUs from the mini allocator
-    // removed (checked) due to total lambda
+    pub open spec(checked) fn observe(self, addr: Address) -> Self
+        recommends
+            self.wf(),
+            self.allocs.contains_key(addr.au),
+            self.allocs[addr.au].reserved.contains(addr),
+    {
+        let result = self.allocs[addr.au].observe(set![addr]);
+        Self{ allocs: self.allocs.insert(addr.au, result), ..self }
+    }
+
     pub open spec/*(checked)*/ fn prune(self, aus: Set<AU>) -> Self
     recommends
         self.wf(),

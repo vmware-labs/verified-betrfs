@@ -34,21 +34,21 @@ pub struct Address {
     pub page: Page,
 }
 
-/// Returns the number of a disk pages in an Allocation Unit. Left as an uninterpreted function
-/// since it's implementation defined.
-pub closed spec(checked) fn page_count() -> nat;
+// /// Returns the number of a disk pages in an Allocation Unit. Left as an uninterpreted function
+// /// since it's implementation defined.
+// pub closed spec(checked) fn page_count() -> nat;
 
-/// Returns the number of Allocation Unit of the disk. Left as an uninterpreted function
-/// since it's implementation defined.
-pub closed spec(checked) fn au_count() -> nat;
+// /// Returns the number of Allocation Unit of the disk. Left as an uninterpreted function
+// /// since it's implementation defined.
+// pub closed spec(checked) fn au_count() -> nat;
 
-impl Address {
-    /// Returns true iff this Address is well formed.
-    pub open spec(checked) fn wf(self) -> bool {
-        &&& self.au < au_count()
-        &&& self.page < page_count()
-    }
-}
+// impl Address {
+//     /// Returns true iff this Address is well formed.
+//     pub open spec(checked) fn wf(self) -> bool {
+//         &&& self.au < au_count()
+//         &&& self.page < page_count()
+//     }
+// }
 
 /// models raw disk content
 pub type UnmarshalledPage = Seq<u8>;
@@ -119,7 +119,7 @@ state_machine!{ AsyncDisk {
         // read processed must have been requested
         require pre.requests.dom().contains(id);
         require pre.requests[id] is ReadReq;
-        require pre.requests[id]->from.wf();
+        // require pre.requests[id]->from.wf();
 
         let read_resp = DiskResponse::ReadResp{
             from: pre.requests[id]->from, 
@@ -136,7 +136,7 @@ state_machine!{ AsyncDisk {
         // read processed must have been requested
         require pre.requests.dom().contains(id);
         require pre.requests[id] is ReadReq;
-        require pre.requests[id]->from.wf();
+        // require pre.requests[id]->from.wf();
         
         // restriction possible fake content
         require fake_content != pre.disk.content[pre.requests[id]->from];
@@ -159,7 +159,7 @@ state_machine!{ AsyncDisk {
         // write processed must have been requested
         require pre.requests.dom().contains(id);
         require pre.requests[id] is WriteReq;
-        require pre.requests[id]->to.wf();
+        // require pre.requests[id]->to.wf();
 
         // TODO: require write data matches its checksum
 
