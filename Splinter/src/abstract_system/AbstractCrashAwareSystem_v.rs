@@ -1,6 +1,6 @@
 // Copyright 2018-2023 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
-/// AbstractCrashTolerantSystem. Formerly named AbstractCoordinationSystem.
+/// AbstractCrashAwareSystem. Formerly named AbstractCoordinationSystem.
 /// Coordinates a map and a journal to present a unified map once abstracted.
 ///
 /// This is the final refinement layer before the top level trusted spec.

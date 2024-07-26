@@ -21,7 +21,7 @@ use crate::abstract_system::AbstractCrashAwareJournal_v;
 use crate::abstract_system::AbstractCrashAwareJournal_v::*;
 use crate::abstract_system::AbstractCrashAwareMap_v;
 use crate::abstract_system::AbstractCrashAwareMap_v::*;
-use crate::abstract_system::AbstractCrashTolerantSystem_v::*;
+use crate::abstract_system::AbstractCrashAwareSystem_v::*;
 use crate::abstract_system::AbstractJournal_v::AbstractJournal;
 use crate::abstract_system::AbstractMap_v::*;
 use crate::abstract_system::MsgHistory_v::{KeyedMessage, MsgHistory};
