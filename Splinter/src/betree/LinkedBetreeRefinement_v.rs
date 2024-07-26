@@ -25,6 +25,9 @@ use crate::betree::LinkedBetree_v::*;
 use crate::betree::SplitRequest_v::*;
 
 verus! {
+
+broadcast use PivotTable::route_lemma;
+
 impl LinkedBetree<BufferDisk>{
     pub open spec/*XXX(checked)*/ fn i_children_seq(self, ranking: Ranking, start: nat) -> Seq<FilteredBetree_v::BetreeNode>
         recommends 
@@ -220,7 +223,6 @@ impl LinkedBetree<BufferDisk>{
             self.child_for_key(k).i() == self.i().child(k)
     {
         let r = self.root().pivots.route(k) as nat;
-        self.root().pivots.route_lemma(k);
         assert(self.root().valid_child_index(r));
         self.i_children_lemma();
     }
@@ -636,7 +638,7 @@ impl QueryReceipt<BufferDisk>{
         assert(i_receipt.all_lines_wf()) by {
             assert forall |i| 0 <= i < i_receipt.lines.len()
             implies #[trigger] i_receipt.lines[i].wf() by {
-                PivotTable::route_lemma_auto();
+                broadcast use PivotTable::route_lemma;
                 assert(self.lines[i].wf()); // trigger
                 self.lines[i].linked.i_wf();
             }
@@ -663,7 +665,6 @@ impl QueryReceipt<BufferDisk>{
 
             assert(self.lines[i].linked.has_root());
             assert(node.key_in_domain(self.key));
-            node.pivots.route_lemma(self.key);
             assert(self.result_linked_at(i)); // trigger
             query_from_commutes_with_i(node.buffers, self.linked.buffer_dv, self.key, start);
         }
@@ -734,7 +735,6 @@ impl Path<BufferDisk>{
             let node = self.linked.root();
             let r = node.pivots.route(self.key) as nat;
 
-            node.pivots.route_lemma(self.key);
             assert(self.subpath().linked == self.linked.child_at_idx(r));
             self.linked.valid_buffer_dv_throughout();
             self.subpath().target_valid_buffer_dv();
@@ -773,8 +773,6 @@ impl Path<BufferDisk>{
             self.subpath().substitute_ensures(replacement, sub_path_addrs);
 
             let r = self.linked.root().pivots.route(self.key);
-            self.linked.root().pivots.route_lemma(self.key);
-
             assert( subtree.valid_ranking(ranking) ) by {
                 assert(result.root().valid_child_index(r as nat)); // trigger
                 subtree.dv.subdisk_implies_ranking_validity(result.dv, ranking);

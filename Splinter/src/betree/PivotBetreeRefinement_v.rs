@@ -16,6 +16,8 @@ use crate::betree::SplitRequest_v::*;
 
 verus! {
 
+broadcast use PivotTable::route_lemma, PivotTable::route_is_lemma;
+
 impl BetreeNode {
     pub open spec(checked) fn i_children_seq(self, start: int) -> Seq<PagedBetree_v::BetreeNode>
         recommends self is Node, 0 <= start <= self->children.len()
@@ -114,7 +116,6 @@ impl BetreeNode {
     {
         let seq_result = self.i_children_seq(0);
         self.i_children_seq_lemma(0);
-        PivotTable::route_lemma_auto();
 
         assert forall |k:Key| {
             (#[trigger] self.i_children().map[k]).wf()
@@ -160,7 +161,6 @@ impl BetreeNode {
 
         assert(empty.wf_children()); // trigger
         empty.i_children_lemma();
-        PivotTable::route_lemma_auto();
 
         assert(empty.i()->children.map =~= empty_child_map.map);
         assert(empty.i() == PagedBetree_v::BetreeNode::empty_root());
@@ -294,15 +294,11 @@ impl BetreeNode {
         self.i_children_lemma();
         self.split_parent(request).i_children_lemma();
 
-        PivotTable::route_lemma_auto();
-        self.split_parent(request)->pivots.route_is_lemma(key, request.get_child_idx() as int);
-
         let a = self.child(key).i().filter_buffer_and_children(left_keys);
         if request is SplitLeaf {
             let split_key = to_key(split_element);
             let b = self.child(key).split_leaf(split_key).0;
-
-            PivotTable::route_is_lemma_auto();
+            
             self.child(key).split_leaf_wf(split_key);
 
             assert forall |k| #[trigger] a->children.map[k] == b.i()->children.map[k] by {}
@@ -311,7 +307,6 @@ impl BetreeNode {
             let child_pivot_idx = request->child_pivot_idx;
             let b = self.child(key).split_index(child_pivot_idx).0;
 
-            PivotTable::route_is_lemma_auto();
             self.child(key).split_index_wf(child_pivot_idx);
 
             b.i_children_lemma();
@@ -338,15 +333,10 @@ impl BetreeNode {
         self.i_children_lemma();
         self.split_parent(request).i_children_lemma();
 
-        PivotTable::route_lemma_auto();
-        self.split_parent(request)->pivots.route_is_lemma(key, request.get_child_idx() as int + 1);
-
         let a = self.child(key).i().filter_buffer_and_children(right_keys);
         if request is SplitLeaf {
             let split_key = to_key(split_element);
             let b = self.child(key).split_leaf(split_key).1;
-
-            PivotTable::route_is_lemma_auto();
             self.child(key).split_leaf_wf(split_key);
 
             assert forall |k| #[trigger] a->children.map[k] == b.i()->children.map[k] by {}
@@ -354,8 +344,6 @@ impl BetreeNode {
         } else {
             let child_pivot_idx = request->child_pivot_idx;
             let b = self.child(key).split_index(child_pivot_idx).1;
-
-            PivotTable::route_is_lemma_auto();
             self.child(key).split_index_wf(child_pivot_idx);
 
             b.i_children_lemma();
@@ -364,8 +352,8 @@ impl BetreeNode {
             assert forall |k| #[trigger] a->children.map[k] == b.i()->children.map[k]
             by {
                 if right_keys.contains(k) {
+                    assert(b->pivots.bounded_key(k)); // trigger
                     let r = b->pivots.route(k);
-                    self.child(key)->pivots.route_is_lemma(k, r + child_pivot_idx);
                 }
             }
             assert(a->children.map =~= b.i()->children.map);
@@ -385,12 +373,9 @@ impl BetreeNode {
         self.split_parent_wf(request);
         let child_idx = request.get_child_idx();
         let r = self->pivots.route(key);
-        PivotTable::route_lemma_auto();
 
         if r < child_idx {
-            self.split_parent(request)->pivots.route_is_lemma(key, r);
-        } else {
-            self.split_parent(request)->pivots.route_is_lemma(key, r+1);
+            assert(Element::lte(self.split_parent(request)->pivots.pivots[r], to_element(key))); // trigger for route_is_lemma
         }
 
         self.i_children_lemma();
@@ -468,7 +453,7 @@ impl BetreeNode {
             self.i_children_seq_same(a, 0);
         } else {
             a.i_children_lemma();
-            PivotTable::route_lemma_auto();
+            
         }
         assert(a.i()->children.map =~= b->children.map);
     }
@@ -484,8 +469,6 @@ impl BetreeNode {
         let moved_buffer = self->buffer.apply_filter(child_domain.key_set());
         child.promote_and_merge_commutes_with_i(child_domain, moved_buffer);
 
-        PivotTable::route_lemma_auto();
-        PivotTable::route_is_lemma_auto();
         self.i_children_lemma();
         self.flush(child_idx).i_children_lemma();
 
@@ -641,7 +624,6 @@ impl Path{
         ensures self.node.children_have_matching_domains(self.replaced_children(replacement))
         decreases self.depth, 0nat
     {
-        PivotTable::route_lemma_auto();
         self.subpath().substitute_preserves_wf(replacement);
 
         let old_children = self.node->children;
@@ -665,7 +647,6 @@ impl Path{
         self.substitute_preserves_wf(replacement);
 
         replacement.i_wf();
-        PivotTable::route_lemma_auto();
 
         if 0 < self.depth {
             self.substitute(replacement).i_children_lemma();
@@ -778,7 +759,7 @@ impl PivotBetree::State {
 
         self.root.i_wf();
         post.root.i_wf();
-        PivotTable::route_lemma_auto();
+        
         post.root.i_children_lemma();
         assert(post.i().root->children.map =~= PagedBetree_v::constant_child_map(self.root.i()).map);
         assert(PagedBetree::State::next_by(self.i(), post.i(), lbl.i(), PagedBetree::Step::internal_grow()));

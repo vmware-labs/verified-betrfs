@@ -118,8 +118,8 @@ impl PivotTable {
         Element::largest_lte(self.pivots, to_element(key))
     }
 
-    pub proof fn route_lemma(self, key: Key)
-        requires self.wf(), self.bounded_key(key)
+    pub broadcast proof fn route_lemma(self, key: Key)
+        requires self.wf(), #[trigger] self.bounded_key(key)
         ensures 0 <= self.route(key) < self.num_ranges(),
             Element::lte(self.pivots[self.route(key)], to_element(key)),
             Element::lt(to_element(key), self.pivots[self.route(key)+1])
@@ -128,25 +128,7 @@ impl PivotTable {
         Element::largest_lte_lemma(self.pivots, to_element(key), self.route(key));
     }
 
-    pub proof fn route_lemma_auto()
-        ensures forall |pt: PivotTable, key: Key| pt.wf() && pt.bounded_key(key)
-        ==> {
-            &&& 0 <= #[trigger] pt.route(key) < pt.num_ranges()
-            &&& Element::lte(pt.pivots[pt.route(key)], to_element(key))
-            &&& Element::lt(to_element(key), pt.pivots[pt.route(key)+1])
-        }
-    {
-        assert forall |pt: PivotTable, key: Key| pt.wf() && pt.bounded_key(key)
-        implies {
-            &&& 0 <= #[trigger] pt.route(key) < pt.num_ranges()
-            &&& Element::lte(pt.pivots[pt.route(key)], to_element(key))
-            &&& Element::lt(to_element(key), pt.pivots[pt.route(key)+1])
-        } by {
-            pt.route_lemma(key);
-        }
-    } 
-
-    pub proof fn route_is_lemma(self, key: Key, r: int)
+    pub broadcast proof fn route_is_lemma(self, key: Key, r: int)
         requires self.wf(), 0 <= r < self.num_ranges(),
             Element::lte(self.pivots[r], to_element(key)),
             Element::lt(to_element(key), self.pivots[r+1])
@@ -154,29 +136,6 @@ impl PivotTable {
     {
         Element::strictly_sorted_implies_sorted(self.pivots);
         Element::largest_lte_lemma(self.pivots, to_element(key), self.route(key));
-    }
-
-    pub proof fn route_is_lemma_auto()
-        ensures forall |pt: PivotTable, key: Key, r: int| 
-        {
-            &&& pt.wf() && 0 <= r < pt.num_ranges()
-            &&& Element::lte(pt.pivots[r], to_element(key))
-            &&& Element::lt(to_element(key), pt.pivots[r+1])
-        }
-        ==> {
-            &&& pt.bounded_key(key)
-            &&& pt.route(key) == r
-        }
-    {
-        assert forall |pt: PivotTable, key: Key, r: int| 
-        {
-            &&& pt.wf() && 0 <= r < pt.num_ranges()
-            &&& Element::lte(pt.pivots[r], to_element(key))
-            &&& Element::lt(to_element(key), pt.pivots[r+1])
-        } implies {
-            &&& pt.bounded_key(key) 
-            &&& pt.route(key) == r
-        } by { pt.route_is_lemma(key, r); }
     } 
 
     pub open spec(checked) fn pivot_range_keyset(self, i: int) -> Set<Key>

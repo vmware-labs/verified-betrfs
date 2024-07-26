@@ -29,6 +29,8 @@ verus! {
 // the abstract Branch type. A refining state machine replaces single-node branches with
 // b+trees.
 
+broadcast use PivotTable::route_lemma;
+
 // propagate buffers<T>
 #[verifier::ext_equal]
 pub struct BetreeNode<T> {
@@ -93,7 +95,7 @@ impl<T> BetreeNode<T> {
     #[verifier(recommends_by)]
     proof fn flushed_ofs_inline_lemma(self, key: Key)
     {
-        self.pivots.route_lemma(key);
+        // self.pivots.route_lemma(key);
         assert( 0 <= self.pivots.route(key) < self.flushed.offsets.len() );
     }
 
@@ -2234,7 +2236,7 @@ impl<T: QueryableDisk> Path<T>{
     {
         if 0 < self.depth {
             let root = self.linked.root();
-            root.pivots.route_lemma(self.key);
+            // root.pivots.route_lemma(self.key);
             assert(root.valid_child_index(root.pivots.route(self.key) as nat)); // trigger
             self.subpath().valid_ranking_throughout(ranking);
         }
@@ -2267,7 +2269,7 @@ impl<T: QueryableDisk> Path<T>{
 
             let node = result.dv.entries[path_addrs[0]];
             let r = node.pivots.route(self.key);
-            node.pivots.route_lemma(self.key);
+            // node.pivots.route_lemma(self.key);
             assert(self.linked.dv.entries.contains_key(self.linked.root.unwrap())); // trigger
 
             assert forall |i| #[trigger] node.valid_child_index(i)
@@ -2311,7 +2313,7 @@ impl<T: QueryableDisk> Path<T>{
         decreases self.depth
     {
         self.substitute_ensures(replacement, path_addrs);
-        PivotTable::route_lemma_auto();
+        broadcast use PivotTable::route_lemma;
 
         if self.depth == 0 {
             ranking
@@ -2397,7 +2399,7 @@ impl<T: QueryableDisk> Path<T>{
             let result_ranking = self.ranking_after_substitution(replacement, path_addrs, ranking);
         
             let r = self.linked.root().pivots.route(self.key) as nat;
-            PivotTable::route_lemma(self.linked.root().pivots, self.key);
+            // PivotTable::route_lemma(self.linked.root().pivots, self.key);
 
             self.linked.dv.subdisk_implies_ranking_validity(replacement.dv, ranking);
             self.valid_ranking_throughout(ranking);
