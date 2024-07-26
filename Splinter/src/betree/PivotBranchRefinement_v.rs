@@ -8,10 +8,11 @@ use vstd::prelude::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 use crate::betree::Buffer_v::*;
-// use crate::betree::Domain_v::*;
 use crate::betree::PivotBranch_v::*;
 
 verus! {
+
+broadcast use Node::route_ensures;
 
 impl Node {
     // Takes in a btree node and returns the buffer abstraction
@@ -19,7 +20,7 @@ impl Node {
         recommends self.wf()
         decreases self
         // TODO(x9du): this when condition is kind of annoying to prove
-        // Usually lemma_route_auto & assert(self.wf()) works
+        // Usually //lemma_route_auto & assert(self.wf()) works
         when self is Index ==> forall |key| 0 <= #[trigger] self.route(key) + 1 < self->children.len()
     {
         match self {
@@ -34,48 +35,6 @@ impl Node {
                 )}
             }
         }
-    }
-}
-
-pub open spec(checked) fn get_keys_or_pivots(node: Node) -> Seq<Key>
-    recommends node.wf()
-{
-    if node is Leaf { node->keys } else { node->pivots }
-}
-
-/// Ensures clause for `Node::route()` method.
-pub proof fn lemma_route_ensures(node: Node, key: Key)
-    requires node.wf()
-    ensures ({
-        let s = get_keys_or_pivots(node);
-        &&& -1 <= #[trigger] node.route(key) < s.len()
-        &&& forall |i| 0 <= i <= node.route(key) ==> #[trigger] Key::lte(s[i], key)
-        &&& forall |i| node.route(key) < i < s.len() ==> #[trigger] Key::lt(key, s[i])
-        &&& s.contains(key) ==> 0 <= node.route(key) && s[node.route(key)] == key
-    })
-{
-    let s = if node is Leaf { node->keys } else { node->pivots };
-    Key::strictly_sorted_implies_sorted(s);
-    Key::largest_lte_ensures(s, key, Key::largest_lte(s, key));
-}
-
-pub proof fn lemma_route_auto()
-    ensures forall |node: Node, key: Key| node.wf() ==> {
-        let s = get_keys_or_pivots(node);
-        &&& -1 <= #[trigger] node.route(key) < s.len()
-        &&& forall |i| #![trigger Key::lte(s[i], key)] 0 <= i <= node.route(key) ==> Key::lte(s[i], key)
-        &&& forall |i| #![trigger Key::lt(key, s[i])] node.route(key) < i < s.len() ==> Key::lt(key, s[i])
-        &&& s.contains(key) ==> 0 <= node.route(key) && s[node.route(key)] == key
-    }
-{
-    assert forall |node: Node, key: Key| node.wf() implies {
-        let s = get_keys_or_pivots(node);
-        &&& -1 <= #[trigger] node.route(key) < s.len()
-        &&& forall |i| #![trigger Key::lte(s[i], key)] 0 <= i <= node.route(key) ==> Key::lte(s[i], key)
-        &&& forall |i| #![trigger Key::lt(key, s[i])] node.route(key) < i < s.len() ==> Key::lt(key, s[i])
-        &&& s.contains(key) ==> 0 <= node.route(key) && s[node.route(key)] == key
-    } by {
-        lemma_route_ensures(node, key);
     }
 }
 
@@ -241,8 +200,6 @@ pub proof fn lemma_insert_leaf_is_correct(node: Node, key: Key, msg: Message)
 {
     let post = node.insert_leaf(key, msg);
     let r_key = node.route(key);
-    lemma_insert_leaf_preserves_wf(node, key, msg);
-    lemma_route_auto();
     assert(post.wf());
     assert(-1 <= r_key < node->keys.len());
 
@@ -385,7 +342,6 @@ pub proof fn lemma_split_leaf_interpretation(old_leaf: Node, split_arg: SplitArg
 {
     let (left_leaf, right_leaf) = old_leaf.split_leaf(split_arg);
     lemma_split_node_preserves_wf(old_leaf, split_arg);
-    lemma_route_auto();
     assert(left_leaf.wf() && right_leaf.wf());
     let union_map = Key::map_pivoted_union(left_leaf.i().map, split_arg.get_pivot(), right_leaf.i().map);
     let pivot = split_arg.get_pivot();
@@ -449,7 +405,6 @@ pub proof fn lemma_split_index_interpretation(old_index: Node, split_arg: SplitA
     let (left_index, right_index) = old_index.split_index(split_arg);
     lemma_split_node_preserves_wf(old_index, split_arg);
     assert(left_index.wf() && right_index.wf());
-    lemma_route_auto();
     let union_map = Key::map_pivoted_union(left_index.i().map, split_arg.get_pivot(), right_index.i().map);
     let pivot_index = split_arg->pivot_index;
     let pivot = split_arg.get_pivot();
@@ -731,8 +686,6 @@ pub proof fn lemma_interpretation_subset_of_all_keys(node: Node)
 {
     if (node is Index) {
         let children = node->children;
-        lemma_route_auto();
-
         assert(forall |i| 0 <= i < children.len() ==> (#[trigger] children[i]).wf());
 
         assert forall |key| node.i().map.dom().contains(key)
@@ -781,7 +734,6 @@ pub proof fn query_refines(pre: Node, lbl: QueryLabel)
     decreases pre
 {
     let r = pre.route(lbl.key);
-    lemma_route_auto();
     if pre is Index {
         let pivots = pre->pivots;
         let children = pre->children;
@@ -794,16 +746,6 @@ pub proof fn query_refines(pre: Node, lbl: QueryLabel)
 
         assert(pre.i().query(lbl.key) == children[r+1].i().query(lbl.key)); // subgoal 3
     }
-}
-
-pub proof fn lemma_insert_leaf_preserves_wf(node: Node, key: Key, msg: Message)
-    requires
-        node.wf(),
-        node is Leaf,
-    ensures
-        node.insert_leaf(key, msg).wf(),
-{
-    lemma_route_ensures(node, key);
 }
 
 pub proof fn lemma_insert_inserts_to_all_keys(node: Node, key: Key, msg: Message, path: Path)
@@ -824,7 +766,6 @@ pub proof fn lemma_insert_inserts_to_all_keys(node: Node, key: Key, msg: Message
         Node::Index{pivots, children} => {
             let post = node.insert(key, msg, path);
             let r = node.route(key);
-            lemma_route_auto();
             assert(0 <= r + 1 < children.len());
 
             // Recursively call the lemma on the changed child: the child we inserted into.
@@ -857,17 +798,12 @@ pub proof fn lemma_insert_preserves_wf(node: Node, key: Key, msg: Message, path:
     decreases node
 {
     match node {
-        Node::Leaf{keys, msgs} => {
-            lemma_insert_leaf_preserves_wf(node, key, msg);
-        },
+        Node::Leaf{keys, msgs} => {},
         Node::Index{pivots, children} => {
             let post = node.insert(key, msg, path);
             assert(post is Index); // For recommends
 
             let r = node.route(key);
-            lemma_route_auto();
-            assert(0 <= r+1 < children.len()); // For recommends
-
             lemma_insert_preserves_wf(children[r+1], key, msg, path.subpath());
 
             // For recommends
@@ -937,8 +873,6 @@ pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
     decreases
         pre
 {
-    lemma_route_auto();
-
     lemma_path_target_is_wf(lbl.path);
     assert(lbl.path.target().wf());
     lemma_insert_leaf_is_correct(lbl.path.target(), lbl.key, lbl.msg);
@@ -981,7 +915,6 @@ pub proof fn grow_refines(pre: Node, lbl: InternalLabel)
         pre.grow().i() == pre.i()
 {
     lemma_grow_preserves_wf(pre);
-    lemma_route_auto();
     let post = pre.grow();
     assert(post.wf());
     assert(post.i().map =~~= pre.i().map);
@@ -1004,8 +937,6 @@ pub proof fn lemma_append_keys_are_path_equiv(keys: Seq<Key>, path: Path)
     if 0 < path.depth {
         lemma_append_keys_are_path_equiv(keys, path.subpath());
     }
-
-    lemma_route_auto();
     Key::strictly_sorted_implies_sorted(keys);
 
     assert forall |key| keys.contains(key) implies path.path_equiv(key) by {
@@ -1066,8 +997,7 @@ pub proof fn lemma_append_appends_to_all_keys(pre: Node, new_keys: Seq<Key>, new
         Node::Index{pivots, children} => {
             let r = pre.route(new_keys[0]);
             lemma_append_keys_are_path_equiv(new_keys, path);
-            lemma_route_auto();
-            assert(0 <= r + 1 < children.len());
+            // assert(0 <= r + 1 < children.len());
             assert(children.len() == post->children.len());
 
             // Recursively call the lemma on the changed child: the child we inserted into.
@@ -1125,7 +1055,6 @@ pub proof fn lemma_append_preserves_wf(pre: Node, keys: Seq<Key>, msgs: Seq<Mess
 
         let r = pre.route(path.key);
         lemma_append_keys_are_path_equiv(keys, path);
-        lemma_route_auto();
         assert(0 <= r+1 < children.len()); // For recommends
 
         lemma_append_preserves_wf(children[r+1], keys, msgs, path.subpath());
@@ -1195,7 +1124,6 @@ pub proof fn append_refines(pre: Node, lbl: AppendLabel)
     decreases
         pre,
 {
-    lemma_route_auto();
     lemma_append_keys_are_path_equiv(lbl.keys, lbl.path);
     lemma_append_preserves_wf(pre, lbl.keys, lbl.msgs, lbl.path);
 
@@ -1312,8 +1240,6 @@ ensures
     // Suppress recommends
     assert(pre is Index);
     assert(post is Index);
-    lemma_route_auto();
-    lemma_route_ensures(pre, pivot);
     assert(0 <= r + 1 < children.len());
 
     // Suppress recommends
@@ -1547,8 +1473,6 @@ ensures
     assert(post is Index);
 
     // Suppress recommends
-    lemma_route_auto();
-    lemma_route_ensures(pre, pivot);
     assert(0 <= r + 1 < children.len());
     assert(split_arg.wf(children[r+1]));
     assert(post->pivots.len() == pivots.len() + 1);
@@ -1644,8 +1568,6 @@ decreases
     // Suppress recommends
     assert(pre is Index);
     assert(post is Index);
-    lemma_route_auto();
-    lemma_route_ensures(pre, pivot);
     assert(0 <= r + 1 < children.len());
 
     if (path.depth == 0) {
@@ -1681,7 +1603,6 @@ pub proof fn lemma_target_all_keys(pre: Node, path: Path, key: Key)
     } else {
         assert(pre is Index);
         let r = pre.route(path.key);
-        lemma_route_auto();
         lemma_target_all_keys(pre->children[r+1], path.subpath(), key);
     }
 }
@@ -1708,8 +1629,6 @@ decreases
     // Suppress recommends
     assert(pre is Index);
     assert(post is Index);
-    lemma_route_auto();
-    lemma_route_ensures(pre, pivot);
     assert(0 <= r + 1 < children.len());
 
     if (path.depth == 0) {
@@ -1814,7 +1733,6 @@ requires
 ensures
     pre.i() == pre.split_child_of_index(split_arg).i(),
 {
-    lemma_route_auto();
     assert(pre is Index);
     let pivots = pre->pivots;
     let children = pre->children;
@@ -1834,15 +1752,6 @@ ensures
 
     assert(forall |i| 0 <= i < post->children.len() ==> (#[trigger] post->children[i]).wf());
     assert(forall |i| 0 <= i < children.len() ==> (#[trigger] children[i]).wf());
-
-    assert forall |i, key| 0 <= i < children.len() && children[i] is Index
-    implies 0 <= #[trigger] children[i].route(key) + 1 < children[i]->children.len() by {
-        lemma_route_ensures(children[i], key);
-    }
-    assert forall |i, key| 0 <= i < post->children.len() && post->children[i] is Index
-    implies 0 <= #[trigger] post->children[i].route(key) + 1 < post->children[i]->children.len() by {
-        lemma_route_ensures(post->children[i], key);
-    }
 
     lemma_split_node_preserves_wf(children[r+1], split_arg);
     lemma_split_node_interpretation(children[r+1], split_arg);
@@ -2012,7 +1921,6 @@ ensures
 decreases
     path.depth,
 {
-    lemma_route_auto();
     assert(pre is Index);
     let pivots = pre->pivots;
     let children = pre->children;

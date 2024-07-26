@@ -246,24 +246,6 @@ impl DiskView {
         }
     }
 
-    // TODO please for the love of Z3 automate
-    // pub proof fn build_tight_auto(self)
-    // ensures
-    //     forall |root:Pointer| #[trigger self.build_tight(root)]
-    //         self.decodable(root) ==> ({
-    //             &&& (forall |addr| #[trigger] self.build_tight(root).entries.contains_key(addr) ==> self.entries.contains_key(addr))
-    //             &&& self.acyclic() ==> self.build_tight(root).is_sub_disk(self)
-    //     })
-    // {
-    //     assert forall |root:Pointer| #[trigger self.build_tight(root)]
-    //         self.decodable(root) implies ({
-    //             &&& (forall |addr| #[trigger] self.build_tight(root).entries.contains_key(addr) ==> self.entries.contains_key(addr))
-    //             &&& self.acyclic() ==> self.build_tight(root).is_sub_disk(self)
-    //     }) by {
-    //         self.build_tight_ensures(root);
-    //     }
-    // }
-
     pub open spec(checked) fn can_crop(self, root: Pointer, depth: nat) -> bool
     recommends
         self.decodable(root),
@@ -313,29 +295,6 @@ impl DiskView {
     {
         if depth > 0 {
             self.pointer_after_crop_seq_end(self.next(root), (depth-1) as nat)
-        }
-    }
-
-    pub proof fn pointer_after_crop_auto(self)
-    ensures
-        forall |root, depth| {
-            &&& self.decodable(root)
-            &&& self.block_in_bounds(root)
-            &&& self.can_crop(root, depth)
-        } ==> {
-            &&& self.is_nondangling_pointer(#[trigger] self.pointer_after_crop(root, depth))
-            &&& self.block_in_bounds(self.pointer_after_crop(root, depth))
-        },
-    {
-        assert forall |root, depth| {
-            &&& self.decodable(root)
-            &&& self.block_in_bounds(root)
-            &&& self.can_crop(root, depth)
-        } implies {
-            &&& self.is_nondangling_pointer(#[trigger] self.pointer_after_crop(root, depth))
-            &&& self.block_in_bounds(self.pointer_after_crop(root, depth))
-        } by {
-            self.pointer_after_crop_ensures(root, depth);
         }
     }
 
@@ -710,21 +669,10 @@ impl TruncatedJournal {
     }
 
     pub proof fn crop_ensures(self, depth: nat)
-    requires
-        self.can_crop(depth),
-    ensures
-        self.crop(depth).wf(),
+    requires self.can_crop(depth),
+    ensures self.crop(depth).wf(),
     {
-        self.disk_view.pointer_after_crop_auto();
-    }
-
-    pub proof fn crop_auto(self)
-    ensures
-        forall |depth| self.can_crop(depth) ==> #[trigger] self.crop(depth).wf(),
-    {
-        assert forall |depth| self.can_crop(depth) implies #[trigger] self.crop(depth).wf() by {
-            self.disk_view.pointer_after_crop_auto();
-        }
+        self.disk_view.pointer_after_crop_ensures(self.freshest_rec, depth);
     }
 
     pub open spec(checked) fn append_record(self, addr: Address, msgs: MsgHistory) -> (out: Self)
@@ -750,35 +698,6 @@ impl TruncatedJournal {
             ..self
         }
     }
-
-    // pub open spec(checked) fn representation(self) -> (out: Set<Address>)
-    // recommends
-    //     self.disk_view.decodable(self.freshest_rec),
-    //     self.disk_view.acyclic(),
-    // {
-    //     self.disk_view.representation(self.freshest_rec)
-    // }
-
-    // // Yeah re-exporting this is annoying. Gonna just ask others to call 
-    // // self.disk_view.representation_auto();
-    // pub proof fn representation_ensures(self)
-    // requires
-    //     self.disk_view.decodable(self.freshest_rec),
-    //     self.disk_view.acyclic(),
-    // ensures
-    //     forall |addr| self.representation().contains(addr)
-    //         ==> self.disk_view.entries.contains_key(addr)
-    // {
-    //     self.disk_view.representation_auto();
-    // }
-
-    // pub open spec(checked) fn disk_is_tight_wrt_representation(self) -> bool
-    // recommends
-    //     self.disk_view.decodable(self.freshest_rec),
-    //     self.disk_view.acyclic(),
-    // {
-    //     self.disk_view.entries.dom() == self.representation()
-    // }
 
     pub open spec(checked) fn mkfs() -> (out: Self)
     {

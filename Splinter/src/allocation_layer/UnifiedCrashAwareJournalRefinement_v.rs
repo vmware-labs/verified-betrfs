@@ -69,21 +69,11 @@ impl ImageState {
         }
     }
 
-    proof fn i_valid(self, dv: DiskView) 
-        requires self.valid_image(dv)
+    broadcast proof fn i_valid(self, dv: DiskView) 
+        requires  #[trigger] self.valid_image(dv)
         ensures self.i(dv).valid_image()
     {
         self.tight_dv_preserves_valid_image(dv);
-    }
-
-    proof fn i_valid_auto() 
-        ensures forall |image: Self, dv| 
-            #[trigger] image.valid_image(dv) ==> image.i(dv).valid_image()
-    {
-        assert forall |image: Self, dv| #[trigger] image.valid_image(dv)
-        implies image.i(dv).valid_image() by {
-            image.i_valid(dv);
-        }
     }
 
     pub proof fn new_addr_preserves_tight_dv(self, dv: DiskView, big: Self, big_dv: DiskView)
@@ -186,7 +176,7 @@ impl UnifiedCrashAwareJournal::State {
             ),
     {
         reveal(AllocationCrashAwareJournal::State::next_by);
-        ImageState::i_valid_auto();
+        broadcast use ImageState::i_valid;
 
         let i_pre_dv = self.i().persistent.tj.disk_view;
         let i_post_dv = post.i().persistent.tj.disk_view;
@@ -217,7 +207,7 @@ impl UnifiedCrashAwareJournal::State {
         reveal(AllocationJournal::State::next);
         reveal(AllocationJournal::State::next_by);
 
-        ImageState::i_valid_auto();
+        broadcast use ImageState::i_valid;
 
         let v = self.ephemeral->v;
         let post_v = post.ephemeral->v;
@@ -261,7 +251,7 @@ impl UnifiedCrashAwareJournal::State {
         reveal(AllocationJournal::State::next);
         reveal(AllocationJournal::State::next_by);
 
-        ImageState::i_valid_auto();
+        broadcast use ImageState::i_valid;
 
         let aj = self.ephemeral->v.to_aj(self.dv);
         let new_bdy = frozen_journal.seq_start();
@@ -312,7 +302,7 @@ impl UnifiedCrashAwareJournal::State {
         reveal(AllocationJournal::State::next);
         reveal(AllocationJournal::State::next_by);
         
-        ImageState::i_valid_auto();
+        broadcast use ImageState::i_valid;
 
         let post_v = post.ephemeral->v;
 
@@ -354,12 +344,11 @@ impl UnifiedCrashAwareJournal::State {
         ensures
             AllocationCrashAwareJournal::State::next(self.i(), post.i(), lbl.i()),
     {
+        broadcast use ImageState::i_valid;
         reveal(UnifiedCrashAwareJournal::State::next_by);
         reveal(UnifiedCrashAwareJournal::State::next);
         reveal(AllocationCrashAwareJournal::State::next_by);
         reveal(AllocationCrashAwareJournal::State::next);
-
-        ImageState::i_valid_auto();
 
         let step = choose|step| UnifiedCrashAwareJournal::State::next_by(self, post, lbl, step);
         match step {

@@ -96,9 +96,9 @@ impl BetreeNode {
         self.i_children_seq_lemma(0);
     }
 
-    proof fn i_wf(self)
+    broadcast proof fn i_wf(self)
         requires self.wf()
-        ensures self.i().wf(), self is Node ==> self.my_domain() == self.i().my_domain()
+        ensures (#[trigger]self.i()).wf(), self is Node ==> self.my_domain() == self.i().my_domain()
         decreases self, 2nat
     {
         if self is Node {
@@ -106,7 +106,7 @@ impl BetreeNode {
             assert(self.wf_children()); // trigger
    
             assert forall |i|
-            ( 
+            (
                 (#[trigger] self.i().valid_child_index(i))
                 && self.i()->children[i as int] is Node
                 && self.i()->children[i as int].local_structure() 
@@ -116,22 +116,6 @@ impl BetreeNode {
                 assert(self.valid_child_index(i));
             }
             assert(self.i().linked_children());
-        }
-    }
-
-    proof fn i_wf_auto()
-        ensures 
-            forall |node: Self| node.wf() ==> {
-                &&& (#[trigger]node.i()).wf()
-                &&& node is Node ==> node.my_domain() == node.i().my_domain()
-            }
-    {
-        assert forall |node: Self| node.wf()
-        implies {
-            &&& (#[trigger]node.i()).wf()
-            &&& node is Node ==> node.my_domain() == node.i().my_domain()
-        } by {
-            node.i_wf();
         }
     }
 
@@ -176,23 +160,12 @@ impl BetreeNode {
         self->buffers.i_filtered_from_domain(self.make_offset_map(), 0);
     }
 
-    proof fn query_from_refines(self, key: Key)
-        requires self.wf(), self is Node, self.key_in_domain(key),
+    broadcast proof fn query_from_refines(self, key: Key)
+        requires self.wf(), self is Node, #[trigger] self.key_in_domain(key),
         ensures self->buffers.query_from(key, self.flushed_ofs(key) as int) == self.i()->buffer.query(key)
     {
         let offset_map = self.make_offset_map();
         self->buffers.query_from_same_as_i_filtered(key, 0, offset_map);
-    }
-
-    proof fn query_from_refines_auto()
-        ensures forall |k: Key, node: BetreeNode| node.wf() && node is Node && (#[trigger] node.key_in_domain(k))
-            ==> node->buffers.query_from(k, node.flushed_ofs(k) as int) == node.i()->buffer.query(k)
-    {
-        assert forall |k: Key, node: BetreeNode| node.wf() && node is Node && (#[trigger] node.key_in_domain(k))
-        implies node->buffers.query_from(k, node.flushed_ofs(k) as int) == node.i()->buffer.query(k)
-        by {
-            node.query_from_refines(k);
-        }
     }
 
     pub open spec /*XXX(checked)*/ fn children_have_matching_domains(self, other_children: Seq<BetreeNode>) -> bool
@@ -299,7 +272,7 @@ impl BetreeNode {
             &&& a.i()->buffer.map.contains_key(k) <==> #[trigger] b->buffer.map.contains_key(k)
             &&& a.i()->buffer.map.contains_key(k) ==> a.i()->buffer.map[k] == b->buffer.map[k]
         }) by {
-                        buffers.i_from_domain(0);
+            buffers.i_from_domain(0);
 
             if a.i()->buffer.map.contains_key(k) {
                 let idx = a.instantiate_buffer_idx_for_active_key(k);
@@ -347,7 +320,7 @@ impl BetreeNode {
         requires self.wf(), domain.wf(), domain is Domain
         ensures self.promote(domain).i() == self.i().promote(domain)
     {
-        BetreeNode::i_wf_auto();
+        broadcast use BetreeNode::i_wf;
         assert(self.promote(domain).i()->children =~= self.i().promote(domain)->children);
         assert(self.promote(domain).i()->buffer =~= self.i().promote(domain)->buffer);
 
@@ -442,7 +415,7 @@ impl BetreeNode {
         } by {
             let idx = other.instantiate_buffer_idx_for_active_key(k);
             self.key_in_buffer_implies_active_key(k, idx);
-            BetreeNode::query_from_refines_auto();
+            broadcast use BetreeNode::query_from_refines;
         }
 
         assert forall |k| #[trigger] self_map.contains_key(k)
@@ -464,7 +437,7 @@ impl BetreeNode {
             self.split_leaf(split_key).0.i() == self.i().split_leaf(split_key).0,
             self.split_leaf(split_key).1.i() == self.i().split_leaf(split_key).1,
     {
-        BetreeNode::i_wf_auto();
+        broadcast use BetreeNode::i_wf;
         
         let (left, right) = self.split_leaf(split_key);
         let (i_left, i_right) = self.i().split_leaf(split_key);
@@ -485,7 +458,7 @@ impl BetreeNode {
             self.split_index(pivot_idx).0.i() == self.i().split_index(pivot_idx).0,
             self.split_index(pivot_idx).1.i() == self.i().split_index(pivot_idx).1,
     {
-        BetreeNode::i_wf_auto();
+        broadcast use BetreeNode::i_wf;
         broadcast use PivotTable::route_is_lemma;
 
         let (left, right) = self.split_index(pivot_idx);
@@ -512,7 +485,7 @@ impl BetreeNode {
     {
         self.split_parent_wf(request);
         self.i().split_parent_wf(request);
-        BetreeNode::i_wf_auto();
+        broadcast use BetreeNode::i_wf;
 
         let new_parent = self.split_parent(request);
         let i_new_parent = self.i().split_parent(request);
@@ -552,7 +525,7 @@ impl BetreeNode {
             self.i().split_parent(request) == self.split_parent(request).i()
     {
         self.split_parent_wf(request);
-        BetreeNode::i_wf_auto();
+        broadcast use BetreeNode::i_wf;
 
         let split_child_idx = request.get_child_idx() as int;
         let child = self->children[split_child_idx];
@@ -670,7 +643,7 @@ impl BetreeNode {
         ensures self.flush(child_idx, buffer_gc).i() == self.i().flush(child_idx)
     {
         self.flush_wf(child_idx, buffer_gc);
-        BetreeNode::i_wf_auto();
+        broadcast use BetreeNode::i_wf;
         
         let flush_upto = self->buffers.len();
         let flushed_ofs = self->flushed.offsets[child_idx as int];
@@ -786,7 +759,7 @@ impl BetreeNode {
         let result = self.compact(start, end, compacted_buffer);
         self.compact_wf(start, end, compacted_buffer);
 
-        BetreeNode::i_wf_auto();
+        broadcast use BetreeNode::i_wf;
         self.i_preserves_children(result, 0, self->children.len() as int);
         assert(result.i()->children =~= self.i()->children);
 
@@ -920,7 +893,7 @@ impl QueryReceipt{
         requires self.valid()
         ensures self.i().valid()
     {
-        BetreeNode::i_wf_auto();
+        broadcast use BetreeNode::i_wf;
         
         let i_receipt = self.i();
         assert forall |i| 0 <= i < i_receipt.lines.len()-1
@@ -1206,7 +1179,7 @@ impl FilteredBetree::State {
         requires self.inv(), FilteredBetree::State::internal_grow(self, post, lbl)
         ensures post.inv(), PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_grow())
     {
-        BetreeNode::i_wf_auto();
+        broadcast use BetreeNode::i_wf;
 
         assert(post.i().root->children =~= self.i().root.grow()->children); // needs this for trigger?
         assert(post.i().root =~= self.i().root.grow());
@@ -1219,7 +1192,7 @@ impl FilteredBetree::State {
         requires self.inv(), FilteredBetree::State::internal_split(self, post, lbl, path, request)
         ensures post.inv(), PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_split(path.i(), request))
     {
-        BetreeNode::i_wf_auto();
+        broadcast use BetreeNode::i_wf;
         path.target().split_parent_wf(request);
         path.substitute_commutes_with_i(path.target().split_parent(request));
 
@@ -1235,7 +1208,7 @@ impl FilteredBetree::State {
         requires self.inv(), FilteredBetree::State::internal_flush(self, post, lbl, path, child_idx, buffer_gc)
         ensures post.inv(), PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_flush(path.i(), child_idx))
     {
-        BetreeNode::i_wf_auto();
+        broadcast use BetreeNode::i_wf;
         path.target().flush_wf(child_idx, buffer_gc);
         path.substitute_commutes_with_i(path.target().flush(child_idx, buffer_gc));
 
@@ -1251,7 +1224,7 @@ impl FilteredBetree::State {
         requires self.inv(), FilteredBetree::State::internal_compact(self, post, lbl, path, start, end, compacted_buffer)
         ensures post.inv(), PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_noop())
     {
-        BetreeNode::i_wf_auto();
+        broadcast use BetreeNode::i_wf;
         path.target().compact_wf(start, end, compacted_buffer);
         path.target().compact_commutes_with_i(start, end, compacted_buffer);
         path.substitute_noop(path.target().compact(start, end, compacted_buffer));        
@@ -1264,7 +1237,7 @@ impl FilteredBetree::State {
         requires self.inv(), FilteredBetree::State::internal_noop(self, post, lbl)
         ensures post.inv(), PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_noop())
     {
-        BetreeNode::i_wf_auto();
+        broadcast use BetreeNode::i_wf;
         reveal(PivotBetree::State::next_by);
         assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_noop()));
     }

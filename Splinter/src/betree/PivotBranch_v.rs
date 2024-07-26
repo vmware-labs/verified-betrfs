@@ -192,6 +192,28 @@ impl Node {
         Key::largest_lte(s, key)
     }
 
+    pub open spec(checked) fn get_keys_or_pivots(self) -> Seq<Key>
+        recommends self.wf()
+    {
+        if self is Leaf { self->keys } else { self->pivots }
+    }
+
+    /// Ensures clause for `Node::route()` method.
+    pub broadcast proof fn route_ensures(self, key: Key)
+        requires self.wf()
+        ensures ({
+            let s = self.get_keys_or_pivots();
+            &&& -1 <= #[trigger] self.route(key) < s.len()
+            &&& forall |i| #![auto] 0 <= i <= self.route(key) ==> Key::lte(s[i], key)
+            &&& forall |i| #![auto] self.route(key) < i < s.len() ==> Key::lt(key, s[i])
+            &&& s.contains(key) ==> 0 <= self.route(key) && s[self.route(key)] == key
+        })
+    {
+        let s = if self is Leaf { self->keys } else { self->pivots };
+        Key::strictly_sorted_implies_sorted(s);
+        Key::largest_lte_ensures(s, key, Key::largest_lte(s, key));
+    }
+
     /// Returns the Message mapped to the given key.
     pub open spec/*XXX (checked)*/ fn query(self, key: Key) -> Message
         recommends self.wf()
