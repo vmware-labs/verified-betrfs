@@ -12,37 +12,26 @@ use crate::spec::AsyncDisk_t;
 
 verus!{
 
-// exporting from trusted disk model
+/// Exporting from trusted disk model
 pub type AU = AsyncDisk_t::AU;
 pub type Page = AsyncDisk_t::Page;
 pub type Address = AsyncDisk_t::Address;
 
-// defining implementation Address for executable code
-pub type IAU = u32;
-pub type IPage = u32;
+pub type IAU = AsyncDisk_t::IAU;
+pub type IPage = AsyncDisk_t::IPage;
+pub type IAddress = AsyncDisk_t::IAddress;
 
-pub struct IAddress {
-    pub au: IAU,
-    pub page: IPage,
+pub open spec(checked) fn page_count() -> Page
+{
+    AsyncDisk_t::page_count()
 }
 
-/// Q: is this silly?
-
-/// Returns the number of a disk pages in an Allocation Unit. Left as an uninterpreted function
-/// since it's implementation defined.
-pub closed spec(checked) fn page_count() -> IPage;
-
-/// Returns the number of Allocation Unit of the disk. Left as an uninterpreted function
-/// since it's implementation defined.
-pub closed spec(checked) fn au_count() -> IAU;
+pub open spec(checked) fn au_count() -> AU
+{
+    AsyncDisk_t::au_count()
+}
 
 impl Address {
-    /// Returns true iff this Address is well formed.
-    pub open spec(checked) fn wf(self) -> bool {
-        &&& self.au < au_count()
-        &&& self.page < page_count()
-    }
-
     /// Returns the Address for the first page of this AU.
     pub open spec(checked) fn first_page(self) -> Address {
         Address{page: 0, ..self}

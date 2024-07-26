@@ -5,10 +5,13 @@
 use builtin::*;
 use builtin_macros::*;
 use vstd::prelude::*;
+
 use crate::disk::GenericDisk_v::*;
 use crate::allocation_layer::MiniAllocator_v;
 
 verus! {
+
+broadcast use crate::spec::AsyncDisk_t::page_count_equals_ipage_count;
 
 pub struct PageAllocator {
     pub observed: IPage, // pages from [0, observed) are reachable from superblock Repr 
@@ -81,19 +84,6 @@ impl PageAllocator {
         assert(old(self)@.observed + old(self)@.reserved =~= self@.observed);
     }
 
-    // pub exec fn observe_upto(&mut self, page: IPage)
-    //     requires 
-    //         old(self).wf(),
-    //         old(self).observed < page <= old(self).reserved,
-    //     ensures
-    //         self.wf(),
-    //         self@ == old(self)@.observe(addr_range(self.au, old(self).observed, page))
-    // {
-    //     let ghost newly_observed = addr_range(self.au, self.observed, page);
-    //     self.observed = page;
-    //     assert(old(self)@.observed + newly_observed =~= self@.observed);
-    // }
-
     proof fn free_addr_implies_not_all_allocated(&self)
         requires self.wf()
         ensures self.has_free_addr() == !self@.all_pages_allocated()
@@ -163,19 +153,22 @@ impl MiniAllocator {
         // ===============================================
         // let alloc = self.allocs.as_mut().unwrap();
         // let addr = alloc.reserve();
-        // alloc.observe_upto(addr.page + 1); 
+        // alloc.observe_upto(addr.page + 1);
         // ===============================================
 
         // workaround in the meantime
-        let alloc = self.allocs.as_ref().unwrap();
-        let mut new_alloc = PageAllocator{au: alloc.au, observed: alloc.observed, reserved: alloc.reserved};
-
-        let addr = new_alloc.reserve();
-        let ghost post_reserve = new_alloc;
-
-        new_alloc.observe_all();
-        self.allocs = Some(new_alloc);
     
+        let mut tmp = None;
+        std::mem::swap(&mut self.allocs, &mut tmp);
+
+        let mut alloc = tmp.unwrap();
+        let addr = alloc.reserve();
+        let ghost post_reserve = alloc;
+
+        alloc.observe_all();
+        tmp = Some(alloc);
+        std::mem::swap(&mut self.allocs, &mut tmp);
+
         proof {
             let v = old(self)@.allocate(addr@).observe(addr@);
             assert(self@.allocs =~= v.allocs);

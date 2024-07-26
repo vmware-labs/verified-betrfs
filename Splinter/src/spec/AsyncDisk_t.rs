@@ -12,6 +12,8 @@ use crate::spec::MapSpec_t::{ID};
 
 verus!{
 
+/// Address defined for spec code
+
 /// The `AU` type is the type for a unique allocation unit identifier (thus we use `nat`s).
 /// 
 /// An Allocation Unit (AU) is the minimum disk unit the "external" (i.e.: top-level) allocator
@@ -34,21 +36,49 @@ pub struct Address {
     pub page: Page,
 }
 
-// /// Returns the number of a disk pages in an Allocation Unit. Left as an uninterpreted function
-// /// since it's implementation defined.
-// pub closed spec(checked) fn page_count() -> nat;
+/// Returns the number of a disk pages in an Allocation Unit. 
+/// Left as an uninterpreted function since it's implementation defined.
+pub closed spec(checked) fn page_count() -> nat;
 
-// /// Returns the number of Allocation Unit of the disk. Left as an uninterpreted function
-// /// since it's implementation defined.
-// pub closed spec(checked) fn au_count() -> nat;
+/// Returns the number of Allocation Unit of the disk. 
+/// Left as an uninterpreted function since it's implementation defined.
+pub closed spec(checked) fn au_count() -> nat;
 
-// impl Address {
-//     /// Returns true iff this Address is well formed.
-//     pub open spec(checked) fn wf(self) -> bool {
-//         &&& self.au < au_count()
-//         &&& self.page < page_count()
-//     }
-// }
+impl Address {
+    /// Returns true iff this Address is well formed.
+    pub open spec(checked) fn wf(self) -> bool {
+        &&& self.au < au_count()
+        &&& self.page < page_count()
+    }
+}
+
+/// IAddress defined for executable code
+
+pub type IAU = u32;
+
+pub type IPage = u32;
+
+pub struct IAddress {
+    pub au: IAU,
+    pub page: IPage,
+}
+
+/// further restricted by actual disk size
+pub closed spec(checked) fn ipage_count() -> IPage;
+
+/// further restricted by actual disk size
+pub closed spec(checked) fn iau_count() -> IAU;
+
+/// axioms relating spec and impl page and au count
+#[verifier(external_body)]
+pub broadcast proof fn page_count_equals_ipage_count()
+    ensures page_count() == ipage_count()
+;
+
+#[verifier(external_body)]
+pub broadcast proof fn au_count_equals_iau_count()
+    ensures au_count() == iau_count()
+;
 
 /// models raw disk content
 pub type UnmarshalledPage = Seq<u8>;
@@ -119,7 +149,7 @@ state_machine!{ AsyncDisk {
         // read processed must have been requested
         require pre.requests.dom().contains(id);
         require pre.requests[id] is ReadReq;
-        // require pre.requests[id]->from.wf();
+        require pre.requests[id]->from.wf();
 
         let read_resp = DiskResponse::ReadResp{
             from: pre.requests[id]->from, 
@@ -136,7 +166,7 @@ state_machine!{ AsyncDisk {
         // read processed must have been requested
         require pre.requests.dom().contains(id);
         require pre.requests[id] is ReadReq;
-        // require pre.requests[id]->from.wf();
+        require pre.requests[id]->from.wf();
         
         // restriction possible fake content
         require fake_content != pre.disk.content[pre.requests[id]->from];
@@ -159,7 +189,7 @@ state_machine!{ AsyncDisk {
         // write processed must have been requested
         require pre.requests.dom().contains(id);
         require pre.requests[id] is WriteReq;
-        // require pre.requests[id]->to.wf();
+        require pre.requests[id]->to.wf();
 
         // TODO: require write data matches its checksum
 

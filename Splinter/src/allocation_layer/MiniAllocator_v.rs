@@ -15,6 +15,8 @@ pub struct PageAllocator {
     pub au: AU,
 }
 
+// TODO: observed <= reserved
+
 impl PageAllocator {
     pub open spec(checked) fn new(au: AU) -> Self {
         Self{observed: Set::empty(), reserved: Set::empty(), au}
