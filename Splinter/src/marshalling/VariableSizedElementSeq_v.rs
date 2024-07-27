@@ -30,7 +30,7 @@ verus! {
 // and this type doesn't anticipate the boundary array's size to change (when a new element is
 // appended).
 
-pub struct VariableSizedElementSeqMarshalling <
+pub struct VariableSizedElementSeqFormat <
     EltFormat: Marshal,
     BdyType: IntFormattable,
     LenType: IntFormattable,
@@ -39,7 +39,7 @@ pub struct VariableSizedElementSeqMarshalling <
     // This field ports eltCfg.
     pub eltf: EltFormat,
     // This field ports bsmCfg.
-    pub bdyf: ResizableUniformSizedElementSeqMarshalling<IntFormat<BdyType>, LenType>,
+    pub bdyf: ResizableUniformSizedElementSeqFormat<IntFormat<BdyType>, LenType>,
 }
 
 
@@ -48,12 +48,12 @@ impl <
     BdyType: IntFormattable,
     LenType: IntFormattable,
 >
-    VariableSizedElementSeqMarshalling<EltFormat, BdyType, LenType>
+    VariableSizedElementSeqFormat<EltFormat, BdyType, LenType>
 {
     pub fn new(eltf: EltFormat, bdy_int_format: IntFormat<BdyType>, lenf: IntFormat<LenType>, total_size: usize) -> (s: Self)
+        requires LenType::uniform_size() <= total_size
     {
-        assume( false ); // left off here
-        Self{ eltf: eltf, bdyf: ResizableUniformSizedElementSeqMarshalling::new(bdy_int_format, lenf, total_size) }
+        Self{ eltf: eltf, bdyf: ResizableUniformSizedElementSeqFormat::new(bdy_int_format, lenf, total_size) }
     }
 
     // The pre-allocated capacity (bytes) is just whatever we preallocated to the
@@ -107,13 +107,8 @@ impl <
         self.element_gettable(dslice@.i(data@), idx as int),
     ensures start as int == self.element_data_begin(dslice@.i(data@), idx as int)
     {
-        assume( false ); // left off here
         let istart: BdyType = self.bdyf.exec_get_elt(dslice, data, idx);
-//         proof {
-//             BdyType::as_int_ensures();
-//             self.boundary_ints_fit_in_usize();
-//         }
-//         assert( BdyType::as_int(istart) == self.element_data_begin(dslice@.i(data@), idx as int) );
+        proof { BdyType::deepv_is_as_int_forall(); }
         BdyType::to_usize(istart)
     }
 
@@ -133,13 +128,9 @@ impl <
     ensures
         end as int == self.element_data_end(dslice@.i(data@), idx as int)
     {
-        assume( false ); // left off here
-//         proof {
-//             BdyType::as_int_ensures();
-//             self.boundary_ints_fit_in_usize();
-//         }
         if 0 < idx {
             let iend = self.bdyf.exec_get_elt(dslice, data, idx - 1);
+            proof { BdyType::deepv_is_as_int_forall(); }
             BdyType::to_usize(iend)
         } else {
             self.exec_total_size()
@@ -148,12 +139,11 @@ impl <
 
     // This is lies, but it papers over a module type specialization in the Dafny code that we
     // haven't shoehorned into this trait system yet.
-    proof fn boundary_seq_easy_marshalling(&self)
-    ensures
-        forall |data| self.bdyf.eltf.parsable(data)
-    {
-        assume(false);
-    }
+//     proof fn boundary_seq_easy_marshalling(&self)
+//     ensures
+//         forall |data| self.bdyf.eltf.parsable(data)
+//     {
+//     }
 
 //     // Here's another obligation we'd like to place on the choice of boundary
 //     // int: don't make me deal with counting things that are beyond the
@@ -161,7 +151,6 @@ impl <
 //     proof fn boundary_ints_fit_in_usize(&self)
 //         ensures forall |i| #![auto] BdyType::spec_this_fits_in_usize(BdyType::as_int(i))
 //     {
-//         assume(false);
 //     }
 
     pub open spec fn size_of_length_field(&self) -> usize
@@ -257,11 +246,11 @@ impl <
 >
     SeqMarshal< EltFormat::DV, EltFormat::U >
     for
-    VariableSizedElementSeqMarshalling<EltFormat, BdyType, LenType>
+    VariableSizedElementSeqFormat<EltFormat, BdyType, LenType>
 {
     open spec fn seq_valid(&self) -> bool {
         &&& self.eltf.valid()
-        &&& self.bdyf.valid()
+        &&& self.bdyf.seq_valid()
         &&& self.bdyf.total_size <= LenType::max()
     }
 
@@ -276,10 +265,6 @@ impl <
 
     exec fn try_length(&self, dslice: &Slice, data: &Vec<u8>) -> (out: Option<usize>)
     {
-//         assert( self.seq_valid() );
-//         assert( self.bdyf.seq_valid() );    // TODO remove; issue #1150
-        assume( false );    // left off here
-        assert( self.bdyf.seq_valid() );
         let out = self.bdyf.try_length(dslice, data);
         assert( out is Some ==> out.unwrap() as int == self.length(dslice@.i(data@)) );    // TODO remove; issue #1150
         out
@@ -318,23 +303,38 @@ impl <
     
     exec fn try_get(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oeslice: Option<Slice>)
     {
-        assume( false ); // left off here
         let ghost gdata = dslice@.i(data@);
         let olen = self.try_length(dslice, data);
         if olen.is_some() && idx < self.exec_max_length() && idx < olen.unwrap() {
             proof {
-                self.boundary_seq_easy_marshalling();
+//                 self.boundary_seq_easy_marshalling();
 //                 self.boundary_ints_fit_in_usize();
+                let sdata = dslice@.i(data@);
+                let bdata = self.bdyf.get_data(sdata, idx as int);
+                // Why isn't SeqMarshalling::get transparent here?
+                assume( bdata == self.bdyf.get(SpecSlice::all(sdata), sdata, idx as int).i(sdata) );
+                self.bdyf.get__ensures_len(SpecSlice::all(sdata), sdata, idx as int);
+                assume( false ); // left off here
+                assert( bdata.len() == BdyType::uniform_size() );
+                assert( self.bdyf.eltf.parsable(bdata) == 
+                    (BdyType::uniform_size() <= bdata.len()) );
+                assert( self.bdyf.eltf.parsable(bdata) );
+                assert( self.element_gettable(dslice@.i(data@), idx as int) );
             }
             let start = self.exec_element_data_begin(dslice, data, idx);
+        assume(false);
             let end = self.exec_element_data_end(dslice, data, idx);
             let total_size = self.exec_total_size();
             if start <= end && end <= total_size && total_size <= dslice.len() {
+                assert( self.gettable(dslice@.i(data@), idx as int) );
                 Some(dslice.subslice(start, end))
             } else {
+                assert( !self.gettable(dslice@.i(data@), idx as int) );
                 None
             }
         } else {
+        assume(false);
+            assert( !self.gettable(dslice@.i(data@), idx as int) );
             None
         }
     }

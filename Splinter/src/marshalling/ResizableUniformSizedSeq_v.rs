@@ -18,11 +18,11 @@ use crate::marshalling::math_v::*;
 
 verus! {
 
-// In a ResizableUniformSizedElementSeqMarshalling, the length (set of readable elements) is
+// In a ResizableUniformSizedElementSeqFormat, the length (set of readable elements) is
 // conveyed by a dynamically-stored length field. The marshaller knows how to read that field and
 // dissuade the caller from reading off the end of the valid data.
 
-pub struct ResizableUniformSizedElementSeqMarshalling
+pub struct ResizableUniformSizedElementSeqFormat
     <EltFormat: Marshal + UniformSized, LenType: IntFormattable>
 {
     pub eltf: EltFormat,
@@ -34,7 +34,7 @@ pub struct ResizableUniformSizedElementSeqMarshalling
 }
 
 impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
-    ResizableUniformSizedElementSeqMarshalling<EltFormat, LenType>
+    ResizableUniformSizedElementSeqFormat<EltFormat, LenType>
 {
     pub fn new(eltf: EltFormat, lenf: IntFormat<LenType>, total_size: usize) -> (s: Self)
     requires
@@ -48,7 +48,9 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
         Self{ eltf, lenf, total_size }
     }
 
-    pub open spec fn valid(&self) -> bool {
+    // "raw_valid" to avoid name collision with Marshal::valid. That led to some confusing proof
+    // failures.
+    pub open spec fn raw_valid(&self) -> bool {
         &&& self.eltf.valid()
         &&& self.lenf.valid()
         &&& self.size_of_length_field() <= self.total_size
@@ -127,14 +129,28 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
         proof { self.length_ensures(dslice@.i(old(data)@)); };
         self.resize(dslice, data, 0);
     }
+
+    pub proof fn get__ensures_len(&self, dslice: SpecSlice, data: Seq<u8>, idx: int)
+    requires self.valid(), 0 <= idx, idx < self.max_length()
+    ensures self.get(dslice, data, idx).len() == self.eltf.uniform_size()
+    {
+        self.index_bounds_facts(idx as int);
+        let eslice = self.get(dslice, data, idx);
+        assume( false );// left off here figuring out why we can't see inside (trait fn) get
+        assert( eslice.start == self.size_of_length_field() + idx * self.eltf.uniform_size() );
+        assert( eslice.end == self.size_of_length_field() + idx * self.eltf.uniform_size() + self.eltf.uniform_size() );
+        assert( eslice.len() == eslice.end - eslice.start );
+        assert( self.get(dslice, data, idx).len() == eslice.len() );
+        assert( eslice.len() == self.eltf.uniform_size() );
+    }
 }
 
 impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
     SeqMarshal< EltFormat::DV, EltFormat::U >
-    for ResizableUniformSizedElementSeqMarshalling<EltFormat, LenType>
+    for ResizableUniformSizedElementSeqFormat<EltFormat, LenType>
 {
     open spec fn seq_valid(&self) -> bool {
-        self.valid()
+        self.raw_valid()
     }
 
     open spec fn lengthable(&self, data: Seq<u8>) -> bool {
@@ -481,7 +497,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
 // length from the static length ("total_size") in the Marshal object.
 
 impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
-    ResizableUniformSizedElementSeqMarshalling<EltFormat, LenType>
+    ResizableUniformSizedElementSeqFormat<EltFormat, LenType>
 {
     pub open spec fn seq_parsable(&self, data: Seq<u8>) -> bool
     {
@@ -526,7 +542,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
 
 impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
     Marshal
-    for ResizableUniformSizedElementSeqMarshalling<EltFormat, LenType>
+    for ResizableUniformSizedElementSeqFormat<EltFormat, LenType>
 {
     type DV = Seq<EltFormat::DV>;
     type U = Vec<EltFormat::U>;

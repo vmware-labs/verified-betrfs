@@ -12,6 +12,7 @@ use crate::marshalling::Slice_v::*;
 use crate::marshalling::UniformSizedSeq_v::*;
 use crate::marshalling::ResizableUniformSizedSeq_v::*;
 use vstd::string::View;
+use crate::marshalling::KeyedMessageFormat_v::*;
 // use crate::marshalling::UniformSized_v::UniformSized;
 // use crate::marshalling::ResizableIntegerSeq_v::*;
 // use crate::marshalling::VariableSizedElementSeq_v::*;
@@ -115,12 +116,12 @@ exec fn test_seq_index(data: &Vec<u8>, end: usize) -> u32
 // }
 
 exec fn u32_resizable_seq_marshaller_factory()
-    -> (rusm: ResizableUniformSizedElementSeqMarshalling<IntFormat<u32>, u32>)
+    -> (rusm: ResizableUniformSizedElementSeqFormat<IntFormat<u32>, u32>)
     ensures rusm.valid(), rusm.total_size == 24, rusm.seq_valid()
 {
     let eltf: IntFormat<u32> = IntFormat::new();
     let lenf: IntFormat<u32> = IntFormat::new();
-    let rusm = ResizableUniformSizedElementSeqMarshalling::new(eltf, lenf, 24);
+    let rusm = ResizableUniformSizedElementSeqFormat::new(eltf, lenf, 24);
     rusm
 }
 
@@ -191,6 +192,13 @@ exec fn test_resizable_seq_marshalling_append() -> (outpr: (Vec<u8>, usize))
     (data, len)
 }
 
+exec fn test_keyed_message() -> Vec<u8>
+{
+    let key = vec![ 8, 9, 10 ];
+    let value = vec![ 2, 4, 6, 8, 244, 122, 11 ];
+    KeyedMessageFormat::construct(&key, &value)
+}
+
 } // verus!
   // Disturbingly this exec fn isn't verified!
 fn main() {
@@ -218,4 +226,7 @@ fn main() {
     print!("end: {:?} data {:?}\n", end, data);
     let v = test_resizable_seq_parse(&data, end);
     print!("v: {:?}\n", v);
+
+    let v = test_keyed_message();
+    print!("keyed_message: {:?}\n", v);
 }

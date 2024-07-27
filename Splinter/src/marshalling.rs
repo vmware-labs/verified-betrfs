@@ -11,6 +11,7 @@ pub mod SeqMarshalling_v;
 pub mod Slice_v;
 pub mod UniformSizedSeq_v;
 pub mod math_v;
+pub mod KeyedMessageFormat_v;
 
 // next steps:
 //
