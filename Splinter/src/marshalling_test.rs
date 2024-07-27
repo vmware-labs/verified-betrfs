@@ -197,6 +197,11 @@ exec fn test_keyed_message() -> Vec<u8>
     let key = vec![ 8, 9, 10 ];
     let value = vec![ 2, 4, 6, 8, 244, 122, 11 ];
     KeyedMessageFormat::construct(&key, &value)
+
+    // A better test would construct a VariableSizedSeq, allocate space for a keyed message within
+    // it, then have KeyedMessageFormat marshal the keyed message pair into that spot. The API
+    // as it stands here would entail copying the key,value pair into a KeyedMessageFormat-marshalled
+    // Vec<u8>, then copying that *again* into its correct spot in the VariableSizedSeq.
 }
 
 } // verus!
