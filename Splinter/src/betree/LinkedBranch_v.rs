@@ -610,9 +610,9 @@ impl LinkedBranch {
         let new_disk_view = self.disk_view
             .modify_disk(self.root, left_root)
             .modify_disk(right_root_addr, right_root);
-        let left_index = LinkedBranch{root: self.root, disk_view: new_disk_view};
-        let right_index = LinkedBranch{root: right_root_addr, disk_view: new_disk_view};
-        (left_index, right_index)
+        let left_leaf = LinkedBranch{root: self.root, disk_view: new_disk_view};
+        let right_leaf = LinkedBranch{root: right_root_addr, disk_view: new_disk_view};
+        (left_leaf, right_leaf)
     }
 
     pub open spec(checked) fn sub_index(self, from: int, to: int) -> Node
