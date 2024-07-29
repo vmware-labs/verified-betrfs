@@ -1,13 +1,13 @@
 // Copyright 2018-2023 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-/// This file defines the PivotBranch data structure. Under the `betree/` folder, all "Branch" data structures are
-/// just B+-trees. They are called "Branches" to distinguish them from the Be-tree data structures, and because
-/// Be-tree nodes can point to B+-trees (thus making B+-trees "branches" of a Be-tree).
-/// 
-/// A PivotBranch is a B+-tree defined in its most natural form, where the pivots are Keys, and Index nodes directly
-/// contain sequences of their children (i.e.: in a concrete implementation its one massive nested data structure, instead
-/// of using pointers). AKA it's a "functional" tree (immutable, defined).
+// This file defines the PivotBranch data structure. Under the `betree/` folder, all "Branch" data structures are
+// just B+-trees. They are called "Branches" to distinguish them from the Be-tree data structures, and because
+// Be-tree nodes can point to B+-trees (thus making B+-trees "branches" of a Be-tree).
+// 
+// A PivotBranch is a B+-tree defined in its most natural form, where the pivots are Keys, and Index nodes directly
+// contain sequences of their children (i.e.: in a concrete implementation its one massive nested data structure, instead
+// of using pointers). AKA it's a "functional" tree (immutable, defined).
 
 use builtin::*;
 
@@ -109,18 +109,24 @@ impl Node {
     /// - For index nodes, this is the set union of all pivot keys + keys contained
     ///   under all leaf nodes under this index node.
     pub open spec(checked) fn all_keys(self) -> Set<Key>
-        decreases self
+        decreases self, 1int,
     {
         match self {
             Node::Leaf{keys, msgs} => keys.to_set(),
             Node::Index{pivots, children} => {
-                let pivotKeys = pivots.to_set();
-                let indexKeys = Set::new(|key| 
-                    exists |i| 0 <= i < children.len() 
-                    && (#[trigger] children[i]).all_keys().contains(key));
-                pivotKeys + indexKeys
+                pivots.to_set() + self.children_keys()
             }
         }
+    }
+
+    pub open spec(checked) fn children_keys(self) -> Set<Key>
+        recommends self is Index
+        decreases self, 0int,
+        when self is Index
+    {
+        Set::new(|key|
+            exists |i| 0 <= i < self->children.len()
+                && (#[trigger] self->children[i]).all_keys().contains(key))
     }
 
     /// Returns true iff all keys under node child[i] are less than pivots[i] 
@@ -163,8 +169,6 @@ impl Node {
                 &&& pivots.len() == children.len() - 1
                 &&& Key::is_strictly_sorted(pivots)
                 &&& forall |i| 0 <= i < children.len() ==> (#[trigger] children[i]).wf()
-                &&& forall |i| 0 <= i < children.len() ==> (#[trigger] children[i].all_keys()).finite()
-                &&& forall |i| 0 <= i < children.len() ==> !(#[trigger] children[i].all_keys()).is_empty()
                 // For children[0:-1], all keys they contain should be < their upper pivot.
                 // This also gives us that children[i]'s pivots are < pivots[i] (if children are index nodes)
                 &&& forall |i| 0 <= i < children.len() - 1 ==> self.all_keys_below_bound(i)
@@ -279,19 +283,30 @@ impl Node {
     /// specified by `keys` and `msgs`.
     pub open spec(checked) fn append(self, keys: Seq<Key>, msgs: Seq<Message>, path: Path) -> Node
         recommends
-            self.wf(),
             path.valid(),
             path.node == self,
             keys.len() > 0,
             keys.len() == msgs.len(),
             Key::is_strictly_sorted(keys),
+            path.target().wf(), // TODO(x9du): remove. Comes from path.valid(), but not having this here causes recommendation not met
             path.target() is Leaf,
-            path.target().wf(), // comes from path.valid(), but not having this here causes recommendation not met
             Key::lt(path.target()->keys.last(), keys[0]),
             path.key == keys[0],
             path.path_equiv(keys.last()) // all new keys must route to the same location
     {
-        path.substitute(Node::Leaf{ keys: path.target()->keys + keys, msgs: path.target()->msgs + msgs })
+        path.substitute(path.target().append_leaf(keys, msgs))
+    }
+
+    pub open spec(checked) fn append_leaf(self, keys: Seq<Key>, msgs: Seq<Message>) -> Node
+        recommends
+            self.wf(),
+            self is Leaf,
+            keys.len() > 0,
+            keys.len() == msgs.len(),
+            Key::is_strictly_sorted(keys),
+            Key::lt(self->keys.last(), keys[0]),
+    {
+        Node::Leaf{ keys: self->keys + keys, msgs: self->msgs + msgs }
     }
 
     /// Returns two leaf nodes formed by splitting `self` into two Leaf nodes, where
@@ -407,6 +422,10 @@ impl Node {
     {
         path.substitute(path.target().split_child_of_index(split_arg))
     }
+}
+
+pub open spec(checked) fn invalid_node() -> Node {
+    Node::Leaf{keys: seq![], msgs: seq![]}
 }
 
 /// A `Path` describes a target node from a given starting node (using a key to target as well

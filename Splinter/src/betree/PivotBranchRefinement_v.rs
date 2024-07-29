@@ -8,6 +8,7 @@ use vstd::prelude::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 use crate::betree::Buffer_v::*;
+use crate::betree::Utils_v::*;
 use crate::betree::PivotBranch_v::*;
 
 verus! {
@@ -20,7 +21,7 @@ impl Node {
         recommends self.wf()
         decreases self
         // TODO(x9du): this when condition is kind of annoying to prove
-        // Usually //lemma_route_auto & assert(self.wf()) works
+        // Usually route_ensures & assert(self.wf()) works
         when self is Index ==> forall |key| 0 <= #[trigger] self.route(key) + 1 < self->children.len()
     {
         match self {
@@ -35,6 +36,37 @@ impl Node {
                 )}
             }
         }
+    }
+
+    pub open spec(checked) fn append_via_insert(self, keys: Seq<Key>, msgs: Seq<Message>, path: Path) -> Node
+        recommends
+            path.valid(),
+            path.node == self,
+            keys.len() > 0,
+            keys.len() == msgs.len(),
+            Key::is_strictly_sorted(keys),
+            path.target() is Leaf,
+            path.target().wf(), // comes from path.valid(), but not having this here causes recommendation not met
+            Key::lt(path.target()->keys.last(), keys[0]),
+            path.key == keys[0],
+            path.path_equiv(keys.last()),
+    {
+        keys.zip_with(msgs).fold_left_alt(self, |node: Node, pair: (Key, Message)|
+            node.insert(pair.0, pair.1, Path{node: node, key: pair.0, depth: path.depth}))
+    }
+}
+
+pub proof fn lemma_route_to_end(node: Node, key: Key)
+    requires
+        node.wf(),
+        Key::lte(node.get_keys_or_pivots().last(), key),
+    ensures
+        node.route(key) == node.get_keys_or_pivots().len() - 1,
+{
+    let r = node.route(key);
+    let s = node.get_keys_or_pivots();
+    if r < s.len() - 1 {
+        assert(Key::lt(key, s.last()));
     }
 }
 
@@ -56,60 +88,6 @@ pub proof fn lemma_key_lte_implies_route_lte(node: Node, key1: Key, key2: Key)
     }
 }
 
-pub proof fn lemma_index_all_keys(node: Node, key: Key)
-    requires
-        node is Index,
-        node.all_keys().contains(key)
-    ensures
-        node->pivots.contains(key)
-        || (exists |i| 0 <= i < node->children.len()
-            && (#[trigger] node->children[i]).all_keys().contains(key))
-{}
-
-// TODO(x9du): lemma_all_keys_finite() remove finite from wf
-
-pub open spec(checked) fn union_seq_of_sets<A>(sets: Seq<Set<A>>) -> Set<A>
-{
-    sets.fold_left(Set::empty(), |u: Set<A>, s| u.union(s))
-}
-
-pub proof fn lemma_union_seq_of_sets_finite<A>(sets: Seq<Set<A>>)
-    requires forall |i| 0 <= i < sets.len() ==> (#[trigger] sets[i]).finite()
-    ensures union_seq_of_sets(sets).finite()
-    decreases sets.len()
-{
-    if sets.len() > 0 {
-        lemma_union_seq_of_sets_finite(sets.drop_last());
-    }
-}
-
-pub proof fn lemma_set_subset_of_union_seq_of_sets<A>(sets: Seq<Set<A>>, a: A)
-    requires exists |i| 0 <= i < sets.len() && (#[trigger] sets[i]).contains(a)
-    ensures union_seq_of_sets(sets).contains(a)
-    decreases sets.len()
-{
-    assert(sets.len() > 0);
-    assert(union_seq_of_sets(sets) == union_seq_of_sets(sets.drop_last()).union(sets.last()));
-    let i = choose |i| 0 <= i < sets.len() && (#[trigger] sets[i]).contains(a);
-    if i < sets.len() - 1 {
-        assert(0 <= i < sets.drop_last().len() && (#[trigger] sets.drop_last()[i]).contains(a));
-        lemma_set_subset_of_union_seq_of_sets(sets.drop_last(), a);
-    }
-}
-
-pub proof fn lemma_union_seq_of_sets_contains<A>(sets: Seq<Set<A>>, a: A)
-    requires union_seq_of_sets(sets).contains(a)
-    ensures exists |i| 0 <= i < sets.len() && (#[trigger] sets[i]).contains(a)
-    decreases sets.len()
-{
-    assert(sets.len() > 0);
-    assert(union_seq_of_sets(sets) == union_seq_of_sets(sets.drop_last()).union(sets.last()));
-    if sets.last().contains(a) {
-    } else {
-        lemma_union_seq_of_sets_contains(sets.drop_last(), a);
-    }
-}
-
 pub open spec(checked) fn map_all_keys(children: Seq<Node>) -> Seq<Set<Key>>
 {
     children.map(|i, child: Node| child.all_keys())
@@ -127,16 +105,13 @@ pub proof fn lemma_union_all_keys_finite(children: Seq<Node>)
     lemma_union_seq_of_sets_finite(map_all_keys(children));
 }
 
-pub proof fn lemma_children_all_keys_equivalence(children: Seq<Node>)
-    ensures
-        Set::new(|key| exists |i| 0 <= i < children.len()
-            && (#[trigger] children[i]).all_keys().contains(key)) ==
-        union_all_keys(children)
+pub proof fn lemma_children_keys_equivalence(node: Node)
+    requires node is Index
+    ensures node.children_keys() == union_all_keys(node->children)
 {
-    let children_all_keys = Set::new(|key| exists |i| 0 <= i < children.len()
-        && (#[trigger] children[i]).all_keys().contains(key));
+    let children = node->children;
 
-    assert forall |key| #[trigger] children_all_keys.contains(key)
+    assert forall |key| #[trigger] node.children_keys().contains(key)
     implies union_all_keys(children).contains(key) by
     {
         let i = choose |i| 0 <= i < children.len()
@@ -146,46 +121,43 @@ pub proof fn lemma_children_all_keys_equivalence(children: Seq<Node>)
     }
 
     assert forall |key| union_all_keys(children).contains(key)
-    implies #[trigger] children_all_keys.contains(key) by
+    implies #[trigger] node.children_keys().contains(key) by
     {
         lemma_union_seq_of_sets_contains(map_all_keys(children), key);
     }
 
-    assert(children_all_keys == union_all_keys(children));
+    assert(node.children_keys() == union_all_keys(children));
 }
 
-pub proof fn lemma_grow_preserves_wf(node: Node)
+pub proof fn lemma_wf_implies_all_keys_finite_and_not_empty(node: Node)
     requires
         node.wf(),
-        node.all_keys().len() > 0
-    ensures node.grow().wf()
+    ensures
+        node.all_keys().finite(),
+        !node.all_keys().is_empty(),
+    decreases node,
 {
-    let post = node.grow();
-    assert(post is Index);
-    assert(post->children.len() == 1);
-    assert(post->children[0] == node);
-    if node is Index {
-        let pivotKeys = node->pivots.to_set();
-        let indexKeys = Set::new(|key| 
-            exists |i| 0 <= i < node->children.len() 
-            && (#[trigger] node->children[i]).all_keys().contains(key));
-        let children_all_keys = union_all_keys(node->children);
-        assert(pivotKeys.finite());
-        lemma_children_all_keys_equivalence(node->children);
-        assert(indexKeys == children_all_keys);
+    if node is Leaf {
+        assert(node.all_keys().contains(node->keys[0]));
+    } else {
+        let pivot_keys = node->pivots.to_set();
+        assert(pivot_keys.finite());
+        lemma_children_keys_equivalence(node);
+        assert forall |i| 0 <= i < node->children.len()
+        implies (#[trigger] node->children[i].all_keys()).finite() by {
+            lemma_wf_implies_all_keys_finite_and_not_empty(node->children[i]);
+        }
         lemma_union_all_keys_finite(node->children);
-        assert(indexKeys.finite());
-        assert(node.all_keys() == pivotKeys + indexKeys);
+        assert(node.children_keys().finite());
+        assert(node.all_keys() == pivot_keys + node.children_keys());
         assert(node.all_keys().finite());
-    }
-}
 
-pub proof fn lemma_grow_preserves_all_keys(node: Node)
-    requires node.wf()
-    ensures node.grow().all_keys() == node.all_keys()
-{
-    let post = node.grow();
-    assert(post.all_keys() == post->children[0].all_keys());
+        assert(node->children.len() > 0);
+        lemma_wf_implies_all_keys_finite_and_not_empty(node->children[0]);
+        assert(!node->children[0].all_keys().is_empty());
+        let key = choose |key| node->children[0].all_keys().contains(key);
+        assert(node.all_keys().contains(key));
+    }
 }
 
 // Proves that insert() on a leaf node refines (as well as other useful and
@@ -405,9 +377,9 @@ pub proof fn lemma_split_index_interpretation(old_index: Node, split_arg: SplitA
     let (left_index, right_index) = old_index.split_index(split_arg);
     lemma_split_node_preserves_wf(old_index, split_arg);
     assert(left_index.wf() && right_index.wf());
-    let union_map = Key::map_pivoted_union(left_index.i().map, split_arg.get_pivot(), right_index.i().map);
-    let pivot_index = split_arg->pivot_index;
     let pivot = split_arg.get_pivot();
+    let union_map = Key::map_pivoted_union(left_index.i().map, pivot, right_index.i().map);
+    let pivot_index = split_arg->pivot_index;
 
     assert forall |key|
     (#[trigger] old_index.i().map.dom().contains(key) ==>
@@ -437,10 +409,13 @@ pub proof fn lemma_split_index_interpretation(old_index: Node, split_arg: SplitA
             assert(old_index->children[r+1].i().map.contains_key(key));
             if r+1 <= pivot_index {
                 assert(left_index.i().map.contains_key(key));
+                assert(Key::lt(key, pivot));
             } else {
                 assert(right_index.i().map.contains_key(key));
+                assert(Key::lte(pivot, key));
             }
-            assert(union_map.dom().contains(key) && old_index.i().map[key] == union_map[key]);
+            assert(union_map.dom().contains(key));
+            assert(old_index.i().map[key] == union_map[key]);
         }
 
         if union_map.dom().contains(key) {
@@ -560,7 +535,7 @@ pub proof fn lemma_split_index_all_keys(old_index: Node, split_arg: SplitArg)
     assert forall |key| left_index.all_keys().contains(key)
     implies #[trigger] Key::lt(key, pivot) && old_index.all_keys().contains(key) by {
         if (!left_index->pivots.contains(key)) {
-            lemma_index_all_keys(left_index, key);
+            assert(left_index.children_keys().contains(key));
             let i = choose |i| 0 <= i < left_index->children.len()
                 && (#[trigger] left_index->children[i]).all_keys().contains(key);
             assert(left_index->children[i] == old_index->children[i]);
@@ -604,7 +579,7 @@ pub proof fn lemma_split_index_all_keys(old_index: Node, split_arg: SplitArg)
         } else if (right_index->pivots.contains(key)) {
             assert(Key::lt(pivot, key));
         } else {
-            lemma_index_all_keys(right_index, key);
+            assert(right_index.children_keys().contains(key));
             let i = choose |i| 0 <= i < right_index->children.len()
                 && (#[trigger] right_index->children[i]).all_keys().contains(key);
             assert(right_index->children[i] == old_index->children[i + pivot_index + 1]);
@@ -909,12 +884,10 @@ pub proof fn insert_refines(pre: Node, lbl: InsertLabel)
 pub proof fn grow_refines(pre: Node, lbl: InternalLabel)
     requires
         pre.wf(),
-        pre.all_keys().len() > 0
     ensures
         pre.grow().wf(),
         pre.grow().i() == pre.i()
 {
-    lemma_grow_preserves_wf(pre);
     let post = pre.grow();
     assert(post.wf());
     assert(post.i().map =~~= pre.i().map);
@@ -947,80 +920,56 @@ pub proof fn lemma_append_keys_are_path_equiv(keys: Seq<Key>, path: Path)
     }
 }
 
-pub proof fn lemma_to_set_distributes_over_plus<A>(a: Seq<A>, b: Seq<A>)
-    ensures
-        (a + b).to_set() == a.to_set().union(b.to_set())
-{
-    assert forall |x| a.to_set().union(b.to_set()).contains(x)
-    implies #[trigger] (a + b).to_set().contains(x) by {
-        assert(a.to_set().contains(x) || b.to_set().contains(x));
-        if (a.to_set().contains(x)) {
-            assert(a.contains(x));
-            let i = a.index_of(x);
-            assert((a + b)[i] == x);
-        } else {
-            assert(b.to_set().contains(x));
-            assert(b.contains(x));
-            let i = b.index_of(x);
-            assert((a + b)[a.len() + i] == x);
-        }
-        assert((a + b).contains(x));
-    }
-    assert((a + b).to_set() == a.to_set().union(b.to_set()));
-}
-
-pub proof fn lemma_append_appends_to_all_keys(pre: Node, new_keys: Seq<Key>, new_msgs: Seq<Message>, path: Path)
+pub proof fn lemma_append_via_insert_path(path: Path, new_keys: Seq<Key>, new_msgs: Seq<Message>)
     requires
-        pre.wf(),
         path.valid(),
-        path.node == pre,
-        new_keys.len() > 0,
+        new_keys.len() > 1,
         new_keys.len() == new_msgs.len(),
         Key::is_strictly_sorted(new_keys),
         path.target() is Leaf,
         Key::lt(path.target()->keys.last(), new_keys[0]),
         path.key == new_keys[0],
-        path.path_equiv(new_keys.last())
-    ensures
-        pre.append(new_keys, new_msgs, path).all_keys() == pre.all_keys().union(new_keys.to_set())
-    decreases pre,
+        path.path_equiv(new_keys.last()),
+    ensures ({
+            let path1 = Path{node: path.node.insert(new_keys[0], new_msgs[0], path), key: new_keys[1], depth: path.depth};
+            &&& path1.valid()
+            &&& path1.target() == path.target().insert_leaf(new_keys[0], new_msgs[0])
+            &&& path1.path_equiv(new_keys.last())
+        })
+    decreases path.depth,
 {
-    lemma_path_target_is_wf(path);
-    assert(path.target().wf());
-    assert(path.target()->keys.len() > 0);
-    let post = pre.append(new_keys, new_msgs, path);
+    let post = path.node.insert(new_keys[0], new_msgs[0], path);
+    let path1 = Path{node: post, key: new_keys[1], depth: path.depth};
+    lemma_insert_preserves_wf(path.node, new_keys[0], new_msgs[0], path);
+    lemma_append_keys_are_path_equiv(new_keys, path);
+    assert(path.path_equiv(new_keys[1]));
 
-    match pre {
-        Node::Leaf{keys, msgs} => {
-            lemma_to_set_distributes_over_plus(keys, new_keys);
-        },
-        Node::Index{pivots, children} => {
-            let r = pre.route(new_keys[0]);
-            lemma_append_keys_are_path_equiv(new_keys, path);
-            // assert(0 <= r + 1 < children.len());
-            assert(children.len() == post->children.len());
+    if path.depth == 0 {
+        lemma_route_to_end(path.target(), new_keys[0]);
+        assert(path1.node->keys.last() == new_keys[0]);
 
-            // Recursively call the lemma on the changed child: the child we inserted into.
-            lemma_append_appends_to_all_keys(children[r+1], new_keys, new_msgs, path.subpath());
-            // This implies that the changed child's all_keys is the same as before except with the
-            // new key inserted.
-            assert(post->children[r+1].all_keys() == children[r+1].all_keys().union(new_keys.to_set()));
-
-            // Now let's just assert that each of the post state's children all_keys
-            // are the same as the pre (besides the changed child).
-            assert(post->children.len() == children.len());
-            assert(forall |i| 0 <= i < post->children.len() && i != (r+1)
-                ==> post->children[i] =~~= #[trigger] children[i]);
-
-            // GOAL
-            assert(post.all_keys() =~~= pre.all_keys().union(new_keys.to_set()));
-        },
+        let r1_key1 = path1.node.route(new_keys[1]);
+        assert(r1_key1 == path1.node->keys.len() - 1) by {
+            assert(Key::lt(new_keys[0], new_keys[1]));
+            if r1_key1 < path1.node->keys.len() - 1 {
+                assert(Key::lt(new_keys[1], path1.node->keys.last()));
+            }
+        }
+        let r1_key2 = path1.node.route(new_keys.last());
+        assert(r1_key2 == path1.node->keys.len() - 1) by {
+            assert(Key::lt(new_keys[0], new_keys.last()));
+            if r1_key2 < path1.node->keys.len() - 1 {
+                assert(Key::lt(new_keys.last(), path1.node->keys.last()));
+            }
+        }
+        assert(r1_key1 == r1_key2);
+    } else {
+        lemma_append_via_insert_path(path.subpath(), new_keys, new_msgs);
     }
 }
 
-pub proof fn lemma_append_preserves_wf(pre: Node, keys: Seq<Key>, msgs: Seq<Message>, path: Path)
+pub proof fn lemma_append_via_insert_preserves_wf(pre: Node, keys: Seq<Key>, msgs: Seq<Message>, path: Path)
     requires
-        pre.wf(),
         path.valid(),
         path.node == pre,
         keys.len() > 0,
@@ -1029,83 +978,224 @@ pub proof fn lemma_append_preserves_wf(pre: Node, keys: Seq<Key>, msgs: Seq<Mess
         path.target() is Leaf,
         Key::lt(path.target()->keys.last(), keys[0]),
         path.key == keys[0],
-        path.path_equiv(keys.last())
+        path.path_equiv(keys.last()),
     ensures
-        pre.append(keys, msgs, path).wf(),
-    decreases pre
+        pre.append_via_insert(keys, msgs, path).wf(),
+    decreases keys.len(),
+{
+    let post = pre.append_via_insert(keys, msgs, path);
+    let insert0 = pre.insert(keys[0], msgs[0], path);
+    let keys_msgs = keys.zip_with(msgs);
+    if keys_msgs.len() == 1 {
+        reveal_with_fuel(vstd::prelude::Seq::fold_left_alt, 2);
+        assert(post == insert0);
+        lemma_insert_preserves_wf(pre, keys[0], msgs[0], path);
+    } else {
+        let path1 = Path{node: insert0, key: keys[1], depth: path.depth};
+        lemma_append_via_insert_path(path, keys, msgs);
+        lemma_path_target_is_wf(path);
+        lemma_route_to_end(path.target(), keys[0]);
+        assert(path1.target()->keys.last() == keys[0]);
+        assert(keys.skip(1)[0] == keys[1]);
+        assert(Key::lt(keys[0], keys[1]));
+        lemma_append_via_insert_preserves_wf(insert0, keys.skip(1), msgs.skip(1), path1);
+        assert(keys_msgs.skip(1) == keys.skip(1).zip_with(msgs.skip(1)));
+        assert(post == insert0.append_via_insert(keys.skip(1), msgs.skip(1), path1));
+    }
+}
+
+pub proof fn lemma_append_incremental(new_keys: Seq<Key>, new_msgs: Seq<Message>, path: Path, path1: Path)
+    requires
+        path.valid(),
+        new_keys.len() > 1,
+        new_keys.len() == new_msgs.len(),
+        Key::is_strictly_sorted(new_keys),
+        path.target() is Leaf,
+        Key::lt(path.target()->keys.last(), new_keys[0]),
+        path.key == new_keys[0],
+        path.path_equiv(new_keys.last()),
+        path1 == (Path{node: path.node.append(new_keys.take(1), new_msgs.take(1), path),
+            key: new_keys[1], depth: path.depth}),
+    ensures
+        path.node.append(new_keys, new_msgs, path)
+            == path1.node.append(new_keys.skip(1), new_msgs.skip(1), path1),
+    decreases path.depth,
+{
+    let post = path.node.append(new_keys, new_msgs, path);
+    let post1 = path1.node.append(new_keys.skip(1), new_msgs.skip(1), path1);
+    if path.depth == 0 {
+        assert(path.node->keys + new_keys == path.node->keys + new_keys.take(1) + new_keys.skip(1));
+        assert(path.node->msgs + new_msgs == path.node->msgs + new_msgs.take(1) + new_msgs.skip(1));
+    } else {
+        let r1 = path1.node.route(new_keys[1]);
+        let r = path.node.route(new_keys[0]);
+        lemma_append_keys_are_path_equiv(new_keys, path);
+        assert(path.path_equiv(new_keys[1]));
+        assert(r == path.node.route(new_keys[1]));
+        assert(r == r1);
+        assert(path1.subpath().node == path1.node->children[r+1]);
+        assert(path1.subpath().node == path.node->children[r+1].append(new_keys.take(1), new_msgs.take(1), path.subpath()));
+        lemma_append_incremental(new_keys, new_msgs, path.subpath(), path1.subpath());
+        // changed children equal
+        assert(post->children[r+1]
+            == path.subpath().node.append(new_keys, new_msgs, path.subpath()));
+        assert(post1->children[r+1]
+            == path1.subpath().node.append(new_keys.skip(1), new_msgs.skip(1), path1.subpath()));
+        
+        // unchanged children equal
+        assert(post->children.len() == path.node->children.len() == post1->children.len());
+        assert(forall |i| 0 <= i < post->children.len() && i != r+1
+            ==> #[trigger] post->children[i] == path.node->children[i] && post1->children[i] == path.node->children[i]);
+
+        assert(post->children =~~= post1->children);
+    }
+}
+
+pub proof fn lemma_append_via_insert_equiv(node: Node, new_keys: Seq<Key>, new_msgs: Seq<Message>, path: Path)
+    requires
+        path.valid(),
+        path.node == node,
+        new_keys.len() > 0,
+        new_keys.len() == new_msgs.len(),
+        Key::is_strictly_sorted(new_keys),
+        path.target() is Leaf,
+        Key::lt(path.target()->keys.last(), new_keys[0]),
+        path.key == new_keys[0],
+        path.path_equiv(new_keys.last()),
+    ensures
+        node.append(new_keys, new_msgs, path) == node.append_via_insert(new_keys, new_msgs, path),
+    decreases new_keys.len(),
 {
     lemma_path_target_is_wf(path);
-    assert(path.target().wf());
-    assert(path.target()->keys.len() > 0);
-    let post = pre.append(keys, msgs, path);
+    let post = node.append(new_keys, new_msgs, path);
+    let via_insert = node.append_via_insert(new_keys, new_msgs, path);
+    let keys_msgs = new_keys.zip_with(new_msgs);
+    let insert0 = node.insert(new_keys[0], new_msgs[0], path);
+    let r = path.target().route(new_keys[0]);
+    lemma_route_to_end(path.target(), new_keys[0]);
+    assert(r == path.target()->keys.len() - 1);
+    assert(path.target()->keys.insert(r+1, new_keys[0]) == path.target()->keys + new_keys.take(1));
+    assert(path.target()->msgs.insert(r+1, new_msgs[0]) == path.target()->msgs + new_msgs.take(1));
 
-    if pre is Leaf {
-        assert(post is Leaf);
-        Key::strictly_sorted_implies_sorted(pre->keys);
-        Key::strictly_sorted_implies_sorted(keys);
-        assert forall |i: int, j: int| 0 <= i < pre->keys.len() && 0 <= j < keys.len()
-        implies Key::lt(pre->keys[i], keys[j]) by {
-            assert(Key::lte(pre->keys[i], pre->keys.last()));
-            assert(Key::lte(keys[0], keys[j]));
-        }
+    if new_keys.len() == 1 {
+        reveal_with_fuel(vstd::prelude::Seq::fold_left_alt, 2);
+        assert(via_insert == insert0);
+        assert(new_keys.take(1) == new_keys);
+        assert(new_msgs.take(1) == new_msgs);
+        assert(insert0 == post);
     } else {
-        let pivots = pre->pivots;
-        let children = pre->children;
-        assert(post is Index); // For recommends
+        let path1 = Path{node: insert0, key: new_keys[1], depth: path.depth};
+        lemma_append_via_insert_path(path, new_keys, new_msgs);
+        assert(path1.valid());
+        assert(path1.target()->keys.last() == new_keys[0]);
+        assert(Key::lt(path1.target()->keys.last(), new_keys[1]));
 
-        let r = pre.route(path.key);
-        lemma_append_keys_are_path_equiv(keys, path);
-        assert(0 <= r+1 < children.len()); // For recommends
+        lemma_append_via_insert_equiv(insert0, new_keys.skip(1), new_msgs.skip(1), path1);
 
-        lemma_append_preserves_wf(children[r+1], keys, msgs, path.subpath());
+        assert(insert0 == node.append(new_keys.take(1), new_msgs.take(1), path));
+        lemma_append_incremental(new_keys, new_msgs, path, path1);
+        assert(post == insert0.append(new_keys.skip(1), new_msgs.skip(1), path1));
 
-        // For recommends
-        assert(pivots.len() == post->pivots.len());
-        assert(children.len() == post->children.len());
+        assert(keys_msgs.skip(1) == new_keys.skip(1).zip_with(new_msgs.skip(1)));
+        assert(via_insert == insert0.append_via_insert(new_keys.skip(1), new_msgs.skip(1), path1));
 
-        lemma_append_appends_to_all_keys(children[r+1], keys, msgs, path.subpath());
+        assert(post == via_insert);
+    }
+}
 
-        // Subgoal 1
-        assert(!post->children[r+1].all_keys().is_empty()) by {
-            assert(post->children[r+1].all_keys().contains(keys[0]));
+pub proof fn lemma_append_via_insert_refines(pre: Node, keys: Seq<Key>, msgs: Seq<Message>, path: Path)
+    requires
+        path.valid(),
+        path.node == pre,
+        keys.len() > 0,
+        keys.len() == msgs.len(),
+        Key::is_strictly_sorted(keys),
+        path.target() is Leaf,
+        Key::lt(path.target()->keys.last(), keys[0]),
+        path.key == keys[0],
+        path.path_equiv(keys.last()),
+    ensures
+        pre.append_via_insert(keys, msgs, path).wf(),
+        pre.append_via_insert(keys, msgs, path).i() == (
+            Buffer{map: pre.i().map.union_prefer_right(Map::new(
+                |key| keys.contains(key),
+                // TODO(x9du): use Key::largest_lte instead?
+                |key| msgs[(Node::Leaf{ keys: keys, msgs: msgs }).route(key)]))}),
+    decreases keys.len(),
+{
+    lemma_append_via_insert_preserves_wf(pre, keys, msgs, path);
+
+    let keys_msgs = keys.zip_with(msgs);
+    let post = pre.append_via_insert(keys, msgs, path);
+    let append_leaf = Node::Leaf{ keys: keys, msgs: msgs };
+    let append_map = Map::new(
+        |key| keys.contains(key),
+        |key| msgs[append_leaf.route(key)]);
+    let i_then_append = Buffer{map: pre.i().map.union_prefer_right(append_map)};
+    let insert0 = pre.insert(keys[0], msgs[0], path);
+    insert_refines(pre, InsertLabel{key: keys[0], msg: msgs[0], path: path});
+    assert(insert0.i() == pre.i().insert(keys[0], msgs[0]));
+    if keys_msgs.len() == 1 {
+        reveal_with_fuel(vstd::prelude::Seq::fold_left_alt, 2);
+        assert(post == insert0);
+        assert(append_map =~~= map![keys[0] => msgs[0]]);
+        assert(i_then_append =~~= pre.i().insert(keys[0], msgs[0]));
+        assert(post.i() == i_then_append);
+    } else {
+        let path1 = Path{node: insert0, key: keys[1], depth: path.depth};
+        lemma_append_via_insert_path(path, keys, msgs);
+        lemma_path_target_is_wf(path);
+        lemma_route_to_end(path.target(), keys[0]);
+        assert(path1.target()->keys.last() == keys[0]);
+        assert(keys.skip(1)[0] == keys[1]);
+        assert(Key::lt(keys[0], keys[1]));
+        lemma_append_via_insert_refines(insert0, keys.skip(1), msgs.skip(1), path1);
+        assert(keys_msgs.skip(1) == keys.skip(1).zip_with(msgs.skip(1)));
+        assert(post == insert0.append_via_insert(keys.skip(1), msgs.skip(1), path1));
+        let append_map1 = Map::new(
+            |key| keys.skip(1).contains(key),
+            |key| msgs.skip(1)[(Node::Leaf{ keys: keys.skip(1), msgs: msgs.skip(1) }).route(key)]);
+        assert(post.i().map == pre.i().insert(keys[0], msgs[0]).map.union_prefer_right(append_map1));
+
+        assert forall |key| #[trigger] post.i().map.contains_key(key)
+        implies i_then_append.map.contains_key(key) by {
+            if !pre.i().map.contains_key(key) {
+                assert(append_map.contains_key(key));
+            }
         }
 
-        // Subgoal 2, needed for asserting that unchanged keys in children[r+1].all_keys() still satisfy bounds
-        assert(post->children[r+1].all_keys() =~~= children[r+1].all_keys().union(keys.to_set()));
-
-        // Subgoal 3: the only changed child, r+1, satisfies all keys bounds
-
-        if (r+1 < children.len() - 1) {
-            assert(pre.all_keys_below_bound(r+1));
-            assert(forall |key| keys.contains(key) ==> Key::lt(key, pivots[r+1]));
-            assert(post.all_keys_below_bound(r+1));
+        assert forall |key| i_then_append.map.contains_key(key)
+        implies #[trigger] post.i().map.contains_key(key) by {
+            if !pre.i().map.contains_key(key) {
+                assert(keys.contains(key));
+                let i = keys.index_of(key);
+                if i > 0 {
+                    assert(keys.skip(1)[i - 1] == key);
+                }
+            }
         }
 
-        if (0 <= r) {
-            assert(pre.all_keys_above_bound(r+1));
-            assert(forall |key| #[trigger] keys.contains(key) ==> Key::lte(pivots[r], key));
-            assert(post.all_keys_above_bound(r+1));
+        assert forall |key| #[trigger] post.i().map.contains_key(key)
+        implies post.i().map[key] == i_then_append.map[key] by {
+            Key::strictly_sorted_implies_unique(keys);
+            if keys.contains(key) {
+                let i = keys.index_of(key);
+                assert(post.i().map[key] == msgs[i]) by {
+                    if i > 0 {
+                        assert(keys.skip(1)[i-1] == key);
+                        assert(msgs.skip(1)[i-1] == msgs[i]);
+                    }
+                }
+                assert(i_then_append.map[key] == msgs[i]);
+            }
         }
 
-        // Subgoal 4: the unchanged children still satisfy all keys bounds
-
-        assert forall |i| 0 <= i < post->children.len() - 1 && i != r+1
-        implies post.all_keys_below_bound(i) by
-        {
-            assert(pre.all_keys_below_bound(i));
-        }
-
-        assert forall |i| 0 < i < post->children.len() && i != r+1
-        implies post.all_keys_above_bound(i) by
-        {
-            assert(pre.all_keys_above_bound(i));
-        }
+        assert(post.i().map =~~= i_then_append.map);
     }
 }
 
 pub proof fn append_refines(pre: Node, lbl: AppendLabel)
     requires
-        pre.wf(),
         lbl.path.valid(),
         lbl.path.node == pre,
         lbl.keys.len() > 0,
@@ -1114,115 +1204,16 @@ pub proof fn append_refines(pre: Node, lbl: AppendLabel)
         lbl.path.target() is Leaf,
         Key::lt(lbl.path.target()->keys.last(), lbl.keys[0]),
         lbl.path.key == lbl.keys[0],
-        lbl.path.path_equiv(lbl.keys.last())
+        lbl.path.path_equiv(lbl.keys.last()),
     ensures
         pre.append(lbl.keys, lbl.msgs, lbl.path).wf(),
         pre.append(lbl.keys, lbl.msgs, lbl.path).i() == (
             Buffer{map: pre.i().map.union_prefer_right(Map::new(
                 |key| lbl.keys.contains(key),
                 |key| lbl.msgs[(Node::Leaf{ keys: lbl.keys, msgs: lbl.msgs }).route(key)]))}),
-    decreases
-        pre,
 {
-    lemma_append_keys_are_path_equiv(lbl.keys, lbl.path);
-    lemma_append_preserves_wf(pre, lbl.keys, lbl.msgs, lbl.path);
-
-    lemma_path_target_is_wf(lbl.path);
-    assert(lbl.path.target().wf());
-    assert(lbl.path.target()->keys.len() > 0);
-
-    let post = pre.append(lbl.keys, lbl.msgs, lbl.path);
-    assert(post.wf());
-    let append_leaf = Node::Leaf{ keys: lbl.keys, msgs: lbl.msgs };
-    let append_map = Map::new(
-        |key| lbl.keys.contains(key),
-        |key| lbl.msgs[append_leaf.route(key)]);
-    let pre_i_then_append = Buffer{map: pre.i().map.union_prefer_right(append_map)};
-
-    match pre {
-        Node::Leaf{keys, msgs} => {
-            assert(pre == lbl.path.target());
-            assert(lbl.path.depth == 0);
-            let post_target = Node::Leaf{ keys: keys + lbl.keys, msgs: msgs + lbl.msgs };
-            assert(post == lbl.path.substitute(post_target));
-            assert(post == post_target);
-
-            lemma_to_set_distributes_over_plus(keys, lbl.keys);
-            // GOAL 1
-            assert(post.i().map.dom() =~~= pre_i_then_append.map.dom());
-
-            // GOAL 2
-            assert forall |k| post.i().map.contains_key(k)
-            implies #[trigger] post.i().map[k] == #[trigger] pre_i_then_append.map[k] by {
-                Key::strictly_sorted_implies_unique(post_target->keys);
-
-                if (keys.contains(k)) {
-                    let i = keys.index_of(k);
-                    assert(post_target->keys[i] == k);
-                    // Proof by contradiction
-                    if (lbl.keys.contains(k)) {
-                        let j = lbl.keys.index_of(k);
-                        assert(post_target->keys[keys.len() + j] == k);
-                        assert(i < keys.len() + j);
-                        assert(Key::lt(post_target->keys[i], post_target->keys[keys.len() + j]));
-                    }
-                    assert(!lbl.keys.contains(k));
-                    assert(!append_map.contains_key(k));
-                    assert(pre.i().map.contains_key(k));
-
-                    assert(post_target->keys[pre.route(k)] == k);
-                    assert(post_target->keys[post_target.route(k)] == k);
-                    assert(pre.route(k) == post_target.route(k));
-                } else {
-                    assert(lbl.keys.contains(k));
-                    assert(append_map.contains_key(k));
-                    assert(post_target->keys.contains(k));
-
-                    assert(post_target->keys[post_target.route(k)] == k);
-                    assert(post_target->keys[keys.len() + append_leaf.route(k)] == k);
-                    assert(post_target.route(k) == keys.len() + append_leaf.route(k));
-                }
-            }
-            
-            assert(post.i().map =~~= pre_i_then_append.map);
-            assert(post.i() =~~= pre_i_then_append);
-        },
-        Node::Index{pivots, children} => {
-            let r = pre.route(lbl.keys[0]);
-
-            // Suppress recommends
-            assert(0 <= r + 1 < children.len());
-            assert(post.wf());
-            assert(post->children.len() == children.len()); 
-            assert(forall |i| 0 <= i < post->children.len() ==> (#[trigger] post->children[i]).wf());
-            assert(forall |i| 0 <= i < children.len() ==> (#[trigger] children[i]).wf());
-
-            // Prove that the changed child still satisfies the append_refines.
-            let child_label = AppendLabel{ keys: lbl.keys, msgs: lbl.msgs, path: lbl.path.subpath() };
-            append_refines(children[r+1], child_label);
-
-            // GOAL 1
-            assert(post.i().map.dom() =~~= pre_i_then_append.map.dom());
-
-            // GOAL 2
-            assert(forall |k| post.i().map.contains_key(k) ==>
-                (#[trigger] post.i().map[k]) =~~= (#[trigger] pre_i_then_append.map[k]));
-            assert(post.i().map =~~= pre_i_then_append.map);
-
-            // OVERALL GOAL
-            assert(post.i() =~~= pre_i_then_append);
-        },
-    }
-}
-
-pub proof fn lemma_subset_finite<A>(a: Set<A>, b: Set<A>)
-    requires
-        a.finite(),
-        b <= a,
-    ensures
-        b.finite(),
-{
-    assert(b == a.intersect(b));
+    lemma_append_via_insert_equiv(pre, lbl.keys, lbl.msgs, lbl.path);
+    lemma_append_via_insert_refines(pre, lbl.keys, lbl.msgs, lbl.path);
 }
 
 pub proof fn lemma_split_child_of_index_preserves_wf(pre: Node, split_arg: SplitArg)
@@ -1295,6 +1286,7 @@ ensures
                 assert(split_arg is SplitIndex);
                 assert(children[r+1] is Index);
                 let pivot_index = split_arg->pivot_index;
+                lemma_wf_implies_all_keys_finite_and_not_empty(children[r+1]->children[pivot_index]);
                 let key = children[r+1]->children[pivot_index].all_keys().choose();
                 assert(Key::lt(key, pivot)) by {
                     assert(children[r+1].all_keys_below_bound(pivot_index));
@@ -1393,37 +1385,6 @@ ensures
     assert(right_node == post->children[r+2]);
     lemma_split_node_all_keys(children[r+1], split_arg);
 
-    // Goal 2
-    lemma_subset_finite(children[r+1].all_keys(), post->children[r+1].all_keys());
-    lemma_subset_finite(children[r+1].all_keys(), post->children[r+2].all_keys());
-
-    // Goal 3
-    if (children[r+1] is Leaf) {
-        assert(post->children[r+1] is Leaf);
-        assert(post->children[r+2] is Leaf);
-        assert(!post->children[r+1].all_keys().is_empty()) by {
-            assert(post->children[r+1]->keys.len() > 0);
-            assert(post->children[r+1]->keys.to_set().contains(post->children[r+1]->keys[0]));
-        }
-        assert(!post->children[r+2].all_keys().is_empty()) by {
-            assert(post->children[r+2]->keys.len() > 0);
-            assert(post->children[r+2]->keys.to_set().contains(post->children[r+2]->keys[0]));
-        }
-    } else {
-        assert(post->children[r+1] is Index);
-        assert(post->children[r+2] is Index);
-        assert(split_arg is SplitIndex);
-        let pivot_index = split_arg->pivot_index;
-        assert(!post->children[r+1].all_keys().is_empty()) by {
-            assert(post->children[r+1]->children[0] == children[r+1]->children[0]);
-            assert(post->children[r+1].all_keys().contains(children[r+1]->children[0].all_keys().choose()));
-        }
-        assert(!post->children[r+2].all_keys().is_empty()) by {
-            assert(post->children[r+2]->children[0] == children[r+1]->children[pivot_index + 1]);
-            assert(post->children[r+2].all_keys().contains(children[r+1]->children[pivot_index + 1].all_keys().choose()));
-        }
-    }
-
     assert(post.all_keys_below_bound(r+1));
     assert(post.all_keys_above_bound(r+2));
 
@@ -1447,9 +1408,9 @@ ensures
         assert(post.all_keys_above_bound(r+1));
     }
 
-    // Goal 4
+    // Goal 2
     assert(forall |i| 0 <= i < post->children.len() - 1 ==> post.all_keys_below_bound(i));
-    // Goal 5
+    // Goal 3
     assert(forall |i| 0 < i < post->children.len() ==> post.all_keys_above_bound(i));
 }
 
