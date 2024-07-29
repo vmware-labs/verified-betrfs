@@ -497,7 +497,6 @@ impl LinkedBranch {
         }
     }
 
-    // TODO(x9du): do we need 3 functions for this?
     pub open spec(checked) fn children_reachable_addrs_using_ranking(self, ranking: Ranking) -> Seq<Set<Address>>
         recommends
             self.wf(),

@@ -318,14 +318,12 @@ pub proof fn insert_refines_internal(pre: LinkedBranch, ranking: Ranking, post_r
     let post_i = post.i_internal(post_ranking);
     let path_i = path.i_internal(ranking);
     lemma_path_i_valid(path, ranking);
-    lemma_path_i_target(path, ranking);
+    lemma_path_target(path, ranking);
 
     lemma_insert_preserves_wf(pre, ranking, key, msg, path);
 
     let except = set!{path.target().root};
-    lemma_target_preserves_disk(path);
     assert(pre.disk_view.entries.remove_keys(except) == post.disk_view.entries.remove_keys(except));
-    assert(pre.disk_view.same_except(post.disk_view, except));
 
     if pre.root() is Index {
         let pivots = pre.root()->pivots;
@@ -410,8 +408,7 @@ pub proof fn append_refines(pre: LinkedBranch, keys: Seq<Key>, msgs: Seq<Message
     lemma_append_via_insert_refines(pre, pre.the_ranking(), post.the_ranking(), keys, msgs, path);
 
     lemma_path_i_internal(path, pre.the_ranking(), keys.last());
-    lemma_path_target_is_wf(path);
-    lemma_path_target_valid_ranking_and_keys_strictly_sorted(path, pre.the_ranking());
+    lemma_path_target(path, pre.the_ranking());
     PivotBranchRefinement_v::lemma_append_via_insert_equiv(pre.i(), keys, msgs, path.i());
 }
 
@@ -430,15 +427,12 @@ pub proof fn split_refines(pre: LinkedBranch, new_child_addr: Address, path: Pat
     let post = pre.split(new_child_addr, path, split_arg);
     let pivot = split_arg.get_pivot();
     let split_child_idx = path.target().root().route(pivot) + 1;
-    // TODO(x9du): combine path target lemmas
-    lemma_path_target_is_wf(path);
-    lemma_path_target_valid_ranking_and_keys_strictly_sorted(path, pre.the_ranking());
+    lemma_path_target(path, pre.the_ranking());
     lemma_route_auto();
     assert(path.target().root().valid_child_index(split_child_idx));
     let split_child = path.target().child_at_idx(split_child_idx);
     let split_child_addr = path.target().root()->children[split_child_idx];
     let post_ranking = pre.the_ranking().insert(new_child_addr, pre.the_ranking()[split_child_addr]);
-    lemma_target_preserves_disk(path);
     let except = set!{path.target().root, split_child_addr, new_child_addr};
     let (left_branch, right_branch) = split_child.split_node(split_arg, new_child_addr);
     let split_except = set!{split_child_addr, new_child_addr};
@@ -507,13 +501,11 @@ pub proof fn split_refines_internal(pre: LinkedBranch, ranking: Ranking, post_ra
     let post = pre.split(new_child_addr, path, split_arg);
     let pivot = split_arg.get_pivot();
     let split_child_idx = path.target().root().route(pivot) + 1;
-    lemma_path_target_is_wf(path);
-    lemma_path_target_valid_ranking_and_keys_strictly_sorted(path, ranking);
+    lemma_path_target(path, ranking);
     lemma_route_auto();
     assert(path.target().root().valid_child_index(split_child_idx));
     let split_child = path.target().child_at_idx(split_child_idx);
     let split_child_addr = path.target().root()->children[split_child_idx];
-    lemma_target_preserves_disk(path);
     let except = set!{path.target().root, split_child_addr, new_child_addr};
     let (left_branch, right_branch) = split_child.split_node(split_arg, new_child_addr);
     let split_except = set!{split_child_addr, new_child_addr};
@@ -527,7 +519,6 @@ pub proof fn split_refines_internal(pre: LinkedBranch, ranking: Ranking, post_ra
     lemma_split_preserves_wf(pre, ranking, new_child_addr, path, split_arg);
     i_internal_wf(pre, ranking);
     lemma_path_i_valid(path, ranking);
-    lemma_path_i_target(path, ranking);
     PivotBranchRefinement_v::lemma_path_target_is_wf(path_i);
     assert(split_child_idx == path_i.target().route(pivot) + 1);
     assert(path_i.target()->children[split_child_idx] == split_child.i_internal(ranking));
@@ -614,7 +605,6 @@ pub proof fn split_refines_internal(pre: LinkedBranch, ranking: Ranking, post_ra
 
                 assert(pre_child.reachable_addrs_using_ranking(ranking).disjoint(except)) by {
                     if pre_child.reachable_addrs_using_ranking(ranking).contains(path.target().root) {
-                        // TODO(x9du): duplication with insert_refines_internal
                         lemma_reachable_implies_all_keys_subset(pre_child, ranking, path.target().root);
                         lemma_all_keys_finite_and_nonempty(path.target(), ranking);
                         let k = choose |k| path.target().all_keys(ranking).contains(k);
@@ -761,7 +751,6 @@ pub proof fn lemma_split_node_ranking(
         right_branch.valid_ranking(post_ranking),
 {
     let post = branch.split_child_of_index(split_arg, new_child_addr);
-    // TODO(x9du): break out lemma_split_node_preserves_wf
     lemma_split_preserves_wf(branch, ranking, new_child_addr, Path{branch: branch, key: split_arg.get_pivot(), depth: 0}, split_arg);
     lemma_route_auto();
     let r = branch.root().route(split_arg.get_pivot()) + 1;
@@ -870,17 +859,14 @@ pub proof fn lemma_split_preserves_wf(pre: LinkedBranch, ranking: Ranking, new_c
         pre.split(new_child_addr, path, split_arg).wf(),
     decreases pre.get_rank(ranking),
 {
-    // TODO(x9du): duplication with split_refines
     let post = pre.split(new_child_addr, path, split_arg);
     let pivot = split_arg.get_pivot();
     let split_child_idx = path.target().root().route(pivot) + 1;
-    lemma_path_target_is_wf(path);
-    lemma_path_target_valid_ranking_and_keys_strictly_sorted(path, ranking);
+    lemma_path_target(path, ranking);
     lemma_route_auto();
     assert(path.target().root().valid_child_index(split_child_idx));
     let split_child = path.target().child_at_idx(split_child_idx);
     let split_child_addr = path.target().root()->children[split_child_idx];
-    lemma_target_preserves_disk(path);
     let except = set!{path.target().root, split_child_addr, new_child_addr};
     let (left_branch, right_branch) = split_child.split_node(split_arg, new_child_addr);
     let split_except = set!{split_child_addr, new_child_addr};
@@ -961,9 +947,8 @@ pub proof fn lemma_append_incremental(keys: Seq<Key>, msgs: Seq<Message>, path: 
     let post1 = path1.branch.append(keys.skip(1), msgs.skip(1), path1);
 
     let except = set!{path.target().root};
-    lemma_target_preserves_disk(path);
+    lemma_path_target(path, ranking);
     assert(path.branch.disk_view.entries.remove_keys(except) == post.disk_view.entries.remove_keys(except));
-    assert(path.branch.disk_view.same_except(post.disk_view, except));
 
     if path.depth == 0 {
         assert(path.branch.root()->keys + keys == path.branch.root()->keys + keys.take(1) + keys.skip(1));
@@ -1010,18 +995,14 @@ pub proof fn lemma_append_via_insert_path(path: Path, ranking: Ranking, keys: Se
     let post = path.branch.insert(keys[0], msgs[0], path);
 
     let except = set!{path.target().root};
-    lemma_target_preserves_disk(path);
+    lemma_path_target(path, ranking);
     assert(path.branch.disk_view.entries.remove_keys(except) == post.disk_view.entries.remove_keys(except));
-    assert(path.branch.disk_view.same_except(post.disk_view, except));
 
     let path1 = Path{branch: post, key: keys[1], depth: path.depth};
     lemma_insert_preserves_wf(path.branch, ranking, keys[0], msgs[0], path);
     lemma_route_auto();
     lemma_append_keys_are_path_equiv(keys, path, ranking);
     assert(path.path_equiv(keys[1]));
-
-    lemma_path_target_is_wf(path);
-    lemma_path_target_valid_ranking_and_keys_strictly_sorted(path, ranking);
 
     if path.depth == 0 {
         lemma_route_to_end(path.target().root(), keys[0]);
@@ -1065,14 +1046,13 @@ pub proof fn lemma_append_via_insert_equiv(branch: LinkedBranch, keys: Seq<Key>,
         branch.append(keys, msgs, path) == branch.append_via_insert(keys, msgs, path),
     decreases keys.len(),
 {
-    lemma_path_target_is_wf(path);
+    lemma_path_target(path, ranking);
     let post = branch.append(keys, msgs, path);
     let via_insert = branch.append_via_insert(keys, msgs, path);
     let keys_msgs = keys.zip_with(msgs);
     let insert0 = branch.insert(keys[0], msgs[0], path);
     let r = path.target().root().route(keys[0]);
     lemma_route_auto();
-    lemma_path_target_valid_ranking_and_keys_strictly_sorted(path, ranking);
     assert(path.target().root().keys_strictly_sorted());
     lemma_route_to_end(path.target().root(), keys[0]);
     assert(r == path.target().root()->keys.len() - 1);
@@ -1135,8 +1115,7 @@ pub proof fn lemma_append_via_insert_preserves_ranking_and_wf(pre: LinkedBranch,
     } else {
         let path1 = Path{branch: insert0, key: keys[1], depth: path.depth};
         lemma_append_via_insert_path(path, ranking, keys, msgs);
-        lemma_path_target_is_wf(path);
-        lemma_path_target_valid_ranking_and_keys_strictly_sorted(path, ranking);
+        lemma_path_target(path, ranking);
         lemma_route_to_end(path.target().root(), keys[0]);
         assert(path1.target().root()->keys.last() == keys[0]);
         assert(keys.skip(1)[0] == keys[1]);
@@ -1187,8 +1166,7 @@ pub proof fn lemma_append_via_insert_refines(pre: LinkedBranch, ranking: Ranking
     } else {
         let path1 = Path{branch: insert0, key: keys[1], depth: path.depth};
         lemma_append_via_insert_path(path, ranking, keys, msgs);
-        lemma_path_target_is_wf(path);
-        lemma_path_target_valid_ranking_and_keys_strictly_sorted(path, ranking);
+        lemma_path_target(path, ranking);
         lemma_route_to_end(path.target().root(), keys[0]);
         assert(path1.target().root()->keys.last() == keys[0]);
         assert(keys.skip(1)[0] == keys[1]);
@@ -1273,7 +1251,7 @@ pub proof fn lemma_insert_preserves_wf(pre: LinkedBranch, ranking: Ranking, key:
             Key::largest_lte_ensures(keys, key, Key::largest_lte(keys, key));
         }
         Node::Index{pivots, children} => {
-            lemma_target_preserves_disk(path);
+            lemma_path_target(path, ranking);
             assert(path.target().disk_view == pre.disk_view);
             assert(path.target().root != pre.root);
             assert(post.disk_view.valid_address(pre.root));
@@ -1290,45 +1268,16 @@ pub proof fn lemma_insert_preserves_wf(pre: LinkedBranch, ranking: Ranking, key:
     }
 }
 
-pub proof fn lemma_path_target_is_wf(path: Path)
-    requires
-        path.valid(),
-    ensures
-        path.target().wf(),
-    decreases
-        path.depth,
-{
-    if path.depth > 0 {
-        lemma_path_target_is_wf(path.subpath());
-    }
-}
-
-pub proof fn lemma_path_target_valid_ranking_and_keys_strictly_sorted(path: Path, ranking: Ranking)
+pub proof fn lemma_path_target(path: Path, ranking: Ranking)
     requires
         path.valid(),
         path.branch.valid_ranking(ranking),
         path.branch.keys_strictly_sorted_internal(ranking),
     ensures
-        path.target().valid_ranking(ranking),
-        path.target().keys_strictly_sorted_internal(ranking),
-    decreases
-        path.depth,
-{
-    if path.depth > 0 {
-        lemma_route_auto();
-        let r = path.branch.root().route(path.key) + 1;
-        assert(path.branch.root().valid_child_index(r));
-        lemma_path_target_valid_ranking_and_keys_strictly_sorted(path.subpath(), ranking);
-    }
-}
-
-pub proof fn lemma_path_i_target(path: Path, ranking: Ranking)
-    requires
-        inv_internal(path.branch, ranking),
-        path.valid(),
-    ensures
         path.target().wf(),
         path.target().valid_ranking(ranking),
+        path.target().keys_strictly_sorted_internal(ranking),
+        path.target().disk_view == path.branch.disk_view,
         path.i_internal(ranking).target() == path.target().i_internal(ranking),
     decreases path.depth,
 {
@@ -1336,7 +1285,7 @@ pub proof fn lemma_path_i_target(path: Path, ranking: Ranking)
         let r = path.branch.root().route(path.key) + 1;
         lemma_route_auto();
         assert(path.branch.root().valid_child_index(r));
-        lemma_path_i_target(path.subpath(), ranking);
+        lemma_path_target(path.subpath(), ranking);
     }
 }
 
@@ -1357,19 +1306,6 @@ pub proof fn lemma_path_i_valid(path: Path, ranking: Ranking)
     }
 }
 
-pub proof fn lemma_target_preserves_disk(path: Path)
-    requires
-        path.valid(),
-    ensures
-        path.target().disk_view == path.branch.disk_view,
-    decreases path.depth,
-{
-    if path.depth > 0 {
-        lemma_target_preserves_disk(path.subpath());
-    }
-}
-
-// TODO(x9du): duplicated from PivotBranchRefinement_v
 pub proof fn lemma_target_all_keys(pre: LinkedBranch, ranking: Ranking, path: Path, key: Key)
     requires
         pre.wf(),
