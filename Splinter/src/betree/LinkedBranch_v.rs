@@ -36,10 +36,7 @@ impl SplitArg {
             }
             Self::SplitIndex{pivot, pivot_index} => {
                 &&& root is Index
-                // &&& split_branch.wf() // TODO(x9du): not sure if this is needed/correct
                 &&& root->children.len() == root->pivots.len() + 1
-                // do we need this?
-                &&& split_branch.acyclic() ==> split_branch.all_keys_in_range()
                 &&& 0 <= pivot_index < root->pivots.len()
                 &&& root->pivots[pivot_index] == pivot
             }
@@ -88,10 +85,10 @@ impl Node {
         Key::is_strictly_sorted(self.keys_or_pivots())
     }
 
-    pub open spec(checked) fn valid_child_index(self, i: nat) -> bool
+    pub open spec(checked) fn valid_child_index(self, i: int) -> bool
     {
         &&& self is Index
-        &&& i < self->children.len()
+        &&& 0 <= i < self->children.len()
     }
 
     pub open spec(checked) fn route(self, key: Key) -> int
@@ -181,9 +178,9 @@ impl DiskView {
             ranking.contains_key(addr)
     {
         let node = self.entries[addr];
-        forall |child_idx: nat| #[trigger] node.valid_child_index(child_idx) ==> {
-            &&& ranking.contains_key(node->children[child_idx as int]) // ranking is closed
-            &&& ranking[node->children[child_idx as int]] < ranking[addr]
+        forall |child_idx: int| #[trigger] node.valid_child_index(child_idx) ==> {
+            &&& ranking.contains_key(node->children[child_idx]) // ranking is closed
+            &&& ranking[node->children[child_idx]] < ranking[addr]
         }
     }
 
@@ -399,8 +396,8 @@ impl LinkedBranch {
         }
     {
         self.root()->children.map(|i: int, addr: Address|
-            if self.root().valid_child_index(i as nat) {
-                self.child_at_idx(i as nat).all_keys(ranking)
+            if self.root().valid_child_index(i) {
+                self.child_at_idx(i).all_keys(ranking)
             } else {
                 set!{} // dummy value 
             })
@@ -425,7 +422,7 @@ impl LinkedBranch {
             self.valid_ranking(ranking)
         decreases self.get_rank(ranking), 2int
     {
-        // TODO (x9du): the match doesn't satisfy the self.root() is Index recommends
+        // TODO(x9du): the match doesn't satisfy the self.root() is Index recommends
         // but the if does?
         if self.root() is Leaf {
             self.root()->keys.to_set()
@@ -455,7 +452,7 @@ impl LinkedBranch {
         decreases self.get_rank(ranking)
     {
         // Need valid ranking implies child has valid ranking to restore checked
-        forall |key| self.child_at_idx(i as nat).all_keys(ranking).contains(key) ==> Key::lt(key, self.root()->pivots[i])
+        forall |key| self.child_at_idx(i).all_keys(ranking).contains(key) ==> Key::lt(key, self.root()->pivots[i])
     }
 
     pub open spec/*XXX (checked)*/ fn all_keys_above_bound(self, i: int, ranking: Ranking) -> bool
@@ -467,15 +464,15 @@ impl LinkedBranch {
         decreases self.get_rank(ranking)
     {
         // Need valid ranking implies child has valid ranking to restore checked
-        forall |key| self.child_at_idx(i as nat).all_keys(ranking).contains(key) ==> #[trigger] Key::lte(self.root()->pivots[i-1], key)
+        forall |key| self.child_at_idx(i).all_keys(ranking).contains(key) ==> #[trigger] Key::lte(self.root()->pivots[i-1], key)
     }
 
-    pub open spec(checked) fn child_at_idx(self, i: nat) -> LinkedBranch
+    pub open spec(checked) fn child_at_idx(self, i: int) -> LinkedBranch
         recommends
             self.has_root(),
             self.root().valid_child_index(i)
     {
-        LinkedBranch{root: self.root()->children[i as int], disk_view: self.disk_view}
+        LinkedBranch{root: self.root()->children[i], disk_view: self.disk_view}
     }
 
     pub open spec(checked) fn representation(self) -> Set<Address>
@@ -508,10 +505,10 @@ impl LinkedBranch {
             self.root() is Index,
         decreases self.get_rank(ranking), 1int
     {
-        Seq::new(self.root()->children.len(), |i: int| self.child_reachable_addrs_using_ranking(ranking, i as nat))
+        Seq::new(self.root()->children.len(), |i: int| self.child_reachable_addrs_using_ranking(ranking, i))
     }
 
-    pub open spec(checked) fn child_reachable_addrs_using_ranking(self, ranking: Ranking, i: nat) -> Set<Address>
+    pub open spec(checked) fn child_reachable_addrs_using_ranking(self, ranking: Ranking, i: int) -> Set<Address>
         recommends
             self.wf(),
             self.valid_ranking(ranking),
@@ -542,7 +539,7 @@ impl LinkedBranch {
                 let r = self.root().route(key);
                 &&& self.wf()
                 &&& self.valid_ranking(ranking)
-                &&& self.root().valid_child_index((r + 1) as nat)
+                &&& self.root().valid_child_index(r + 1)
             }
         }
     {
@@ -556,7 +553,7 @@ impl LinkedBranch {
                 Message::Update{delta: nop_delta()}
             }
         } else {
-            self.child_at_idx((r+1) as nat).query_internal(key, ranking)
+            self.child_at_idx(r+1).query_internal(key, ranking)
         }
     }
 
@@ -667,9 +664,9 @@ impl LinkedBranch {
         &&& self.root().wf()
         &&& {
             let child_idx = self.root().route(split_arg.get_pivot()) + 1;
-            &&& self.child_at_idx(child_idx as nat).has_root()
-            &&& split_arg.wf(self.child_at_idx(child_idx as nat))
-            &&& self.child_at_idx(child_idx as nat).disk_view.is_fresh(set!{new_child_addr})
+            &&& self.child_at_idx(child_idx).has_root()
+            &&& split_arg.wf(self.child_at_idx(child_idx))
+            &&& self.child_at_idx(child_idx).disk_view.is_fresh(set!{new_child_addr})
             }
     }
 
@@ -679,7 +676,7 @@ impl LinkedBranch {
         // Need route ensures to restore checked
         let pivot = split_arg.get_pivot();
         let child_idx = self.root().route(pivot) + 1;
-        let (left_branch, right_branch) = self.child_at_idx(child_idx as nat).split_node(split_arg, new_child_addr);
+        let (left_branch, right_branch) = self.child_at_idx(child_idx).split_node(split_arg, new_child_addr);
         let new_root = Node::Index{
             pivots: self.root()->pivots.insert(child_idx, pivot),
             children: self.root()->children.insert(child_idx + 1, new_child_addr)
@@ -712,7 +709,7 @@ impl Path {
     {
         // Need route ensures to restore checked
         let r = self.branch.root().route(self.key) + 1;
-        Path{branch: self.branch.child_at_idx(r as nat), key: self.key, depth: (self.depth - 1) as nat}
+        Path{branch: self.branch.child_at_idx(r), key: self.key, depth: (self.depth - 1) as nat}
     }
 
     pub open spec(checked) fn valid(self) -> bool
