@@ -264,15 +264,16 @@ pub proof fn grow_refines_internal(pre: LinkedBranch, ranking: Ranking, post_ran
     assert(post_i->children.len() == i_then_grow->children.len() == 1);
     assert(post.root().valid_child_index(0));
     assert(post_i->children[0] == post.child_at_idx(0).i_internal(post_ranking));
-    assert(post.child_at_idx(0) == LinkedBranch{root: pre.root, disk_view: post.disk_view});
-    assert(pre.disk_view.is_subset_of(post.disk_view));
-    assert(pre.valid_ranking(post_ranking));
-    lemma_subdisk_same_i_internal(pre, post.child_at_idx(0), post_ranking);
-    assert(post_i->children[0] == pre.i_internal(post_ranking));
-
-    lemma_i_internal_ignores_ranking(pre, ranking, post_ranking);
-    assert(pre.i_internal(post_ranking) == pre.i_internal(ranking));
     assert(i_then_grow->children[0] == pre.i_internal(ranking));
+
+    let except = set!{addr};
+    assert(pre.disk_view.entries.remove_keys(except) == post.disk_view.entries.remove_keys(except));
+
+    if pre.reachable_addrs_using_ranking(ranking).contains(addr) {
+        lemma_reachable_implies_valid_address(pre, ranking, addr);
+    }
+    lemma_reachable_unchanged_implies_same_i_internal(
+        pre, ranking, post.child_at_idx(0), post_ranking, except);
     assert(post_i->children =~~= i_then_grow->children);
     assert(post_i == i_then_grow);
 
@@ -1379,49 +1380,6 @@ pub proof fn lemma_i_wf_implies_inv(branch: LinkedBranch, ranking: Ranking)
                 assert(Key::lte(branch_i->pivots[i-1], key));
             }
         }
-    }
-}
-
-pub proof fn lemma_i_internal_ignores_ranking(branch: LinkedBranch, ranking1: Ranking, ranking2: Ranking)
-    requires
-        branch.wf(),
-        branch.valid_ranking(ranking1),
-        branch.valid_ranking(ranking2),
-    ensures
-        branch.i_internal(ranking1) == branch.i_internal(ranking2),
-    decreases branch.get_rank(ranking1),
-{
-    if branch.root() is Index {
-        assert forall |i: int| #[trigger] branch.root().valid_child_index(i)
-        implies branch.child_at_idx(i).i_internal(ranking1)
-            == branch.child_at_idx(i).i_internal(ranking2) by {
-            lemma_i_internal_ignores_ranking(branch.child_at_idx(i), ranking1, ranking2);
-        }
-        assert(branch.i_internal(ranking1)->children =~~= branch.i_internal(ranking2)->children);
-    }
-}
-
-pub proof fn lemma_subdisk_same_i_internal(branch1: LinkedBranch, branch2: LinkedBranch, ranking: Ranking)
-    requires
-        branch1.wf(),
-        branch2.wf(),
-        branch1.valid_ranking(ranking),
-        branch2.valid_ranking(ranking),
-        branch1.root() == branch2.root(),
-        branch1.disk_view.is_subset_of(branch2.disk_view),
-    ensures
-        branch1.i_internal(ranking) == branch2.i_internal(ranking),
-    decreases branch1.get_rank(ranking),
-{
-    if branch1.root() is Index {
-        assert forall |i: int| #[trigger] branch1.root().valid_child_index(i)
-        implies
-            branch2.root().valid_child_index(i)
-            && (branch1.child_at_idx(i).i_internal(ranking)
-                == branch2.child_at_idx(i).i_internal(ranking)) by {
-            lemma_subdisk_same_i_internal(branch1.child_at_idx(i), branch2.child_at_idx(i), ranking);
-        }
-        assert(branch1.i_internal(ranking)->children =~~= branch2.i_internal(ranking)->children);
     }
 }
 
