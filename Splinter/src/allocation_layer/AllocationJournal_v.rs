@@ -12,7 +12,7 @@ use crate::abstract_system::StampedMap_v::LSN;
 use crate::allocation_layer::MiniAllocator_v::*;
 use crate::disk::GenericDisk_v::AU;
 use crate::disk::GenericDisk_v::*;
-use crate::journal::LikesJournal_v;
+use crate::allocation_layer::LikesJournal_v;
 use crate::journal::LinkedJournal_v;
 use crate::journal::LinkedJournal_v::{DiskView, LinkedJournal, TruncatedJournal};
 

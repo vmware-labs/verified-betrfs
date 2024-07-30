@@ -111,7 +111,7 @@ impl ImageState {
 pub struct EphemeralState {
     pub image: ImageState,
     pub unmarshalled_tail: MsgHistory,  // from LinkedJournal::State
-    pub lsn_au_index: Map<LSN, AU>,  // from AJ::State
+    pub lsn_au_index: Map<LSN, AU>,     // from AJ::State
     pub mini_allocator: MiniAllocator,  // from AJ::State
 }
 
@@ -339,7 +339,10 @@ state_machine!{UnifiedCrashAwareJournal{
                 pre.ephemeral->v.to_aj(pre.dv),
                 new_ephemeral.to_aj(new_dv),
                 AllocationJournal::Label::DiscardOld{
-                    start_lsn: pre.inflight.unwrap().seq_start(),
+                    // common case would be a no op (if only journal was synced)
+                    // inflight.seq_start would have been the same as ephemeral seq_start
+                    // unless map is actually synced as well
+                    start_lsn: pre.inflight.unwrap().seq_start(), 
                     require_end: lbl->require_end,
                     // where do we specify which aus are in deallocs?
                     deallocs: lbl->discarded,

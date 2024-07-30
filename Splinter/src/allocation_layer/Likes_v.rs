@@ -15,16 +15,16 @@ verus!{
         Multiset::empty()
     }
 
-    pub open spec(checked) fn map_sum<T>(s: Map<T, Likes>) -> Likes
-        decreases s.dom().len() when s.dom().finite()
-    {
-        if s.dom().len() == 0 {
-            no_likes()
-        } else {
-            // TODO(verus): natural but fails due to lack of axiom support
-            // let k = choose |k| s.dom().contains(k); 
-            let k = s.dom().choose();
-            map_sum(s.remove(k)).add(s[k])
-        }
-    }
+    // pub open spec(checked) fn map_sum<T>(s: Map<T, Likes>) -> Likes
+    //     decreases s.dom().len() when s.dom().finite()
+    // {
+    //     if s.dom().len() == 0 {
+    //         no_likes()
+    //     } else {
+    //         // TODO(verus): natural but fails due to lack of axiom support
+    //         // let k = choose |k| s.dom().contains(k); 
+    //         let k = s.dom().choose();
+    //         map_sum(s.remove(k)).add(s[k])
+    //     }
+    // }
 }

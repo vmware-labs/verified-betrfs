@@ -4,7 +4,7 @@
 #![allow(unused_imports)]
 use builtin::*;
 use vstd::prelude::*;
-use vstd::{map::*,multiset::*};
+use vstd::{map::*,set_lib::*};
 use vstd::math;
 
 use builtin_macros::*;
@@ -16,6 +16,7 @@ use crate::journal::LinkedJournal_v;
 use crate::journal::LinkedJournal_v::TruncatedJournal;
 use crate::journal::LinkedJournal_v::DiskView;
 use crate::disk::GenericDisk_v::*;
+use crate::allocation_layer::Likes_v::*;
 use crate::allocation_layer::Likes_v::*;
 
 verus!{
@@ -468,7 +469,8 @@ decreases lsn_addr_map.dom().len() when lsn_addr_map.dom().finite()
     } else {
         let k = lsn_addr_map.dom().choose();
         let sub_likes = map_to_likes(lsn_addr_map.remove(k));
-        Multiset::empty().insert(lsn_addr_map[k]).add(sub_likes)
+
+        set![lsn_addr_map[k]].to_multiset().add(sub_likes)
     }
 }
 
@@ -492,12 +494,6 @@ impl TruncatedJournal {
             self.disk_view.build_lsn_addr_index_domain_valid(self.freshest_rec);
             self.disk_view.build_lsn_addr_index_range_valid(self.freshest_rec);
         }
-    }
-
-    pub open spec(checked) fn transitive_likes(self) -> Likes
-    {
-        if !self.decodable() { arbitrary() }
-        else { Multiset::from_set(self.build_lsn_addr_index().values()) }
     }
 
     pub open spec(checked) fn discard_old_cond(self, start_lsn: LSN, keep_addrs: Set<Address>, new: Self) -> bool
@@ -657,12 +653,14 @@ state_machine!{ LikesJournal {
 
     pub open spec fn transitive_likes(self) -> Likes 
     {
-        self.journal.truncated_journal.transitive_likes()
+        let tj = self.journal.truncated_journal;
+        if !tj.decodable() { arbitrary() }
+        else { map_to_likes(tj.build_lsn_addr_index()) }
     }
 
     pub open spec fn imperative_likes(self) -> Likes
     {
-        Multiset::from_set(self.lsn_addr_index.values())
+        map_to_likes(self.lsn_addr_index)
     }
 
     transition!{ read_for_recovery(lbl: Label) {

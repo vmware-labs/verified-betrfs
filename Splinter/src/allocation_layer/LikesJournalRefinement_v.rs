@@ -8,7 +8,7 @@ use vstd::prelude::*;
 use crate::abstract_system::StampedMap_v::LSN;
 use crate::journal::LinkedJournal_v;
 use crate::journal::LinkedJournal_v::{LinkedJournal, TruncatedJournal};
-use crate::journal::LikesJournal_v::*;
+use crate::allocation_layer::LikesJournal_v::*;
 
 verus!{
 

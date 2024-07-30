@@ -6,8 +6,8 @@ use vstd::prelude::*;
 use crate::abstract_system::StampedMap_v::LSN;
 use crate::disk::GenericDisk_v::*;
 use crate::journal::LinkedJournal_v::{LinkedJournal, DiskView, TruncatedJournal};
-use crate::journal::LikesJournal_v;
-use crate::journal::LikesJournal_v::{LikesJournal};
+use crate::allocation_layer::LikesJournal_v;
+use crate::allocation_layer::LikesJournal_v::{LikesJournal};
 use crate::allocation_layer::AllocationJournal_v::*;
 
 verus!{

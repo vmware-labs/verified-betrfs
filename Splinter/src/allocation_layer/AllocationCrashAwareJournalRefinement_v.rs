@@ -9,7 +9,7 @@ use crate::abstract_system::AbstractJournal_v::AbstractJournal;
 use crate::abstract_system::MsgHistory_v::*;
 use crate::allocation_layer::AllocationCrashAwareJournal_v::*;
 use crate::allocation_layer::AllocationJournal_v::{AllocationJournal, JournalImage};
-use crate::journal::LikesJournal_v::LikesJournal;
+use crate::allocation_layer::LikesJournal_v::LikesJournal;
 use crate::journal::LinkedJournal_v::{LinkedJournal, TruncatedJournal};
 use crate::journal::PagedJournal_v::JournalRecord;
 

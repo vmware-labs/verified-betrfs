@@ -2399,8 +2399,6 @@ impl<T: QueryableDisk> Path<T>{
             let result_ranking = self.ranking_after_substitution(replacement, path_addrs, ranking);
         
             let r = self.linked.root().pivots.route(self.key) as nat;
-            // PivotTable::route_lemma(self.linked.root().pivots, self.key);
-
             self.linked.dv.subdisk_implies_ranking_validity(replacement.dv, ranking);
             self.valid_ranking_throughout(ranking);
 
