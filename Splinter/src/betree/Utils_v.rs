@@ -4,7 +4,56 @@
 use builtin_macros::*;
 use vstd::prelude::*;
 
+use crate::spec::KeyType_t::*;
+use crate::spec::Messages_t::*;
+use crate::disk::GenericDisk_v::*;
+
 verus! {
+
+pub trait BranchNode {
+    spec fn wf(&self) -> bool;
+
+    spec fn is_index(&self) -> bool;
+
+    spec fn keys(&self) -> Seq<Key>
+        recommends !self.is_index()
+    ;
+
+    spec fn msgs(&self) -> Seq<Message>
+        recommends !self.is_index()
+    ;
+
+    spec fn pivots(&self) -> Seq<Key>
+        recommends self.is_index()
+    ;
+
+    spec fn children(&self) -> Seq<Address>
+        recommends self.is_index()
+    ;
+
+    open spec fn keys_or_pivots(&self) -> Seq<Key>
+    {
+        if !self.is_index() { self.keys() } else { self.pivots() }
+    }
+
+    open spec fn valid_child_index(&self, i: int) -> bool
+    {
+        &&& self.is_index()
+        &&& 0 <= i < self.children().len()
+    }
+
+    open spec fn route(&self, key: Key) -> int
+        recommends self.wf()
+    {
+        let s = self.keys_or_pivots();
+        Key::largest_lte(s, key)
+    }
+
+    open spec fn keys_strictly_sorted(&self) -> bool
+    {
+        Key::is_strictly_sorted(self.keys_or_pivots())
+    }
+}
 
 pub open spec(checked) fn union_seq_of_sets<A>(sets: Seq<Set<A>>) -> Set<A>
 {
