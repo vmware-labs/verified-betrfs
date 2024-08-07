@@ -932,7 +932,7 @@ state_machine!{ LinkedJournal {
     }
 
     #[inductive(discard_old)]
-    fn discard_old_inductive(pre: Self, post: Self, lbl: Label, new_tj: TruncatedJournal) {
+    pub fn discard_old_inductive(pre: Self, post: Self, lbl: Label, new_tj: TruncatedJournal) {
         let lsn = lbl->start_lsn;
         let post_discard = pre.truncated_journal.discard_old(lsn);
 
@@ -941,7 +941,7 @@ state_machine!{ LinkedJournal {
     }
 
     #[inductive(internal_journal_marshal)]
-    fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address) {
+    pub fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address) {
         assert( post.truncated_journal.disk_view.valid_ranking(pre.truncated_journal.marshal_ranking(addr)) );    // witness
     }
 
