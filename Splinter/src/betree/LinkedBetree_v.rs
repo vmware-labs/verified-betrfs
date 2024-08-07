@@ -691,16 +691,25 @@ impl<T> LinkedBetree<T> {
         &&& self.root().flushed.update(child_idx as int, self.root().buffers.len()).all_gte(buffer_gc)
     }
 
-    pub open spec/*XXX(checked)*/ fn flush(self, child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs) -> LinkedBetree<T>
-        recommends self.can_flush(child_idx, buffer_gc) //, self.is_fresh(new_addrs.repr())
+    pub open spec/*XXX(checked)*/ fn flush_buffers(self, child_idx: nat, buffer_gc: nat) -> LinkedSeq<T>
+        recommends self.can_flush(child_idx, buffer_gc)
     {
         let root = self.root();
         let flush_upto = root.buffers.len(); 
         let flushed_ofs = root.flushed.offsets[child_idx as int];
-
         let buffers_to_child = root.buffers.slice(flushed_ofs as int, flush_upto as int);
+
+        buffers_to_child
+    }
+
+    pub open spec/*XXX(checked)*/ fn flush(self, child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs) -> LinkedBetree<T>
+        recommends self.can_flush(child_idx, buffer_gc) //, self.is_fresh(new_addrs.repr())
+    {
+        let root = self.root();
+        let flush_upto = root.buffers.len();
+
         let child = self.dv.get(root.children[child_idx as int]);
-        let new_child = child.extend_buffer_seq(buffers_to_child);
+        let new_child = child.extend_buffer_seq(self.flush_buffers(child_idx, buffer_gc));
 
         let new_root = BetreeNode{
             buffers: root.buffers.slice(buffer_gc as int, flush_upto as int),
@@ -1140,7 +1149,7 @@ state_machine!{ LinkedBetreeVars {
     fn freeze_as_inductive(pre: Self, post: Self, lbl: Label) { }
 
     #[inductive(internal_flush_memtable)]
-    fn internal_flush_memtable_inductive(pre: Self, post: Self, lbl: Label, new_addrs: TwoAddrs) {
+    pub fn internal_flush_memtable_inductive(pre: Self, post: Self, lbl: Label, new_addrs: TwoAddrs) {
         let ranking = pre.linked.the_ranking();
         let pushed = pre.linked.push_memtable(pre.memtable, new_addrs);
         let pushed_ranking = pre.linked.push_memtable_new_ranking(pre.memtable, new_addrs, ranking);
@@ -1151,7 +1160,7 @@ state_machine!{ LinkedBetreeVars {
 
         let buffer_addrs = pre.linked.reachable_buffer_addrs();
         let post_buffer_addrs = pushed.reachable_buffer_addrs();
-        
+
         assert forall |addr| post_buffer_addrs.contains(addr) && addr != new_addrs.addr2
         implies #[trigger] buffer_addrs.contains(addr)
         by {
@@ -1171,7 +1180,7 @@ state_machine!{ LinkedBetreeVars {
     }
    
     #[inductive(internal_grow)]
-    fn internal_grow_inductive(pre: Self, post: Self, lbl: Label, new_root_addr: Address) { 
+    pub fn internal_grow_inductive(pre: Self, post: Self, lbl: Label, new_root_addr: Address) { 
         let old_ranking = pre.linked.finite_ranking();
         pre.linked.finite_ranking_ensures();
 
@@ -1238,7 +1247,7 @@ state_machine!{ LinkedBetreeVars {
     }
 
     #[inductive(internal_split)]
-    fn internal_split_inductive(pre: Self, post: Self, lbl: Label, new_linked: LinkedBetree<BufferDisk>, path: Path<BufferDisk>, 
+    pub fn internal_split_inductive(pre: Self, post: Self, lbl: Label, new_linked: LinkedBetree<BufferDisk>, path: Path<BufferDisk>, 
         request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs) {
         let new_subtree = path.target().split_parent(request, new_addrs);
         let splitted = path.substitute(new_subtree, path_addrs);
@@ -1284,7 +1293,7 @@ state_machine!{ LinkedBetreeVars {
     }
    
     #[inductive(internal_flush)]
-    fn internal_flush_inductive(pre: Self, post: Self, lbl: Label, new_linked: LinkedBetree<BufferDisk>, path: Path<BufferDisk>, 
+    pub fn internal_flush_inductive(pre: Self, post: Self, lbl: Label, new_linked: LinkedBetree<BufferDisk>, path: Path<BufferDisk>, 
         child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, path_addrs: PathAddrs) {
         let new_subtree = path.target().flush(child_idx, buffer_gc, new_addrs);
         let flushed = path.substitute(new_subtree, path_addrs);
@@ -1328,7 +1337,7 @@ state_machine!{ LinkedBetreeVars {
     }
 
     #[inductive(internal_compact)]
-    fn internal_compact_inductive(pre: Self, post: Self, lbl: Label, new_linked: LinkedBetree<BufferDisk>, path: Path<BufferDisk>, 
+    pub fn internal_compact_inductive(pre: Self, post: Self, lbl: Label, new_linked: LinkedBetree<BufferDisk>, path: Path<BufferDisk>, 
         start: nat, end: nat, compacted_buffer: Buffer, new_addrs: TwoAddrs, path_addrs: PathAddrs) {
         let new_subtree = path.target().compact(start, end, compacted_buffer, new_addrs);
         let compacted = path.substitute(new_subtree, path_addrs);
