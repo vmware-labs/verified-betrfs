@@ -117,7 +117,7 @@ impl BetreeNode {
         }
     }
 
-    pub open spec(checked) fn push_memtable(self, memtable: Memtable) -> BetreeNode
+    pub open spec(checked) fn push_memtable(self, memtable: Memtable<Buffer>) -> BetreeNode
     recommends self.wf()
     {
         self.promote(total_domain()).merge_buffer(memtable.buffer)
@@ -485,7 +485,7 @@ impl Path{
 
 state_machine!{ PivotBetree {
     fields {
-        pub memtable: Memtable,
+        pub memtable: Memtable<Buffer>,
         pub root: BetreeNode,
     }
 

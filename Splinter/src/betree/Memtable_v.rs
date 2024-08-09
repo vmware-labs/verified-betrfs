@@ -15,26 +15,38 @@ use crate::abstract_system::StampedMap_v::*;
 use crate::abstract_system::MsgHistory_v::*;
 
 verus! {
-pub struct Memtable {
-    pub buffer: Buffer,
+
+#[verifier::ext_equal]
+pub struct Memtable<T> {
+    pub buffer: T,
     pub seq_end: LSN
 }
 
-impl Memtable {
-    pub open spec(checked) fn query(self, key: Key) -> Message {
+impl<T: AbstractBuffer> Memtable<T> {
+    pub open spec(checked) fn query(&self, key: Key) -> Message
+    {
         self.buffer.query(key)
     }
 
-    pub open spec(checked) fn apply_put(self, km: KeyedMessage) -> Memtable {
+    pub open spec(checked) fn contains(&self, key: Key) -> bool
+    {
+        self.buffer.contains(key)
+    }
+
+    pub open spec(checked) fn is_empty(&self) -> bool
+    {
+        self.buffer.is_empty()
+    }
+
+    pub open spec(checked) fn apply_put(self, km: KeyedMessage) ->  Memtable<T> {
+        let msg = self.query(km.key).merge(km.message);
         Memtable{ 
-            buffer: Buffer{
-                map: self.buffer.map.insert(km.key, self.query(km.key).merge(km.message))
-            },
+            buffer: *self.buffer.insert_ref(km.key, msg),
             seq_end: self.seq_end + 1
         }
     }
 
-    pub open spec(checked) fn apply_puts(self, puts: MsgHistory) -> Memtable
+    pub open spec(checked) fn apply_puts(self, puts: MsgHistory) ->  Memtable<T>
         recommends puts.wf(), puts.can_follow(self.seq_end)
         decreases puts.seq_end when puts.wf()
     {
@@ -74,22 +86,20 @@ impl Memtable {
             );
         }
     }
+}
 
-    pub open spec(checked) fn empty_memtable(lsn: LSN) -> Memtable {
-        Memtable{ 
+impl Memtable<Buffer> {
+   pub open spec(checked) fn empty_memtable(lsn: LSN) -> Self {
+        Memtable{
             buffer: Buffer::empty(),
             seq_end: lsn
         }
     }
 
-    pub open spec(checked) fn drain(self) -> Memtable {
+    pub open spec(checked) fn drain(self) -> Self {
         Self::empty_memtable(self.seq_end)
     }
+}
 
-    pub open spec(checked) fn is_empty(self) -> bool {
-        self.buffer == Buffer::empty()
-    }
-
-} // end impl Memtable
 
 } // end verus!

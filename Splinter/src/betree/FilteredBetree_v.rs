@@ -118,7 +118,7 @@ impl BetreeNode {
         }
     }
 
-    pub open spec(checked) fn push_memtable(self, memtable: Memtable) -> BetreeNode
+    pub open spec(checked) fn push_memtable(self, memtable: Memtable<Buffer>) -> BetreeNode
     recommends
         self.wf(),
     {
@@ -610,7 +610,7 @@ impl Path{
 
 state_machine!{ FilteredBetree {
     fields {
-        pub memtable: Memtable,
+        pub memtable: Memtable<Buffer>,
         pub root: BetreeNode,
     }
 
@@ -688,7 +688,6 @@ state_machine!{ FilteredBetree {
         require let Label::Internal{} = lbl;
         require pre.wf();
     }}
-
 
     init!{ initialize(stamped_betree: StampedBetree) {
         require stamped_betree.value.wf();
