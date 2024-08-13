@@ -74,7 +74,7 @@ impl BetreeNode {
         TotalKMMap(Map::new(|k: Key| true, |k| self.i_at(k)))
     }
 
-    proof fn memtable_distributes_over_betree(self, memtable: Memtable<Buffer>)
+    proof fn memtable_distributes_over_betree(self, memtable: Memtable<SimpleBuffer>)
         requires self.wf()
         ensures map_apply(memtable, self.i()) == self.push_memtable(memtable).value.i()
     {
@@ -83,7 +83,7 @@ impl BetreeNode {
         assert(map_a =~= map_b);
     }
 
-    proof fn push_empty_memtable_refines(self, memtable: Memtable<Buffer>)
+    proof fn push_empty_memtable_refines(self, memtable: Memtable<SimpleBuffer>)
         requires self.wf(), memtable.is_empty()
         ensures i_stamped_betree(Stamped{value: self, seq_end: memtable.seq_end})
             == i_stamped_betree(self.push_memtable(memtable))
@@ -91,7 +91,7 @@ impl BetreeNode {
         assert(self.i() =~= self.push_memtable(memtable).value.i());
     }
 
-    proof fn merge_buffer_lemma(self, new_buffer: Buffer, key: Key)
+    proof fn merge_buffer_lemma(self, new_buffer: SimpleBuffer, key: Key)
         requires self.wf()
         ensures self.promote().merge_buffer(new_buffer).i_at(key) 
             == self.i_at(key).merge(new_buffer.query(key))
@@ -146,7 +146,7 @@ impl BetreeNode {
     }
 } // end impl BetreeNode
 
-pub open spec(checked) fn map_apply(memtable: Memtable<Buffer>, base: TotalKMMap) -> TotalKMMap
+pub open spec(checked) fn map_apply(memtable: Memtable<SimpleBuffer>, base: TotalKMMap) -> TotalKMMap
 {
     TotalKMMap(Map::new(|k: Key| true, |k: Key| base[k].merge(memtable.query(k))))
 }

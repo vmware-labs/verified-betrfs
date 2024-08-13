@@ -13,7 +13,7 @@ verus! {
 
 #[verifier::ext_equal]
 pub struct BufferSeq {
-    pub buffers: Seq<Buffer>
+    pub buffers: Seq<SimpleBuffer>
 }
 
 impl BufferSeq {
@@ -27,7 +27,7 @@ impl BufferSeq {
     }
 
     #[verifier(inline)]
-    pub open spec(checked) fn spec_index(self, i: int) -> Buffer
+    pub open spec(checked) fn spec_index(self, i: int) -> SimpleBuffer
         recommends 0 <= i < self.len()
     {
         self.buffers[i]
@@ -69,25 +69,25 @@ impl BufferSeq {
         BufferSeq{ buffers: self.buffers + new_buffers.buffers }
     }
 
-    pub open spec(checked) fn update_subrange(self, start: int, end: int, new_buffer: Buffer) -> BufferSeq 
+    pub open spec(checked) fn update_subrange(self, start: int, end: int, new_buffer: SimpleBuffer) -> BufferSeq 
         recommends 0 <= start < end <= self.len()
     {
         let s = seq![new_buffer];
         BufferSeq{ buffers: self.buffers.subrange(0, start) + s + self.buffers.subrange(end, self.len() as int) }
     }
 
-    pub open spec(checked) fn i_from(self, idx: int) -> Buffer
+    pub open spec(checked) fn i_from(self, idx: int) -> SimpleBuffer
         recommends 0 <= idx <= self.len()
         decreases self.len() - idx when 0 <= idx <= self.len()
     {
         if self.len() == idx {
-            Buffer::empty()
+            SimpleBuffer::empty()
         } else {
             self[idx].merge(self.i_from(idx+1))
         }
     }
 
-    pub open spec(checked) fn i(self) -> Buffer
+    pub open spec(checked) fn i(self) -> SimpleBuffer
     {
         self.i_from(0)
     }
@@ -98,12 +98,12 @@ impl BufferSeq {
         &&& self[buffer_idx].map.contains_key(k)
     }
 
-    pub open spec /*XXX (checked)*/ fn i_filtered_from(self, offset_map: OffsetMap, idx: int) -> Buffer
+    pub open spec /*XXX (checked)*/ fn i_filtered_from(self, offset_map: OffsetMap, idx: int) -> SimpleBuffer
         recommends offset_map.is_total(), 0 <= idx <= self.len() 
         decreases self.len() - idx when 0 <= idx <= self.len()
     {
         if self.len() == idx {
-            Buffer::empty()
+            SimpleBuffer::empty()
         } else {
             let bottom_buffer = self[idx].apply_filter(offset_map.active_keys(idx as nat));
 //            let _ = assert(new_offset_map.is_total());   // XXX: aargh what was the way to add proof text?
@@ -111,7 +111,7 @@ impl BufferSeq {
         }
     }
 
-    pub open spec(checked) fn i_filtered(self, offset_map: OffsetMap) -> Buffer 
+    pub open spec(checked) fn i_filtered(self, offset_map: OffsetMap) -> SimpleBuffer 
       recommends offset_map.is_total()
     {
         self.i_filtered_from(offset_map, 0)

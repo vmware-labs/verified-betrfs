@@ -118,7 +118,7 @@ impl BetreeNode {
         }
     }
 
-    pub open spec(checked) fn push_memtable(self, memtable: Memtable<Buffer>) -> BetreeNode
+    pub open spec(checked) fn push_memtable(self, memtable: Memtable<SimpleBuffer>) -> BetreeNode
     recommends
         self.wf(),
     {
@@ -357,7 +357,7 @@ impl BetreeNode {
     }
 
     #[verifier::opaque]
-    pub open spec fn compact_key_range(self, start: nat, end: nat, k: Key) -> bool
+    pub open spec fn valid_compact_key_domain(self, start: nat, end: nat, k: Key) -> bool
         recommends self.wf(), self is Node, start < end <= self->buffers.len()
     {
         &&& self.key_in_domain(k)
@@ -366,19 +366,19 @@ impl BetreeNode {
             ).key_in_buffer_filtered(self.make_offset_map().decrement(start), 0, k, buffer_idx)
     }
 
-    pub open spec fn can_compact(self, start: nat, end: nat, compacted_buffer: Buffer) -> bool 
+    pub open spec fn can_compact(self, start: nat, end: nat, compacted_buffer: SimpleBuffer) -> bool 
     {
         &&& self.wf()
         &&& self is Node
         &&& start < end <= self->buffers.len()
-        &&& forall |k| #[trigger] compacted_buffer.map.contains_key(k) <==> self.compact_key_range(start, end, k)
+        &&& forall |k| #[trigger] compacted_buffer.map.contains_key(k) <==> self.valid_compact_key_domain(start, end, k)
         &&& forall |k| compacted_buffer.map.contains_key(k) ==> ({
             let from = if self.flushed_ofs(k) <= start { 0 } else { self.flushed_ofs(k)-start };
             &&& #[trigger] compacted_buffer.query(k) == self->buffers.slice(start as int, end as int).query_from(k, from)
         })
     }
 
-    pub open spec /*XXX(checked)*/ fn compact(self, start: nat, end: nat, compacted_buffer: Buffer) -> BetreeNode
+    pub open spec /*XXX(checked)*/ fn compact(self, start: nat, end: nat, compacted_buffer: SimpleBuffer) -> BetreeNode
     recommends
         self.can_compact(start, end, compacted_buffer),
     {
@@ -610,7 +610,7 @@ impl Path{
 
 state_machine!{ FilteredBetree {
     fields {
-        pub memtable: Memtable<Buffer>,
+        pub memtable: Memtable<SimpleBuffer>,
         pub root: BetreeNode,
     }
 
@@ -676,7 +676,7 @@ state_machine!{ FilteredBetree {
         update root = path.substitute(path.target().flush(child_idx, buffer_gc));
     }}
 
-    transition!{ internal_compact(lbl: Label, path: Path, start: nat, end: nat, compacted_buffer: Buffer) {
+    transition!{ internal_compact(lbl: Label, path: Path, start: nat, end: nat, compacted_buffer: SimpleBuffer) {
         require let Label::Internal{} = lbl;
         require path.valid();
         require path.target().can_compact(start, end, compacted_buffer);

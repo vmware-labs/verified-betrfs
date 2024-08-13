@@ -417,7 +417,7 @@ impl BetreeNode {
         assert(i_parent->children.map =~= parent_i->children.map);
     }
 
-    proof fn promote_and_merge_wf(self, domain: Domain, buffer: Buffer)
+    proof fn promote_and_merge_wf(self, domain: Domain, buffer: SimpleBuffer)
         requires self.wf(), domain.wf(), domain is Domain
         ensures self.promote(domain).merge_buffer(buffer).wf()
     {
@@ -441,7 +441,7 @@ impl BetreeNode {
         assert forall |i| #[trigger] result.valid_child_index(i) ==> self.valid_child_index(i) by {}
     }
 
-    proof fn promote_and_merge_commutes_with_i(self, domain: Domain, new_buffer: Buffer)
+    proof fn promote_and_merge_commutes_with_i(self, domain: Domain, new_buffer: SimpleBuffer)
         requires self.wf(), domain.wf(), domain is Domain
         ensures self.promote(domain).merge_buffer(new_buffer).i() == self.i().promote().merge_buffer(new_buffer)
     {

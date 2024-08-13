@@ -20,7 +20,7 @@ verus! {
 broadcast use PivotTable::route_lemma; 
 
 impl BetreeNode {
-    pub open spec(checked) fn i_buffer(self) -> Buffer
+    pub open spec(checked) fn i_buffer(self) -> SimpleBuffer
         recommends self.wf(), self is Node
     {
         let offset_map = self.make_offset_map();
@@ -712,7 +712,7 @@ impl BetreeNode {
         assert(flushed.i()->buffer =~= i_flushed->buffer);
     }
 
-    proof fn compact_wf(self, start: nat, end: nat, compacted_buffer: Buffer)
+    proof fn compact_wf(self, start: nat, end: nat, compacted_buffer: SimpleBuffer)
         requires self.can_compact(start, end, compacted_buffer)
         ensures self.compact(start, end, compacted_buffer).wf()
     {
@@ -720,7 +720,7 @@ impl BetreeNode {
         assert forall |i| #[trigger] result.valid_child_index(i) ==> self.valid_child_index(i) by {}
     }
 
-    proof fn compact_buffer_property(self, start: nat, end: nat, compacted_buffer: Buffer)
+    proof fn compact_buffer_property(self, start: nat, end: nat, compacted_buffer: SimpleBuffer)
         requires self.can_compact(start, end, compacted_buffer)
         ensures ({
             let slice_ofs_map = self.make_offset_map().decrement(start);
@@ -734,14 +734,14 @@ impl BetreeNode {
 
         assert(compacted_buffer.map.dom() =~= compact_slice_i.map.dom()) by {
             compact_slice.i_filtered_from_domain(slice_ofs_map, 0);
-            reveal(BetreeNode::compact_key_range);
+            reveal(BetreeNode::valid_compact_key_domain);
         }
 
         
         assert forall |k| compacted_buffer.map.contains_key(k)
         implies #[trigger] compacted_buffer.map[k] == compact_slice_i.map[k] 
         by {
-            reveal(BetreeNode::compact_key_range);
+            reveal(BetreeNode::valid_compact_key_domain);
             let from = if self.flushed_ofs(k) <= start { 0 } else { self.flushed_ofs(k)-start };
             assert(slice_ofs_map.offsets[k] == from);
             assert(compacted_buffer.query(k) == compact_slice.query_from(k, from as int));
@@ -752,7 +752,7 @@ impl BetreeNode {
     }
 
 
-    proof fn compact_commutes_with_i(self, start: nat, end: nat, compacted_buffer: Buffer)
+    proof fn compact_commutes_with_i(self, start: nat, end: nat, compacted_buffer: SimpleBuffer)
         requires self.can_compact(start, end, compacted_buffer)
         ensures self.compact(start, end, compacted_buffer).i() == self.i()
     {
@@ -782,7 +782,7 @@ impl BetreeNode {
                     assert(result->buffers[start as int] == compacted_buffer); // trigger
                     assert(compacted_buffer.map.contains_key(k)) by {
                         assert(compact_slice.key_in_buffer_filtered(slice_ofs_map, 0, k, idx-start));
-                        reveal(BetreeNode::compact_key_range);
+                        reveal(BetreeNode::valid_compact_key_domain);
                     }
                     result.key_in_buffer_implies_active_key(k, start as int);
                 } else {
@@ -796,7 +796,7 @@ impl BetreeNode {
                 if idx < start {
                     self.key_in_buffer_implies_active_key(k, idx);
                 } else if idx < start+1 {
-                    reveal(BetreeNode::compact_key_range);
+                    reveal(BetreeNode::valid_compact_key_domain);
                     let slice_idx = choose |slice_idx| compact_slice.key_in_buffer_filtered(slice_ofs_map, 0, k, slice_idx);
                     self.key_in_buffer_implies_active_key(k, start + slice_idx);
                 } else {
@@ -825,7 +825,7 @@ impl BetreeNode {
                     implies ! #[trigger] compact_slice[i].map.contains_key(k)
                     by {
                         if compact_slice[i].map.contains_key(k) {
-                            reveal(BetreeNode::compact_key_range);
+                            reveal(BetreeNode::valid_compact_key_domain);
                             assert(compact_slice.key_in_buffer_filtered(slice_ofs_map, 0, k, i));
                             assert(false);
                         }
@@ -1167,7 +1167,7 @@ impl FilteredBetree::State {
         assert(a->children =~= b->children);
 
         assert(buffers.i().apply_filter(total_domain().key_set()) =~= buffers.i());
-        assert(buffers.i_from(1) == Buffer::empty()); // trigger
+        assert(buffers.i_from(1) == SimpleBuffer::empty()); // trigger
         assert(buffers.i() =~= buffers[0]);
         assert(a->buffer == b->buffer);
 
@@ -1220,7 +1220,7 @@ impl FilteredBetree::State {
         assert(PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_flush(path.i(), child_idx)));
     }
 
-    proof fn internal_compact_refines(self, post: Self, lbl: FilteredBetree::Label, path: Path, start: nat, end: nat, compacted_buffer: Buffer)
+    proof fn internal_compact_refines(self, post: Self, lbl: FilteredBetree::Label, path: Path, start: nat, end: nat, compacted_buffer: SimpleBuffer)
         requires self.inv(), FilteredBetree::State::internal_compact(self, post, lbl, path, start, end, compacted_buffer)
         ensures post.inv(), PivotBetree::State::next_by(self.i(), post.i(), lbl.i(), PivotBetree::Step::internal_noop())
     {

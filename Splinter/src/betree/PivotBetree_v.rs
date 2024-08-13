@@ -29,7 +29,7 @@ pub open spec(checked) fn empty_image() -> StampedBetree {
 pub enum BetreeNode {
     Nil,
     Node{
-        buffer: Buffer,
+        buffer: SimpleBuffer,
         pivots: PivotTable,
         children: Seq<BetreeNode>
     },
@@ -107,7 +107,7 @@ impl BetreeNode {
         }
     }
 
-    pub open spec(checked) fn merge_buffer(self, new_buffer: Buffer) -> BetreeNode
+    pub open spec(checked) fn merge_buffer(self, new_buffer: SimpleBuffer) -> BetreeNode
         recommends self is Node
     {
         BetreeNode::Node{
@@ -117,7 +117,7 @@ impl BetreeNode {
         }
     }
 
-    pub open spec(checked) fn push_memtable(self, memtable: Memtable<Buffer>) -> BetreeNode
+    pub open spec(checked) fn push_memtable(self, memtable: Memtable<SimpleBuffer>) -> BetreeNode
     recommends self.wf()
     {
         self.promote(total_domain()).merge_buffer(memtable.buffer)
@@ -244,7 +244,7 @@ impl BetreeNode {
         recommends domain.wf(), domain is Domain
     {
         BetreeNode::Node{
-            buffer: Buffer::empty(),
+            buffer: SimpleBuffer::empty(),
             pivots: domain_to_pivots(domain),
             children: seq![BetreeNode::Nil]
         }
@@ -253,7 +253,7 @@ impl BetreeNode {
     pub open spec(checked) fn grow(self) -> BetreeNode
     {
         BetreeNode::Node{
-            buffer: Buffer::empty(),
+            buffer: SimpleBuffer::empty(),
             pivots: domain_to_pivots(total_domain()),
             children: seq![self]
         }
@@ -485,7 +485,7 @@ impl Path{
 
 state_machine!{ PivotBetree {
     fields {
-        pub memtable: Memtable<Buffer>,
+        pub memtable: Memtable<SimpleBuffer>,
         pub root: BetreeNode,
     }
 

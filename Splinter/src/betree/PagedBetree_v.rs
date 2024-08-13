@@ -62,7 +62,7 @@ pub open spec(checked) fn empty_child_map() -> ChildMap {
 pub enum BetreeNode {
     Nil,
     Node{ 
-        buffer: Buffer,
+        buffer: SimpleBuffer,
         children: ChildMap},
 }
 
@@ -83,7 +83,7 @@ impl BetreeNode {
 
     pub open spec(checked) fn empty_root() -> BetreeNode {
         BetreeNode::Node {
-            buffer: Buffer::empty(),
+            buffer: SimpleBuffer::empty(),
             children: empty_child_map()
         }
     }
@@ -96,14 +96,14 @@ impl BetreeNode {
         }
     }
 
-    pub open spec(checked) fn merge_buffer(self, new_buffer: Buffer) -> BetreeNode {
+    pub open spec(checked) fn merge_buffer(self, new_buffer: SimpleBuffer) -> BetreeNode {
         BetreeNode::Node{
             buffer: self->buffer.merge(new_buffer),
             children: self->children,
         }
     }
 
-    pub open spec(checked) fn push_memtable(self, memtable: Memtable<Buffer>) -> StampedBetree {
+    pub open spec(checked) fn push_memtable(self, memtable: Memtable<SimpleBuffer>) -> StampedBetree {
         Stamped{
             value: self.promote().merge_buffer(memtable.buffer),
             seq_end: memtable.seq_end
@@ -326,7 +326,7 @@ impl Path {
 
 state_machine!{ PagedBetree {
     fields {
-        pub memtable: Memtable<Buffer>,
+        pub memtable: Memtable<SimpleBuffer>,
         pub root: BetreeNode,
     }
 
@@ -374,7 +374,7 @@ state_machine!{ PagedBetree {
         require let Label::Internal{} = lbl;
         require pre.wf();
         update root = BetreeNode::Node{
-            buffer: Buffer::empty(),
+            buffer: SimpleBuffer::empty(),
             children: constant_child_map(pre.root)
         };
     }}

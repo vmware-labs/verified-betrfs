@@ -22,7 +22,12 @@ pub struct Memtable<T> {
     pub seq_end: LSN
 }
 
-impl<T: AbstractBuffer> Memtable<T> {
+impl<T: Buffer> Memtable<T> {
+    pub open spec(checked) fn i(&self) -> Memtable<SimpleBuffer>
+    {
+        Memtable{buffer: self.buffer.i(), seq_end: self.seq_end}
+    }
+
     pub open spec(checked) fn query(&self, key: Key) -> Message
     {
         self.buffer.query(key)
@@ -38,15 +43,15 @@ impl<T: AbstractBuffer> Memtable<T> {
         self.buffer.is_empty()
     }
 
-    pub open spec(checked) fn apply_put(self, km: KeyedMessage) ->  Memtable<T> {
+    pub open spec(checked) fn apply_put(self, km: KeyedMessage) -> Memtable<T> {
         let msg = self.query(km.key).merge(km.message);
-        Memtable{ 
+        Memtable{
             buffer: *self.buffer.insert_ref(km.key, msg),
             seq_end: self.seq_end + 1
         }
     }
 
-    pub open spec(checked) fn apply_puts(self, puts: MsgHistory) ->  Memtable<T>
+    pub open spec(checked) fn apply_puts(self, puts: MsgHistory) -> Memtable<T>
         recommends puts.wf(), puts.can_follow(self.seq_end)
         decreases puts.seq_end when puts.wf()
     {
@@ -88,10 +93,10 @@ impl<T: AbstractBuffer> Memtable<T> {
     }
 }
 
-impl Memtable<Buffer> {
+impl Memtable<SimpleBuffer> {
    pub open spec(checked) fn empty_memtable(lsn: LSN) -> Self {
         Memtable{
-            buffer: Buffer::empty(),
+            buffer: SimpleBuffer::empty(),
             seq_end: lsn
         }
     }

@@ -57,7 +57,7 @@ impl<T> BufferDisk<T> {
     }
 } // end of BufferDisk<T> impl
 
-impl<T: AbstractBuffer> BufferDisk<T> {
+impl<T: Buffer> BufferDisk<T> {
     pub open spec fn query(&self, addr: Address, k: Key) -> Message
     {
         self.entries[addr].query(k)
@@ -81,55 +81,59 @@ impl<T: AbstractBuffer> BufferDisk<T> {
         &&& self.entries[addr].contains(k)
     }
 
-    pub open spec(checked) fn key_in_buffer_filtered(self, buffers: LinkedSeq, offset_map: OffsetMap, from_idx: int, k: Key, idx: int) -> bool
-        recommends 0 <= from_idx, offset_map.is_total()
+    pub open spec(checked) fn key_in_buffer(self, buffers: LinkedSeq, from_idx: int, k: Key, idx: int) -> bool
+        recommends 0 <= from_idx
     {
         &&& from_idx <= idx < buffers.len()
         &&& self.queryable_contains(buffers[idx], k)
+    }
+
+    pub open spec(checked) fn key_in_buffer_filtered(self, buffers: LinkedSeq, offset_map: OffsetMap, from_idx: int, k: Key, idx: int) -> bool
+        recommends 0 <= from_idx, offset_map.is_total()
+    {
+        &&& self.key_in_buffer(buffers, from_idx, k, idx)
         &&& offset_map.offsets[k] <= idx
     }
+
+    pub open spec(checked) fn i_buffer_seq(self, addrs: LinkedSeq) -> BufferSeq_v::BufferSeq
+        recommends self.valid_buffers(addrs)
+    {
+        let buffers = Seq::new(addrs.len(), |i| self.entries[addrs[i]].i());    
+        BufferSeq_v::BufferSeq{ buffers: buffers }
+    }
+
+    pub proof fn query_from_commutes_with_i(self, addrs: LinkedSeq, k: Key, start: int)
+        requires 
+            self.valid_buffers(addrs),
+            0 <= start <= addrs.len(),
+        ensures 
+            self.query_from(addrs, k, start) == self.i_buffer_seq(addrs).query_from(k, start)
+        decreases addrs.len() - start
+    {
+        broadcast use Buffer::query_refines;
+        if start < addrs.len() {
+            self.query_from_commutes_with_i(addrs, k, start+1);
+        }
+    }
+
+    pub broadcast proof fn subdisk_implies_same_i(self, big: Self, addrs: LinkedSeq)
+        requires
+            self.valid_buffers(addrs),
+            self.is_sub_disk(big),
+        ensures 
+            self.i_buffer_seq(addrs) == big.i_buffer_seq(addrs)
+    {
+        let i_small = self.i_buffer_seq(addrs);
+        let i_big = big.i_buffer_seq(addrs);
+
+        assert forall |i| 0 <= i < addrs.len()
+        implies i_small[i] == i_big[i]
+        by {
+            if self.entries.contains_key(addrs[i]) {
+                assert(big.entries.contains_key(addrs[i])); // trigger
+            }
+        }
+        assert(i_small =~= i_big);
+    }
 }
-
-// pub open spec(checked) fn i_buffer_seq(addrs: LinkedSeq<BufferDisk>, dv: BufferDisk) -> BufferSeq_v::BufferSeq
-// {
-//     let buffers = Seq::new(addrs.len(), |i| 
-//         if dv.entries.contains_key(addrs[i]) { 
-//             dv.entries[addrs[i]] 
-//         } else { Buffer::empty() });
-
-//     BufferSeq_v::BufferSeq{ buffers: buffers }
-// }
-
-// pub proof fn subdisk_implies_same_i(addrs: LinkedSeq<BufferDisk>, small: BufferDisk, big: BufferDisk)
-//     requires
-//         addrs.valid(small),
-//         small.is_sub_disk(big),
-//     ensures 
-//         i_buffer_seq(addrs, small) == i_buffer_seq(addrs, big)
-// {
-//     let i_small = i_buffer_seq(addrs, small);
-//     let i_big = i_buffer_seq(addrs, big);
-
-//     // assert forall |i| 0 <= i < addrs.len()
-//     // implies i_small[i] == i_big[i]
-//     // by {
-//     //     if small.entries.contains_key(addrs[i]) {
-//     //         assert(big.entries.contains_key(addrs[i])); // trigger
-//     //     }
-//     // }
-//     assert(i_small =~= i_big);
-// }
-
-// pub proof fn query_from_commutes_with_i(addrs: LinkedSeq<BufferDisk>, dv: BufferDisk, k: Key, start: int)
-//     requires 
-//         addrs.valid(dv),
-//         0 <= start <= addrs.len(),
-//     ensures 
-//         addrs.query_from(dv, k, start) == i_buffer_seq(addrs, dv).query_from(k, start)
-//     decreases addrs.len() - start
-// {
-//     if start < addrs.len() {
-//         query_from_commutes_with_i(addrs, dv, k, start+1);
-//     }    
-// }
 }  // end verus!

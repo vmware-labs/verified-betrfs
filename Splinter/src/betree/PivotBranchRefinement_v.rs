@@ -17,7 +17,7 @@ broadcast use Node::route_ensures;
 
 impl Node {
     // Takes in a btree node and returns the buffer abstraction
-    pub open spec(checked) fn i(self) -> Buffer
+    pub open spec(checked) fn i(self) -> SimpleBuffer
         recommends self.wf()
         decreases self
         // TODO(x9du): this when condition is kind of annoying to prove
@@ -26,10 +26,10 @@ impl Node {
     {
         match self {
             Node::Leaf{keys, msgs} => {
-                Buffer{map: Map::new(|key| keys.contains(key), |key| msgs[self.route(key)])}
+                SimpleBuffer{map: Map::new(|key| keys.contains(key), |key| msgs[self.route(key)])}
             }
             Node::Index{pivots, children} => {
-                Buffer{map: Map::new(
+                SimpleBuffer{map: Map::new(
                     // TODO(x9du): adding triggers in here causes ungraceful dump
                     |key| children[self.route(key) + 1].i().map.contains_key(key),
                     |key| children[self.route(key) + 1].i().map[key]
@@ -167,7 +167,7 @@ pub proof fn lemma_insert_leaf_is_correct(node: Node, key: Key, msg: Message)
         node is Leaf,
         node.wf()
     ensures
-        node.insert_leaf(key, msg).i() == (Buffer{map: node.i().map.insert(key, msg)}),
+        node.insert_leaf(key, msg).i() == (SimpleBuffer{map: node.i().map.insert(key, msg)}),
         node.insert_leaf(key, msg).all_keys() == node.all_keys().insert(key)
 {
     let post = node.insert_leaf(key, msg);
@@ -1117,7 +1117,7 @@ pub proof fn lemma_append_via_insert_refines(pre: Node, keys: Seq<Key>, msgs: Se
     ensures
         pre.append_via_insert(keys, msgs, path).wf(),
         pre.append_via_insert(keys, msgs, path).i() == (
-            Buffer{map: pre.i().map.union_prefer_right(Map::new(
+            SimpleBuffer{map: pre.i().map.union_prefer_right(Map::new(
                 |key| keys.contains(key),
                 // TODO(x9du): use Key::largest_lte instead?
                 |key| msgs[(Node::Leaf{ keys: keys, msgs: msgs }).route(key)]))}),
@@ -1131,7 +1131,7 @@ pub proof fn lemma_append_via_insert_refines(pre: Node, keys: Seq<Key>, msgs: Se
     let append_map = Map::new(
         |key| keys.contains(key),
         |key| msgs[append_leaf.route(key)]);
-    let i_then_append = Buffer{map: pre.i().map.union_prefer_right(append_map)};
+    let i_then_append = SimpleBuffer{map: pre.i().map.union_prefer_right(append_map)};
     let insert0 = pre.insert(keys[0], msgs[0], path);
     insert_refines(pre, InsertLabel{key: keys[0], msg: msgs[0], path: path});
     assert(insert0.i() == pre.i().insert(keys[0], msgs[0]));
@@ -1208,7 +1208,7 @@ pub proof fn append_refines(pre: Node, lbl: AppendLabel)
     ensures
         pre.append(lbl.keys, lbl.msgs, lbl.path).wf(),
         pre.append(lbl.keys, lbl.msgs, lbl.path).i() == (
-            Buffer{map: pre.i().map.union_prefer_right(Map::new(
+            SimpleBuffer{map: pre.i().map.union_prefer_right(Map::new(
                 |key| lbl.keys.contains(key),
                 |key| lbl.msgs[(Node::Leaf{ keys: lbl.keys, msgs: lbl.msgs }).route(key)]))}),
 {
