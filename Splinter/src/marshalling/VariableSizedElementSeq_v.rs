@@ -41,7 +41,7 @@ pub struct VariableSizedElementSeqFormat <
     pub eltf: EltFormat,
 
     // This field ports bsmCfg.
-    // The bdfy knows "how big" the space we've allocated is, and we "steal"
+    // The bdyf knows "how big" the space we've allocated is, and we "steal"
     // space from the bdyf allocation to store elements at the "end" of the
     // overall allocated space.
     pub bdyf: ResizableUniformSizedElementSeqFormat<IntFormat<BdyType>, LenType>,
@@ -310,22 +310,38 @@ impl <
     {
         let ghost gdata = dslice@.i(data@);
         let olen = self.try_length(dslice, data);
-        if olen.is_some() && idx < self.exec_max_length() && idx < olen.unwrap() {
+        if olen.is_some() && 0 <= idx && idx < self.exec_max_length() && idx < olen.unwrap() {
+            let ghost sdata = dslice@.i(data@);
             proof {
-                let sdata = dslice@.i(data@);
 
                 // Painfully re-discovered spec ensures on ::all
                 SpecSlice::all_ensures::<u8>();
 
                 self.bdyf.get_ensures(SpecSlice::all(sdata), sdata, idx as int);
 
-                let dataslice = self.bdyf.get(SpecSlice::all(sdata), sdata, idx as int);
                 // TODO(jonh) file issue about triggering for axiom_seq_subrange_len
                 assert( self.element_gettable(dslice@.i(data@), idx as int) );
             }
             let start = self.exec_element_data_begin(dslice, data, idx);
-        assume(false);
+            proof {
+                if 0 < idx {
+                    self.bdyf.get_ensures(SpecSlice::all(sdata), sdata, idx - 1 as int);
+//                     let idata = dslice@.i(data@);
+//                     let midx = idx -1 as nat;
+//                     let bdata = self.bdyf.get_data(idata, midx);
+//                     SpecSlice::all_ensures::<u8>();
+//                     assert( self.bdyf.get(dslice@, data@, midx).len() == BdyType::uniform_size() );
+//                     assert( self.bdyf.get(dslice@, data@, midx).len() == bdata.len() );
+//                     assert( bdata.len() == BdyType::uniform_size() );
+//                     assert( BdyType::uniform_size() <= bdata.len() );
+//                     assert( self.bdyf.eltf.parsable(bdata) );
+//                     assert( self.bdyf.eltf.parsable(self.bdyf.get_data(idata, midx)) );
+//                     assert( self.bdyf.elt_parsable(dslice@.i(data@), idx - 1 as int) );
+                    assert( self.element_gettable(dslice@.i(data@), idx - 1 as int) );
+                }
+            }
             let end = self.exec_element_data_end(dslice, data, idx);
+        assume(false);
             let total_size = self.exec_total_size();
             if start <= end && end <= total_size && total_size <= dslice.len() {
                 assert( self.gettable(dslice@.i(data@), idx as int) );
