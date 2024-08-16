@@ -11,6 +11,7 @@ use crate::marshalling::Marshalling_v::*;
 use crate::marshalling::IntegerMarshalling_v::*;
 use crate::marshalling::SeqMarshalling_v::*;
 // use crate::marshalling::UniformSizedSeq_v::*;
+use crate::marshalling::UniformSized_v::*;
 use crate::marshalling::ResizableUniformSizedSeq_v::*;
 // use crate::marshalling::math_v::*;
 
@@ -38,7 +39,11 @@ pub struct VariableSizedElementSeqFormat <
     // The values we're marshalling and how to marshall each.
     // This field ports eltCfg.
     pub eltf: EltFormat,
+
     // This field ports bsmCfg.
+    // The bdfy knows "how big" the space we've allocated is, and we "steal"
+    // space from the bdyf allocation to store elements at the "end" of the
+    // overall allocated space.
     pub bdyf: ResizableUniformSizedElementSeqFormat<IntFormat<BdyType>, LenType>,
 }
 
@@ -194,18 +199,18 @@ impl <
             assert( self.size_of_table(self.length(data)) ==
                 LenType::uniform_size() as int + self.length(data) * BdyType::uniform_size() as int );
             let bsm = self.bdyf;
-            assert( 
+            assert(
                 bsm.length(data) * BdyType::uniform_size() as int
                     <= bsm.total_size as int - bsm.size_of_length_field() as int );
-            assert( 
+            assert(
                 bsm.size_of_length_field() as int + bsm.length(data) * BdyType::uniform_size() as int
                     <= bsm.total_size as int );
             assert( bsm.size_of_length_field() == LenType::uniform_size() as int );
             assert( bsm.length(data) == self.length(data) );
 
             assert( bsm.total_size as int <= self.total_size() as int );
-                
-                    
+
+
             assert( self.size_of_table(self.length(data)) <= self.total_size() as int );
         }
     }
@@ -300,7 +305,7 @@ impl <
     {
         self.eltf.parse(self.get_data(data, idx))
     }
-    
+
     exec fn try_get(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oeslice: Option<Slice>)
     {
         let ghost gdata = dslice@.i(data@);
@@ -310,13 +315,33 @@ impl <
 //                 self.boundary_seq_easy_marshalling();
 //                 self.boundary_ints_fit_in_usize();
                 let sdata = dslice@.i(data@);
+                assert( sdata.len() == dslice@.len() );
                 let bdata = self.bdyf.get_data(sdata, idx as int);
-                // Why isn't SeqMarshalling::get transparent here?
-                assume( bdata == self.bdyf.get(SpecSlice::all(sdata), sdata, idx as int).i(sdata) );
                 self.bdyf.get__ensures_len(SpecSlice::all(sdata), sdata, idx as int);
-                assume( false ); // left off here
+                assert( self.bdyf.gettable(sdata, idx as int) );
+
+                // Painfully re-discovered spec ensures on ::all
+                SpecSlice::all_ensures::<u8>();
+
+//                 assert( SpecSlice::all(sdata).i(sdata) == sdata );  // extensionality trigger
+                assert( self.bdyf.gettable(SpecSlice::all(sdata).i(sdata), idx as int) );
+                self.bdyf.get_ensures(SpecSlice::all(sdata), sdata, idx as int);
+                assert( self.bdyf.get(SpecSlice::all(sdata), sdata, idx as int).len()
+                        == self.bdyf.eltf.uniform_size() );
+//                 assert( bdata == self.bdyf.get(SpecSlice::all(sdata), sdata, idx as int) );
+
+                let dataslice = self.bdyf.get(SpecSlice::all(sdata), sdata, idx as int);
+                // TODO(jonh) file issue about triggering for axiom_seq_subrange_len
+                assert( dataslice.end <= sdata.len() );
+                assert( 0 <= dataslice.start <= dataslice.end <= sdata.len() );
+                assert( sdata.subrange(dataslice.start, dataslice.end).len() == dataslice.end - dataslice.start );
+                assert( bdata == dataslice.i(sdata) );
+                assert( bdata.len() == dataslice.len() );
+                assert( bdata.len() == self.bdyf.get(SpecSlice::all(sdata), sdata, idx as int).len() );
+                assert( BdyType::uniform_size() == self.bdyf.eltf.uniform_size() );
+
                 assert( bdata.len() == BdyType::uniform_size() );
-                assert( self.bdyf.eltf.parsable(bdata) == 
+                assert( self.bdyf.eltf.parsable(bdata) ==
                     (BdyType::uniform_size() <= bdata.len()) );
                 assert( self.bdyf.eltf.parsable(bdata) );
                 assert( self.element_gettable(dslice@.i(data@), idx as int) );

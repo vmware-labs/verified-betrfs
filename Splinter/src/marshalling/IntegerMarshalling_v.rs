@@ -59,8 +59,9 @@ pub trait IntFormattable : Deepview<int> + builtin::Integer + SpecOrd + Copy + S
     ensures forall |v: Self| #[trigger] v.deepv() == v as int
     {
         assert forall |v: Self| #[trigger] v.deepv() == v as int by {
-            assume(false);
-//             Self::deepv_is_as_int(v);
+//             assume(false);
+//            // issue #1235 is fixed on branch trait-req-ens-call-graph
+           Self::deepv_is_as_int(v);
         }
     }
 

@@ -376,70 +376,10 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
         Seq::new(len as nat, |i: int| self.get_elt(data, i))
     }
 
-
-    /////////////////////////////////////////////////////////////////////////
-    // marshall (entire sequence)
-    /////////////////////////////////////////////////////////////////////////
-    // This isn't very satisfyingly organized; I duplicate these placeholders
-    // from Marshalling so we can `impl Marshalling for SeqMarshalling`
-    // without them defined yet. Probably need to break Marsalling into
-    // pieces and + them together?
-
-    // No, these don't make sense as obligations; in the dfy code they're
-    // part of the implementation inheritance impl of Marshalling.
-//     spec fn marshallable(&self, value: Seq<DVElt>) -> bool
-//         ;
-// 
-//     spec fn spec_size(&self, value: Seq<DVElt>) -> usize
-//     recommends
-//         self.seq_valid(),
-//         self.marshallable(value)
-//     ;
-// 
-//     exec fn exec_size(&self, value: &Vec<Elt>) -> (sz: usize)
-//     requires
-//         self.seq_valid(),
-//         self.marshallable(value.deepv()),
-//     ensures
-//         sz == self.spec_size(value.deepv())
-//     ;
-// 
-//     // Defining these default methods so we can define exec_marshall. Bleeghh.
-//     spec fn seq_parsable(&self, data: Seq<u8>) -> bool
-//     {
-//         &&& self.seq_valid()
-//         &&& self.lengthable(data)
-//         &&& self.length(data) <= usize::MAX
-//         &&& self.parsable_to_len(data, self.length(data) as usize)
-//     }
-// 
-//     spec fn seq_parse(&self, data: Seq<u8>) -> Seq<DVElt>
-//     {
-//         self.parse_to_len(data, self.length(data) as usize)
-//     }
-// 
-// //     exec fn seq_exec_parse(&self, dslice: &Slice, data: &Vec<u8>) -> (value: Vec<Elt>)
-// //     requires
-// //         self.seq_valid(),
-// //         dslice@.valid(data@),
-// //         self.seq_parsable(dslice@.i(data@)),
-// //     ensures
-// //         value.deepv() == self.seq_parse(dslice@.i(data@)),
-// //     ;
-// 
-//     exec fn exec_marshall(&self, value: &Vec<Elt>, data: &mut Vec<u8>, start: usize) -> (end: usize)
-//     requires
-//         self.seq_valid(),
-//         self.marshallable(value.deepv()),
-//         start as int + self.spec_size(value.deepv()) as int <= old(data).len(),
-//     ensures
-//         end == start + self.spec_size(value.deepv()),
-//         data.len() == old(data).len(),
-//         forall |i| 0 <= i < start ==> data[i] == old(data)[i],
-//         forall |i| end <= i < data.len() ==> data[i] == old(data)[i],
-//         self.seq_parsable(data@.subrange(start as int, end as int)),
-//         self.seq_parse(data@.subrange(start as int, end as int)) == value.deepv()
-//     ;
+    open spec fn loyalty_test(&self) -> int
+    {
+        7
+    }
 }
 
 
