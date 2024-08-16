@@ -312,38 +312,15 @@ impl <
         let olen = self.try_length(dslice, data);
         if olen.is_some() && idx < self.exec_max_length() && idx < olen.unwrap() {
             proof {
-//                 self.boundary_seq_easy_marshalling();
-//                 self.boundary_ints_fit_in_usize();
                 let sdata = dslice@.i(data@);
-                assert( sdata.len() == dslice@.len() );
-                let bdata = self.bdyf.get_data(sdata, idx as int);
-                self.bdyf.get__ensures_len(SpecSlice::all(sdata), sdata, idx as int);
-                assert( self.bdyf.gettable(sdata, idx as int) );
 
                 // Painfully re-discovered spec ensures on ::all
                 SpecSlice::all_ensures::<u8>();
 
-//                 assert( SpecSlice::all(sdata).i(sdata) == sdata );  // extensionality trigger
-                assert( self.bdyf.gettable(SpecSlice::all(sdata).i(sdata), idx as int) );
                 self.bdyf.get_ensures(SpecSlice::all(sdata), sdata, idx as int);
-                assert( self.bdyf.get(SpecSlice::all(sdata), sdata, idx as int).len()
-                        == self.bdyf.eltf.uniform_size() );
-//                 assert( bdata == self.bdyf.get(SpecSlice::all(sdata), sdata, idx as int) );
 
                 let dataslice = self.bdyf.get(SpecSlice::all(sdata), sdata, idx as int);
                 // TODO(jonh) file issue about triggering for axiom_seq_subrange_len
-                assert( dataslice.end <= sdata.len() );
-                assert( 0 <= dataslice.start <= dataslice.end <= sdata.len() );
-                assert( sdata.subrange(dataslice.start, dataslice.end).len() == dataslice.end - dataslice.start );
-                assert( bdata == dataslice.i(sdata) );
-                assert( bdata.len() == dataslice.len() );
-                assert( bdata.len() == self.bdyf.get(SpecSlice::all(sdata), sdata, idx as int).len() );
-                assert( BdyType::uniform_size() == self.bdyf.eltf.uniform_size() );
-
-                assert( bdata.len() == BdyType::uniform_size() );
-                assert( self.bdyf.eltf.parsable(bdata) ==
-                    (BdyType::uniform_size() <= bdata.len()) );
-                assert( self.bdyf.eltf.parsable(bdata) );
                 assert( self.element_gettable(dslice@.i(data@), idx as int) );
             }
             let start = self.exec_element_data_begin(dslice, data, idx);
