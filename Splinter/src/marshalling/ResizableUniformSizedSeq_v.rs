@@ -85,7 +85,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
         self.lenf.exec_uniform_size()
     }
 
-    proof fn index_bounds_facts(&self, idx: int)
+    pub proof fn index_bounds_facts(&self, idx: int)
     requires self.valid(), 0 <= idx, idx < self.max_length()
     ensures
         self.size_of_length_field() as int

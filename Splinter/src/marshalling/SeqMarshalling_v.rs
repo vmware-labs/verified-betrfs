@@ -306,15 +306,22 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
         recommends self.seq_valid(), self.well_formed(data), self.elt_marshallable(value)
         ;
 
-    spec fn appends(&self, data: Seq<u8>, value: DVElt, newdata: Seq<u8>) -> bool
+    open spec fn appends(&self, data: Seq<u8>, value: DVElt, newdata: Seq<u8>) -> bool
     recommends
         self.seq_valid(),
         self.well_formed(data),
         self.elt_marshallable(value),
         self.appendable(data, value)
-    // TODO dfy has a default impl here
-        ;
-
+    {
+        let oldlen = self.length(data);
+        &&& newdata.len() == data.len()
+        &&& self.length(newdata) == oldlen + 1
+        &&& forall |i| i != oldlen ==> self.preserves_entry(data, i, newdata)
+        &&& self.gettable(newdata, oldlen)
+        &&& self.elt_parsable(newdata, oldlen)
+        &&& self.get_elt(newdata, oldlen) == value
+        &&& self.well_formed(newdata)
+    }
 
     exec fn exec_well_formed(&self, dslice: &Slice, data: &Vec<u8>) -> (w: bool)
     requires

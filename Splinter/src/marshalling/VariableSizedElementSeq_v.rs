@@ -236,11 +236,18 @@ impl <
 
     // index into buffer where element data begins (growing from end)
     pub open spec fn elements_start(&self, data: Seq<u8>) -> int {
-        7
-//         let t = self.table(data);
-//         if t.len() == 0 { self.total_size() }
-//         else { t.last() }
-//         oh left off here
+        let t = self.table(data);
+        if t.len() == 0 { self.total_size() as int }
+        else { t.last() }
+    }
+
+    pub open spec fn free_space(&self, data: Seq<u8>) -> int
+    recommends
+        self.seq_valid(),
+        self.tableable(data),
+        self.valid_table(data),
+    {
+        self.elements_start(data) - self.size_of_table(self.length(data))
     }
 }
 
@@ -434,13 +441,76 @@ impl <
     {
     }
 
-    open spec fn appendable(&self, data: Seq<u8>, value: EltFormat::DV) -> bool { false }
-
-    open spec fn appends(&self, data: Seq<u8>, value: EltFormat::DV, newdata: Seq<u8>) -> bool { false }
+    open spec fn appendable(&self, data: Seq<u8>, value: EltFormat::DV) -> bool {
+        BdyType::uniform_size() + self.eltf.spec_size(value) as nat
+            <= self.free_space(data)
+    }
 
     exec fn exec_well_formed(&self, dslice: &Slice, data: &Vec<u8>) -> (w: bool) {
-        assume( false );
-        false
+        let ghost idata = dslice@.i(data@);
+        proof {
+            BdyType::deepv_is_as_int_forall();
+        }
+
+        match self.bdyf.try_parse(dslice, data) {
+            None => false,
+            Some(tbl) => {
+                let len = tbl.len();
+                if len == 0 {
+                    return true;
+                }
+                let size_of_length_field = LenType::exec_uniform_size();
+                let size_of_boundary_entry = BdyType::exec_uniform_size();
+
+                // TODO: index_bounds_facts being public is a bit yucky
+                proof {
+                    self.bdyf.parsable_length_bounds(idata);
+                    assert( tbl.len() == self.table(idata).len() );
+
+                    // trigger to learn len-1 < self.bdyf.max_length()
+                    assert( self.bdyf.gettable(idata, len as int - 1) );
+
+                    self.bdyf.index_bounds_facts(len as int - 1);
+                }
+
+                let tbsz = size_of_length_field + len * size_of_boundary_entry;
+                if BdyType::to_usize(tbl[len-1]) < tbsz {
+                    // Uh oh, last element in table, placed first in storage, overlaps
+                    // with the boundary table itself!
+//                     proof {
+//                         let t = self.table(idata);
+//                         assert( 0 < t.len() );
+//                         assert( self.size_of_table(t.len() as int) == tbsz );
+//                         assert( t.last() == tbl[len-1] as int );
+//                         assert(!( self.size_of_table(t.len() as int) <= t.last() ));
+//                     }
+//                     assert( !self.well_formed(idata) );
+                    // Fails valid_table() second conjunct
+                    return false;
+                }
+                if self.exec_total_size() < BdyType::to_usize(tbl[0]) {
+                    // Far end of table sticks out beyond end of available storage -->
+                    // tbl[0] has negative length
+                    return false;
+                }
+
+                let mut i:usize = 0;
+                while i < len - 1
+                invariant
+                    0 <= i < len,
+                    forall |ip, jp| 0 <= ip <= jp <= i ==> tbl[jp] as int <= tbl[ip] as int
+                {
+                    assert( tbl[i as int] as int == self.table(idata)[i as int] );  // trigger
+                    assert( tbl[i as int + 1] as int == self.table(idata)[i as int +1] );   // trigger
+                    if BdyType::to_usize(tbl[i]) < BdyType::to_usize(tbl[i+1]) {
+                        return false;
+                    }
+                    i += 1;
+                }
+                assume(false);  // TODO
+                true
+            }
+        }
     }
 
     exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: &EltFormat::U) -> (r: bool) {
