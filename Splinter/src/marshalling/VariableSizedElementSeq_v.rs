@@ -475,22 +475,11 @@ impl <
 
                 let tbsz = size_of_length_field + len * size_of_boundary_entry;
                 if BdyType::to_usize(tbl[len-1]) < tbsz {
-                    // Uh oh, last element in table, placed first in storage, overlaps
-                    // with the boundary table itself!
-//                     proof {
-//                         let t = self.table(idata);
-//                         assert( 0 < t.len() );
-//                         assert( self.size_of_table(t.len() as int) == tbsz );
-//                         assert( t.last() == tbl[len-1] as int );
-//                         assert(!( self.size_of_table(t.len() as int) <= t.last() ));
-//                     }
-//                     assert( !self.well_formed(idata) );
-                    // Fails valid_table() second conjunct
+                    // Fails valid_table() third conjunct
                     return false;
                 }
                 if self.exec_total_size() < BdyType::to_usize(tbl[0]) {
-                    // Far end of table sticks out beyond end of available storage -->
-                    // tbl[0] has negative length
+                    // Fails valid_table() second conjunct
                     return false;
                 }
 
@@ -507,7 +496,6 @@ impl <
                     }
                     i += 1;
                 }
-                assume(false);  // TODO
                 true
             }
         }
