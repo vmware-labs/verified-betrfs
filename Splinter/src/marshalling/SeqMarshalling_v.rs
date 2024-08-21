@@ -201,6 +201,7 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
     /////////////////////////////////////////////////////////////////////////
     // setting individual elements
     /////////////////////////////////////////////////////////////////////////
+    // TODO: make this a separate trait, since not all seq formatters support it.
     spec fn elt_marshallable(&self, elt: DVElt) -> bool
         ;
 

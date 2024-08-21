@@ -249,6 +249,65 @@ impl <
     {
         self.elements_start(data) - self.size_of_table(self.length(data))
     }
+
+    spec fn append_offset(&self, data: Seq<u8>, value: EltFormat::DV) -> int
+    recommends
+        self.seq_valid(),
+        self.lengthable(data),
+        self.well_formed(data),
+        self.eltf.marshallable(value),
+        self.appendable(data, value),
+    {
+        let len = self.length(data);
+        let size = self.eltf.spec_size(value);
+        let upper_bound =
+            if len == 0 {
+                self.total_size() as int
+            }
+            else {
+                self.bdyf.get_elt(data, len - 1)
+            };
+        let start: int = upper_bound - size;
+        start
+    }
+
+    proof fn appendable_implies_bdyf_appendable(&self, data: Seq<u8>, value: EltFormat::DV)
+    requires
+        self.seq_valid(),
+        self.well_formed(data),
+        self.eltf.marshallable(value),
+        self.appendable(data, value),
+    ensures
+        self.length(data) + 1 < usize::MAX,
+        self.length(data) + 1 < BdyType::max(),
+        self.bdyf.appendable(data, self.append_offset(data, value))
+    {
+        assume(false); // TODO left off here
+    }
+
+    // Show that, if the old data table is a prefix of the new,
+    // both data agree on all the elements in the old table.
+    proof fn elements_identity(self, data: Seq<u8>, newdata: Seq<u8>)
+        // TODO left off here
+    ensures
+        forall |i| self.gettable(data, i) ==> self.gettable(newdata, i),
+        forall |i| self.gettable(data, i) ==> self.gettable(newdata, i) == self.gettable(data, i),
+    {
+        assume(false); // TODO left off here
+    }
+
+    // The tricky bit in exec_append is that the bdyf array doesn't change meaning
+    // when we write the datum because, even though it occupies space
+    // in the capacity of self.bdyf, it doesn't actually interfere
+    // with the resident values.
+    proof fn table_identity(&self, data: Seq<u8>, newdata: Seq<u8>)
+        // TODO left off here
+    ensures
+        self.tableable(newdata),
+        self.table(newdata) == self.table(data),
+    {
+        assume(false); // TODO left off here
+    }
 }
 
 impl <
@@ -511,36 +570,67 @@ impl <
         let ghost idata = dslice@.i(data@);
         proof {
             self.bdyf.parsable_length_bounds(idata);
+            BdyType::deepv_is_as_int_forall();
         }
         let size_of_length_field = LenType::exec_uniform_size();
         let size_of_boundary_entry = BdyType::exec_uniform_size();
         let table_size = size_of_length_field + len * size_of_boundary_entry;
 
-        proof { BdyType::deepv_is_as_int_forall(); }
+        // TODO replace this block with exec_append_offset
         let upper_bound =
             if len == 0 {
-                let ub = self.exec_total_size();
-//                 assert( table_size <= ub );
-                ub
+                self.exec_total_size()
             }
             else {
-                let iub = self.bdyf.exec_get_elt(dslice, data, len - 1);
-                let ub = BdyType::to_usize(iub);
-//                 assert( table_size == self.size_of_table(len as int) );
-//                 assert( ub == iub.deepv() );
-//                 assert( iub.deepv() == self.bdyf.get_elt(idata, len-1) );
-//                 assert( ub == self.table(idata).last() );
-//                 assert( table_size <= ub );
-                ub
+                BdyType::to_usize(self.bdyf.exec_get_elt(dslice, data, len - 1))
             };
         let free_space = upper_bound - table_size;
         let elt_size = self.eltf.exec_size(value);
-        assume( false );
         size_of_boundary_entry <= free_space && elt_size <= free_space - size_of_boundary_entry
     }
 
     exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: &EltFormat::U) {
-        assume( false );
+        let ghost idata = dslice@.i(data@);
+        proof {
+            BdyType::deepv_is_as_int_forall();
+            self.appendable_implies_bdyf_appendable(idata, value.deepv());
+        }
+        // TODO replace this block with exec_append_offset
+        let len = self.exec_length(dslice, data);
+        let size = self.eltf.exec_size(value);
+        let upper_bound =
+            if len == 0 {
+                self.exec_total_size()
+            }
+            else {
+                BdyType::to_usize(self.bdyf.exec_get_elt(dslice, data, len - 1))
+            };
+        assert( size <= upper_bound );
+        let start: usize = upper_bound - size;
+        let after_elt = self.eltf.exec_marshall(value, data, dslice.start + start);
+
+        // Snapshot the data after writing the new datum but before appending the boundary table
+        let ghost middle_data = dslice@.i(data@);
+        proof {
+        // middle / dummy proof
+        // elements_identity
+            // we didn't break the table
+            self.table_identity(idata, middle_data);
+            // we didn't break any of the old elements
+            self.elements_identity(idata, middle_data);
+            assert( self.well_formed(middle_data) );
+            assert( self.bdyf.appendable(middle_data, start as int) );
+        }
+
+        assert( upper_bound <= BdyType::max() );    // TODO left off here!
+        assert( start <= BdyType::max() );
+        self.bdyf.exec_append(dslice, data, &BdyType::from_usize(start));
+
+        proof {
+        // another block of proof
+        // elements_identity
+        }
+        assume(false);
     }
 
 }
