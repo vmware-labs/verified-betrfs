@@ -403,8 +403,11 @@ impl <
     // creating holes or overlaps.
     /////////////////////////////////////////////////////////////////////////
 
+    // This definition is also used in exec_appendable.
     open spec fn elt_marshallable(&self, elt: EltFormat::DV) -> bool
-    {false}
+    {
+        self.eltf.marshallable(elt)
+    }
 
     open spec fn settable(&self, data: Seq<u8>, idx: int, value: EltFormat::DV) -> bool
     {false}
@@ -502,8 +505,38 @@ impl <
     }
 
     exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: &EltFormat::U) -> (r: bool) {
+        let len = self.exec_length(dslice, data);
+
+        // TODO factor out this repeated code from exec_well_formed
+        let ghost idata = dslice@.i(data@);
+        proof {
+            self.bdyf.parsable_length_bounds(idata);
+        }
+        let size_of_length_field = LenType::exec_uniform_size();
+        let size_of_boundary_entry = BdyType::exec_uniform_size();
+        let table_size = size_of_length_field + len * size_of_boundary_entry;
+
+        proof { BdyType::deepv_is_as_int_forall(); }
+        let upper_bound =
+            if len == 0 {
+                let ub = self.exec_total_size();
+//                 assert( table_size <= ub );
+                ub
+            }
+            else {
+                let iub = self.bdyf.exec_get_elt(dslice, data, len - 1);
+                let ub = BdyType::to_usize(iub);
+//                 assert( table_size == self.size_of_table(len as int) );
+//                 assert( ub == iub.deepv() );
+//                 assert( iub.deepv() == self.bdyf.get_elt(idata, len-1) );
+//                 assert( ub == self.table(idata).last() );
+//                 assert( table_size <= ub );
+                ub
+            };
+        let free_space = upper_bound - table_size;
+        let elt_size = self.eltf.exec_size(value);
         assume( false );
-        false
+        size_of_boundary_entry <= free_space && elt_size <= free_space - size_of_boundary_entry
     }
 
     exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: &EltFormat::U) {
