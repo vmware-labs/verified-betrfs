@@ -291,7 +291,7 @@ impl <
         // TODO left off here
     ensures
         forall |i| self.gettable(data, i) ==> self.gettable(newdata, i),
-        forall |i| self.gettable(data, i) ==> self.gettable(newdata, i) == self.gettable(data, i),
+        forall |i| self.gettable(data, i) ==> self.get_data(newdata, i) == self.get_data(data, i),
     {
         assume(false); // TODO left off here
     }
@@ -598,15 +598,29 @@ impl <
         // TODO replace this block with exec_append_offset
         let len = self.exec_length(dslice, data);
         let size = self.eltf.exec_size(value);
+        assume( self.bdyf.total_size <= LenType::max() );
+        assume( self.bdyf.total_size <= BdyType::max() );
         let upper_bound =
             if len == 0 {
-                self.exec_total_size()
+                // Here Dafny knows totalSize <= bdyf type max,
+                // because V.totalSize is a function method that
+                // reaches into a field BSMCfg of type ... well, uint64. Hmm.
+                let ub = self.exec_total_size();
+            // so we could have LenType = u64, BdyType = u32, and bdyf.total_size = 0x2_0000_0000
+//         assert( self.bdyf.total_size <= LenType::max() );
+//         assert( ub <= BdyType::max() );    // TODO left off here!
+                ub
             }
             else {
-                BdyType::to_usize(self.bdyf.exec_get_elt(dslice, data, len - 1))
+                let ub = BdyType::to_usize(self.bdyf.exec_get_elt(dslice, data, len - 1));
+//         assert( ub <= BdyType::max() );    // TODO left off here!
+                ub
             };
         assert( size <= upper_bound );
         let start: usize = upper_bound - size;
+        ////////////////////////////////////////////////////////////
+        // Write the value into its empty slot
+        ////////////////////////////////////////////////////////////
         let after_elt = self.eltf.exec_marshall(value, data, dslice.start + start);
 
         // Snapshot the data after writing the new datum but before appending the boundary table
@@ -622,15 +636,85 @@ impl <
             assert( self.bdyf.appendable(middle_data, start as int) );
         }
 
-        assert( upper_bound <= BdyType::max() );    // TODO left off here!
-        assert( start <= BdyType::max() );
+//         assert( upper_bound <= BdyType::max() );    // TODO left off here!
+//         assert( start <= BdyType::max() );
+        ////////////////////////////////////////////////////////////
+        // Append the new boundary element
+        ////////////////////////////////////////////////////////////
         self.bdyf.exec_append(dslice, data, &BdyType::from_usize(start));
+
+        let ghost newdata = dslice@.i(data@);
+        let ghost newslot = self.length(idata); // TODO rename from oldlen in SeqMarshalling
+
 
         proof {
         // another block of proof
-        // elements_identity
+            self.elements_identity(middle_data, newdata);
         }
-        assume(false);
+
+        assert forall |i| i != newslot implies self.preserves_entry(idata, i, newdata) by {
+//         &&& (self.gettable(data, idx) ==> self.gettable(new_data, idx))
+//         &&& (self.gettable(data, idx) && self.elt_parsable(data, idx)) ==> {
+//             &&& self.elt_parsable(new_data, idx)
+//             &&& self.get_elt(new_data, idx) == self.get_elt(data, idx)
+//             if self.gettable(idata, i) {
+//                 assert( self.gettable(middle_data, i) );
+//                 assert( self.gettable(newdata, i) );
+//                 if self.elt_parsable(idata, i) {
+//                     assert( self.elt_parsable(middle_data, i) );
+//                     assert( self.elt_parsable(newdata, i) );
+//                     assert( self.get_elt(middle_data, i) == self.get_elt(idata, i) );
+//                     assert( self.get_elt(newdata, i) == self.get_elt(idata, i) );
+//                 }
+//             }
+//             assume( false );
+        }
+        assert( self.gettable(newdata, newslot) ) by {
+            assert( self.bdyf.appends(middle_data, start as int, newdata) );
+            let oldlen = self.bdyf.length(middle_data);
+            assert( self.bdyf.gettable(newdata, oldlen) );
+            assert( self.bdyf.elt_parsable(newdata, oldlen) );
+            if 0 < oldlen {
+//                 assert( self.bdyf.gettable(newdata, oldlen-1) );
+//                 // the entire bdyf is parsable, so each elt is parsable.
+//                 // Probably a missing ensures.
+//                 assert( self.tableable(idata) );
+//                 assert( self.tableable(middle_data) );
+//                     // append should have preserved parsability!
+//                 assert( self.bdyf.parsable_to_len(middle_data, self.bdyf.length(middle_data) as usize) );
+//                 let msize = self.bdyf.length(middle_data) as usize;
+//                 assert forall |i: int| 0<=i && i<msize implies self.bdyf.elt_parsable(middle_data, i) by {
+//                     assert( self.bdyf.elt_parsable(idata, i) );
+//                     assert( self.bdyf.elt_parsable(middle_data, i) );
+//                 }
+//                 assert forall |i: int| 0<=i && i<msize implies self.bdyf.elt_parsable(newdata, i) by {
+//                     assert( self.bdyf.elt_parsable(idata, i) );
+//                     assert( self.bdyf.elt_parsable(middle_data, i) );
+//                     assert( self.bdyf.elt_parsable(newdata, i) );
+//                 }
+//                 assert( forall |i: int| 0<=i && i<msize as int ==> self.bdyf.elt_parsable(newdata, i) );
+//                 assert( self.bdyf.elt_parsable_to_len(newdata, msize as int) );
+//                 assert( self.bdyf.elt_parsable_to_len(newdata, self.bdyf.length(middle_data) as usize as int) );
+//                 assert( self.bdyf.parsable_to_len(newdata, self.bdyf.length(middle_data) as usize) );
+//                 assert( self.bdyf.parsable_to_len(newdata, self.bdyf.length(newdata) as usize) );
+//                 assert( self.tableable(newdata) );
+//                 assert( self.bdyf.parsable(newdata) );
+                assert( self.bdyf.gettable(middle_data, oldlen-1) );
+                assert( self.bdyf.elt_parsable(middle_data, oldlen-1) );
+                assert( self.bdyf.preserves_entry(middle_data, oldlen-1, newdata) ); // trigger
+
+                assert( self.bdyf.gettable(newdata, oldlen-1) );
+                assert( self.bdyf.elt_parsable(newdata, oldlen-1) );
+            }
+            assert( newslot == self.bdyf.length(idata) );
+            assert( newslot == self.bdyf.length(middle_data) );
+            assert( oldlen == newslot );
+            assert( self.bdyf.gettable(newdata, newslot) );
+            assume( false );
+        }
+        assume( self.elt_parsable(newdata, newslot) );
+        assume( self.get_elt(newdata, newslot) == value.deepv() );
+        assume( self.well_formed(newdata) );
     }
 
 }
