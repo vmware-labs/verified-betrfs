@@ -308,6 +308,16 @@ impl <
     {
         assume(false); // TODO left off here
     }
+
+    // TODO move somewhere sane
+    proof fn lemma_seq_slice_slice(data: Seq<u8>, i: int, j: int, k: int, l: int)
+    requires
+        0<=i<=j<=data.len(),
+        0<=k<=l<=j-i,
+    ensures
+        data.subrange(i,j).subrange(k,l) =~= data.subrange(i+k, i+l)
+    {
+    }
 }
 
 impl <
@@ -323,6 +333,7 @@ impl <
         &&& self.eltf.valid()
         &&& self.bdyf.seq_valid()
         &&& self.bdyf.total_size <= LenType::max()
+        &&& self.bdyf.total_size <= BdyType::max()
     }
 
     open spec fn lengthable(&self, data: Seq<u8>) -> bool {
@@ -594,12 +605,13 @@ impl <
         proof {
             BdyType::deepv_is_as_int_forall();
             self.appendable_implies_bdyf_appendable(idata, value.deepv());
+            SpecSlice::all_ensures::<u8>(); // sigh
         }
         // TODO replace this block with exec_append_offset
         let len = self.exec_length(dslice, data);
         let size = self.eltf.exec_size(value);
-        assume( self.bdyf.total_size <= LenType::max() );
-        assume( self.bdyf.total_size <= BdyType::max() );
+//         assert( self.bdyf.total_size <= LenType::max() );
+//         assert( self.bdyf.total_size <= BdyType::max() );
         let upper_bound =
             if len == 0 {
                 // Here Dafny knows totalSize <= bdyf type max,
@@ -624,6 +636,7 @@ impl <
         let after_elt = self.eltf.exec_marshall(value, data, dslice.start + start);
 
         // Snapshot the data after writing the new datum but before appending the boundary table
+        let ghost middle_data_raw = data@;
         let ghost middle_data = dslice@.i(data@);
         proof {
         // middle / dummy proof
@@ -653,21 +666,6 @@ impl <
         }
 
         assert forall |i| i != newslot implies self.preserves_entry(idata, i, newdata) by {
-//         &&& (self.gettable(data, idx) ==> self.gettable(new_data, idx))
-//         &&& (self.gettable(data, idx) && self.elt_parsable(data, idx)) ==> {
-//             &&& self.elt_parsable(new_data, idx)
-//             &&& self.get_elt(new_data, idx) == self.get_elt(data, idx)
-//             if self.gettable(idata, i) {
-//                 assert( self.gettable(middle_data, i) );
-//                 assert( self.gettable(newdata, i) );
-//                 if self.elt_parsable(idata, i) {
-//                     assert( self.elt_parsable(middle_data, i) );
-//                     assert( self.elt_parsable(newdata, i) );
-//                     assert( self.get_elt(middle_data, i) == self.get_elt(idata, i) );
-//                     assert( self.get_elt(newdata, i) == self.get_elt(idata, i) );
-//                 }
-//             }
-//             assume( false );
         }
         assert( self.gettable(newdata, newslot) ) by {
             assert( self.bdyf.appends(middle_data, start as int, newdata) );
@@ -675,46 +673,148 @@ impl <
             assert( self.bdyf.gettable(newdata, oldlen) );
             assert( self.bdyf.elt_parsable(newdata, oldlen) );
             if 0 < oldlen {
-//                 assert( self.bdyf.gettable(newdata, oldlen-1) );
-//                 // the entire bdyf is parsable, so each elt is parsable.
-//                 // Probably a missing ensures.
-//                 assert( self.tableable(idata) );
-//                 assert( self.tableable(middle_data) );
-//                     // append should have preserved parsability!
-//                 assert( self.bdyf.parsable_to_len(middle_data, self.bdyf.length(middle_data) as usize) );
-//                 let msize = self.bdyf.length(middle_data) as usize;
-//                 assert forall |i: int| 0<=i && i<msize implies self.bdyf.elt_parsable(middle_data, i) by {
-//                     assert( self.bdyf.elt_parsable(idata, i) );
-//                     assert( self.bdyf.elt_parsable(middle_data, i) );
-//                 }
-//                 assert forall |i: int| 0<=i && i<msize implies self.bdyf.elt_parsable(newdata, i) by {
-//                     assert( self.bdyf.elt_parsable(idata, i) );
-//                     assert( self.bdyf.elt_parsable(middle_data, i) );
-//                     assert( self.bdyf.elt_parsable(newdata, i) );
-//                 }
-//                 assert( forall |i: int| 0<=i && i<msize as int ==> self.bdyf.elt_parsable(newdata, i) );
-//                 assert( self.bdyf.elt_parsable_to_len(newdata, msize as int) );
-//                 assert( self.bdyf.elt_parsable_to_len(newdata, self.bdyf.length(middle_data) as usize as int) );
-//                 assert( self.bdyf.parsable_to_len(newdata, self.bdyf.length(middle_data) as usize) );
-//                 assert( self.bdyf.parsable_to_len(newdata, self.bdyf.length(newdata) as usize) );
-//                 assert( self.tableable(newdata) );
-//                 assert( self.bdyf.parsable(newdata) );
-                assert( self.bdyf.gettable(middle_data, oldlen-1) );
-                assert( self.bdyf.elt_parsable(middle_data, oldlen-1) );
                 assert( self.bdyf.preserves_entry(middle_data, oldlen-1, newdata) ); // trigger
-
-                assert( self.bdyf.gettable(newdata, oldlen-1) );
-                assert( self.bdyf.elt_parsable(newdata, oldlen-1) );
+//                 assert( self.bdyf.gettable(newdata, oldlen-1) );
+//                 assert( self.bdyf.elt_parsable(newdata, oldlen-1) );
             }
             assert( newslot == self.bdyf.length(idata) );
             assert( newslot == self.bdyf.length(middle_data) );
             assert( oldlen == newslot );
             assert( self.bdyf.gettable(newdata, newslot) );
-            assume( false );
         }
-        assume( self.elt_parsable(newdata, newslot) );
-        assume( self.get_elt(newdata, newslot) == value.deepv() );
-        assume( self.well_formed(newdata) );
+//         assert( start+size as int == after_elt - dslice.start as int );
+//         assert( newdata.subrange(start as int, start+size as int)
+//                 =~= middle_data.subrange(start as int, after_elt - dslice.start as int) ) by {
+//             Self::lemma_seq_slice_slice(newdata, dslice.start as int, dslice.end as int, start as int, start+size as int);
+//         }
+        assert( self.eltf.parsable(middle_data_raw.subrange(dslice.start + start as int, after_elt as int)) );
+
+//         This is unprovable. get_elt(middle_data, newslot) isn't defined because middle_data is
+//             before the newslot bdy elt is written.
+//         assert( middle_data_raw.subrange(dslice.start + start as int, after_elt as int)
+//             =~= self.get_data(middle_data, newslot) ) by {
+//             let mslice = SpecSlice::all(middle_data);
+//             assert( self.bdyf.get_elt(middle_data, newslot) == start );
+//             assert( self.bdyf.get_elt(middle_data, newslot) == start );
+//             assert( 
+//                 mslice.subslice(
+//                     self.element_data_begin(mslice.i(middle_data), newslot),
+//                     self.element_data_end(mslice.i(middle_data), newslot)).i(middle_data)
+//                 ==
+//                 self.get(SpecSlice::all(middle_data), middle_data, newslot).i(middle_data)
+//             );
+//             assert(
+//                 self.get(SpecSlice::all(middle_data), middle_data, newslot).i(middle_data)
+//                 ==
+//                 self.get_data(middle_data, newslot)
+//             );
+//         }
+//         assert( self.eltf.parsable(self.get_data(middle_data, newslot)) );
+//         assert( self.elt_parsable(middle_data, newslot) );
+
+        // bdy points to the right range
+        assume( self.get_data(newdata, newslot) == newdata.subrange(dslice.start + start, after_elt as int) );
+        // range has the right stuff in it
+        assert( self.eltf.parsable(middle_data_raw.subrange(dslice.start + start as int, after_elt as int)) );
+//         assert( newdata.subrange(dslice.start + start, after_elt as int)
+//             == middle_data_raw.subrange(dslice.start + start, after_elt as int)
+//             );
+        assert( self.eltf.parsable(middle_data_raw.subrange(dslice.start + start, after_elt as int)) );
+
+        let ghost nslice = SpecSlice::all(newdata);
+
+        // Hey, this is the data that shouldn't have been touched by the second bdyf write.
+        // elements_identity doesn't help us, because newslot wasn't yet gettable at middle.
+        // bdyf.exec_append's agree_beyond_slice doesn't help us, because we handed it the
+        // entire slice.
+        // bdyf.append's preserves_entry doesn't help us, because these bytes beyond the appended
+        // bdy element don't hold bdyf gettable fields.
+        // THE MAGIC is MarshalledAccessors.i.dfy:1138
+        assume(
+            middle_data_raw.subrange(dslice.start + start, after_elt as int)
+            ==
+            data@.subrange(dslice.start + start, after_elt as int)
+        );
+
+//         assert(
+//             data@.subrange(dslice@.start + start, after_elt as int)
+//             ==
+//             dslice@.i(data@).subrange(start as int, after_elt - dslice.start)
+//         );
+//         assert(
+//             dslice@.i(data@).subrange(start as int, after_elt - dslice.start)
+//             ==
+//             newdata.subrange(start as int, after_elt - dslice.start)
+//         );
+//         assert(
+//             newdata.subrange(start as int, after_elt - dslice.start)
+//             ==
+//             newdata.subrange(nslice.start + start, nslice.start + after_elt - dslice.start)
+//         );
+//         assert(
+//             newdata.subrange(nslice.start + start, nslice.start + after_elt - dslice.start)
+//             ==
+//             nslice.subslice(start as int, after_elt - dslice.start as int).i(newdata)
+//         );
+//         assert(
+//             middle_data_raw.subrange(dslice.start + start, after_elt as int)
+//             ==
+//             nslice.subslice(start as int, after_elt - dslice.start as int).i(newdata)
+//         );
+//
+//         assert( 
+//             start
+//             == self.bdyf.get_elt(newdata, newslot)
+//         );
+//         assert( 
+//             self.bdyf.get_elt(newdata, newslot)
+//             == self.bdyf.get_elt(nslice.i(newdata), newslot)
+//         );
+//         assert( 
+//             self.bdyf.get_elt(nslice.i(newdata), newslot)
+//             == self.element_data_begin(nslice.i(newdata), newslot)
+//         );
+
+        // trigger all_ensures
+        assert( self.element_data_begin(nslice.i(newdata), newslot) == start );
+
+        // trigger
+        // TODO(verus): all I did here was intros element_data_end. That should never be necessary
+        // to tickle a trigger.
+        assert(
+            if newslot == 0 { self.total_size() as int }
+            else { self.bdyf.get_elt(newdata, newslot - 1) }
+            == self.element_data_end(newdata, newslot)
+        );
+        // trigger
+        assert( self.element_data_end(newdata, newslot) == after_elt - dslice.start );
+
+//         assert( self.element_data_end(nslice.i(newdata), newslot) == after_elt - dslice.start );
+
+        assert(
+            data@.subrange(dslice@.start + start, after_elt as int)
+            == self.get_data(newdata, newslot)
+        );
+
+//         assert(
+//             nslice.subslice(
+//                 self.element_data_begin(nslice.i(newdata), newslot),
+//                 self.element_data_end(nslice.i(newdata), newslot)).i(newdata)
+//             ==
+//             self.get(SpecSlice::all(newdata), newdata, newslot).i(newdata)
+//         );
+// 
+//         assert(
+//             self.get(SpecSlice::all(newdata), newdata, newslot).i(newdata)
+//             == self.get_data(newdata, newslot)
+//             );
+        assert( self.eltf.parsable(self.get_data(newdata, newslot)) );
+        assert( self.elt_parsable(newdata, newslot) );
+
+        assert( self.get_elt(newdata, newslot) == value.deepv() );
+        assert( self.tableable(newdata) );
+        assume( self.valid_table(newdata) );
+        assert( self.well_formed(newdata) );
     }
 
 }
