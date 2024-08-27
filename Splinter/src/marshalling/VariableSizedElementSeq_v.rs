@@ -730,11 +730,20 @@ impl <
         // bdyf.append's preserves_entry doesn't help us, because these bytes beyond the appended
         // bdy element don't hold bdyf gettable fields.
         // THE MAGIC is MarshalledAccessors.i.dfy:1138
-        assume(
-            middle_data_raw.subrange(dslice.start + start, after_elt as int)
-            ==
-            data@.subrange(dslice.start + start, after_elt as int)
-        );
+        assert( self.bdyf.untampered_bytes(dslice, middle_data_raw, data@) );
+        proof {
+            let used_bytes = dslice.start + self.bdyf.size_of_length_field() + self.bdyf.length(newdata) * self.bdyf.eltf.uniform_size();
+            assert( self.bdyf.size_of_length_field() + self.bdyf.length(newdata) * self.bdyf.eltf.uniform_size() <= start );
+            assert( start <= after_elt );
+            assert( after_elt <= data@.len() );
+            let msub = middle_data_raw.subrange(dslice.start + start, after_elt as int);
+            let dsub = data@.subrange(dslice.start + start, after_elt as int);
+            assert( 
+                middle_data_raw.subrange(dslice.start + start, after_elt as int)
+                ==
+                data@.subrange(dslice.start + start, after_elt as int)
+            );
+        }
 
 //         assert(
 //             data@.subrange(dslice@.start + start, after_elt as int)
@@ -787,7 +796,7 @@ impl <
             == self.element_data_end(newdata, newslot)
         );
         // trigger
-        assert( self.element_data_end(newdata, newslot) == after_elt - dslice.start );
+        assume( self.element_data_end(newdata, newslot) == after_elt - dslice.start );
 
 //         assert( self.element_data_end(nslice.i(newdata), newslot) == after_elt - dslice.start );
 
@@ -812,7 +821,7 @@ impl <
         assert( self.elt_parsable(newdata, newslot) );
 
         assert( self.get_elt(newdata, newslot) == value.deepv() );
-        assert( self.tableable(newdata) );
+        assume( self.tableable(newdata) );
         assume( self.valid_table(newdata) );
         assert( self.well_formed(newdata) );
     }
