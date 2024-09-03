@@ -147,10 +147,14 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
     // exec_append promises not to touch any bytes beyond the spot it places the appended value.
     // This is a bit of a layering violation used in VariableSizedElementSeq to share space between
     // the boundary seq and the value storage.
-    pub open spec fn untampered_bytes(&self, dslice: &Slice, olddata: Seq<u8>, newdata: Seq<u8>) -> bool
+    pub open spec fn first_unused_byte(&self, dslice: SpecSlice, data: Seq<u8>) -> int
     {
-        let used_bytes = dslice.start + self.size_of_length_field() + self.length(newdata) * self.eltf.uniform_size();
-        forall |i| used_bytes <= i < newdata.len() ==> olddata[i] == newdata[i]
+        dslice.start + self.size_of_length_field() + self.length(dslice.i(data)) * self.eltf.uniform_size()
+    }
+
+    pub open spec fn untampered_bytes(&self, dslice: SpecSlice, olddata: Seq<u8>, newdata: Seq<u8>) -> bool
+    {
+        forall |i| self.first_unused_byte(dslice, newdata) <= i < newdata.len() ==> olddata[i] == newdata[i]
     }
 }
 
@@ -487,7 +491,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
     }
 
     exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: &EltFormat::U)
-    ensures self.untampered_bytes(dslice, old(data)@, data@)
+    ensures self.untampered_bytes(dslice@, old(data)@, data@)
     {
         let len = self.exec_length(dslice, data);
         self.exec_set(dslice, data, len, value);
@@ -499,7 +503,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
             assert( self.preserves_entry(dslice@.i(old(data)@), i, middle) );   // trigger
             assert( self.preserves_entry(middle, i, dslice@.i(data@)) );        // trigger
         }
-        assume( self.untampered_bytes(dslice, old(data)@, data@) ); // TODO
+        assume( self.untampered_bytes(dslice@, old(data)@, data@) ); // TODO
     }
 }
 

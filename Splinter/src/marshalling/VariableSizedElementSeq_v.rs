@@ -250,6 +250,42 @@ impl <
         self.elements_start(data) - self.size_of_table(self.length(data))
     }
 
+    // TODO hey wait this is just elements_start
+    spec fn upper_bound(&self, data: Seq<u8>) -> int
+    {
+        let len = self.length(data);
+        if len == 0 {
+            self.total_size() as int
+        }
+        else {
+            self.bdyf.get_elt(data, len - 1)
+        }
+    }
+
+    // exec_appendable and exec_append both need these two bits of info
+    exec fn exec_length_and_upper_bound(&self, dslice: &Slice, data: &Vec<u8>) -> (len_and_bound: (usize, usize))
+    requires
+        self.seq_valid(),
+        dslice@.valid(data@),
+        self.lengthable(dslice@.i(data@)),
+        self.well_formed(dslice@.i(data@)),
+    ensures
+        len_and_bound.0 == self.length(dslice@.i(data@)),
+        len_and_bound.1 == self.upper_bound(dslice@.i(data@)),
+    {
+        proof { BdyType::deepv_is_as_int_forall(); }
+        let len = self.exec_length(dslice, data);
+
+        let upper_bound =
+            if len == 0 {
+                self.exec_total_size()
+            }
+            else {
+                BdyType::to_usize(self.bdyf.exec_get_elt(dslice, data, len - 1))
+            };
+        (len, upper_bound)
+    }
+
     spec fn append_offset(&self, data: Seq<u8>, value: EltFormat::DV) -> int
     recommends
         self.seq_valid(),
@@ -258,17 +294,7 @@ impl <
         self.eltf.marshallable(value),
         self.appendable(data, value),
     {
-        let len = self.length(data);
-        let size = self.eltf.spec_size(value);
-        let upper_bound =
-            if len == 0 {
-                self.total_size() as int
-            }
-            else {
-                self.bdyf.get_elt(data, len - 1)
-            };
-        let start: int = upper_bound - size;
-        start
+        self.upper_bound(data) - self.eltf.spec_size(value)
     }
 
     proof fn appendable_implies_bdyf_appendable(&self, data: Seq<u8>, value: EltFormat::DV)
@@ -515,6 +541,7 @@ impl <
     }
 
     open spec fn appendable(&self, data: Seq<u8>, value: EltFormat::DV) -> bool {
+        // We have room for one more bdy entry plus the new datum
         BdyType::uniform_size() + self.eltf.spec_size(value) as nat
             <= self.free_space(data)
     }
@@ -575,7 +602,7 @@ impl <
     }
 
     exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: &EltFormat::U) -> (r: bool) {
-        let len = self.exec_length(dslice, data);
+        let (len, upper_bound) = self.exec_length_and_upper_bound(dslice, data);
 
         // TODO factor out this repeated code from exec_well_formed
         let ghost idata = dslice@.i(data@);
@@ -587,14 +614,6 @@ impl <
         let size_of_boundary_entry = BdyType::exec_uniform_size();
         let table_size = size_of_length_field + len * size_of_boundary_entry;
 
-        // TODO replace this block with exec_append_offset
-        let upper_bound =
-            if len == 0 {
-                self.exec_total_size()
-            }
-            else {
-                BdyType::to_usize(self.bdyf.exec_get_elt(dslice, data, len - 1))
-            };
         let free_space = upper_bound - table_size;
         let elt_size = self.eltf.exec_size(value);
         size_of_boundary_entry <= free_space && elt_size <= free_space - size_of_boundary_entry
@@ -607,27 +626,8 @@ impl <
             self.appendable_implies_bdyf_appendable(idata, value.deepv());
             SpecSlice::all_ensures::<u8>(); // sigh
         }
-        // TODO replace this block with exec_append_offset
-        let len = self.exec_length(dslice, data);
+        let (len, upper_bound) = self.exec_length_and_upper_bound(dslice, data);
         let size = self.eltf.exec_size(value);
-//         assert( self.bdyf.total_size <= LenType::max() );
-//         assert( self.bdyf.total_size <= BdyType::max() );
-        let upper_bound =
-            if len == 0 {
-                // Here Dafny knows totalSize <= bdyf type max,
-                // because V.totalSize is a function method that
-                // reaches into a field BSMCfg of type ... well, uint64. Hmm.
-                let ub = self.exec_total_size();
-            // so we could have LenType = u64, BdyType = u32, and bdyf.total_size = 0x2_0000_0000
-//         assert( self.bdyf.total_size <= LenType::max() );
-//         assert( ub <= BdyType::max() );    // TODO left off here!
-                ub
-            }
-            else {
-                let ub = BdyType::to_usize(self.bdyf.exec_get_elt(dslice, data, len - 1));
-//         assert( ub <= BdyType::max() );    // TODO left off here!
-                ub
-            };
         assert( size <= upper_bound );
         let start: usize = upper_bound - size;
         ////////////////////////////////////////////////////////////
@@ -649,14 +649,13 @@ impl <
             assert( self.bdyf.appendable(middle_data, start as int) );
         }
 
-//         assert( upper_bound <= BdyType::max() );    // TODO left off here!
-//         assert( start <= BdyType::max() );
         ////////////////////////////////////////////////////////////
         // Append the new boundary element
         ////////////////////////////////////////////////////////////
         self.bdyf.exec_append(dslice, data, &BdyType::from_usize(start));
 
         let ghost newdata = dslice@.i(data@);
+        let ghost raw_new_data = data@;
         let ghost newslot = self.length(idata); // TODO rename from oldlen in SeqMarshalling
 
 
@@ -668,49 +667,11 @@ impl <
         assert forall |i| i != newslot implies self.preserves_entry(idata, i, newdata) by {
         }
         assert( self.gettable(newdata, newslot) ) by {
-            assert( self.bdyf.appends(middle_data, start as int, newdata) );
             let oldlen = self.bdyf.length(middle_data);
-            assert( self.bdyf.gettable(newdata, oldlen) );
-            assert( self.bdyf.elt_parsable(newdata, oldlen) );
             if 0 < oldlen {
                 assert( self.bdyf.preserves_entry(middle_data, oldlen-1, newdata) ); // trigger
-//                 assert( self.bdyf.gettable(newdata, oldlen-1) );
-//                 assert( self.bdyf.elt_parsable(newdata, oldlen-1) );
             }
-            assert( newslot == self.bdyf.length(idata) );
-            assert( newslot == self.bdyf.length(middle_data) );
-            assert( oldlen == newslot );
-            assert( self.bdyf.gettable(newdata, newslot) );
         }
-//         assert( start+size as int == after_elt - dslice.start as int );
-//         assert( newdata.subrange(start as int, start+size as int)
-//                 =~= middle_data.subrange(start as int, after_elt - dslice.start as int) ) by {
-//             Self::lemma_seq_slice_slice(newdata, dslice.start as int, dslice.end as int, start as int, start+size as int);
-//         }
-        assert( self.eltf.parsable(middle_data_raw.subrange(dslice.start + start as int, after_elt as int)) );
-
-//         This is unprovable. get_elt(middle_data, newslot) isn't defined because middle_data is
-//             before the newslot bdy elt is written.
-//         assert( middle_data_raw.subrange(dslice.start + start as int, after_elt as int)
-//             =~= self.get_data(middle_data, newslot) ) by {
-//             let mslice = SpecSlice::all(middle_data);
-//             assert( self.bdyf.get_elt(middle_data, newslot) == start );
-//             assert( self.bdyf.get_elt(middle_data, newslot) == start );
-//             assert( 
-//                 mslice.subslice(
-//                     self.element_data_begin(mslice.i(middle_data), newslot),
-//                     self.element_data_end(mslice.i(middle_data), newslot)).i(middle_data)
-//                 ==
-//                 self.get(SpecSlice::all(middle_data), middle_data, newslot).i(middle_data)
-//             );
-//             assert(
-//                 self.get(SpecSlice::all(middle_data), middle_data, newslot).i(middle_data)
-//                 ==
-//                 self.get_data(middle_data, newslot)
-//             );
-//         }
-//         assert( self.eltf.parsable(self.get_data(middle_data, newslot)) );
-//         assert( self.elt_parsable(middle_data, newslot) );
 
         // bdy points to the right range
         assume( self.get_data(newdata, newslot) == newdata.subrange(dslice.start + start, after_elt as int) );
@@ -730,59 +691,94 @@ impl <
         // bdyf.append's preserves_entry doesn't help us, because these bytes beyond the appended
         // bdy element don't hold bdyf gettable fields.
         // THE MAGIC is MarshalledAccessors.i.dfy:1138
-        assert( self.bdyf.untampered_bytes(dslice, middle_data_raw, data@) );
+        assert( self.bdyf.untampered_bytes(dslice@, middle_data_raw, data@) );
         proof {
-            let used_bytes = dslice.start + self.bdyf.size_of_length_field() + self.bdyf.length(newdata) * self.bdyf.eltf.uniform_size();
-            assert( self.bdyf.size_of_length_field() + self.bdyf.length(newdata) * self.bdyf.eltf.uniform_size() <= start );
-            assert( start <= after_elt );
+            assert( self.bdyf.size_of_length_field() == self.size_of_length_field() as int );
+            assert( self.bdyf.length(newdata) == self.length(newdata) );
+            assert( self.bdyf.eltf.uniform_size() == self.size_of_boundary_entry() as int );
+
+            assert( self.size_of_table(self.length(newdata))
+                ==
+                self.bdyf.size_of_length_field() + self.bdyf.length(newdata) * self.bdyf.eltf.uniform_size() );
+
+            assert( self.bdyf.first_unused_byte(dslice@, raw_new_data)
+                ==
+                dslice@.start + self.bdyf.size_of_length_field() + self.bdyf.length(dslice@.i(raw_new_data)) * self.bdyf.eltf.uniform_size() );
+
+            assert( self.bdyf.first_unused_byte(dslice@, raw_new_data)
+                == dslice.start + self.size_of_table(self.length(newdata)) );
+            assert( self.elements_start(newdata) == self.upper_bound(newdata) );
+            assert( self.length(idata) + 1 == self.length(newdata) );
+            
+            assert( self.length(idata) * self.size_of_boundary_entry() + self.size_of_boundary_entry()
+                == (self.length(idata) + 1) * self.size_of_boundary_entry() ) by (nonlinear_arith);
+
+            assert( self.size_of_table(self.length(idata)) + BdyType::uniform_size()
+                    == self.size_of_table(self.length(newdata)) );
+
+            // This offset math gets confusing because some values are based at the start of the
+            // slice, others are indices into the raw data (already have the slice.start added in).
+            //
+            // start is relative to the slice.
+            // first_unused_byte is relative to the raw data
+            // after_elt is relative to the raw data
+
+            assert( self.bdyf.first_unused_byte(dslice@, raw_new_data) <=  dslice.start + start );
+            assert( dslice.start + start <= after_elt );
             assert( after_elt <= data@.len() );
+
+            // The value we wrote into the unused region wasn't stomped by the
+            // bdy append
+            assert( middle_data_raw.len() == data@.len() );
             let msub = middle_data_raw.subrange(dslice.start + start, after_elt as int);
             let dsub = data@.subrange(dslice.start + start, after_elt as int);
-            assert( 
-                middle_data_raw.subrange(dslice.start + start, after_elt as int)
-                ==
-                data@.subrange(dslice.start + start, after_elt as int)
-            );
+            assert( msub.len() == dsub.len() );
+            assert forall |i| 0 <= i < msub.len() implies msub[i] == dsub[i] by {
+                assert( msub[i] == middle_data_raw[dslice.start + start + i] );
+                assert( middle_data_raw[dslice.start + start + i]
+                    == middle_data[start + i]
+                    );
+                assert( dsub[i] == data@[dslice.start + start + i] );
+                assert( data@[dslice.start + start + i] == newdata[start + i] );
+
+                // self.bdyf.untampered_bytes
+        // forall |i| self.first_unused_byte(dslice, newdata) <= i < newdata.len() ==> olddata[i] == newdata[i]
+                let x = dslice.start + start + i;
+                let fub = dslice.start + self.bdyf.size_of_length_field() + self.bdyf.length(newdata) * self.bdyf.eltf.uniform_size();
+
+                assert( upper_bound == self.upper_bound(idata) );
+                assert( self.free_space(idata) == upper_bound - self.size_of_table(self.length(idata)) );
+                assert( start == upper_bound - size );
+                assert( self.bdyf.eltf.uniform_size() + size <= self.free_space(idata) );
+
+                let bdysize = BdyType::uniform_size();
+                let lensz = LenType::uniform_size();
+                let datasize = size;
+                let ub = upper_bound;
+                let oldlen = self.length(idata);
+                let midlen = self.length(middle_data);
+                assert( oldlen == midlen );
+                let newlen = self.length(newdata);
+
+                self.appends(middle_data, value.deepv(), newdata);
+                assert( self.bdyf.length(newdata) == self.bdyf.length(middle_data) + 1 );
+                assert( self.length(newdata) == self.length(middle_data) + 1 );
+
+                assert( newlen == oldlen + 1 );
+                assert( bdysize + lensz + oldlen * bdysize <= start );
+                assert( lensz + newlen * bdysize <= start );
+
+
+                assert( self.bdyf.size_of_length_field() + self.bdyf.length(newdata) * self.bdyf.eltf.uniform_size() <= start );
+                assert( fub <= x );
+                assert( self.bdyf.first_unused_byte(dslice@, data@) <= x );
+                assert( x < data@.len() );
+                assert( middle_data_raw[x] == data@[x] );
+                assert( middle_data[start + i] == newdata[start + i] );
+            }
+            assert( msub == dsub );
         }
 
-//         assert(
-//             data@.subrange(dslice@.start + start, after_elt as int)
-//             ==
-//             dslice@.i(data@).subrange(start as int, after_elt - dslice.start)
-//         );
-//         assert(
-//             dslice@.i(data@).subrange(start as int, after_elt - dslice.start)
-//             ==
-//             newdata.subrange(start as int, after_elt - dslice.start)
-//         );
-//         assert(
-//             newdata.subrange(start as int, after_elt - dslice.start)
-//             ==
-//             newdata.subrange(nslice.start + start, nslice.start + after_elt - dslice.start)
-//         );
-//         assert(
-//             newdata.subrange(nslice.start + start, nslice.start + after_elt - dslice.start)
-//             ==
-//             nslice.subslice(start as int, after_elt - dslice.start as int).i(newdata)
-//         );
-//         assert(
-//             middle_data_raw.subrange(dslice.start + start, after_elt as int)
-//             ==
-//             nslice.subslice(start as int, after_elt - dslice.start as int).i(newdata)
-//         );
-//
-//         assert( 
-//             start
-//             == self.bdyf.get_elt(newdata, newslot)
-//         );
-//         assert( 
-//             self.bdyf.get_elt(newdata, newslot)
-//             == self.bdyf.get_elt(nslice.i(newdata), newslot)
-//         );
-//         assert( 
-//             self.bdyf.get_elt(nslice.i(newdata), newslot)
-//             == self.element_data_begin(nslice.i(newdata), newslot)
-//         );
 
         // trigger all_ensures
         assert( self.element_data_begin(nslice.i(newdata), newslot) == start );
