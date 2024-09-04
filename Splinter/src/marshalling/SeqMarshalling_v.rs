@@ -383,11 +383,6 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
     {
         Seq::new(len as nat, |i: int| self.get_elt(data, i))
     }
-
-    open spec fn loyalty_test(&self) -> int
-    {
-        7
-    }
 }
 
 
