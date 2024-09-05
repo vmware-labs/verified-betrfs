@@ -639,14 +639,10 @@ impl <
         let ghost middle_data_raw = data@;
         let ghost middle_data = dslice@.i(data@);
         proof {
-        // middle / dummy proof
-        // elements_identity
             // we didn't break the table
             self.table_identity(idata, middle_data);
             // we didn't break any of the old elements
             self.elements_identity(idata, middle_data);
-            assert( self.well_formed(middle_data) );
-            assert( self.bdyf.appendable(middle_data, start as int) );
         }
 
         ////////////////////////////////////////////////////////////
@@ -654,46 +650,18 @@ impl <
         ////////////////////////////////////////////////////////////
         self.bdyf.exec_append(dslice, data, &BdyType::from_usize(start));
 
-        let ghost newdata = dslice@.i(data@);
-        let ghost raw_new_data = data@;
-        let ghost newslot = self.length(idata); // TODO rename from oldlen in SeqMarshalling
-
+        // Much of the tricky bit of this proof is that there are data bytes that the bdyf append
+        // doesn't touch, expressed as `bdyf.untampered_bytes`. That's a sneaky extra ensures
+        // of bdyf append that doesn't appear in the SeqMarshalling.append contract, but we
+        // need it for our tightly-coupled dependency on the Resizable implementation.
+        // (See MarshalledAccessors.i.dfy:1138 in the original Dafny version.)
 
         proof {
-        // another block of proof
+            let newdata = dslice@.i(data@);
+            let newslot = self.length(idata); // TODO rename from oldlen in SeqMarshalling
+
             self.elements_identity(middle_data, newdata);
-        }
 
-        assert forall |i| i != newslot implies self.preserves_entry(idata, i, newdata) by {
-        }
-        assert( self.gettable(newdata, newslot) ) by {
-            let oldlen = self.bdyf.length(middle_data);
-            if 0 < oldlen {
-                assert( self.bdyf.preserves_entry(middle_data, oldlen-1, newdata) ); // trigger
-            }
-        }
-
-        // bdy points to the right range
-        assume( self.get_data(newdata, newslot) == newdata.subrange(dslice.start + start, after_elt as int) );
-        // range has the right stuff in it
-        assert( self.eltf.parsable(middle_data_raw.subrange(dslice.start + start as int, after_elt as int)) );
-//         assert( newdata.subrange(dslice.start + start, after_elt as int)
-//             == middle_data_raw.subrange(dslice.start + start, after_elt as int)
-//             );
-        assert( self.eltf.parsable(middle_data_raw.subrange(dslice.start + start, after_elt as int)) );
-
-        let ghost nslice = SpecSlice::all(newdata);
-
-        // Hey, this is the data that shouldn't have been touched by the second bdyf write.
-        // elements_identity doesn't help us, because newslot wasn't yet gettable at middle.
-        // bdyf.exec_append's agree_beyond_slice doesn't help us, because we handed it the
-        // entire slice.
-        // bdyf.append's preserves_entry doesn't help us, because these bytes beyond the appended
-        // bdy element don't hold bdyf gettable fields.
-        // THE MAGIC is MarshalledAccessors.i.dfy:1138
-        assert( self.bdyf.untampered_bytes(dslice@, middle_data_raw, data@) );
-        proof {
-            
             assert( self.length(idata) * self.size_of_boundary_entry() + self.size_of_boundary_entry()
                 == (self.length(idata) + 1) * self.size_of_boundary_entry() )
                 by (nonlinear_arith);
@@ -703,105 +671,52 @@ impl <
             let msub = middle_data_raw.subrange(dslice.start + start, after_elt as int);
             let dsub = data@.subrange(dslice.start + start, after_elt as int);
             assert( msub == dsub );
-        }
 
-        // trigger all_ensures
-        assert( self.element_data_begin(nslice.i(newdata), newslot) == start );
-
-        // trigger
-        // TODO(verus): all I did here was intros element_data_end. That should never be necessary
-        // to tickle a trigger.
-//         assert(
-//             if newslot == 0 { self.total_size() as int }
-//             else { self.bdyf.get_elt(newdata, newslot - 1) }
-//             == self.element_data_end(newdata, newslot)
-//         );
-        // The new data ends at after_elt.
-//         assert( after_elt == dslice.start + start + size );
-
-        // trigger
-        proof {
             if 0 < newslot {
                 // trigger
                 assert( self.bdyf.preserves_entry(middle_data, newslot - 1, newdata) );
             }
 
-            // trigger: extn equality?
+            // trigger: extn equality
             assert(
                 data@.subrange(dslice@.start + start, after_elt as int)
                 == self.get_data(newdata, newslot)
             );
 
-            assert( self.eltf.parsable(self.get_data(newdata, newslot)) );
-            assert( self.elt_parsable(newdata, newslot) );
-
-            assert( self.get_elt(newdata, newslot) == value.deepv() );
-
-            let mlen = self.bdyf.length(middle_data);
-            let nlen = self.bdyf.length(newdata);
-            assert( mlen + 1 == nlen );
-            assert( self.bdyf.gettable_to_len(newdata, nlen) );
-            assert forall |i: int| 0<=i && i<nlen implies self.bdyf.elt_parsable(newdata, i) by {
-                if i < newslot {
-//                     assert( self.bdyf.gettable_to_len(middle_data, mlen) );
-//                     assert( self.bdyf.elt_parsable(middle_data, i) );
-//                     assert( self.bdyf.gettable(middle_data, i) );
-//                     assert( self.bdyf.elt_parsable(middle_data, i) );
+            assert( self.tableable(newdata) ) by {
+                assert forall |i: int| 0<=i && i<self.bdyf.length(newdata) implies self.bdyf.elt_parsable(newdata, i) by {
+                    if i < newslot {
                     // trigger
-                    assert( self.bdyf.preserves_entry(middle_data, i, newdata) );
-                    // appends only promises preserves_entry, which only
-                    // preserves get_elt, not get_data!
-//                     assert( self.bdyf.get_data(middle_data, i) == 
-//                             self.bdyf.get_data(newdata, i) );
-//                     assert( self.bdyf.elt_parsable(newdata, i) );
-//                 } else {
-//                     assert( self.bdyf.elt_parsable(newdata, i) );
+                        assert( self.bdyf.preserves_entry(middle_data, i, newdata) );
+                    }
                 }
             }
-            assert( self.bdyf.elt_parsable_to_len(newdata, nlen) );
-            assert( self.bdyf.parsable_to_len(newdata, self.bdyf.length(newdata) as usize) );
-            assert( self.tableable(newdata) );
 
-            let old_t = self.table(idata);
-//             let mid_t = self.table(middle_data);
-//             assert( old_t == mid_t );
-            let t = self.table(newdata);
-            assert forall |i, j| 0 <= i <= j < t.len() implies t[j] <= t[i] by {
-                if j < newslot {
-                    // trigger preserves_entry
-                    assert( self.bdyf.preserves_entry(middle_data, i, newdata) );
-                    assert( self.bdyf.preserves_entry(middle_data, j, newdata) );
-                    // trigger old valid_table
-                    assert( old_t[j] <= old_t[i] );
-//                     assert( t[i] == old_t[i] );
-//                     assert( t[j] == old_t[j] );
-                } else {
-                    assert( j == newslot );
-                    if i < j {
+            assert( self.valid_table(newdata) ) by {
+                let old_t = self.table(idata);
+                let t = self.table(newdata);
+                assert forall |i, j| 0 <= i <= j < t.len() implies t[j] <= t[i] by {
+                    if j < newslot {
+                        // trigger preserves_entry
+                        assert( self.bdyf.preserves_entry(middle_data, i, newdata) );
+                        assert( self.bdyf.preserves_entry(middle_data, j, newdata) );
+                        // trigger old valid_table
+                        assert( old_t[j] <= old_t[i] );
+                    } else if i < j {
+//                         assert( j == newslot );
                         let k = newslot - 1;
                         // trigger preserves_entry
                         assert( self.bdyf.preserves_entry(middle_data, k, newdata) );
                         assert( self.bdyf.preserves_entry(middle_data, i, newdata) );
-//                         assert( t[j] <= t[k] );
                         // trigger old valid_table
                         assert( old_t[k] <= old_t[i] );
-//                         assert( t[k] <= t[i] );
-//                     } else {
-//                         assert( t[j] == t[i] );
                     }
                 }
-            }
-            if 0 < t.len() {
                 if 0 < newslot {
+                    // trigger preserves_entry
                     assert( self.bdyf.preserves_entry(middle_data, 0, newdata) );
-                    assert( t[0] == old_t[0] );
-                    assert( t[0] <= self.total_size() as int );
-                } else {
-                    assert( t[0] <= self.total_size() as int );
                 }
             }
-            assert( self.valid_table(newdata) );
-            assert( self.well_formed(newdata) );
         }
     }
 
