@@ -109,6 +109,8 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
         self.get(dslice, data, idx).valid(data)
     ;
 
+    // TODO the presence of this SpecSlice::all(data) complicates proofs; suggests that maybe
+    // self.get shouldn't take a slice.
     open spec fn get_data(&self, data: Seq<u8>, idx: int) -> (edata: Seq<u8>)
     recommends
         self.seq_valid(),
@@ -317,7 +319,11 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
         let oldlen = self.length(data);
         &&& newdata.len() == data.len()
         &&& self.length(newdata) == oldlen + 1
+
+        // TODO: Dafny original didn't particularly bound i because preserves_entry's body has
+        // *able(i) on the LHS of all implications. Kinda mysteriously magical, tho. Not a fan.
         &&& forall |i| i != oldlen ==> self.preserves_entry(data, i, newdata)
+
         &&& self.gettable(newdata, oldlen)
         &&& self.elt_parsable(newdata, oldlen)
         &&& self.get_elt(newdata, oldlen) == value

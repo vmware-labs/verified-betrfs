@@ -756,7 +756,8 @@ impl <
         ////////////////////////////////////////////////////////////
         // Append the new boundary element
         ////////////////////////////////////////////////////////////
-        self.bdyf.exec_append(dslice, data, &BdyType::from_usize(start));
+        let new_bdy = BdyType::from_usize(start);
+        self.bdyf.exec_append(dslice, data, &new_bdy);
 
         // Much of the tricky bit of this proof is that there are data bytes that the bdyf append
         // doesn't touch, expressed as `bdyf.untampered_bytes`. That's a sneaky extra ensures
@@ -769,7 +770,37 @@ impl <
             let newslot = self.length(idata); // TODO rename from oldlen in SeqMarshalling
 
             assert( self.tableable(newdata) ) by {
-                assume(false);  // TODO left off here
+                let oldlen = self.length(idata);
+                let newlen = self.length(newdata);
+                assert forall |i: int| 0<=i && i<newlen implies {
+                    &&& self.bdyf.gettable(newdata, i)
+                    &&& self.bdyf.elt_parsable(newdata, i)
+                } by {
+                    if i < oldlen {
+//                         assert( self.bdyf.gettable(idata, i) );
+//                         assert( self.bdyf.elt_parsable(idata, i) );
+//                         assert( i != self.bdyf.length(idata) );
+// //                         let spec_start: BdyType = start as BdyType;
+// //                         BdyType::deepv_is_as_int(spec_start);
+//                         assert( self.bdyf.appends(middle_data, new_bdy.deepv(), newdata) ); // exec_append
+                        assert( self.bdyf.preserves_entry(middle_data, i, newdata) );
+
+//                         assert( self.bdyf.get(SpecSlice::all(idata), idata, i) == self.bdyf.get(SpecSlice::all(newdata), newdata, i) );
+//                         assert( SpecSlice::all(idata) == SpecSlice::all(newdata) );
+//                         let slice = self.bdyf.get(SpecSlice::all(idata), idata, i);
+//                         assert( slice.i(idata) == slice.i(newdata) );
+//                         // here we go again, trying to prove the bytes are the same.
+//                         // all we need -- and have -- is that the values are the same.
+//                         assert( self.bdyf.get_data(idata, i) == self.bdyf.get(SpecSlice::all(idata), idata, i).i(idata) );
+//                         assert( self.bdyf.get_data(newdata, i) == self.bdyf.get(SpecSlice::all(newdata), newdata, i).i(newdata) );
+//                         assert( self.bdyf.get_data(idata, i) == self.bdyf.get_data(newdata, i) );
+//                         assert( self.bdyf.elt_parsable(newdata, i) );
+//                     } else {
+//                         assert( i == oldlen );
+//                         assert( self.bdyf.gettable(newdata, i) );
+//                         assert( self.bdyf.elt_parsable(newdata, i) );
+                    }
+                }
             }
             assert( self.valid_table(newdata) ) by {
                 assume(false);  // TODO left off here
