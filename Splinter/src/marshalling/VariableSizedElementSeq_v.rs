@@ -372,21 +372,11 @@ impl <
         self.tableable(newdata),
         self.table(newdata) == self.table(data),
     {
-        // try deleting
         self.bdyf.length_ensures(data);
-        self.bdyf.length_ensures(newdata);
-        SpecSlice::all_ensures::<u8>();
-
         self.tableable_ensures(data);       // grumble grumble TODO broadcast
-        self.tableable_ensures(newdata);    // grumble grumble TODO broadcast
 
-        assert( self.size_of_length_field() as int <= self.size_of_table(self.length(data)) );
-        assert( self.size_of_table(self.length(data)) <= self.total_size() );
-        assert( self.size_of_table(self.length(data)) <= newdata.len() );
-        // try deleting
         Self::subrange_of_matching_take(newdata, data, 0, self.size_of_length_field() as int, self.size_of_table(self.length(data)));
-        assert( newdata.take(self.size_of_length_field() as int)
-            == data.take(self.size_of_length_field() as int) );
+
         assert( self.bdyf.length(newdata) == self.bdyf.length(data) );
         let len = self.length(newdata);
 
@@ -394,7 +384,6 @@ impl <
         assert forall |i: int| 0<=i && i<len implies self.bdyf.gettable(newdata, i) by {
             assert( self.bdyf.gettable(data, i) );
         }
-        assert( self.bdyf.gettable_to_len(newdata, self.bdyf.length(newdata)) );
 
         assert forall |i: int| 0<=i<len implies {
             &&& self.bdyf.elt_parsable(newdata, i)
@@ -403,15 +392,15 @@ impl <
         } by {
             mul_preserves_le(i+1, len, BdyType::uniform_size() as int);
 
-            let ns = self.bdyf.size_of_length_field() + i * self.bdyf.eltf.uniform_size();
-            let ne = self.bdyf.size_of_length_field() + i * self.bdyf.eltf.uniform_size() + self.bdyf.eltf.uniform_size();
             let a = self.bdyf.size_of_length_field();
             let b = self.bdyf.eltf.uniform_size();
             assert( a + i * b + b == a + (i + 1) * b ) by(nonlinear_arith);
 
+            let ns = self.bdyf.size_of_length_field() + i * self.bdyf.eltf.uniform_size();
+            let ne = self.bdyf.size_of_length_field() + i * self.bdyf.eltf.uniform_size() + self.bdyf.eltf.uniform_size();
             Self::subrange_of_matching_take(newdata, data, ns, ne, self.size_of_table(self.length(data)));
-            assert( self.bdyf.get_data(newdata, i) == self.bdyf.get_data(data, i) );
         }
+
         // trigger extn equality (verus issue #1257)
         assert( self.table(newdata) == self.table(data) );
     }
@@ -787,25 +776,16 @@ impl <
                 assert forall |i| 0 <= i < ot.len() implies ot[i] == t[i] by {
                     assert( self.bdyf.preserves_entry(middle_data, i, newdata) );
                 }
-                assert( ot.len() + 1 == t.len() );
+//                 assert( ot.len() + 1 == t.len() );
                 // Every element has non-negative length
-                assert forall |i, j| 0 <= i <= j < t.len() implies t[j] <= t[i] by {
-//                     if i < j {
-//                         assert( i < ot.len() );
-//                         assert( t[i] == ot[i] );
-//                         if j < ot.len() {
-//                             assert( t[j] == ot[j] );
-//                             assert( t[j] <= t[i] );
-//                         } else {
-//                             assert( t[j] <= t[i] );
-//                         }
-//                     }
-                }
                 if 0 < t.len() {
-                    assume( false );
                     // The last element ends before the end of the VSES total byte allocation
                     assert( t[0] <= self.total_size() as int );
+
                     // The first element starts beyond the end of the table itself.
+                    assert( t.last() == start );
+                    assume(false);
+                    assert( self.size_of_table(t.len() as int) <= start );
                     assert( self.size_of_table(t.len() as int) <= t.last() );
                 }
             }
