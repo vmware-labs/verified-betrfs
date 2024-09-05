@@ -325,79 +325,35 @@ impl <
         self.valid_table(newdata),
         is_prefix(self.table(data), self.table(newdata)),
         newdata.skip(self.elements_start(data)) == data.skip(self.elements_start(data)),
-        // TODO left off here
     ensures
         forall |i| self.gettable(data, i) ==> self.gettable(newdata, i),
         forall |i| self.gettable(data, i) ==> self.get_data(newdata, i) == self.get_data(data, i),
     {
-        let dt = self.table(data);
-        let nt = self.table(newdata);
-        assert( dt.len() == self.bdyf.parse(data).len() );
-        assert( self.bdyf.parse(data).len()
-            == self.bdyf.parse_to_len(data, self.bdyf.length(data) as usize).len() );
-        assert( self.bdyf.parse_to_len(data, self.bdyf.length(data) as usize).len()
-            == self.bdyf.length(data) as usize );
         self.bdyf.length_ensures(data); // TODO FML
         self.bdyf.length_ensures(newdata);  // TODO FML
-        assert( 0 <= self.bdyf.length(data) );
-        assert( 0 <= self.bdyf.length(newdata) );
-        assert( self.bdyf.length(data) as usize
-            == self.bdyf.length(data) );
-
-        assert( dt.len() == self.length(data) );
-        assert( nt.len() == self.length(newdata) );
         SpecSlice::all_ensures::<u8>(); // TODO I need to study broadcasts
+                                        //
         assert forall |i| self.gettable(data, i) implies {
             &&& self.gettable(newdata, i)
             &&& self.get_data(newdata, i) == self.get_data(data, i)
         } by {
-            let start = self.element_data_begin(data, i);
-            let end = self.element_data_end(data, i);
+            let dt = self.table(data);
+            let nt = self.table(newdata);
             assert( nt.take(dt.len() as int)[i] == nt[i] );
             if 0 < i {
                 assert( nt.take(dt.len() as int)[i-1] == nt[i-1] );
             }
-            assert( i < self.length(newdata) );
-            assert( self.gettable(newdata, i) );
 
-            // For this to be true, I need:
-            assert( start == self.element_data_begin(newdata, i) );
-            assert( end == self.element_data_end(newdata, i) );
-            assert( self.elements_start(data) <= start );
-            assert( start <= end );
-            // - element_data_begin to match in {data, newdata}
-            // - element_data_end to match in {data, newdata}
-            // - both values to be in the skip'd matching region in the requires clause
+            // trigger subrange axioms to appeal to skip requires
+            let start = self.element_data_begin(data, i);
+            let es = self.elements_start(data);
             let len = self.get_data(newdata, i).len();
-            let nd = self.get(SpecSlice::all(newdata), newdata, i);
-            assert( SpecSlice::all(newdata).start == 0 );
-            assert( SpecSlice::all(newdata).i(newdata) == newdata );
-            assert( nd.start == start );
-            assert( nd.end == end );
-            let gd = self.get(SpecSlice::all(data), data, i);
-            assert( SpecSlice::all(data).start == 0 );
-            assert( gd.start == start );
-            assert( gd.end == end );
-            assert( gd == nd );
-            assert( self.get_data(data, i).len() == len );
             assert forall |k| 0 <= k < len implies
                 self.get_data(newdata, i)[k] == self.get_data(data, i)[k] by {
-                let es = self.elements_start(data);
-//                 assert(
-//                     self.get_data(newdata, i)[k]
-//                     ==
-//                     newdata.subrange(start, end)[k]
-//                 );
-//                 assert(
-//                     self.get_data(data, i)[k]
-//                     ==
-//                     data.subrange(start, end)[k]
-//                 );
-//                 assert( data.subrange(start, end)[k] == data[start+k] );
-//                 assert( data[start+k] == data.skip(es)[start+k-es] );
                 assert( self.get_data(newdata, i)[k] == newdata.skip(es)[start + k - es] );
                 assert( self.get_data(data, i)[k] == data.skip(es)[start + k - es] );
             }
+            // trigger extn equality
             assert( self.get_data(newdata, i) == self.get_data(data, i) );
         }
     }
