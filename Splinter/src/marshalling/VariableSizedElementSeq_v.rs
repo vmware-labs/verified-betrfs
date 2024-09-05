@@ -769,41 +769,47 @@ impl <
             let newdata = dslice@.i(data@);
             let newslot = self.length(idata); // TODO rename from oldlen in SeqMarshalling
 
-            assert( self.tableable(newdata) ) by {
-                let oldlen = self.length(idata);
-                let newlen = self.length(newdata);
-                assert forall |i: int| 0<=i && i<newlen implies {
+            assert({
+                &&& self.tableable(newdata)
+                &&& self.valid_table(newdata)
+            }) by {
+                assert forall |i: int| 0<=i<self.length(newdata) implies {
                     &&& self.bdyf.gettable(newdata, i)
                     &&& self.bdyf.elt_parsable(newdata, i)
                 } by {
-                    if i < oldlen {
-//                         assert( self.bdyf.gettable(idata, i) );
-//                         assert( self.bdyf.elt_parsable(idata, i) );
-//                         assert( i != self.bdyf.length(idata) );
-// //                         let spec_start: BdyType = start as BdyType;
-// //                         BdyType::deepv_is_as_int(spec_start);
-//                         assert( self.bdyf.appends(middle_data, new_bdy.deepv(), newdata) ); // exec_append
+                    if i < self.length(idata) {
                         assert( self.bdyf.preserves_entry(middle_data, i, newdata) );
-
-//                         assert( self.bdyf.get(SpecSlice::all(idata), idata, i) == self.bdyf.get(SpecSlice::all(newdata), newdata, i) );
-//                         assert( SpecSlice::all(idata) == SpecSlice::all(newdata) );
-//                         let slice = self.bdyf.get(SpecSlice::all(idata), idata, i);
-//                         assert( slice.i(idata) == slice.i(newdata) );
-//                         // here we go again, trying to prove the bytes are the same.
-//                         // all we need -- and have -- is that the values are the same.
-//                         assert( self.bdyf.get_data(idata, i) == self.bdyf.get(SpecSlice::all(idata), idata, i).i(idata) );
-//                         assert( self.bdyf.get_data(newdata, i) == self.bdyf.get(SpecSlice::all(newdata), newdata, i).i(newdata) );
-//                         assert( self.bdyf.get_data(idata, i) == self.bdyf.get_data(newdata, i) );
-//                         assert( self.bdyf.elt_parsable(newdata, i) );
-//                     } else {
-//                         assert( i == oldlen );
-//                         assert( self.bdyf.gettable(newdata, i) );
-//                         assert( self.bdyf.elt_parsable(newdata, i) );
                     }
+                }
+
+                let ot = self.table(middle_data);
+                let t = self.table(newdata);
+                assert forall |i| 0 <= i < ot.len() implies ot[i] == t[i] by {
+                    assert( self.bdyf.preserves_entry(middle_data, i, newdata) );
+                }
+                assert( ot.len() + 1 == t.len() );
+                // Every element has non-negative length
+                assert forall |i, j| 0 <= i <= j < t.len() implies t[j] <= t[i] by {
+//                     if i < j {
+//                         assert( i < ot.len() );
+//                         assert( t[i] == ot[i] );
+//                         if j < ot.len() {
+//                             assert( t[j] == ot[j] );
+//                             assert( t[j] <= t[i] );
+//                         } else {
+//                             assert( t[j] <= t[i] );
+//                         }
+//                     }
+                }
+                if 0 < t.len() {
+                    assume( false );
+                    // The last element ends before the end of the VSES total byte allocation
+                    assert( t[0] <= self.total_size() as int );
+                    // The first element starts beyond the end of the table itself.
+                    assert( self.size_of_table(t.len() as int) <= t.last() );
                 }
             }
             assert( self.valid_table(newdata) ) by {
-                assume(false);  // TODO left off here
             }
             assert( is_prefix(self.table(middle_data), self.table(newdata)) ) by {
                 assume(false);  // TODO left off here
