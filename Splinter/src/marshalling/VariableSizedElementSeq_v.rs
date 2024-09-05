@@ -358,17 +358,115 @@ impl <
         }
     }
 
+    proof fn subtake<T>(a: Seq<T>, b: Seq<T>, k: int, l: int)
+    requires
+        a.take(l) == b.take(l),
+        l <= a.len(),
+        l <= b.len(),
+        0 <= k <= l,
+    ensures
+        a.take(k) == b.take(k),
+    {
+        assert( a.take(k).len() == b.take(k).len() );
+        assert forall |i| 0 <= i < k implies a.take(k)[i] == b.take(k)[i] by {
+            assert( a.take(k)[i] == a.take(l)[i] );
+            assert( b.take(k)[i] == b.take(l)[i] );
+        }
+        // trigger extn equality (verus issue #1257)
+        assert( a.take(k) == b.take(k) );
+    }
+
+    proof fn subtake2<T>(a: Seq<T>, b: Seq<T>, s: int, e: int, l: int)
+    requires
+        a.take(l) == b.take(l),
+        l <= a.len(),
+        l <= b.len(),
+        0 <= s <= e <= l,
+    ensures
+        a.subrange(s, e) == b.subrange(s, e),
+    {
+        assert( a.subrange(s, e).len() == b.subrange(s, e).len() );
+        let d = e - s;
+        assert forall |i| 0 <= i < d implies a.subrange(s, e)[i] == b.subrange(s, e)[i] by {
+            assert( a.subrange(s, e)[i] == a.take(l)[i + s] );
+            assert( b.subrange(s, e)[i] == b.take(l)[i + s] );
+        }
+        // trigger extn equality (verus issue #1257)
+        assert( a.subrange(s, e) == b.subrange(s, e) );
+    }
+
     // The tricky bit in exec_append is that the bdyf array doesn't change meaning
     // when we write the datum because, even though it occupies space
     // in the capacity of self.bdyf, it doesn't actually interfere
     // with the resident values.
     proof fn table_identity(&self, data: Seq<u8>, newdata: Seq<u8>)
-        // TODO left off here
+    requires
+        self.seq_valid(),
+        self.tableable(data),
+        self.total_size() <= newdata.len(),
+        newdata.take(self.size_of_table(self.length(data))) == data.take(self.size_of_table(self.length(data))),
     ensures
         self.tableable(newdata),
         self.table(newdata) == self.table(data),
     {
-        assume(false); // TODO left off here
+        // try deleting
+        self.bdyf.length_ensures(data);
+        self.bdyf.length_ensures(newdata);
+        SpecSlice::all_ensures::<u8>();
+
+        self.tableable_ensures(data);       // grumble grumble TODO broadcast
+        self.tableable_ensures(newdata);    // grumble grumble TODO broadcast
+
+        assert( self.size_of_length_field() as int <= self.size_of_table(self.length(data)) );
+        assert( self.size_of_table(self.length(data)) <= self.total_size() );
+        assert( self.size_of_table(self.length(data)) <= newdata.len() );
+        // try deleting
+        Self::subtake(newdata, data, self.size_of_length_field() as int, self.size_of_table(self.length(data)));
+        assert( newdata.take(self.size_of_length_field() as int)
+            == data.take(self.size_of_length_field() as int) );
+        assert( self.bdyf.length(newdata) == self.bdyf.length(data) );
+        let len = self.length(newdata);
+
+        // trigger to satisify bdyf.parsable_to_len and hence tableable
+        assert forall |i: int| 0<=i && i<len implies self.bdyf.gettable(newdata, i) by {
+            assert( self.bdyf.gettable(data, i) );
+        }
+        assert( self.bdyf.gettable_to_len(newdata, self.bdyf.length(newdata)) );
+
+        assert forall |i: int| 0<=i && i<len implies self.bdyf.elt_parsable(newdata, i) by {
+//             assert( self.bdyf.elt_parsable(data, i) );
+            let ns = self.bdyf.size_of_length_field() + i * self.bdyf.eltf.uniform_size();
+            let ne = self.bdyf.size_of_length_field() + i * self.bdyf.eltf.uniform_size() + self.bdyf.eltf.uniform_size();
+//             assert( self.bdyf.get_data(newdata, i) == newdata.subrange(ns, ne) );
+//             assert( self.bdyf.get_data(data, i) == data.subrange(ns, ne) );
+//             assert( self.length(data) == len );
+//             assert( i <= len ); 
+            mul_preserves_le(i+1, len, BdyType::uniform_size() as int);
+//             assert( (i+1) * BdyType::uniform_size() as int <= len * BdyType::uniform_size() as int );
+            let a = self.bdyf.size_of_length_field();
+            let b = self.bdyf.eltf.uniform_size();
+//             assert( ne == a + i * b + b );
+            assert( a + i * b + b == a + (i + 1) * b ) by(nonlinear_arith);
+//             assert( ne == a + (i + 1) * b );
+//             assert( ne == self.bdyf.size_of_length_field() + i * self.bdyf.eltf.uniform_size() + self.bdyf.eltf.uniform_size() );
+
+//             assert( ne <= self.size_of_table(self.length(data)) );
+            Self::subtake2(newdata, data, ns, ne, self.size_of_table(self.length(data)));
+            assert( self.bdyf.get_data(newdata, i) == self.bdyf.get_data(data, i) );
+        }
+        assert( self.bdyf.elt_parsable_to_len(newdata, self.bdyf.length(newdata)) );
+        assert( self.bdyf.parsable_to_len(newdata, self.bdyf.length(newdata) as usize) );
+        assert( self.tableable(newdata) );
+
+        assert forall |i| 0 <= i < len implies {
+            &&& self.bdyf.gettable(newdata, i)
+            &&& self.bdyf.get_data(newdata, i) == self.bdyf.get_data(data, i)
+        } by {
+            self.bdyf.parsable_length_bounds(data);
+            self.bdyf.index_bounds_facts(i);
+            mul_preserves_le(i+1, len, BdyType::uniform_size() as int);
+        }
+        assert( self.table(newdata) == self.table(data) );
     }
 
     // TODO move somewhere sane
@@ -676,6 +774,9 @@ impl <
         let ghost middle_data = dslice@.i(data@);
         proof {
             // we didn't break the table
+            assert( middle_data.take(self.size_of_table(self.length(idata))) == idata.take(self.size_of_table(self.length(idata))) ) by {
+                assume(false);  // TODO left off here
+            }
             self.table_identity(idata, middle_data);
             // we didn't break any of the old elements
             assert( is_prefix(self.table(idata), self.table(middle_data)) ) by {
