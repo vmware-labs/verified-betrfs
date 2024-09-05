@@ -740,17 +740,16 @@ impl <
         let ghost middle_data = dslice@.i(data@);
         proof {
             // we didn't break the table
-            assert( middle_data.take(self.size_of_table(self.length(idata))) == idata.take(self.size_of_table(self.length(idata))) ) by {
-                assume(false);  // TODO left off here
-            }
+            assert( middle_data.take(start as int) == idata.take(start as int) );   // verus #1257
+            Self::subrange_of_matching_take(middle_data, idata, 0, self.size_of_table(self.length(idata)) as int, start as int);
             self.table_identity(idata, middle_data);
+
             // we didn't break any of the old elements
             assert( is_prefix(self.table(idata), self.table(middle_data)) ) by {
-                assume(false);  // TODO left off here
+                // Sheesh, subranges don't trigger very nicely.
+                assert( self.table(middle_data).subrange(0, self.table(idata).len() as int) == self.table(middle_data) );
             }
-            assert( middle_data.skip(self.elements_start(idata)) == idata.skip(self.elements_start(idata)) ) by {
-                assume(false);  // TODO left off here
-            }
+            assert( middle_data.skip(self.elements_start(idata)) == idata.skip(self.elements_start(idata)) );
             self.elements_identity(idata, middle_data);
         }
 
