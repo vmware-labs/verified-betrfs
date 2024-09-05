@@ -109,7 +109,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
             self.eltf.uniform_size() as int);
     }
 
-    proof fn length_ensures(&self, data: Seq<u8>)
+    pub proof fn length_ensures(&self, data: Seq<u8>)
     ensures 0 <= self.length(data) <= LenType::max()
     {
         self.lenf.parse_nat(data.subrange(0, self.size_of_length_field() as int));

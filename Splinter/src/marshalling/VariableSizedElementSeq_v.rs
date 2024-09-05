@@ -13,7 +13,7 @@ use crate::marshalling::SeqMarshalling_v::*;
 // use crate::marshalling::UniformSizedSeq_v::*;
 use crate::marshalling::UniformSized_v::*;
 use crate::marshalling::ResizableUniformSizedSeq_v::*;
-// use crate::marshalling::math_v::*;
+use crate::marshalling::math_v::*;
 
 verus! {
 
@@ -308,18 +308,98 @@ impl <
         self.length(data) + 1 < BdyType::max(),
         self.bdyf.appendable(data, self.append_offset(data, value))
     {
-        assume(false); // TODO left off here
+        // Discuss with Rob why these proofs weren't needed in Dafny?
+        assume( self.length(data) + 1 < usize::MAX );
+        assume( self.length(data) + 1 < BdyType::max() );
+        assume( self.bdyf.appendable(data, self.append_offset(data, value)) );
     }
 
     // Show that, if the old data table is a prefix of the new,
     // both data agree on all the elements in the old table.
     proof fn elements_identity(self, data: Seq<u8>, newdata: Seq<u8>)
+    requires
+        self.seq_valid(),
+        self.tableable(data),
+        self.tableable(newdata),
+        self.valid_table(data),
+        self.valid_table(newdata),
+        is_prefix(self.table(data), self.table(newdata)),
+        newdata.skip(self.elements_start(data)) == data.skip(self.elements_start(data)),
         // TODO left off here
     ensures
         forall |i| self.gettable(data, i) ==> self.gettable(newdata, i),
         forall |i| self.gettable(data, i) ==> self.get_data(newdata, i) == self.get_data(data, i),
     {
-        assume(false); // TODO left off here
+        let dt = self.table(data);
+        let nt = self.table(newdata);
+        assert( dt.len() == self.bdyf.parse(data).len() );
+        assert( self.bdyf.parse(data).len()
+            == self.bdyf.parse_to_len(data, self.bdyf.length(data) as usize).len() );
+        assert( self.bdyf.parse_to_len(data, self.bdyf.length(data) as usize).len()
+            == self.bdyf.length(data) as usize );
+        self.bdyf.length_ensures(data); // TODO FML
+        self.bdyf.length_ensures(newdata);  // TODO FML
+        assert( 0 <= self.bdyf.length(data) );
+        assert( 0 <= self.bdyf.length(newdata) );
+        assert( self.bdyf.length(data) as usize
+            == self.bdyf.length(data) );
+
+        assert( dt.len() == self.length(data) );
+        assert( nt.len() == self.length(newdata) );
+        SpecSlice::all_ensures::<u8>(); // TODO I need to study broadcasts
+        assert forall |i| self.gettable(data, i) implies {
+            &&& self.gettable(newdata, i)
+            &&& self.get_data(newdata, i) == self.get_data(data, i)
+        } by {
+            let start = self.element_data_begin(data, i);
+            let end = self.element_data_end(data, i);
+            assert( nt.take(dt.len() as int)[i] == nt[i] );
+            if 0 < i {
+                assert( nt.take(dt.len() as int)[i-1] == nt[i-1] );
+            }
+            assert( i < self.length(newdata) );
+            assert( self.gettable(newdata, i) );
+
+            // For this to be true, I need:
+            assert( start == self.element_data_begin(newdata, i) );
+            assert( end == self.element_data_end(newdata, i) );
+            assert( self.elements_start(data) <= start );
+            assert( start <= end );
+            // - element_data_begin to match in {data, newdata}
+            // - element_data_end to match in {data, newdata}
+            // - both values to be in the skip'd matching region in the requires clause
+            let len = self.get_data(newdata, i).len();
+            let nd = self.get(SpecSlice::all(newdata), newdata, i);
+            assert( SpecSlice::all(newdata).start == 0 );
+            assert( SpecSlice::all(newdata).i(newdata) == newdata );
+            assert( nd.start == start );
+            assert( nd.end == end );
+            let gd = self.get(SpecSlice::all(data), data, i);
+            assert( SpecSlice::all(data).start == 0 );
+            assert( gd.start == start );
+            assert( gd.end == end );
+            assert( gd == nd );
+            assert( self.get_data(data, i).len() == len );
+            assert forall |k| 0 <= k < len implies
+                self.get_data(newdata, i)[k] == self.get_data(data, i)[k] by {
+                let es = self.elements_start(data);
+//                 assert(
+//                     self.get_data(newdata, i)[k]
+//                     ==
+//                     newdata.subrange(start, end)[k]
+//                 );
+//                 assert(
+//                     self.get_data(data, i)[k]
+//                     ==
+//                     data.subrange(start, end)[k]
+//                 );
+//                 assert( data.subrange(start, end)[k] == data[start+k] );
+//                 assert( data[start+k] == data.skip(es)[start+k-es] );
+                assert( self.get_data(newdata, i)[k] == newdata.skip(es)[start + k - es] );
+                assert( self.get_data(data, i)[k] == data.skip(es)[start + k - es] );
+            }
+            assert( self.get_data(newdata, i) == self.get_data(data, i) );
+        }
     }
 
     // The tricky bit in exec_append is that the bdyf array doesn't change meaning
@@ -642,6 +722,12 @@ impl <
             // we didn't break the table
             self.table_identity(idata, middle_data);
             // we didn't break any of the old elements
+            assert( is_prefix(self.table(idata), self.table(middle_data)) ) by {
+                assume(false);  // TODO left off here
+            }
+            assert( middle_data.skip(self.elements_start(idata)) == idata.skip(self.elements_start(idata)) ) by {
+                assume(false);  // TODO left off here
+            }
             self.elements_identity(idata, middle_data);
         }
 
@@ -660,6 +746,18 @@ impl <
             let newdata = dslice@.i(data@);
             let newslot = self.length(idata); // TODO rename from oldlen in SeqMarshalling
 
+            assert( self.tableable(newdata) ) by {
+                assume(false);  // TODO left off here
+            }
+            assert( self.valid_table(newdata) ) by {
+                assume(false);  // TODO left off here
+            }
+            assert( is_prefix(self.table(middle_data), self.table(newdata)) ) by {
+                assume(false);  // TODO left off here
+            }
+            assert( newdata.skip(self.elements_start(middle_data)) == middle_data.skip(self.elements_start(middle_data)) ) by {
+                assume(false);  // TODO left off here
+            }
             self.elements_identity(middle_data, newdata);
 
             assert( self.length(idata) * self.size_of_boundary_entry() + self.size_of_boundary_entry()
