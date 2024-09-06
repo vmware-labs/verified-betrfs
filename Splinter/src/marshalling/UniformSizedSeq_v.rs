@@ -51,61 +51,6 @@ impl<EltFormat: Marshal + UniformSized> UniformSizedElementSeqFormat<EltFormat>
             pos_mul_preserves_order(idx + 1, self.slice_length(slice), self.eltf.uniform_size() as int);
         }
     }
-
-//     // TODO delete: copy-pasted from trait default https://github.com/verus-lang/verus/issues/1157
-//     pub open spec fn get_data(&self, data: Seq<u8>, idx: int) -> (edata: Seq<u8>)
-//     {
-//         self.get(SpecSlice::all(data), data, idx).i(data)
-//     }
-// 
-//     // TODO: delete; testing why definition in trait default isn't visible here
-//     pub open spec fn elt_parsable_to_len(&self, data: Seq<u8>, len: int) -> bool
-//     {
-//         forall |i: int| 0<=i && i<len ==> self.elt_parsable(data, i)
-//     }
-// 
-//     // TODO: delete; testing why definition in trait default isn't visible here
-//     pub open spec fn parsable_to_len(&self, data: Seq<u8>, len: usize) -> bool
-//     {
-//         &&& self.gettable_to_len(data, len as int)
-//         &&& self.elt_parsable_to_len(data, len as int)
-//     }
-// 
-//     // TODO: delete; testing why definition in trait default isn't visible here
-//     pub open spec fn gettable_to_len(&self, data: Seq<u8>, len: int) -> bool
-//     {
-//         forall |i: int| 0<=i && i<len ==> self.gettable(data, i)
-//     }
-// 
-//     // TODO: delete; testing why definition in trait default isn't visible here
-//     pub open spec fn parse_to_len(&self, data: Seq<u8>, len: usize) -> Seq<EltFormat::DV>
-//     {
-//         Seq::new(len as nat, |i: int| self.get_elt(data, i))
-//     }
-// 
-//     // TODO: delete; testing why definition in trait default isn't visible here
-//     pub open spec fn sets(&self, data: Seq<u8>, idx: int, value: EltFormat::DV, new_data: Seq<u8>) -> bool
-//     {
-//         &&& new_data.len() == data.len()
-//         &&& self.lengthable(data) ==> {
-//             &&& self.lengthable(new_data)
-//             &&& self.length(new_data) == self.length(data)
-//             }
-//         &&& forall |i| i!=idx ==> self.preserves_entry(data, i, new_data)
-//         &&& self.gettable(new_data, idx)
-//         &&& self.elt_parsable(new_data, idx)
-//         &&& self.get_elt(new_data, idx) == value
-//     }
-// 
-//     // TODO: delete; testing why definition in trait default isn't visible here
-//     pub open spec fn preserves_entry(&self, data: Seq<u8>, idx: int, new_data: Seq<u8>) -> bool
-//     {
-//         &&& (self.gettable(data, idx) ==> self.gettable(new_data, idx))
-//         &&& (self.gettable(data, idx) && self.elt_parsable(data, idx)) ==> {
-//             &&& self.elt_parsable(new_data, idx)
-//             &&& self.get_elt(new_data, idx) == self.get_elt(data, idx)
-//             }
-//     }
 }
 
 impl<EltFormat: Marshal + UniformSized>
@@ -201,8 +146,6 @@ impl<EltFormat: Marshal + UniformSized>
     exec fn try_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oelt: Option<EltFormat::U>)
     // TODO factor out this common impl
     {
-        //proof { self.eltf.spec_elt_marshalling_ensures() };  // :v(
-
         let oeslice = self.try_get(dslice, data, idx);
         match oeslice {
             None => {
@@ -218,26 +161,6 @@ impl<EltFormat: Marshal + UniformSized>
                 }
                 let oelt = self.eltf.try_parse(&eslice, data);
 
-//                 proof {
-//                     // TODO(verus): (Rob's suggestion): in the proof block, shadow all exec vars
-//                     // with a let ghost version, so I don't have to write this let.
-//                     let goelt = oelt;
-//                     if goelt is Some {
-//                         assert( self.eltf.parsable(eslice@.i(data@)) );
-// 
-// //                         let didx = idx as int;
-// //                         let ddata = dslice@.i(data@);
-// //                         assert( self.get_data(ddata, didx)
-// //                                 == self.get(SpecSlice::all(ddata), ddata, didx).i(ddata) );
-// // 
-// //                         assert( eslice@.i(data@) == self.get_data(ddata, didx) );
-// //                         assert( self.eltf.parsable(self.get_data(dslice@.i(data@), idx as int)) );
-//                         assert( self.elt_parsable(dslice@.i(data@), idx as int) );
-//                         assert( oelt.unwrap().deepv() == self.get_elt(dslice@.i(data@), idx as int) );
-//                     } else {
-//                         assert( !self.elt_parsable(dslice@.i(data@), idx as int) );
-//                     }
-//                 }
                 oelt
             }
         }
@@ -325,8 +248,6 @@ impl<EltFormat: Marshal + UniformSized>
         }
 
         assert( self.sets(dslice@.i(olddata), idx as int, value.deepv(), dslice@.i(data@)) );
-//         // https://github.com/verus-lang/verus/issues/1157
-//         assume( false );
     }
 
     /////////////////////////////////////////////////////////////////////////
@@ -383,17 +304,6 @@ impl<EltFormat: Marshal + UniformSized>
         &&& self.eltf.marshallable(value[i])
         &&& self.eltf.spec_size(value[i]) == self.eltf.uniform_size()
     }
-
-// I don't remember what this was for, but it doesn't have a prototype in the dafny version.
-//     proof fn marshallable_subrange(&self, value: Seq<DVElt>, l: int)
-//     requires self.marshallable(value), 0<=l<=value.len()
-//     ensures self.marshallable(value.subrange(0, l))
-//     {
-//         mul_preserves_le(l, value.len() as int, self.eltf.uniform_size() as int);
-//         assert forall |i| 0 <= i < value.subrange(0, l).len() implies self.marshallable_at(value.subrange(0, l), i) by {
-//             assert( self.marshallable_at(value, i) );
-//         }
-//     }
 }
 
 impl<EltFormat: Marshal + UniformSized>
@@ -442,11 +352,7 @@ impl<EltFormat: Marshal + UniformSized>
                 while i < len
                 invariant
                     i <= len,
-//                     self.valid(),   // TODO(verus #984): waste of my debugging time
-//                     dslice@.valid(data@),   // TODO(verus #984): waste of my debugging time
-//                     len == self.length(dslice@.i(data@)) as usize, // TODO(verus #984): waste of my debugging time
                     result.len() == i,
-//                     forall |j| 0<=j<i as nat ==> self.gettable(dslice@.i(data@), j),
                     forall |j| 0<=j<i as nat ==> self.elt_parsable(dslice@.i(data@), j),
                     forall |j| #![auto] 0<=j<i as nat ==> result[j].deepv() == self.get_elt(dslice@.i(data@), j),
                 {
@@ -458,26 +364,8 @@ impl<EltFormat: Marshal + UniformSized>
                     result.push(oelt.unwrap());
                     i += 1;
                 }
-                // Looks like this wants extensionality, but no ~! Not sure why it's needed.
-                // Oh maybe it's the trait-ensures-don't-trigger bug?
-//                 assert forall |j| result.deepv()[j] == result[j].deepv() by {}
 
-                proof {
-//                     let ddata = dslice@.i(data@);
-//                     let dlen = self.length(ddata) as usize;
-//                     let ptl = self.parse_to_len(ddata, dlen);
-//                     assert( ptl.len() == dlen );
-//                     assert( result.len() == i );
-
-//                     // https://github.com/verus-lang/verus/issues/1157
-//                     assume( result.deepv() == Seq::new(result.len() as nat, |i: int| result[i].deepv()) );
-                    
-//                     assert( result.deepv().len() == i );
-//                     assert( result.deepv().len() == ptl.len() );
-//                     assert( result.deepv() == ptl );
-//                     assert( result.deepv() == self.seq_parse(dslice@.i(data@)) );
-                    assert( result.deepv() == self.parse(dslice@.i(data@)) );    // trigger.
-                }
+                assert( result.deepv() == self.parse(dslice@.i(data@)) );    // trigger.
                 return Some(result);
             }
         }
@@ -498,12 +386,6 @@ impl<EltFormat: Marshal + UniformSized>
 
     exec fn exec_size(&self, value: &Self::U) -> (sz: usize)
     {
-//         proof {
-// //             assert( self.marshallable(value.deepv()) );
-// //             // https://github.com/verus-lang/verus/issues/1157
-// //             assert( value.deepv().len() == value.len() );
-// //             assert( value.len() * self.eltf.uniform_size() <= usize::MAX );
-//         }
         usize_mult(value.len(), self.eltf.exec_uniform_size())
     }
 
@@ -523,19 +405,11 @@ impl<EltFormat: Marshal + UniformSized>
         invariant
             0 <= i <= value.len(),
             data@.len() == old(data)@.len(),
-//             end as int == start as int + self.spec_size(value.deepv().subrange(0, i as int)) as int,
             end as int == start as int + i * self.eltf.uniform_size(),
             forall |j| 0 <= j < start ==> data@[j] == old(data)@[j],
             forall |j| end as int <= j < old(data)@.len() ==> data@[j] == old(data)@[j],
-
-            // TODO(verus): another decoy recommends failure that proves if you just ask for it
-//             end as int <= data@.len(),
             self.parsable(data@.subrange(start as int, end as int)),
             self.parse(data@.subrange(start as int, end as int)) == value.deepv().subrange(0, i as int),
-
-            // These should have been pulled through the loop via spinoff_loop(false); not sure why that didn't work. --> because that feature got renamed when it was merged.
-//             self.marshallable(value.deepv()),
-//             start as int + self.spec_size(value.deepv()) as int <= old(data).len(),
         {
             let ghost oldend = end;
             assert( oldend as int == start as int + self.spec_size(value.deepv().subrange(0, i as int)) as int );
@@ -554,12 +428,12 @@ impl<EltFormat: Marshal + UniformSized>
 
                 let esz = self.eltf.spec_size(value.deepv()[i as int]) as int;
                 assert( esz == self.eltf.uniform_size() ) by {
-                    assert( self.marshallable_at(value.deepv(), i as int) );
+                    assert( self.marshallable_at(value.deepv(), i as int) );    // trigger
                 }
 
-                assert( self.eltf.marshallable(value[i as int].deepv()) ) by {
-                    assert( self.marshallable_at(value.deepv(), i as int) );
-                }
+//                 assert( self.eltf.marshallable(value[i as int].deepv()) ) by {
+//                     assert( self.marshallable_at(value.deepv(), i as int) );
+//                 }
             }
 
             end = self.eltf.exec_marshall(&value[i], data, end);
