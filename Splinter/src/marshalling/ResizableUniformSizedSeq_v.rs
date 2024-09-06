@@ -130,19 +130,18 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
         self.resize(dslice, data, 0);
     }
 
-    pub proof fn get__ensures_len(&self, dslice: SpecSlice, data: Seq<u8>, idx: int)
-    requires self.valid(), 0 <= idx, idx < self.max_length()
-    ensures self.get(dslice, data, idx).len() == self.eltf.uniform_size()
-    {
-        self.index_bounds_facts(idx as int);
-        let eslice = self.get(dslice, data, idx);
-        assume( false );// left off here figuring out why we can't see inside (trait fn) get
-        assert( eslice.start == self.size_of_length_field() + idx * self.eltf.uniform_size() );
-        assert( eslice.end == self.size_of_length_field() + idx * self.eltf.uniform_size() + self.eltf.uniform_size() );
-        assert( eslice.len() == eslice.end - eslice.start );
-        assert( self.get(dslice, data, idx).len() == eslice.len() );
-        assert( eslice.len() == self.eltf.uniform_size() );
-    }
+//     pub proof fn get__ensures_len(&self, dslice: SpecSlice, data: Seq<u8>, idx: int)
+//     requires self.valid(), 0 <= idx, idx < self.max_length()
+//     ensures self.get(dslice, data, idx).len() == self.eltf.uniform_size()
+//     {
+//         self.index_bounds_facts(idx as int);
+//         let eslice = self.get(dslice, data, idx);
+//         assert( eslice.start == self.size_of_length_field() + idx * self.eltf.uniform_size() );
+//         assert( eslice.end == self.size_of_length_field() + idx * self.eltf.uniform_size() + self.eltf.uniform_size() );
+//         assert( eslice.len() == eslice.end - eslice.start );
+//         assert( self.get(dslice, data, idx).len() == eslice.len() );
+//         assert( eslice.len() == self.eltf.uniform_size() );
+//     }
 
     // exec_append promises not to touch any bytes beyond the spot it places the appended value.
     // This is a bit of a layering violation used in VariableSizedElementSeq to share space between
@@ -363,6 +362,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
     }
 
     exec fn exec_set(&self, dslice: &Slice, data: &mut Vec<u8>, idx: usize, value: &EltFormat::U)
+    ensures self.untampered_bytes(dslice@, old(data)@, data@)
     {
         proof { self.index_bounds_facts(idx as int); }
         let elt_start = dslice.start + self.exec_size_of_length_field() + idx * self.eltf.exec_uniform_size();
@@ -386,11 +386,12 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
                 mul_preserves_le(idx as int + 1, i, self.eltf.uniform_size() as int);
             }
 
-            // TODO(verus): shouldn't assert-by conclusion give us this trigger for free?
+            // TODO(verus): #1257
             assert( self.get_data(dslice@.i(data@), i) == self.get_data(dslice@.i(old(data)@), i) );
         }
             
         assert( self.sets(dslice@.i(old(data)@), idx as int, value.deepv(), dslice@.i(data@)) );
+        assume( self.untampered_bytes(dslice@, old(data)@, data@) );    // left off
     }
 
     /////////////////////////////////////////////////////////////////////////
@@ -410,7 +411,9 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
         &&& newlen <= LenType::exec_max()
     }
 
-    exec fn resize(&self, dslice: &Slice, data: &mut Vec<u8>, newlen: usize) {
+    exec fn resize(&self, dslice: &Slice, data: &mut Vec<u8>, newlen: usize)
+    ensures self.untampered_bytes(dslice@, old(data)@, data@)
+    {
         let length_val = LenType::from_usize(newlen);
         let length_end = self.lenf.exec_marshall(&length_val, data, dslice.start);
 
@@ -494,17 +497,47 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
     exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: &EltFormat::U)
     ensures self.untampered_bytes(dslice@, old(data)@, data@)
     {
+//         let ghost raw_begin = data@;
+        let ghost sliced_begin = dslice@.i(data@);
         let len = self.exec_length(dslice, data);
-        self.exec_set(dslice, data, len, value);
-        let ghost middle = dslice@.i(data@);
         self.resize(dslice, data, len + 1);
 
-        assert( self.preserves_entry(middle, len as int, dslice@.i(data@)) );   // trigger
+//         let ghost raw_middle = data@;
+        let ghost sliced_middle = dslice@.i(data@);
+        self.exec_set(dslice, data, len, value);
+
+//         let ghost raw_finish = data@;
+//         let ghost sliced_finish = dslice@.i(raw_finish);
+
+        assert( self.preserves_entry(sliced_begin, len as int, sliced_middle) );   // trigger
         assert forall |i| i != len implies self.preserves_entry(dslice@.i(old(data)@), i, dslice@.i(data@)) by {
-            assert( self.preserves_entry(dslice@.i(old(data)@), i, middle) );   // trigger
-            assert( self.preserves_entry(middle, i, dslice@.i(data@)) );        // trigger
+            assert( self.preserves_entry(dslice@.i(old(data)@), i, sliced_middle) );   // trigger
+            assert( self.preserves_entry(sliced_middle, i, dslice@.i(data@)) );        // trigger
         }
-        assume( self.untampered_bytes(dslice@, old(data)@, data@) ); // TODO
+//         proof {
+//             let bfub = self.first_unused_byte(dslice@, raw_begin);
+//             let mfub = self.first_unused_byte(dslice@, raw_middle);
+//             let nfub = self.first_unused_byte(dslice@, raw_finish);
+//             let raw_len = raw_finish.len();
+//             assert( self.resizes(sliced_begin, len+1, sliced_middle) );
+//             assert( self.sets(sliced_middle, len as int, value.deepv(), sliced_finish) );
+//             assert( raw_middle.len() == raw_len);
+//             assert( raw_begin.len() == raw_len);
+//             // i is in full-slice units.
+//             // resize doesn't touch anything
+//             assert( self.untampered_bytes(dslice@, raw_begin, raw_middle) );
+//             assert forall |i| mfub <= i < raw_middle.len() implies raw_begin[i] == raw_middle[i] by {
+//             }
+//             // set doesn't touch anything
+//             assert forall |i| nfub <= i < data@.len() implies raw_middle[i] == data@[i] by {
+//                 assert( self.untampered_bytes(dslice@, raw_middle, data@) );
+//             }
+//             assert forall |i| nfub <= i < data@.len() implies raw_begin[i] == data@[i] by {
+//             }
+//             assert forall |i| self.first_unused_byte(dslice@, data@) <= i < data@.len() implies old(data)@[i] == data@[i] by {
+//             }
+//         }
+        assert( self.untampered_bytes(dslice@, old(data)@, data@) );
     }
 }
 

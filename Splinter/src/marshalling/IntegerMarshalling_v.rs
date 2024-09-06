@@ -262,7 +262,7 @@ impl StaticallySized for u64 {
 #[cfg(target_pointer_width = "64")]
 proof fn usize64_workaround() ensures usize::MAX==u64::MAX {
     // TODO(verus): Why can't Verus see value of usize::MAX?
-    assume( usize::MAX==u64::MAX );
+    assume( usize::MAX==u64::MAX ); // workaround
 }
 
 impl IntFormattable for u64 {
