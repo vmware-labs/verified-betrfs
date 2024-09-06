@@ -784,7 +784,23 @@ impl <
 
                     // The first element starts beyond the end of the table itself.
                     assert( t.last() == start );
-                    assume(false);
+        self.bdyf.length_ensures(middle_data); // TODO FML
+        self.bdyf.length_ensures(newdata);  // TODO FML
+        SpecSlice::all_ensures::<u8>(); // TODO I need to study broadcasts
+
+                    assert( start == upper_bound - size );
+                    let size_of_length_field = LenType::uniform_size();
+                    let size_of_boundary_entry = BdyType::uniform_size();
+                    let table_size = size_of_length_field + len * size_of_boundary_entry;
+                    let free_space = upper_bound - table_size;
+                    let otl = ot.len() as int;
+                    let tl = t.len() as int;
+                    let otz = self.size_of_table(otl);
+                    let tz = self.size_of_table(tl);
+                    assert( tl == otl + 1 );
+                    assert( (otl + 1) * size_of_boundary_entry == otl * size_of_boundary_entry + size_of_boundary_entry ) by(nonlinear_arith);
+                    assert( tz == otz + size_of_boundary_entry );
+                    assert( upper_bound - self.size_of_table(ot.len() as int) == free_space );
                     assert( self.size_of_table(t.len() as int) <= start );
                     assert( self.size_of_table(t.len() as int) <= t.last() );
                 }
