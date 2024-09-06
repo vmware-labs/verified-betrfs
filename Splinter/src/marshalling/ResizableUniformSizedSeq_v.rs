@@ -362,7 +362,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
     }
 
     exec fn exec_set(&self, dslice: &Slice, data: &mut Vec<u8>, idx: usize, value: &EltFormat::U)
-    ensures self.untampered_bytes(dslice@, old(data)@, data@)
+    ensures idx < self.length(dslice@.i(data@)) ==> self.untampered_bytes(dslice@, old(data)@, data@)
     {
         proof { self.index_bounds_facts(idx as int); }
         let elt_start = dslice.start + self.exec_size_of_length_field() + idx * self.eltf.exec_uniform_size();
@@ -390,8 +390,33 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
             assert( self.get_data(dslice@.i(data@), i) == self.get_data(dslice@.i(old(data)@), i) );
         }
             
-        assert( self.sets(dslice@.i(old(data)@), idx as int, value.deepv(), dslice@.i(data@)) );
-        assume( self.untampered_bytes(dslice@, old(data)@, data@) );    // left off
+//         assert( self.sets(dslice@.i(old(data)@), idx as int, value.deepv(), dslice@.i(data@)) );
+
+        proof {
+            let start = dslice@.start;
+            let lsz = self.size_of_length_field();
+            let esz = self.eltf.uniform_size();
+            if idx < self.length(dslice@.i(data@)) {
+//                 assert( self.length(dslice@.i(data@)) == self.length(dslice@.i(old(data)@)) );
+                let plen = self.length(dslice@.i(data@));
+//                 assert( idx < plen );
+//                 assert( idx + 1 <= plen );
+//                 assert( elt_start == start + lsz + idx * esz );
+//                 assert( elt_end == elt_start + esz );
+//                 assert( elt_end == start + lsz + idx * esz + esz );
+//                 assert( elt_end == start + lsz + (idx + 1 )* esz );
+                mul_preserves_le(idx + 1, plen, esz as int);
+//                 assert( (idx + 1 )* esz <= plen * esz );
+// 
+//                 assert( elt_start <= start + lsz + plen * esz - esz );
+//                 assert( elt_start <= start + lsz + self.length(dslice@.i(old(data)@)) * esz - esz );
+//                 assert( elt_end <= start + lsz + self.length(dslice@.i(old(data)@)) * esz );
+//                 assert( elt_end <= self.first_unused_byte(dslice@, data@) );
+//                 assert forall |i| self.first_unused_byte(dslice@, data@) <= i < data@.len() implies old(data)@[i] == data@[i] by {
+//                 }
+                assert( self.untampered_bytes(dslice@, old(data)@, data@) );    // left off
+            }
+        }
     }
 
     /////////////////////////////////////////////////////////////////////////
