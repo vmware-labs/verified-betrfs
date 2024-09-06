@@ -59,9 +59,7 @@ pub trait IntFormattable : Deepview<int> + builtin::Integer + SpecOrd + Copy + S
     ensures forall |v: Self| #[trigger] v.deepv() == v as int
     {
         assert forall |v: Self| #[trigger] v.deepv() == v as int by {
-//             assume(false);
-//            // issue #1235 is fixed on branch trait-req-ens-call-graph
-           Self::deepv_is_as_int(v);
+            Self::deepv_is_as_int(v);
         }
     }
 
@@ -263,7 +261,7 @@ impl StaticallySized for u64 {
 
 #[cfg(target_pointer_width = "64")]
 proof fn usize64_workaround() ensures usize::MAX==u64::MAX {
-    // TODO: Why can't Verus see value of usize::MAX?
+    // TODO(verus): Why can't Verus see value of usize::MAX?
     assume( usize::MAX==u64::MAX );
 }
 
@@ -447,11 +445,11 @@ impl<T: IntFormattable> Marshal for IntFormat<T>
 
     exec fn exec_parse(&self, slice: &Slice, data: &Vec<u8>) -> (value: T)
     {
-        assume( false );    // I think there's instability here
-        
         let sr = slice_subrange(data.as_slice(), slice.start, slice.start+T::exec_uniform_size());
         assert( sr@ == slice@.i(data@).subrange(0, T::uniform_size() as int) ); // trigger
-        T::from_le_bytes(sr)
+        let value = T::from_le_bytes(sr);
+        proof { T::deepv_is_as_int(value); }
+        value
     }
 
     exec fn exec_marshall(&self, value: &T, data: &mut Vec<u8>, start: usize) -> (end: usize)
