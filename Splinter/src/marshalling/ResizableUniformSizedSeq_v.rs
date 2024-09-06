@@ -390,31 +390,15 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
             assert( self.get_data(dslice@.i(data@), i) == self.get_data(dslice@.i(old(data)@), i) );
         }
             
-//         assert( self.sets(dslice@.i(old(data)@), idx as int, value.deepv(), dslice@.i(data@)) );
+        // postcondition goal
+        // assert( self.sets(dslice@.i(old(data)@), idx as int, value.deepv(), dslice@.i(data@)) );
 
         proof {
-            let start = dslice@.start;
-            let lsz = self.size_of_length_field();
-            let esz = self.eltf.uniform_size();
-            if idx < self.length(dslice@.i(data@)) {
-//                 assert( self.length(dslice@.i(data@)) == self.length(dslice@.i(old(data)@)) );
-                let plen = self.length(dslice@.i(data@));
-//                 assert( idx < plen );
-//                 assert( idx + 1 <= plen );
-//                 assert( elt_start == start + lsz + idx * esz );
-//                 assert( elt_end == elt_start + esz );
-//                 assert( elt_end == start + lsz + idx * esz + esz );
-//                 assert( elt_end == start + lsz + (idx + 1 )* esz );
-                mul_preserves_le(idx + 1, plen, esz as int);
-//                 assert( (idx + 1 )* esz <= plen * esz );
-// 
-//                 assert( elt_start <= start + lsz + plen * esz - esz );
-//                 assert( elt_start <= start + lsz + self.length(dslice@.i(old(data)@)) * esz - esz );
-//                 assert( elt_end <= start + lsz + self.length(dslice@.i(old(data)@)) * esz );
-//                 assert( elt_end <= self.first_unused_byte(dslice@, data@) );
-//                 assert forall |i| self.first_unused_byte(dslice@, data@) <= i < data@.len() implies old(data)@[i] == data@[i] by {
-//                 }
-                assert( self.untampered_bytes(dslice@, old(data)@, data@) );    // left off
+            let len = self.length(dslice@.i(data@));
+            if idx < len {
+                mul_preserves_le(idx + 1, len, self.eltf.uniform_size() as int);
+                // postcondition goal
+                // assert( self.untampered_bytes(dslice@, old(data)@, data@) );
             }
         }
     }
