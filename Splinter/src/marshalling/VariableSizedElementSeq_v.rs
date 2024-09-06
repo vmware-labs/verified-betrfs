@@ -789,14 +789,20 @@ impl <
 //                     assert( self.size_of_table(t.len() as int) <= t.last() );
                 }
             }
-            assert( self.valid_table(newdata) ) by {
+
+            let mtbl = self.table(middle_data);
+            let ntbl = self.table(newdata);
+            assert( is_prefix(mtbl, ntbl) ) by {
+                let len = mtbl.len() as int;
+                assert forall |i| 0 <= i < len implies mtbl[i] == ntbl[i] by {
+                    assert( self.bdyf.preserves_entry(middle_data, i, newdata) );
+                }
+                // freaken extnality
+                assert( mtbl == ntbl.take(len) );
             }
-            assert( is_prefix(self.table(middle_data), self.table(newdata)) ) by {
-                assume(false);  // TODO left off here
-            }
-            assert( newdata.skip(self.elements_start(middle_data)) == middle_data.skip(self.elements_start(middle_data)) ) by {
-                assume(false);  // TODO left off here
-            }
+
+            assert( newdata.skip(self.elements_start(middle_data)) =~= middle_data.skip(self.elements_start(middle_data)) );
+
             self.elements_identity(middle_data, newdata);
 
             assert( self.length(idata) * self.size_of_boundary_entry() + self.size_of_boundary_entry()
