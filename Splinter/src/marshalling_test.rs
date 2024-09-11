@@ -13,9 +13,10 @@ use crate::marshalling::UniformSizedSeq_v::*;
 use crate::marshalling::ResizableUniformSizedSeq_v::*;
 use vstd::string::View;
 use crate::marshalling::KeyedMessageFormat_v::*;
-// use crate::marshalling::UniformSized_v::UniformSized;
+use crate::marshalling::UniformSized_v::UniformSized;
 // use crate::marshalling::ResizableIntegerSeq_v::*;
 use crate::marshalling::VariableSizedElementSeq_v::*;
+use crate::marshalling::StaticallySized_v::*;
 
 // fn m<M: Marshalling<int, u32>>(m: &M) {
 // }
@@ -217,6 +218,107 @@ exec fn test_keyed_message() -> Vec<u8>
 //     keyed_message_format.exec_set(leaf_slice, leaf_bytes, &key, &value);
 }
 
+struct Lorem {
+    last_val: usize,
+}
+
+impl Lorem {
+    pub closed spec fn valid(&self) -> bool
+    {
+        self.last_val < 1000
+    }
+
+    pub exec fn new() -> (out: Self)
+    ensures
+        out.valid(),
+    {
+        Lorem{last_val: 0}
+    }
+
+    pub exec fn ipsum(&mut self, len: usize) -> (out: Vec<u8>)
+    requires
+        old(self).valid(),
+    ensures
+        self.valid(),
+        out.len() == len,
+    {
+        let round = self.last_val % 10;
+        self.last_val = self.last_val + (10 - round) + 10;
+        if self.last_val >= 1000 { self.last_val = 0 };
+
+        let mut out = Vec::new();
+        let mut i = 0;
+        while i < len
+            invariant
+                i <= len,
+                out.len() == i,
+                self.valid(),
+        {
+            out.push(self.last_val as u8);
+            self.last_val = self.last_val + 1;
+            if self.last_val >= 1000 { self.last_val = 0 };
+            i += 1;
+        }
+        out
+    }
+}
+
+exec fn test_marshal_keyed_message_seq() -> Vec<u8>
+{
+    let total_size = 200;
+    let elt_format = UniformSizedElementSeqFormat::new(IntFormat::<u8>::new());
+    let bdy_int_fmt = IntFormat::<u32>::new();
+    let bdy_int_size = bdy_int_fmt.exec_uniform_size();
+    let lenf = IntFormat::<u32>::new();
+    let vfmt = VariableSizedElementSeqFormat::new(elt_format, bdy_int_fmt, lenf, total_size);
+    let mut data = prealloc(total_size);
+    let slice = Slice::all(&data);
+    vfmt.initialize(&slice, &mut data);
+
+    let mut free_space: usize = total_size - u32::exec_uniform_size();
+    assert( free_space == vfmt.free_space(slice@.i(data@)) );
+
+    let mut lorem = Lorem::new();
+    loop
+    invariant
+        lorem.valid(),
+        slice@.valid(data@),    // because data len never changes
+        vfmt.tableable(slice@.i(data@)),
+        vfmt.valid_table(slice@.i(data@)),
+        free_space == vfmt.free_space(slice@.i(data@)),
+    {
+        let key = lorem.ipsum(6);
+        let value = lorem.ipsum(12);
+        
+        if KeyedMessageFormat::exec_required_size(key.len(), value.len()) + bdy_int_size >
+//             vfmt.exec_free_space(&slice, &data)
+            free_space
+        {
+            // it's full.
+            break;
+        }
+
+        // What we *want* to do:
+//         let kmf = KeyedMessageFormat::construct(&key, &value);
+//         slice = vfmt.append_allocate(kmf.size());
+//         kmf.store_key_value(slice, data, key, value);
+
+        // one-copy workaround
+        let kvdata = KeyedMessageFormat::construct(&key, &value);
+        assert( free_space == vfmt.free_space(slice@.i(data@)) );
+        assert( KeyedMessageFormat::required_size(key.len(), value.len()) == kvdata.len() );
+        assert( kvdata.len() == vfmt.eltf.spec_size(kvdata.deepv()) );
+        assert( u32::uniform_size() + vfmt.eltf.spec_size(kvdata.deepv()) as nat <= vfmt.free_space(slice@.i(data@)) );
+        assert( vfmt.appendable(slice@.i(data@), kvdata.deepv()) );
+        vfmt.exec_append(&slice, &mut data, &kvdata);
+        free_space = free_space - (u32::exec_uniform_size() + kvdata.len());
+        assert( free_space == vfmt.free_space(slice@.i(data@)) );
+    }
+    data
+}
+
+// exec fn test_parse_keyed_message_seq() -> Vec<u8>
+
 } // verus!
   // Disturbingly this exec fn isn't verified!
 fn main() {
@@ -247,4 +349,8 @@ fn main() {
 
     let v = test_keyed_message();
     print!("keyed_message: {:?}\n", v);
+
+    let v = test_marshal_keyed_message_seq();
+    print!("keyed_message_seq: {:?}\n", v);
+//     let p = v
 }

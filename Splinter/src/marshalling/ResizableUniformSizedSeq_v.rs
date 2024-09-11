@@ -122,9 +122,10 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
         dslice@.valid(old(data)@),
         self.total_size <= dslice@.len(),
     ensures
-        self.well_formed(dslice@.i(data@)),
-        self.length(dslice@.i(data@)) == 0,
         data.len() == old(data).len(),
+        self.well_formed(dslice@.i(data@)),
+        self.lengthable(dslice@.i(data@)),
+        self.length(dslice@.i(data@)) == 0,
     {
         proof { self.length_ensures(dslice@.i(old(data)@)); };
         self.resize(dslice, data, 0);

@@ -174,6 +174,74 @@ impl IntFormattable for u8 {
 }
 
 //////////////////////////////////////////////////////////////////////////////
+// u16
+//////////////////////////////////////////////////////////////////////////////
+
+impl Deepview<int> for u16 {
+    //type DV = int;
+    open spec fn deepv(&self) -> int { *self as int }
+}
+
+impl StaticallySized for u16 {
+    open spec fn uniform_size() -> usize { 2 } 
+
+    // TODO(verus): Too bad this proof-free obligation can't be handled in the trait
+    proof fn uniform_size_ensures() {}
+
+    exec fn exec_uniform_size() -> usize { 2 } 
+}
+
+impl IntFormattable for u16 {
+    closed spec fn spec_from_le_bytes(s: Seq<u8>) -> u16
+    {
+        spec_u16_from_le_bytes(s)
+    }
+
+    closed spec fn spec_to_le_bytes(x: u16) -> Seq<u8>
+    {
+        spec_u16_to_le_bytes(x)
+    }
+
+    exec fn to_le_bytes(x: u16) -> (s: Vec<u8>)
+    {
+        u16_to_le_bytes(x)
+    }
+
+    exec fn from_le_bytes(s: &[u8]) -> (x:u16)
+    {
+        u16_from_le_bytes(s)
+    }
+        
+    proof fn lemma_auto_spec_to_from_le_bytes()
+    {
+        lemma_auto_spec_u16_to_from_le_bytes();
+
+        // Another case of https://github.com/verus-lang/verus/issues/1150
+        assert forall |x: Self|
+            #![trigger Self::spec_to_le_bytes(x)]
+        {
+          &&& Self::spec_to_le_bytes(x).len() == Self::uniform_size()
+          &&& Self::spec_from_le_bytes(Self::spec_to_le_bytes(x)) == x
+        } by {
+        }
+    }
+
+    proof fn deepv_is_as_int(v: Self) {}
+
+    open spec fn max() -> (m: usize) { Self::MAX as usize }
+
+    proof fn max_ensures(v: Self) {}
+
+    exec fn exec_max() -> (m: usize) { Self::MAX as usize }
+
+    exec fn to_usize(v: Self) -> (w: usize) { v as usize }
+
+    exec fn from_usize(v: usize) -> (w: Self) { v as Self }
+
+    proof fn nonnegative(v: Self) {}
+}
+
+//////////////////////////////////////////////////////////////////////////////
 // u32
 //////////////////////////////////////////////////////////////////////////////
 

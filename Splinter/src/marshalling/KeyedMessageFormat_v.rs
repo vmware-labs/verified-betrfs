@@ -36,7 +36,7 @@ impl Deepview<SpecKVPair> for KVPair {
 }
 
 pub struct KeyedMessageFormat {
-    vfmt: VariableSizedElementSeqFormat<UniformSizedElementSeqFormat<IntFormat<u8>>, u32, u32>,
+    vfmt: VariableSizedElementSeqFormat<UniformSizedElementSeqFormat<IntFormat<u8>>, u16, u16>,
 }
 
 const KEY_SLOT: usize = 0;
@@ -70,17 +70,31 @@ impl KeyedMessageFormat {
 
     pub open spec fn required_size(key_len: usize, value_len: usize) -> int
     {
-         u32::uniform_size() + u32::uniform_size() + key_len + u32::uniform_size() + value_len
+         u16::uniform_size() + u16::uniform_size() + key_len + u16::uniform_size() + value_len
     }
 
     pub open spec fn fits(key_len: usize, value_len: usize) -> bool
     {
-        Self::required_size(key_len, value_len) <= u32::MAX
+        Self::required_size(key_len, value_len) <= u16::MAX
+    }
+
+    pub exec fn exec_required_size(key_len: usize, value_len: usize) -> (out: usize)
+    requires
+        Self::fits(key_len, value_len),
+    ensures
+        out as int == Self::required_size(key_len, value_len)
+    {
+         u16::exec_uniform_size() + u16::exec_uniform_size() + key_len + u16::exec_uniform_size() + value_len
     }
 
     pub closed spec fn size(&self) -> int
     {
         self.vfmt.total_size() as int
+    }
+
+    pub exec fn exec_size(&self) -> usize
+    {
+        self.vfmt.exec_total_size()
     }
 
     // Construct a formatter for key and value of known size
@@ -93,11 +107,11 @@ impl KeyedMessageFormat {
         // TODO ensures we can store_key_value() it with this key and data
     {
         // Sneaky knowledge of how VariableSizedElementSeq works
-        let u32size = u32::exec_uniform_size();
-        let total_size = u32size + u32size + key_data.len() + u32size + value_data.len();
+        let u16size = u16::exec_uniform_size();
+        let total_size = u16size + u16size + key_data.len() + u16size + value_data.len();
         let elt_format = UniformSizedElementSeqFormat::new(IntFormat::<u8>::new());
-        let bdy_int_fmt = IntFormat::<u32>::new();
-        let lenf = IntFormat::<u32>::new();
+        let bdy_int_fmt = IntFormat::<u16>::new();
+        let lenf = IntFormat::<u16>::new();
         let vfmt = VariableSizedElementSeqFormat::new(elt_format, bdy_int_fmt, lenf, total_size);
         let s = KeyedMessageFormat{vfmt};
         s
@@ -121,9 +135,11 @@ impl KeyedMessageFormat {
             out
         }
 
-    pub exec fn construct(key_data: &Vec<u8>, value_data: &Vec<u8>) -> Vec<u8>
+    pub exec fn construct(key_data: &Vec<u8>, value_data: &Vec<u8>) -> (out: Vec<u8>)
     requires
         Self::fits(key_data.len(), value_data.len()),
+    ensures
+        out.len() == Self::required_size(key_data.len(), value_data.len()),
     {
         let kmf = Self::new(key_data, value_data);
         let len = kmf.vfmt.exec_total_size();
@@ -137,6 +153,7 @@ impl KeyedMessageFormat {
         self.is_container(old(data)@, key_data.len(), value_data.len()),
     ensures
         self.filled(data@),
+        data@.len() == old(data)@.len(),
     {
         let slice = Slice::all(data);
         proof{ SpecSlice::all_ensures::<u8>() };

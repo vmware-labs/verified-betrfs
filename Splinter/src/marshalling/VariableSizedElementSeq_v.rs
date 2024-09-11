@@ -272,6 +272,18 @@ impl <
         self.elements_start(data) - self.size_of_table(self.length(data))
     }
 
+//     pub exec fn exec_free_space(&self, slice: &Slice, data: &Vec<u8>) -> (out: usize)
+//     requires
+//         self.seq_valid(),
+//         self.tableable(slice@.i(data@)),
+//         self.valid_table(slice@.i(data@)),
+//     ensures
+//         out as int == self.free_space(slice@.i(data@)),
+//     {
+//         0
+//         //self.elements_start(data) - self.size_of_table(self.length(data))
+//     }
+
     // TODO hey wait this is just elements_start
     spec fn upper_bound(&self, data: Seq<u8>) -> int
     {
@@ -730,7 +742,12 @@ impl <
         size_of_boundary_entry <= free_space && elt_size <= free_space - size_of_boundary_entry
     }
 
-    exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: &EltFormat::U) {
+    exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: &EltFormat::U)
+    ensures
+        // bonus layer-violating ensures
+        self.free_space(dslice@.i(data@)) == self.free_space(dslice@.i(old(data)@))
+            - (self.size_of_boundary_entry() + self.eltf.spec_size(value.deepv())),
+    {
         let ghost idata = dslice@.i(data@);
         proof {
             BdyType::deepv_is_as_int_forall();
