@@ -56,9 +56,31 @@ impl <
     VariableSizedElementSeqFormat<EltFormat, BdyType, LenType>
 {
     pub fn new(eltf: EltFormat, bdy_int_format: IntFormat<BdyType>, lenf: IntFormat<LenType>, total_size: usize) -> (s: Self)
-        requires LenType::uniform_size() <= total_size
+    requires
+        LenType::uniform_size() <= total_size,
+        eltf.valid(),
+        total_size <= BdyType::max(),
+        total_size <= LenType::max(),
+    ensures
+        s.seq_valid(),
+        s.total_size() == total_size,
     {
         Self{ eltf: eltf, bdyf: ResizableUniformSizedElementSeqFormat::new(bdy_int_format, lenf, total_size) }
+    }
+
+    // Initialize a data region to represent zero records
+    pub exec fn initialize(&self, dslice: &Slice, data: &mut Vec<u8>)
+    requires
+        self.seq_valid(),
+        dslice@.valid(old(data)@),
+        self.total_size() <= dslice@.len(),
+    ensures
+        data.len() == old(data).len(),
+        self.well_formed(dslice@.i(data@)),
+        self.lengthable(dslice@.i(data@)),
+        self.length(dslice@.i(data@)) == 0,
+    {
+        self.bdyf.initialize(dslice, data);
     }
 
     // The pre-allocated capacity (bytes) is just whatever we preallocated to the

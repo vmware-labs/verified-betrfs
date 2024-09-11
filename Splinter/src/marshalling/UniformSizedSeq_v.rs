@@ -436,6 +436,7 @@ impl<EltFormat: Marshal + UniformSized>
 //                 }
             }
 
+            assert( self.marshallable_at(value.deepv(), i as int) );     // de-flake trigger
             end = self.eltf.exec_marshall(&value[i], data, end);
             i += 1;
 
