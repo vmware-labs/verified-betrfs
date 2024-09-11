@@ -599,6 +599,14 @@ impl <
                     assert( eslice@.i(data@) =~= self.get_data(dslice@.i(data@), idx as int) );
                 }
                 let oelt = self.eltf.try_parse(&eslice, data);
+                proof {
+                    let oelt = oelt;    // make a copy to avoid move complaint
+                    if oelt is Some {
+                        // trigger. #1239 resurrected?
+                        assert( oelt.unwrap().deepv() == self.get_elt(dslice@.i(data@), idx as int) );
+                    }
+                }
+//                 assert( oelt.deepv() == self.parse(slice@.i(data@)) );
                 oelt
             }
         }

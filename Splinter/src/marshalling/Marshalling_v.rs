@@ -62,7 +62,10 @@ pub trait Marshal {
         slice@.valid(data@),
     ensures
         p == self.parsable(slice@.i(data@))
-    ;
+    {
+        let ovalue = self.try_parse(slice, data);
+        ovalue.is_some()
+    }
 
     spec fn marshallable(&self, value: Self::DV) -> bool
     ;

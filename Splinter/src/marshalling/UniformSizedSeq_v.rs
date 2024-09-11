@@ -315,13 +315,6 @@ impl<EltFormat: Marshal + UniformSized>
 
     open spec fn valid(&self) -> bool { self.seq_valid() }
 
-    exec fn exec_parsable(&self, dslice: &Slice, data: &Vec<u8>) -> (p: bool)
-    {
-        // TODO factor this into Marshal trait default method
-        let ovalue = self.try_parse(dslice, data);
-        ovalue.is_some()
-    }
-
     open spec fn parsable(&self, data: Seq<u8>) -> bool
     {
         self.seq_parsable(data)

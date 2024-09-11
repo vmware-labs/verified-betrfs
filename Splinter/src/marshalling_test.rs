@@ -244,7 +244,7 @@ impl Lorem {
         out.len() == len,
     {
         let round = self.last_val % 10;
-        self.last_val = self.last_val + (10 - round) + 10;
+        self.last_val = self.last_val + (10 - round);
         if self.last_val >= 1000 { self.last_val = 0 };
 
         let mut out = Vec::new();

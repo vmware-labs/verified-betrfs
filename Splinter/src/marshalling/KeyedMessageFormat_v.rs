@@ -164,54 +164,19 @@ impl KeyedMessageFormat {
         slice@.agree_beyond_slice(old(data)@, data@),
         self.parse(slice@.i(data@)) == kvpair.deepv(),
     {
-        let ghost idata = slice@.i(data@);
-        proof{ SpecSlice::all_ensures::<u8>() };
+        // zero the array in this slice
         self.vfmt.initialize(&slice, data);
 
-        let ghost data0 = slice@.i(data@);
-        let ghost oldlen = self.vfmt.length(data0);
-        assert( oldlen == 0 );
-
-        assert( slice@.agree_beyond_slice(old(data)@, data@) );
+        // install the key
         self.vfmt.exec_append(&slice, data, &kvpair.key);
 
         let ghost middle = slice@.i(data@);
-        assert( self.vfmt.appends(data0, kvpair.key.deepv(), middle) );
 
-//         assert( slice@.agree_beyond_slice(old(data)@, data@) );
-        assert( oldlen == 0 );
-        assert( oldlen == KEY_SLOT as int );
-        assert( self.vfmt.get_elt(middle, oldlen) == kvpair.key.deepv() );
-        assert( self.vfmt.get_elt(middle, oldlen) == kvpair.key.deepv() );
-        assert( kvpair.key.deepv() == kvpair.deepv().key );
-        //assert( self.vfmt.get_elt(middle, oldlen) == value
-        assert( kvpair.deepv().key == self.vfmt.get_elt(middle, KEY_SLOT as int) );
-        assert( self.parse(middle).key == self.vfmt.get_elt(middle, KEY_SLOT as int) );
-
-        assert( self.vfmt.gettable(slice@.i(data@), KEY_SLOT as int) ); // trigger
-        assert( self.vfmt.appendable(slice@.i(data@), kvpair.value.deepv()) );    // trigger
+        // install the value
         self.vfmt.exec_append(&slice, data, &kvpair.value);
 
-        assert( self.parse(middle).key == self.vfmt.get_elt(middle, KEY_SLOT as int) );
-        assert( kvpair.deepv().key == kvpair.key.deepv() );
-        assert( kvpair.deepv().key == self.vfmt.get_elt(middle, KEY_SLOT as int) );
-        let ghost newdata = slice@.i(data@);
-        assert( self.parse(newdata).key == self.vfmt.get_elt(newdata, KEY_SLOT as int) );
-
-        assert( self.vfmt.preserves_entry(middle, KEY_SLOT as int, newdata) );   // trigger
-//         assert( self.parse(slice@.i(data@)) == kvpair.deepv() ) by {
-//             let pp = self.parse(slice@.i(data@));
-//             assert( pp == self.parse(newdata) );
-//             assert( pp.key == self.vfmt.get_elt(newdata, KEY_SLOT as int) );
-//             // stability
-//             assert( pp.key == self.vfmt.get_elt(middle, KEY_SLOT as int) );
-//             let cp = kvpair.deepv();
-// 
-//             let idata = slice@.i(data@);
-//             assert( pp.key == cp.key );
-//         }
-//         assert( slice@.agree_beyond_slice(old(data)@, data@) );
-//         assert( slice@.i(data@) == data@ );  // extn equality trigger
+        // trigger: value append didn't stomp the key
+        assert( self.vfmt.preserves_entry(middle, KEY_SLOT as int, slice@.i(data@)) );
     }
 
     // TODO Want to borrow the data! Read it in-place, let caller copy as needed.
@@ -246,12 +211,6 @@ impl Marshal for KeyedMessageFormat {
         self.filled(data)
     }
 
-    exec fn exec_parsable(&self, slice: &Slice, data: &Vec<u8>) -> (p: bool)
-    {
-        assume( false );
-        false   // TODO
-    }
-
     // TODO rename filled->parsable, is_container -> marshallable?
     open spec fn marshallable(&self, value: Self::DV) -> bool
     {
@@ -282,7 +241,10 @@ impl Marshal for KeyedMessageFormat {
         if key.is_none() || value.is_none() {
             None
         } else {
-            Some(KVPair{key: key.unwrap(), value: value.unwrap()})
+            let kv = KVPair{key: key.unwrap(), value: value.unwrap()};
+            // trigger -- should have come from trait? #1239 resurrected?
+            assert( kv.deepv() == self.parse(slice@.i(data@)) );
+            Some(kv)
         }
     }
 
