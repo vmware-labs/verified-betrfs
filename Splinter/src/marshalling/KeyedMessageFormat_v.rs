@@ -140,39 +140,77 @@ impl KeyedMessageFormat {
             out
         }
 
-    pub exec fn construct(key_data: &Vec<u8>, value_data: &Vec<u8>) -> (out: Vec<u8>)
+    pub exec fn construct(kvpair: &KVPair) -> (out: Vec<u8>)
     requires
-        Self::fits(key_data.len(), value_data.len()),
+        Self::fits(kvpair.key.len(), kvpair.value.len()),
     ensures
-        out.len() == Self::required_size(key_data.len(), value_data.len()),
+        out.len() == Self::required_size(kvpair.key.len(), kvpair.value.len()),
     {
-        let kmf = Self::new(key_data, value_data);
+        let kmf = Self::new(&kvpair.key, &kvpair.value);
         let len = kmf.vfmt.exec_total_size();
         let mut data = Self::prealloc(len);
-        kmf.store_key_value(&Slice::all(&data), &mut data, key_data, value_data);
+        kmf.store_key_value(&Slice::all(&data), &mut data, &kvpair);
         data
     }
 
     // inner part of marshal
-    pub exec fn store_key_value(&self, slice: &Slice, data: &mut Vec<u8>, key_data: &Vec<u8>, value_data: &Vec<u8>)
+    pub exec fn store_key_value(&self, slice: &Slice, data: &mut Vec<u8>, kvpair: &KVPair)
     requires
-        self.is_container(slice@.i(old(data)@), key_data.len(), value_data.len()),
+        self.is_container(slice@.i(old(data)@), kvpair.key.len(), kvpair.value.len()),
         slice@.valid(old(data)@),
     ensures
         self.filled(slice@.i(data@)),
         data@.len() == old(data)@.len(),
         slice@.agree_beyond_slice(old(data)@, data@),
-        self.parse(slice@.i(data@)) == (SpecKVPair{key: key_data.deepv(), value: value_data.deepv()}),
+        self.parse(slice@.i(data@)) == kvpair.deepv(),
     {
+        let ghost idata = slice@.i(data@);
         proof{ SpecSlice::all_ensures::<u8>() };
         self.vfmt.initialize(&slice, data);
-        self.vfmt.exec_append(&slice, data, key_data);
+
+        let ghost data0 = slice@.i(data@);
+        let ghost oldlen = self.vfmt.length(data0);
+        assert( oldlen == 0 );
+
+        assert( slice@.agree_beyond_slice(old(data)@, data@) );
+        self.vfmt.exec_append(&slice, data, &kvpair.key);
+
+        let ghost middle = slice@.i(data@);
+        assert( self.vfmt.appends(data0, kvpair.key.deepv(), middle) );
+
+//         assert( slice@.agree_beyond_slice(old(data)@, data@) );
+        assert( oldlen == 0 );
+        assert( oldlen == KEY_SLOT as int );
+        assert( self.vfmt.get_elt(middle, oldlen) == kvpair.key.deepv() );
+        assert( self.vfmt.get_elt(middle, oldlen) == kvpair.key.deepv() );
+        assert( kvpair.key.deepv() == kvpair.deepv().key );
+        //assert( self.vfmt.get_elt(middle, oldlen) == value
+        assert( kvpair.deepv().key == self.vfmt.get_elt(middle, KEY_SLOT as int) );
+        assert( self.parse(middle).key == self.vfmt.get_elt(middle, KEY_SLOT as int) );
 
         assert( self.vfmt.gettable(slice@.i(data@), KEY_SLOT as int) ); // trigger
-        assert( self.vfmt.appendable(slice@.i(data@), value_data.deepv()) );    // trigger
-        self.vfmt.exec_append(&slice, data, value_data);
+        assert( self.vfmt.appendable(slice@.i(data@), kvpair.value.deepv()) );    // trigger
+        self.vfmt.exec_append(&slice, data, &kvpair.value);
 
-        assume( false );
+        assert( self.parse(middle).key == self.vfmt.get_elt(middle, KEY_SLOT as int) );
+        assert( kvpair.deepv().key == kvpair.key.deepv() );
+        assert( kvpair.deepv().key == self.vfmt.get_elt(middle, KEY_SLOT as int) );
+        let ghost newdata = slice@.i(data@);
+        assert( self.parse(newdata).key == self.vfmt.get_elt(newdata, KEY_SLOT as int) );
+
+        assert( self.vfmt.preserves_entry(middle, KEY_SLOT as int, newdata) );   // trigger
+//         assert( self.parse(slice@.i(data@)) == kvpair.deepv() ) by {
+//             let pp = self.parse(slice@.i(data@));
+//             assert( pp == self.parse(newdata) );
+//             assert( pp.key == self.vfmt.get_elt(newdata, KEY_SLOT as int) );
+//             // stability
+//             assert( pp.key == self.vfmt.get_elt(middle, KEY_SLOT as int) );
+//             let cp = kvpair.deepv();
+// 
+//             let idata = slice@.i(data@);
+//             assert( pp.key == cp.key );
+//         }
+//         assert( slice@.agree_beyond_slice(old(data)@, data@) );
 //         assert( slice@.i(data@) == data@ );  // extn equality trigger
     }
 
@@ -260,9 +298,8 @@ impl Marshal for KeyedMessageFormat {
     {
         let len = Self::exec_required_size(value.key.len(), value.value.len());
         let slice = Slice{start: start, end: start + len};
-        self.store_key_value(&slice, data, &value.key, &value.value);
+        self.store_key_value(&slice, data, value);
         let end = start + len;
-        assume( false );
         assert( self.parse(data@.subrange(start as int, end as int)) == value.deepv() );
         end
     }

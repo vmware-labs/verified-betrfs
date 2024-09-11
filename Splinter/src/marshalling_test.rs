@@ -198,8 +198,9 @@ exec fn test_keyed_message() -> Vec<u8>
     let key = vec![ 8, 9, 10 ];
     let value = vec![ 2, 4, 6, 8, 244, 122, 11 ];
 
+    let kvpair = KVPair{key, value};
 //     if true {
-        return KeyedMessageFormat::construct(&key, &value);
+        return KeyedMessageFormat::construct(&kvpair);
 //     }
 
 //     // A better test would construct a VariableSizedSeq, allocate space for a keyed message within
@@ -287,10 +288,9 @@ exec fn test_marshal_keyed_message_seq() -> Vec<u8>
         vfmt.valid_table(slice@.i(data@)),
         free_space == vfmt.free_space(slice@.i(data@)),
     {
-        let key = lorem.ipsum(6);
-        let value = lorem.ipsum(12);
+        let kvpair = KVPair{key: lorem.ipsum(6), value: lorem.ipsum(12)};
         
-        if KeyedMessageFormat::exec_required_size(key.len(), value.len()) + bdy_int_size >
+        if KeyedMessageFormat::exec_required_size(kvpair.key.len(), kvpair.value.len()) + bdy_int_size >
 //             vfmt.exec_free_space(&slice, &data)
             free_space
         {
@@ -304,9 +304,9 @@ exec fn test_marshal_keyed_message_seq() -> Vec<u8>
 //         kmf.store_key_value(slice, data, key, value);
 
         // one-copy workaround
-        let kvdata = KeyedMessageFormat::construct(&key, &value);
+        let kvdata = KeyedMessageFormat::construct(&kvpair);
         assert( free_space == vfmt.free_space(slice@.i(data@)) );
-        assert( KeyedMessageFormat::required_size(key.len(), value.len()) == kvdata.len() );
+        assert( KeyedMessageFormat::required_size(kvpair.key.len(), kvpair.value.len()) == kvdata.len() );
         assert( kvdata.len() == vfmt.eltf.spec_size(kvdata.deepv()) );
         assert( u32::uniform_size() + vfmt.eltf.spec_size(kvdata.deepv()) as nat <= vfmt.free_space(slice@.i(data@)) );
         assert( vfmt.appendable(slice@.i(data@), kvdata.deepv()) );

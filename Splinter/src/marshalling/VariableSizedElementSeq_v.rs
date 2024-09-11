@@ -79,6 +79,7 @@ impl <
         self.well_formed(dslice@.i(data@)),
         self.lengthable(dslice@.i(data@)),
         self.length(dslice@.i(data@)) == 0,
+        dslice@.agree_beyond_slice(old(data)@, data@),
     {
         self.bdyf.initialize(dslice, data);
     }
