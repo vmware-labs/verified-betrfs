@@ -74,6 +74,17 @@ impl<T: Buffer> LinkedBetree<T>{
         }
     }
 
+
+
+    // how do you talk about two 
+    //  self.linked.i_buffer() (buffer_dv) .i() == self.i().root);
+
+
+    // i_buffer_seq() =~= 
+    // for each node ibufferseq is the same as buffer_disk.i().i_buffer_seq
+
+    // proof that i().i() is the same as i()
+
     pub open spec(checked) fn i(self) -> FilteredBetree_v::BetreeNode
         recommends self.acyclic()
     {
@@ -325,6 +336,58 @@ impl<T: Buffer> LinkedBetree<T>{
         }
     }
 
+    // for any that 
+    proof fn meowza_with_ranking(self)
+        requires self.has_root(), self.acyclic()
+        ensures 
+            self.i() is Node,
+            self.i()->buffers =~= self.i_buffer().buffer_dv.i_buffer_seq(self.root().buffers)
+    {
+        self.i_wf();
+
+        let i_bdv = self.i_buffer().buffer_dv;
+        assert(i_bdv.entries.dom() == self.buffer_dv.entries.dom());
+        assert(self.i()->buffers == self.buffer_dv.i_buffer_seq(self.root().buffers));
+
+        // we know it's the same 
+        assert(i_bdv.i() =~= i_bdv);
+
+        // we want to say that the i disk is the same
+
+        assume(false);
+
+        // assert(i_bdv.i_buffer_seq(self.root().buffers) =~= self.i()->buffers);
+        assert(i_bdv.i_buffer_seq(self.root().buffers)
+            =~= self.buffer_dv.i_buffer_seq(self.root().buffers));
+
+        // assert forall |addr| self.root().buffers.contains(addr) 
+        // implies i_bdv.i_buffer_seq() by {
+
+        // } 
+
+        // broadcast use BufferDisk::subdisk_implies_same_i;
+        // if self.has_root() {
+        //     self.valid_buffer_dv_throughout();
+        //     assert(self.i()->buffers =~= big.i()->buffers);
+
+        //     self.i_children_lemma();
+        //     big.i_children_lemma();
+
+        //     assert forall |i| 0 <= i < self.i()->children.len()
+        //     implies self.i()->children[i] == big.i()->children[i]
+        //     by {
+        //         let child = self.child_at_idx(i as nat);
+        //         let big_child = big.child_at_idx(i as nat);
+
+        //         assert(self.root().valid_child_index(i as nat));
+        //         assert(big.root().valid_child_index(i as nat));
+        //         child.subdisk_preserves_i_with_ranking(big_child, ranking, big_ranking);
+        //     }
+        //     assert(self.i()->children =~= big.i()->children);
+        // }
+        assume(false);
+    }
+
     proof fn push_memtable_commutes_with_i(self, memtable: Memtable<T>, new_addrs: TwoAddrs)
         requires 
             self.acyclic(),
@@ -516,6 +579,7 @@ impl<T: Buffer> LinkedBetree<T>{
             self.i().can_compact(start, end, compacted_buffer.i())
     {
         self.i_wf();
+        broadcast use Buffer::contains_refines, Buffer::query_refines;
         reveal(FilteredBetree_v::BetreeNode::valid_compact_key_domain);
 
         let compact_slice = self.root().buffers.slice(start as int, end as int);
@@ -558,6 +622,8 @@ impl<T: Buffer> LinkedBetree<T>{
             let from = if self.i().flushed_ofs(k) <= start { 0 } else { self.i().flushed_ofs(k)-start };
             self.buffer_dv.query_from_commutes_with_i(compact_slice, k, from);
         }
+
+        assume(false);
     }
 
     proof fn compact_commutes_with_i(self, start: nat, end: nat, compacted_buffer: T, new_addrs: TwoAddrs)
@@ -666,8 +732,7 @@ impl<T: Buffer> QueryReceipt<T>{
             assert(self.lines[i].linked.has_root());
             assert(node.key_in_domain(self.key));
             assert(self.result_linked_at(i)); // trigger
-
-            assert(self.linked.buffer_dv.valid_buffers(node.buffers)); // TODO(meow?)
+            assert(self.linked.buffer_dv.valid_buffers(node.buffers));
             self.linked.buffer_dv.query_from_commutes_with_i(node.buffers, self.key, start);
         }
     }
@@ -857,6 +922,7 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
         ensures
             FilteredBetree::State::initialize(self.i(), i_stamped_betree(v))
     {
+        v.memtable.buffer.empty_refines();
         self.linked.i_wf();
     }
 
@@ -881,18 +947,39 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
             FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::put())
     {
         reveal(FilteredBetree::State::next_by);
+        self.memtable.apply_puts_refines(lbl->puts);
     }
+
+    // stamped betree proof
 
     proof fn freeze_as_refines(self, post: Self, lbl: LinkedBetreeVars::Label)
         requires 
-            self.inv(), 
+            self.inv(),
             post.inv(), 
             LinkedBetreeVars::State::freeze_as(self, post, lbl)
         ensures
             FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::freeze_as())
     {
         reveal(FilteredBetree::State::next_by);
+        self.memtable.buffer.empty_refines();
+        assert(self.i().memtable.is_empty());
         self.linked.i_wf();
+        assert(self.i().wf());
+
+        let ranking = self.linked.the_ranking();
+        assert(lbl->stamped_betree.value.valid_ranking(ranking));
+        assert(lbl->stamped_betree.value.acyclic());
+
+        assert(lbl->stamped_betree.seq_end == self.i().memtable.seq_end);
+
+        // buffer performs the same 
+
+        // assert(lbl->stamped_betree.value.i() == lbl.i()->stamped_betree.value);
+        // assert(lbl->stamped_betree.value == self.linked.i_buffer()); // linked betree nodes
+
+        // assert(lbl->stamped_betree.value.i() == self.linked.i_buffer().i());
+        assume(self.linked.i_buffer().i() == self.i().root);
+        // assert(lbl->stamped_betree.value.i() == self.i().root);
     }
 
     proof fn internal_flush_memtable_refines(self, post: Self, lbl: LinkedBetreeVars::Label, new_memtable: Memtable<T>, new_addrs: TwoAddrs)

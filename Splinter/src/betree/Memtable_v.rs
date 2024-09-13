@@ -91,6 +91,18 @@ impl<T: Buffer> Memtable<T> {
             );
         }
     }
+
+    pub proof fn apply_puts_refines(self, puts: MsgHistory)
+        requires puts.wf(), puts.can_follow(self.seq_end)
+        ensures self.apply_puts(puts).i() == self.i().apply_puts(puts)
+        decreases puts.len()
+    {
+        broadcast use Buffer::insert_refines, Buffer::query_refines;
+        if 0 < puts.len() {
+            let last_lsn = (puts.seq_end - 1) as nat;
+            self.apply_puts_refines(puts.discard_recent(last_lsn));
+        }
+    }
 }
 
 impl Memtable<SimpleBuffer> {

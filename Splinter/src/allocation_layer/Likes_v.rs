@@ -10,6 +10,8 @@ use crate::disk::GenericDisk_v::*;
 verus!{
     pub type Likes = Multiset<Address>;
 
+    pub type AULikes = Multiset<AU>;
+
     pub open spec(checked) fn no_likes() -> Likes
     {
         Multiset::empty()

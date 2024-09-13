@@ -41,6 +41,11 @@ impl<T> BufferDisk<T> {
         self.entries <= bigger.entries
     }
 
+    pub open spec(checked) fn agrees_with(self, bigger: BufferDisk<T>) -> bool
+    {
+        self.entries.agrees(bigger.entries)
+    }
+
     pub open spec(checked) fn empty_disk() -> Self
     {
         Self{ entries: Map::empty() }

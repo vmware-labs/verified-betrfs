@@ -21,15 +21,20 @@ pub trait Buffer {
     spec fn i(&self) -> SimpleBuffer;
 
     broadcast proof fn contains_refines(&self, key: Key) 
-        ensures self.contains(key) == self.i().map.contains_key(key)
+        ensures #[trigger] self.contains(key) == self.i().map.contains_key(key)
     ;
 
     broadcast proof fn query_refines(&self, key: Key)
-        ensures self.query(key) == self.i().query_internal(key)
+        ensures  #[trigger] self.query(key) == self.i().query_internal(key)
     ;
 
-    // proof for contains => i().contains
-    // ...
+    broadcast proof fn insert_refines(&self, key: Key, msg: Message) 
+        ensures self.insert_ref(key, msg).i() == self.i().insert(key, msg)
+    ;
+
+    proof fn empty_refines(&self) 
+        ensures  #[trigger] self.is_empty() ==> self.i() == SimpleBuffer::empty()
+    ;
 }
 
 // rename to Simple SimpleBuffer
@@ -65,10 +70,13 @@ impl Buffer for SimpleBuffer {
         *self
     }
 
-    broadcast proof fn contains_refines(&self, key: Key) {}
+    proof fn contains_refines(&self, key: Key) {}
 
-    broadcast proof fn query_refines(&self, key: Key) {}
+    proof fn query_refines(&self, key: Key) {}
 
+    proof fn insert_refines(&self, key: Key, msg: Message) {}
+
+    proof fn empty_refines(&self) {}
 }
 
 // A SimpleBuffer is a map from keys to messages.
