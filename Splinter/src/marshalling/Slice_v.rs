@@ -54,9 +54,20 @@ impl SpecSlice {
         &&& forall |i| self.end<=i<data.len() ==> data[i] == new_data[i]
     }
 
+    pub open spec fn is_subslice(&self, big_slice: SpecSlice) -> bool
+    {
+        &&& big_slice.start <= self.start
+        &&& self.end <= big_slice.end
+    }
+
     pub open spec fn subslice(&self, a: int, b: int) -> (result: SpecSlice)
     {
         SpecSlice{start: self.start + a, end: self.start + b}
+    }
+
+    pub open spec fn drop(&self, count: int) -> (result: SpecSlice)
+    {
+        SpecSlice{start: self.start + count, end: self.end}
     }
 }
 
@@ -85,6 +96,13 @@ impl Slice {
     ensures out@ == self@.subslice(a as int, b as int)
     {
         Slice{start: self.start + a, end: self.start + b}
+    }
+
+    pub exec fn drop(&self, count: usize) -> (result: Slice)
+    requires
+        self.start + count <= usize::MAX,
+    {
+        Slice{start: self.start + count, end: self.end}
     }
 }
 

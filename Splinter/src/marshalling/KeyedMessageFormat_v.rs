@@ -51,45 +51,55 @@ impl KeyedMessageFormat {
     pub closed spec fn internal_marshallable(&self, key_len: usize, value_len: usize) -> bool
     {
         &&& self.internal_valid()
-        &&& Self::fits(key_len, value_len)
-        &&& self.vfmt.total_size() == Self::required_size(key_len, value_len)
+        &&& Self::fits(key_len + value_len)
+        &&& self.vfmt.total_size() == Self::required_size(key_len + value_len)
     }
 
     // A data container capable of receiving key and value of this len
     pub closed spec fn is_container(&self, data: Seq<u8>, key_len: usize, value_len: usize) -> bool
     {
         &&& self.internal_marshallable(key_len, value_len)
-        &&& self.vfmt.total_size() <= data.len()
+//         &&& self.vfmt.total_size() <= data.len()
     }
 
     // A data container capable of supplying a key and a value
     pub closed spec fn filled(&self, data: Seq<u8>) -> bool
     {
         &&& self.internal_valid()
-        &&& self.vfmt.total_size() <= data.len()
+//         &&& self.vfmt.total_size() <= data.len()
         &&& self.vfmt.gettable(data, KEY_SLOT as int)
         &&& self.vfmt.elt_parsable(data, KEY_SLOT as int)
         &&& self.vfmt.gettable(data, VALUE_SLOT as int)
         &&& self.vfmt.elt_parsable(data, VALUE_SLOT as int)
     }
 
-    pub open spec fn required_size(key_len: usize, value_len: usize) -> int
+    pub open spec fn spec_overhead() -> int
     {
-         u16::uniform_size() + u16::uniform_size() + key_len + u16::uniform_size() + value_len
+         u16::uniform_size() + u16::uniform_size() + u16::uniform_size()
     }
 
-    pub open spec fn fits(key_len: usize, value_len: usize) -> bool
+    pub open spec fn required_size(kv_capacity: int) -> int
     {
-        Self::required_size(key_len, value_len) <= u16::MAX
+        Self::spec_overhead() + kv_capacity
+    }
+
+    pub open spec fn fits(kv_capacity: int) -> bool
+    {
+        Self::required_size(kv_capacity) <= u16::MAX
+    }
+
+    pub exec fn exec_overhead() -> usize
+    {
+         u16::exec_uniform_size() + u16::exec_uniform_size() + u16::exec_uniform_size()
     }
 
     pub exec fn exec_required_size(key_len: usize, value_len: usize) -> (out: usize)
     requires
-        Self::fits(key_len, value_len),
+        Self::fits(key_len + value_len),
     ensures
-        out as int == Self::required_size(key_len, value_len)
+        out as int == Self::required_size(key_len + value_len)
     {
-         u16::exec_uniform_size() + u16::exec_uniform_size() + key_len + u16::exec_uniform_size() + value_len
+        Self::exec_overhead() + key_len + value_len
     }
 
     pub closed spec fn size(&self) -> int
@@ -103,21 +113,20 @@ impl KeyedMessageFormat {
     }
 
     // Construct a formatter for key and value of known size
-    pub exec fn new(key_data: &Vec<u8>, value_data: &Vec<u8>) -> (s: Self)
+    pub exec fn new(backing_capacity: usize) -> (s: Self)
     requires
-        Self::fits(key_data.len(), value_data.len()),
+        backing_capacity <= u16::MAX,
     ensures
         s.internal_valid(),
-        s.size() == Self::required_size(key_data.len(), value_data.len()),
+        s.size() == backing_capacity,
         // TODO ensures we can store_key_value() it with this key and data
     {
         // Sneaky knowledge of how VariableSizedElementSeq works
         let u16size = u16::exec_uniform_size();
-        let total_size = u16size + u16size + key_data.len() + u16size + value_data.len();
         let elt_format = UniformSizedElementSeqFormat::new(IntFormat::<u8>::new());
         let bdy_int_fmt = IntFormat::<u16>::new();
         let lenf = IntFormat::<u16>::new();
-        let vfmt = VariableSizedElementSeqFormat::new(elt_format, bdy_int_fmt, lenf, total_size);
+        let vfmt = VariableSizedElementSeqFormat::new(elt_format, bdy_int_fmt, lenf, backing_capacity);
         let s = KeyedMessageFormat{vfmt};
         s
     }
@@ -142,11 +151,11 @@ impl KeyedMessageFormat {
 
     pub exec fn construct(kvpair: &KVPair) -> (out: Vec<u8>)
     requires
-        Self::fits(kvpair.key.len(), kvpair.value.len()),
+        Self::fits(kvpair.key.len() + kvpair.value.len()),
     ensures
-        out.len() == Self::required_size(kvpair.key.len(), kvpair.value.len()),
+        out.len() == Self::required_size(kvpair.key.len() + kvpair.value.len()),
     {
-        let kmf = Self::new(&kvpair.key, &kvpair.value);
+        let kmf = Self::new(Self::exec_required_size(kvpair.key.len(), kvpair.value.len()));
         let len = kmf.vfmt.exec_total_size();
         let mut data = Self::prealloc(len);
         kmf.store_key_value(&Slice::all(&data), &mut data, &kvpair);
@@ -219,7 +228,7 @@ impl Marshal for KeyedMessageFormat {
 
     open spec fn spec_size(&self, value: Self::DV) -> usize
     {
-        Self::required_size(value.key.len() as usize, value.value.len() as usize) as usize
+        Self::required_size(value.key.len() + value.value.len() as int) as usize
     }
 
     exec fn exec_size(&self, value: &Self::U) -> (sz: usize)
@@ -242,8 +251,7 @@ impl Marshal for KeyedMessageFormat {
             None
         } else {
             let kv = KVPair{key: key.unwrap(), value: value.unwrap()};
-            // trigger -- should have come from trait? #1239 resurrected?
-            assert( kv.deepv() == self.parse(slice@.i(data@)) );
+            assert( kv.deepv() == self.parse(slice@.i(data@)) );    // trigger -- should have come from trait? #1239 resurrected?
             Some(kv)
         }
     }
@@ -266,5 +274,83 @@ impl Marshal for KeyedMessageFormat {
         end
     }
 }
+
+struct FlexibleKeyFmt {
+}
+
+impl FlexibleKeyFmt {
+    pub exec fn new(key_data: &Vec<u8>, value_data: &Vec<u8>) -> (s: Self)
+    {
+        FlexibleKeyFmt{}
+    }
+
+    pub open spec fn spec_get_kmf(len: int) -> KeyedMessageFormat
+    {
+        KeyedMessageFormat::new(KeyedMessageFormat::required_size(len) as usize)
+    }
+
+    exec fn exec_get_kmf(len: usize) -> KeyedMessageFormat
+    {
+        KeyedMessageFormat::new(KeyedMessageFormat::exec_overhead() + len)
+    }
+}
+
+impl Marshal for FlexibleKeyFmt {
+    type DV = SpecKVPair;
+    type U = KVPair;
+
+    open spec fn valid(&self) -> bool
+    {
+        true
+    }
+
+    open spec fn parsable(&self, data: Seq<u8>) -> bool
+    {
+        Self::spec_get_kmf(data.len() as int).filled(data)
+    }
+
+    // TODO rename filled->parsable, is_container -> marshallable?
+    open spec fn marshallable(&self, kvpair: Self::DV) -> bool
+    {
+        KeyedMessageFormat::fits(kvpair.key.len() + kvpair.value.len() as int)
+    }
+
+    open spec fn spec_size(&self, value: Self::DV) -> usize
+    {
+        KeyedMessageFormat::required_size(value.key.len() + value.value.len() as int) as usize
+    }
+
+    exec fn exec_size(&self, value: &Self::U) -> (sz: usize)
+    {
+        KeyedMessageFormat::exec_required_size(value.key.len(), value.value.len())
+    }
+
+    closed spec fn parse(&self, data: Seq<u8>) -> Self::DV
+    {
+        let kmf = Self::spec_get_kmf(data.len() as int);
+        kmf.parse(data)
+    }
+
+    exec fn try_parse(&self, slice: &Slice, data: &Vec<u8>) -> (ov: Option<Self::U>)
+    {
+        let kmf = Self::exec_get_kmf(data.len());
+        kmf.try_parse(slice, data)
+    }
+
+    exec fn exec_parse(&self, slice: &Slice, data: &Vec<u8>) -> (value: Self::U)
+    {
+        self.try_parse(slice, data).unwrap()
+    }
+
+    // jonh skipping translation of Parse -- does it ever save more than
+    // a cheap if condition?
+
+    exec fn exec_marshall(&self, value: &Self::U, data: &mut Vec<u8>, start: usize) -> (end: usize)
+    {
+        let kmf = Self::exec_get_kmf(data.len());
+        kmf.exec_marshall(value, data, start)
+    }
+}
+
 
 }

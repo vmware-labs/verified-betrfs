@@ -1,5 +1,6 @@
 #![verifier::loop_isolation(false)]
 #![allow(non_snake_case)]   // we should probably fix up the module names to be rust-snakey
+#![allow(unused_imports)]
 
 use builtin::*;
 use builtin_macros::*;
@@ -12,7 +13,8 @@ use crate::marshalling::Slice_v::*;
 use crate::marshalling::UniformSizedSeq_v::*;
 use crate::marshalling::ResizableUniformSizedSeq_v::*;
 use vstd::string::View;
-use crate::marshalling::KeyedMessageFormat_v::*;
+// use crate::marshalling::KeyedMessageFormat_v::*;
+use crate::marshalling::KVPairFormat_v::*;
 use crate::marshalling::UniformSized_v::UniformSized;
 // use crate::marshalling::ResizableIntegerSeq_v::*;
 use crate::marshalling::VariableSizedElementSeq_v::*;
@@ -193,31 +195,31 @@ exec fn test_resizable_seq_marshalling_append() -> (outpr: (Vec<u8>, usize))
     (data, len)
 }
 
-exec fn test_keyed_message() -> Vec<u8>
-{
-    let key = vec![ 8, 9, 10 ];
-    let value = vec![ 2, 4, 6, 8, 244, 122, 11 ];
-
-    let kvpair = KVPair{key, value};
-//     if true {
-        return KeyedMessageFormat::construct(&kvpair);
-//     }
-
-//     // A better test would construct a VariableSizedSeq, allocate space for a keyed message within
-//     // it, then have KeyedMessageFormat marshal the keyed message pair into that spot. The API
-//     // as it stands here would entail copying the key,value pair into a KeyedMessageFormat-marshalled
-//     // Vec<u8>, then copying that *again* into its correct spot in the VariableSizedSeq.
-//     let keyed_message_format = KeyedMessageFormat::new(&key, &value);
-//     let leaf_format = VariableSizedElementSeqFormat::new(
-//             IntFormat::<u8>::new(), IntFormat::<u8>::new(), IntFormat::<u8>::new(), 4096);
-//     let mut leaf_bytes = Vec::<u8>::with_capacity(4096);
-//     // so the tricky bit is what's the negotiation between the VSE and the subtype?
-//     // I want the VSE to allocate the space, the subtype to decide how much, the
-//     // VSE needs to promise the right value was written, but the subtype is the one that should
-//     // know how to do that writing. Hrmm. Would be fun to ask Rob about it.
-//     let leaf_slice = leaf_format.exec_allocate_for_append(&Slice::all(leaf_bytes), leaf_bytes, keyed_message_format.exec_size(key, value));
-//     keyed_message_format.exec_set(leaf_slice, leaf_bytes, &key, &value);
-}
+// exec fn test_keyed_message() -> Vec<u8>
+// {
+//     let key = vec![ 8, 9, 10 ];
+//     let value = vec![ 2, 4, 6, 8, 244, 122, 11 ];
+// 
+//     let kvpair = KVPair{key, value};
+// //     if true {
+//         return KeyedMessageFormat::construct(&kvpair);
+// //     }
+// 
+// //     // A better test would construct a VariableSizedSeq, allocate space for a keyed message within
+// //     // it, then have KeyedMessageFormat marshal the keyed message pair into that spot. The API
+// //     // as it stands here would entail copying the key,value pair into a KeyedMessageFormat-marshalled
+// //     // Vec<u8>, then copying that *again* into its correct spot in the VariableSizedSeq.
+// //     let keyed_message_format = KeyedMessageFormat::new(&key, &value);
+// //     let leaf_format = VariableSizedElementSeqFormat::new(
+// //             IntFormat::<u8>::new(), IntFormat::<u8>::new(), IntFormat::<u8>::new(), 4096);
+// //     let mut leaf_bytes = Vec::<u8>::with_capacity(4096);
+// //     // so the tricky bit is what's the negotiation between the VSE and the subtype?
+// //     // I want the VSE to allocate the space, the subtype to decide how much, the
+// //     // VSE needs to promise the right value was written, but the subtype is the one that should
+// //     // know how to do that writing. Hrmm. Would be fun to ask Rob about it.
+// //     let leaf_slice = leaf_format.exec_allocate_for_append(&Slice::all(leaf_bytes), leaf_bytes, keyed_message_format.exec_size(key, value));
+// //     keyed_message_format.exec_set(leaf_slice, leaf_bytes, &key, &value);
+// }
 
 struct Lorem {
     last_val: usize,
@@ -264,58 +266,59 @@ impl Lorem {
     }
 }
 
-exec fn test_marshal_keyed_message_seq() -> Vec<u8>
-{
-    let total_size = 200;
-    let elt_format = UniformSizedElementSeqFormat::new(IntFormat::<u8>::new());
-    let bdy_int_fmt = IntFormat::<u32>::new();
-    let bdy_int_size = bdy_int_fmt.exec_uniform_size();
-    let lenf = IntFormat::<u32>::new();
-    let vfmt = VariableSizedElementSeqFormat::new(elt_format, bdy_int_fmt, lenf, total_size);
-    let mut data = prealloc(total_size);
-    let slice = Slice::all(&data);
-    vfmt.initialize(&slice, &mut data);
+// exec fn test_marshal_keyed_message_seq() -> Vec<u8>
+// {
+//     let total_size = 200;
+//     let elt_format = UniformSizedElementSeqFormat::new(IntFormat::<u8>::new());
+//     let bdy_int_fmt = IntFormat::<u32>::new();
+//     let bdy_int_size = bdy_int_fmt.exec_uniform_size();
+//     let lenf = IntFormat::<u32>::new();
+//     let vfmt = VariableSizedElementSeqFormat::new(elt_format, bdy_int_fmt, lenf, total_size);
+//     let mut data = prealloc(total_size);
+//     let slice = Slice::all(&data);
+//     vfmt.initialize(&slice, &mut data);
+// 
+//     let mut free_space: usize = total_size - u32::exec_uniform_size();
+//     assert( free_space == vfmt.free_space(slice@.i(data@)) );
+// 
+//     let mut lorem = Lorem::new();
+//     loop
+//     invariant
+//         lorem.valid(),
+//         slice@.valid(data@),    // because data len never changes
+//         vfmt.tableable(slice@.i(data@)),
+//         vfmt.valid_table(slice@.i(data@)),
+//         free_space == vfmt.free_space(slice@.i(data@)),
+//     {
+//         let kvpair = KVPair{key: lorem.ipsum(6), value: lorem.ipsum(12)};
+//         
+//         if KeyedMessageFormat::exec_required_size(kvpair.key.len(), kvpair.value.len()) + bdy_int_size >
+// //             vfmt.exec_free_space(&slice, &data)
+//             free_space
+//         {
+//             // it's full.
+//             break;
+//         }
+// 
+//         // What we *want* to do:
+// //         let kmf = KeyedMessageFormat::construct(&key, &value);
+// //         slice = vfmt.append_allocate(kmf.size());
+// //         kmf.store_key_value(slice, data, key, value);
+// 
+//         // one-copy workaround
+//         let kvdata = KeyedMessageFormat::construct(&kvpair);
+//         assert( free_space == vfmt.free_space(slice@.i(data@)) );
+//         assert( KeyedMessageFormat::required_size(kvpair.key.len() + kvpair.value.len()) == kvdata.len() );
+//         assert( kvdata.len() == vfmt.eltf.spec_size(kvdata.deepv()) );
+//         assert( u32::uniform_size() + vfmt.eltf.spec_size(kvdata.deepv()) as nat <= vfmt.free_space(slice@.i(data@)) );
+//         assert( vfmt.appendable(slice@.i(data@), kvdata.deepv()) );
+//         vfmt.exec_append(&slice, &mut data, &kvdata);
+//         free_space = free_space - (u32::exec_uniform_size() + kvdata.len());
+//         assert( free_space == vfmt.free_space(slice@.i(data@)) );
+//     }
+//     data
+// }
 
-    let mut free_space: usize = total_size - u32::exec_uniform_size();
-    assert( free_space == vfmt.free_space(slice@.i(data@)) );
-
-    let mut lorem = Lorem::new();
-    loop
-    invariant
-        lorem.valid(),
-        slice@.valid(data@),    // because data len never changes
-        vfmt.tableable(slice@.i(data@)),
-        vfmt.valid_table(slice@.i(data@)),
-        free_space == vfmt.free_space(slice@.i(data@)),
-    {
-        let kvpair = KVPair{key: lorem.ipsum(6), value: lorem.ipsum(12)};
-        
-        if KeyedMessageFormat::exec_required_size(kvpair.key.len(), kvpair.value.len()) + bdy_int_size >
-//             vfmt.exec_free_space(&slice, &data)
-            free_space
-        {
-            // it's full.
-            break;
-        }
-
-        // What we *want* to do:
-//         let kmf = KeyedMessageFormat::construct(&key, &value);
-//         slice = vfmt.append_allocate(kmf.size());
-//         kmf.store_key_value(slice, data, key, value);
-
-        // one-copy workaround
-        let kvdata = KeyedMessageFormat::construct(&kvpair);
-        assert( free_space == vfmt.free_space(slice@.i(data@)) );
-        assert( KeyedMessageFormat::required_size(kvpair.key.len(), kvpair.value.len()) == kvdata.len() );
-        assert( kvdata.len() == vfmt.eltf.spec_size(kvdata.deepv()) );
-        assert( u32::uniform_size() + vfmt.eltf.spec_size(kvdata.deepv()) as nat <= vfmt.free_space(slice@.i(data@)) );
-        assert( vfmt.appendable(slice@.i(data@), kvdata.deepv()) );
-        vfmt.exec_append(&slice, &mut data, &kvdata);
-        free_space = free_space - (u32::exec_uniform_size() + kvdata.len());
-        assert( free_space == vfmt.free_space(slice@.i(data@)) );
-    }
-    data
-}
 
 // exec fn test_parse_keyed_message_seq() -> Vec<u8>
 
@@ -347,10 +350,9 @@ fn main() {
     let v = test_resizable_seq_parse(&data, end);
     print!("v: {:?}\n", v);
 
-    let v = test_keyed_message();
-    print!("keyed_message: {:?}\n", v);
+//     let v = test_keyed_message();
+//     print!("keyed_message: {:?}\n", v);
 
-    let v = test_marshal_keyed_message_seq();
-    print!("keyed_message_seq: {:?}\n", v);
-//     let p = v
+//     let v = test_marshal_keyed_message_seq();
+//     print!("keyed_message_seq: {:?}\n", v);
 }

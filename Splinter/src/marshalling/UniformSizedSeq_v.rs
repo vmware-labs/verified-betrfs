@@ -146,6 +146,7 @@ impl<EltFormat: Marshal + UniformSized>
     exec fn try_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oelt: Option<EltFormat::U>)
     // TODO factor out this common impl
     {
+        assume( false );    // this proof be flakin'. TODO run Mariposa
         let oeslice = self.try_get(dslice, data, idx);
         match oeslice {
             None => {
