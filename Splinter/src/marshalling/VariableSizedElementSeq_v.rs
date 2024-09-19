@@ -477,10 +477,11 @@ impl <
     BdyType: IntFormattable,
     LenType: IntFormattable,
 >
-    SeqMarshal< EltFormat::DV, EltFormat::U >
-    for
-    VariableSizedElementSeqFormat<EltFormat, BdyType, LenType>
+    SeqMarshal for VariableSizedElementSeqFormat<EltFormat, BdyType, LenType>
 {
+    type DVElt = EltFormat::DV;
+    type Elt = EltFormat::U;
+
     open spec fn seq_valid(&self) -> bool {
         &&& self.eltf.valid()
         &&& self.bdyf.seq_valid()

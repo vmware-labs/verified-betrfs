@@ -160,9 +160,11 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
 }
 
 impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
-    SeqMarshal< EltFormat::DV, EltFormat::U >
-    for ResizableUniformSizedElementSeqFormat<EltFormat, LenType>
+    SeqMarshal for ResizableUniformSizedElementSeqFormat<EltFormat, LenType>
 {
+    type DVElt = EltFormat::DV;
+    type Elt = EltFormat::U;
+
     open spec fn seq_valid(&self) -> bool {
         self.raw_valid()
     }

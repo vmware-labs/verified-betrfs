@@ -54,9 +54,11 @@ impl<EltFormat: Marshal + UniformSized> UniformSizedElementSeqFormat<EltFormat>
 }
 
 impl<EltFormat: Marshal + UniformSized>
-    SeqMarshal< EltFormat::DV, EltFormat::U >
-    for UniformSizedElementSeqFormat<EltFormat>
+    SeqMarshal for UniformSizedElementSeqFormat<EltFormat>
 {
+    type DVElt = EltFormat::DV;
+    type Elt = EltFormat::U;
+
     open spec fn seq_valid(&self) -> bool {
         &&& self.eltf.valid()
     }

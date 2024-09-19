@@ -19,7 +19,10 @@ verus! {
 // append to the end of the sequence.
 //////////////////////////////////////////////////////////////////////////////
 
-pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
+pub trait SeqMarshal {
+    type DVElt;                         // The view (spec) type of each element
+    type Elt: Deepview<Self::DVElt>;    // The runtime type of each element
+
     spec fn seq_valid(&self) -> bool;
 
     spec fn lengthable(&self, data: Seq<u8>) -> bool
@@ -133,7 +136,7 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
 //         self.spec_elt_marshalling().parsable(self.get_data(data, idx))
 //     }
 
-    spec fn get_elt(&self, data: Seq<u8>, idx: int) -> (elt: DVElt)
+    spec fn get_elt(&self, data: Seq<u8>, idx: int) -> (elt: Self::DVElt)
     recommends
         self.seq_valid(),
         self.gettable(data, idx),
@@ -174,7 +177,7 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
     // they all specialize for performance. So we'll omit the default here.
     ;
 
-    exec fn try_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oelt: Option<Elt>)
+    exec fn try_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oelt: Option<Self::Elt>)
     requires
         self.seq_valid(),
         dslice@.valid(data@),
@@ -188,7 +191,7 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
     // if we had a way of talking about eltm and its type in this trait.
     ;
 
-    exec fn exec_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (elt: Elt)
+    exec fn exec_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (elt: Self::Elt)
     requires
         self.seq_valid(),
         self.gettable(dslice@.i(data@), idx as int),
@@ -204,10 +207,10 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
     // setting individual elements
     /////////////////////////////////////////////////////////////////////////
     // TODO: make this a separate trait, since not all seq formatters support it.
-    spec fn elt_marshallable(&self, elt: DVElt) -> bool
+    spec fn elt_marshallable(&self, elt: Self::DVElt) -> bool
         ;
 
-    spec fn settable(&self, data: Seq<u8>, idx: int, value: DVElt) -> bool
+    spec fn settable(&self, data: Seq<u8>, idx: int, value: Self::DVElt) -> bool
     recommends
         self.seq_valid(),
         self.elt_marshallable(value)
@@ -226,7 +229,7 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
 
     // proof fn preserves_entry_transitive
 
-    open spec fn sets(&self, data: Seq<u8>, idx: int, value: DVElt, new_data: Seq<u8>) -> bool
+    open spec fn sets(&self, data: Seq<u8>, idx: int, value: Self::DVElt, new_data: Seq<u8>) -> bool
     recommends
         self.seq_valid(),
         self.elt_marshallable(value),
@@ -243,7 +246,7 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
         &&& self.get_elt(new_data, idx) == value
     }
 
-    exec fn exec_settable(&self, dslice: &Slice, data: &Vec<u8>, idx: usize, value: &Elt) -> (s: bool)
+    exec fn exec_settable(&self, dslice: &Slice, data: &Vec<u8>, idx: usize, value: &Self::Elt) -> (s: bool)
     requires
         self.seq_valid(),
         dslice@.valid(data@),
@@ -252,7 +255,7 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
         s == self.settable(dslice@.i(data@), idx as int, value.deepv())
     ;
 
-    exec fn exec_set(&self, dslice: &Slice, data: &mut Vec<u8>, idx: usize, value: &Elt)
+    exec fn exec_set(&self, dslice: &Slice, data: &mut Vec<u8>, idx: usize, value: &Self::Elt)
     requires
         self.seq_valid(),
         dslice@.valid(old(data)@),
@@ -305,11 +308,11 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
         ensures self.well_formed(data) ==> self.lengthable(data)
         ;
 
-    spec fn appendable(&self, data: Seq<u8>, value: DVElt) -> bool
+    spec fn appendable(&self, data: Seq<u8>, value: Self::DVElt) -> bool
         recommends self.seq_valid(), self.well_formed(data), self.elt_marshallable(value)
         ;
 
-    open spec fn appends(&self, data: Seq<u8>, value: DVElt, newdata: Seq<u8>) -> bool
+    open spec fn appends(&self, data: Seq<u8>, value: Self::DVElt, newdata: Seq<u8>) -> bool
     recommends
         self.seq_valid(),
         self.well_formed(data),
@@ -338,7 +341,7 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
             w == self.well_formed(dslice@.i(data@))
         ;
 
-    exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: &Elt) -> (r: bool)
+    exec fn exec_appendable(&self, dslice: &Slice, data: &Vec<u8>, value: &Self::Elt) -> (r: bool)
     requires
         self.seq_valid(),
         dslice@.valid(data@),
@@ -348,7 +351,7 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
         r == self.appendable(dslice@.i(data@), value.deepv())
     ;
 
-    exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: &Elt)
+    exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: &Self::Elt)
     requires
         self.seq_valid(),
         dslice@.valid(old(data)@),
@@ -384,7 +387,7 @@ pub trait SeqMarshal<DVElt, Elt: Deepview<DVElt>> {
         &&& self.elt_parsable_to_len(data, len as int)
     }
 
-    open spec fn parse_to_len(&self, data: Seq<u8>, len: usize) -> Seq<DVElt>
+    open spec fn parse_to_len(&self, data: Seq<u8>, len: usize) -> Seq<Self::DVElt>
     recommends self.seq_valid(), self.parsable_to_len(data, len)
     {
         Seq::new(len as nat, |i: int| self.get_elt(data, i))
