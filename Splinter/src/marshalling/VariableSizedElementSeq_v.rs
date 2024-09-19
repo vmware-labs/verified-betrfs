@@ -59,6 +59,8 @@ impl <
     requires
         LenType::uniform_size() <= total_size,
         eltf.valid(),
+        bdy_int_format.valid(),
+        lenf.valid(),
         total_size <= BdyType::max(),
         total_size <= LenType::max(),
     ensures

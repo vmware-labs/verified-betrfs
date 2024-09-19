@@ -266,58 +266,41 @@ impl Lorem {
     }
 }
 
-// exec fn test_marshal_keyed_message_seq() -> Vec<u8>
-// {
-//     let total_size = 200;
-//     let elt_format = UniformSizedElementSeqFormat::new(IntFormat::<u8>::new());
-//     let bdy_int_fmt = IntFormat::<u32>::new();
-//     let bdy_int_size = bdy_int_fmt.exec_uniform_size();
-//     let lenf = IntFormat::<u32>::new();
-//     let vfmt = VariableSizedElementSeqFormat::new(elt_format, bdy_int_fmt, lenf, total_size);
-//     let mut data = prealloc(total_size);
-//     let slice = Slice::all(&data);
-//     vfmt.initialize(&slice, &mut data);
-// 
-//     let mut free_space: usize = total_size - u32::exec_uniform_size();
-//     assert( free_space == vfmt.free_space(slice@.i(data@)) );
-// 
-//     let mut lorem = Lorem::new();
-//     loop
-//     invariant
-//         lorem.valid(),
-//         slice@.valid(data@),    // because data len never changes
-//         vfmt.tableable(slice@.i(data@)),
-//         vfmt.valid_table(slice@.i(data@)),
-//         free_space == vfmt.free_space(slice@.i(data@)),
-//     {
-//         let kvpair = KVPair{key: lorem.ipsum(6), value: lorem.ipsum(12)};
-//         
-//         if KeyedMessageFormat::exec_required_size(kvpair.key.len(), kvpair.value.len()) + bdy_int_size >
-// //             vfmt.exec_free_space(&slice, &data)
-//             free_space
-//         {
-//             // it's full.
-//             break;
-//         }
-// 
-//         // What we *want* to do:
-// //         let kmf = KeyedMessageFormat::construct(&key, &value);
-// //         slice = vfmt.append_allocate(kmf.size());
-// //         kmf.store_key_value(slice, data, key, value);
-// 
-//         // one-copy workaround
-//         let kvdata = KeyedMessageFormat::construct(&kvpair);
-//         assert( free_space == vfmt.free_space(slice@.i(data@)) );
-//         assert( KeyedMessageFormat::required_size(kvpair.key.len() + kvpair.value.len()) == kvdata.len() );
-//         assert( kvdata.len() == vfmt.eltf.spec_size(kvdata.deepv()) );
-//         assert( u32::uniform_size() + vfmt.eltf.spec_size(kvdata.deepv()) as nat <= vfmt.free_space(slice@.i(data@)) );
-//         assert( vfmt.appendable(slice@.i(data@), kvdata.deepv()) );
-//         vfmt.exec_append(&slice, &mut data, &kvdata);
-//         free_space = free_space - (u32::exec_uniform_size() + kvdata.len());
-//         assert( free_space == vfmt.free_space(slice@.i(data@)) );
-//     }
-//     data
-// }
+exec fn test_marshal_seq_kvpair() -> Vec<u8>
+{
+    let total_size = 200;
+    let kv_format = KVPairFormat::<u32>::new();
+    proof { usize64_workaround(); }
+    let bdy_int_fmt = IntFormat::<u32>::new();
+    let bdy_int_size = bdy_int_fmt.exec_uniform_size();
+    let lenf = IntFormat::<u32>::new();
+    let vfmt = VariableSizedElementSeqFormat::new(kv_format, bdy_int_fmt, lenf, total_size);
+    let kv_format = KVPairFormat::<u32>::new();    // until we can borrow it into vfmt... verus issue #1271
+    let mut data = prealloc(total_size);
+    let slice = Slice::all(&data);
+    vfmt.initialize(&slice, &mut data);
+
+    let mut free_space: usize = total_size - u32::exec_uniform_size();
+
+    let mut lorem = Lorem::new();
+    loop
+    invariant
+        lorem.valid(),
+        slice@.valid(data@),    // because data len never changes
+        vfmt.tableable(slice@.i(data@)),
+        vfmt.valid_table(slice@.i(data@)),
+        free_space == vfmt.free_space(slice@.i(data@)),
+    {
+        let kvpair = KVPair{key: lorem.ipsum(6), value: lorem.ipsum(12)};
+        let kv_space = kv_format.exec_size(&kvpair) + bdy_int_size;
+
+        if free_space < kv_space { break; }
+
+        vfmt.exec_append(&slice, &mut data, &kvpair);
+        free_space = free_space - kv_space;
+    }
+    data
+}
 
 
 // exec fn test_parse_keyed_message_seq() -> Vec<u8>
@@ -350,9 +333,6 @@ fn main() {
     let v = test_resizable_seq_parse(&data, end);
     print!("v: {:?}\n", v);
 
-//     let v = test_keyed_message();
-//     print!("keyed_message: {:?}\n", v);
-
-//     let v = test_marshal_keyed_message_seq();
-//     print!("keyed_message_seq: {:?}\n", v);
+    let v = test_marshal_seq_kvpair();
+    print!("test_marshal_seq_kvpair: {:?}\n", v);
 }
