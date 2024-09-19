@@ -70,7 +70,6 @@ pub trait IntFormattable : Deepview<int> + builtin::Integer + SpecOrd + Copy + S
 
     proof fn max_ensures(v: Self)
     ensures v as int <= Self::max() as int
-    //ensures forall |v: Self| v as int <= Self::max() as int
     ;
 
     exec fn exec_max() -> (m: usize)
@@ -137,8 +136,6 @@ impl IntFormattable for u8 {
         
     proof fn lemma_auto_spec_to_from_le_bytes()
     {
-//         lemma_auto_spec_u32_to_from_le_bytes();
-
         // Another case of https://github.com/verus-lang/verus/issues/1150
         assert forall |x: Self|
             #![trigger Self::spec_to_le_bytes(x)]
@@ -152,8 +149,6 @@ impl IntFormattable for u8 {
             s.len() == Self::uniform_size() implies
               #[trigger] Self::spec_to_le_bytes(Self::spec_from_le_bytes(s)) == s
         by {
-//             assert( Self::spec_from_le_bytes(s) == s[0] );
-//             assert( Self::spec_to_le_bytes(s[0]) == seq![s[0]] );
             assert( seq![s[0]] == s );  // extensional equality
         }
     }
@@ -495,15 +490,11 @@ impl<T: IntFormattable> Marshal for IntFormat<T>
 
     exec fn try_parse(&self, slice: &Slice, data: &Vec<u8>) -> (ov: Option<T>)
     {
-        // TODO(verus): shouldn't need to trigger this; it's in our (inherited) requires
-        assert( slice@.valid(data@) );
-
         if T::exec_uniform_size() <= slice.len() {
             let sr = slice_subrange(data.as_slice(), slice.start, slice.start+T::exec_uniform_size());
             let parsed = T::from_le_bytes(sr);
             assert( sr@ == slice@.i(data@).subrange(0, T::uniform_size() as int) ); // trigger
             proof { T::deepv_is_as_int(parsed); }
-            assert( parsed.deepv() == self.parse(slice@.i(data@)) );
             Some(parsed)
         } else {
             assert( !self.parsable(slice@.i(data@)) );
@@ -523,7 +514,7 @@ impl<T: IntFormattable> Marshal for IntFormat<T>
     exec fn exec_marshall(&self, value: &T, data: &mut Vec<u8>, start: usize) -> (end: usize)
     {
         let s = T::to_le_bytes(*value);
-        assert( s@.subrange(0, T::uniform_size() as int) =~= s@ ); // need a little extensionality? Do it by hand!
+        assert( s@.subrange(0, T::uniform_size() as int) =~= s@ ); // trigger extn
         let end = Self::install_bytes(&s, data, start);
 
         assert( data@.subrange(start as int, end as int) == s@ );   // trigger
@@ -550,10 +541,7 @@ impl<T: IntFormattable> UniformSized for IntFormat<T> {
     exec fn exec_uniform_size(&self) -> (sz: usize)
     ensures sz == T::uniform_size()
     {
-        let sz = T::exec_uniform_size();
-        // TODO(verus): postcondition didn't trigger but assert did.
-        assert( sz == self.uniform_size() );
-        sz
+        T::exec_uniform_size()
     }
 }
 

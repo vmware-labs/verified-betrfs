@@ -27,13 +27,6 @@ impl<DVE, Elt: Deepview<DVE>> Deepview<Seq<DVE>> for Vec<Elt> {
     }
 }
 
-// Only want this to apply to types that are not already DeepView. :v/
-// impl<T: View> Deepview for T {
-//     type DV = <T as View>::V;
-// 
-//     fn deepv(&self) -> Self::DV;
-// }
-
 // Marshal is the most basic behavior: A format that implements Marshal
 // knows how to parse and marshall the type all at once.
 //
@@ -52,40 +45,16 @@ pub trait Marshal {
 
     spec fn valid(&self) -> bool;
 
+    //////////////////////////////////////////////////////////////////////
+    // Parsing
+    //////////////////////////////////////////////////////////////////////
+
     spec fn parsable(&self, data: Seq<u8>) -> bool
     recommends self.valid()
     ;
 
-    exec fn exec_parsable(&self, slice: &Slice, data: &Vec<u8>) -> (p: bool)
-    requires
-        self.valid(),
-        slice@.valid(data@),
-    ensures
-        p == self.parsable(slice@.i(data@))
-    {
-        let ovalue = self.try_parse(slice, data);
-        ovalue.is_some()
-    }
-
-    spec fn marshallable(&self, value: Self::DV) -> bool
-    ;
-
-    spec fn spec_size(&self, value: Self::DV) -> usize
-    recommends 
-        self.valid(),
-        self.marshallable(value)
-    ;
-
-    exec fn exec_size(&self, value: &Self::U) -> (sz: usize)
-    requires 
-        self.valid(),
-        self.marshallable(value.deepv()),
-    ensures
-        sz == self.spec_size(value.deepv())
-    ;
-
     spec fn parse(&self, data: Seq<u8>) -> Self::DV
-    recommends 
+    recommends
         self.valid(),
         self.parsable(data)
     ;
@@ -99,6 +68,17 @@ pub trait Marshal {
         self.parsable(slice@.i(data@)) ==> ov.unwrap().deepv() == self.parse(slice@.i(data@))
     ;
 
+    exec fn exec_parsable(&self, slice: &Slice, data: &Vec<u8>) -> (p: bool)
+    requires
+        self.valid(),
+        slice@.valid(data@),
+    ensures
+        p == self.parsable(slice@.i(data@))
+    {
+        let ovalue = self.try_parse(slice, data);
+        ovalue.is_some()
+    }
+
     exec fn exec_parse(&self, slice: &Slice, data: &Vec<u8>) -> (value: Self::U)
     requires
         self.valid(),
@@ -110,11 +90,29 @@ pub trait Marshal {
         self.try_parse(slice, data).unwrap()
     }
 
-    // jonh skipping translation of Parse -- does it ever save more than
-    // a cheap if condition?
+    //////////////////////////////////////////////////////////////////////
+    // Marshalling
+    //////////////////////////////////////////////////////////////////////
+
+    spec fn marshallable(&self, value: Self::DV) -> bool
+    ;
+
+    spec fn spec_size(&self, value: Self::DV) -> usize
+    recommends
+        self.valid(),
+        self.marshallable(value)
+    ;
+
+    exec fn exec_size(&self, value: &Self::U) -> (sz: usize)
+    requires
+        self.valid(),
+        self.marshallable(value.deepv()),
+    ensures
+        sz == self.spec_size(value.deepv())
+    ;
 
     exec fn exec_marshall(&self, value: &Self::U, data: &mut Vec<u8>, start: usize) -> (end: usize)
-    requires 
+    requires
         self.valid(),
         self.marshallable(value.deepv()),
         start as int + self.spec_size(value.deepv()) as int <= old(data).len(),
