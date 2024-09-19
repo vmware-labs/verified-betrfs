@@ -36,13 +36,13 @@ impl Deepview<SpecKVPair> for KVPair {
     }
 }
 
-struct KVPairFormat {
+pub struct KVPairFormat {
     keylen_fmt: IntFormat::<u16>,
     data_fmt: UniformSizedElementSeqFormat<IntFormat::<u8>>,
 }
 
 impl KVPairFormat {
-    exec fn new() -> Self
+    pub exec fn new() -> Self
     {
         KVPairFormat {
             keylen_fmt: IntFormat::<u16>::new(),
