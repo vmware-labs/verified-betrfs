@@ -13,7 +13,6 @@ use crate::marshalling::Slice_v::*;
 use crate::marshalling::UniformSizedSeq_v::*;
 use crate::marshalling::ResizableUniformSizedSeq_v::*;
 use vstd::string::View;
-// use crate::marshalling::KeyedMessageFormat_v::*;
 use crate::marshalling::KVPairFormat_v::*;
 use crate::marshalling::UniformSized_v::UniformSized;
 // use crate::marshalling::ResizableIntegerSeq_v::*;
@@ -194,32 +193,6 @@ exec fn test_resizable_seq_marshalling_append() -> (outpr: (Vec<u8>, usize))
     let len = data.len();
     (data, len)
 }
-
-// exec fn test_keyed_message() -> Vec<u8>
-// {
-//     let key = vec![ 8, 9, 10 ];
-//     let value = vec![ 2, 4, 6, 8, 244, 122, 11 ];
-// 
-//     let kvpair = KVPair{key, value};
-// //     if true {
-//         return KeyedMessageFormat::construct(&kvpair);
-// //     }
-// 
-// //     // A better test would construct a VariableSizedSeq, allocate space for a keyed message within
-// //     // it, then have KeyedMessageFormat marshal the keyed message pair into that spot. The API
-// //     // as it stands here would entail copying the key,value pair into a KeyedMessageFormat-marshalled
-// //     // Vec<u8>, then copying that *again* into its correct spot in the VariableSizedSeq.
-// //     let keyed_message_format = KeyedMessageFormat::new(&key, &value);
-// //     let leaf_format = VariableSizedElementSeqFormat::new(
-// //             IntFormat::<u8>::new(), IntFormat::<u8>::new(), IntFormat::<u8>::new(), 4096);
-// //     let mut leaf_bytes = Vec::<u8>::with_capacity(4096);
-// //     // so the tricky bit is what's the negotiation between the VSE and the subtype?
-// //     // I want the VSE to allocate the space, the subtype to decide how much, the
-// //     // VSE needs to promise the right value was written, but the subtype is the one that should
-// //     // know how to do that writing. Hrmm. Would be fun to ask Rob about it.
-// //     let leaf_slice = leaf_format.exec_allocate_for_append(&Slice::all(leaf_bytes), leaf_bytes, keyed_message_format.exec_size(key, value));
-// //     keyed_message_format.exec_set(leaf_slice, leaf_bytes, &key, &value);
-// }
 
 struct Lorem {
     last_val: usize,
