@@ -144,9 +144,10 @@ impl Marshal for KVPairFormat {
 
     closed spec fn marshallable(&self, kvpair: Self::DV) -> bool
     {
-        self.keylen_fmt.uniform_size()
+        &&& self.keylen_fmt.uniform_size()
             + self.data_fmt.spec_size(kvpair.key)
             + self.data_fmt.spec_size(kvpair.value) <= usize::MAX
+        &&& self.data_fmt.spec_size(kvpair.key) <= u16::MAX
     }
 
     closed spec fn spec_size(&self, kvpair: Self::DV) -> usize
@@ -175,7 +176,6 @@ impl Marshal for KVPairFormat {
 
     exec fn try_parse(&self, slice: &Slice, data: &Vec<u8>) -> (ov: Option<Self::U>)
     {
-        let ghost idata = slice@.i(data@);
         if slice.len() < self.keylen_fmt.exec_uniform_size() { return None }
 
         let keylen_u16 = self.exec_try_get_keylen_elt(slice, data);
@@ -194,28 +194,20 @@ impl Marshal for KVPairFormat {
         if value.is_none() { return None }
 
         let kvpair = KVPair{key: key.unwrap(), value: value.unwrap()};
+
         proof {
-            assert( self.parse(idata).key ==
-                    self.data_fmt.parse(self.get_key_slice(keylen as int).i(idata)) );
-            assert( kvpair.deepv().key ==
-                    self.data_fmt.parse(key_slice@.i(data@)) );
+            let idata = slice@.i(data@);
             // trigger slice extn equality
             assert( key_slice@.i(data@) == self.get_key_slice(keylen as int).i(idata) );
-
-            assert( kvpair.deepv().key == self.parse(idata).key );
-
-            assert( kvpair.deepv().value ==
-                self.data_fmt.parse(value_slice@.i(data@)) );
-            assert( self.parse(idata).value ==
-                self.data_fmt.parse(self.get_value_subslice(SpecSlice::all(idata), keylen as int).i(idata)) );
             // trigger slice extn equality
             assert( value_slice@.i(data@)
                 == self.get_value_subslice(SpecSlice::all(idata), keylen as int).i(idata) );
 
-//             assert( value_slice@.i(data@) == self.get_value_subslice(slice@, keylen as int).i(idata) );
-            assert( kvpair.deepv().value == self.parse(idata).value );
+            // trigger KVPair extn equality (not triggered automatically because it's hiding in an
+            // implication?)
             assert( kvpair.deepv() == self.parse(idata) );
         }
+
         Some(kvpair)
     }
 
@@ -229,8 +221,106 @@ impl Marshal for KVPairFormat {
 
     exec fn exec_marshall(&self, kvpair: &Self::U, data: &mut Vec<u8>, start: usize) -> (end: usize)
     {
-        assume( false );
-        0
+        let dummy = self.data_fmt.exec_size(&kvpair.key);
+        assert( dummy == self.data_fmt.spec_size(kvpair.key.deepv()) );
+        assert( self.data_fmt.spec_size(kvpair.key.deepv()) <= u16::MAX );
+        let keylen: u16 = self.data_fmt.exec_size(&kvpair.key) as u16;
+        let keylen_end = self.keylen_fmt.exec_marshall(&keylen, data, start);
+
+        let ghost rawdata1 = data@;
+        let ghost keylendata = data@.subrange(start as int, keylen_end as int);
+        proof {
+            // trigger slice extn equality
+            assert( self.get_keylen_slice().i(keylendata) == data@.subrange(start as int, keylen_end as int) );
+            assert( self.get_keylen_elt(keylendata) == keylen as int );
+        }
+
+//         assert( keylen_end == start + self.keylen_fmt.uniform_size() );
+
+        let key_end = self.data_fmt.exec_marshall(&kvpair.key, data, keylen_end);
+
+        let ghost rawdata2 = data@;
+        proof {
+//             let spec_keysize = self.data_fmt.spec_size(kvpair.key.deepv()) as int;
+//             assert( key_end == keylen_end + spec_keysize );
+//             assert( key_end - keylen_end == spec_keysize );
+// 
+            let keydata = data@.subrange(start as int, key_end as int);
+            let keylen_specparsed = self.get_keylen_elt(keydata);
+            assert( self.get_keylen_slice().i(keydata) == self.get_keylen_slice().i(keylendata) );  // trigger extn equality
+            assert( keylen_specparsed  == self.get_keylen_elt(keylendata) );
+            let key_slice = self.get_key_slice(keylen_specparsed);
+
+            assert( keylen as int == keylen_specparsed );
+            assert( key_slice.end == keylen_specparsed as int + self.keylen_fmt.uniform_size() );
+            let ghost keylendata2 = data@.subrange(start as int, keylen_end as int);
+            assert( keylendata2 == keylendata );    // trigger extn equality
+            assert( self.get_keylen_elt(keylendata2) == keylen as int );
+            assert( 
+                self.keylen_fmt.uniform_size()
+                    + self.data_fmt.spec_size(kvpair.key.deepv())
+                    + self.data_fmt.spec_size(kvpair.value.deepv()) <= usize::MAX );
+            assert( key_slice.end <= keydata.len() );
+            assert( key_slice.valid(keydata) );
+//             assert( xdata.len() == key_slice.len() );
+//             assert( (xdata.len() as int) <= usize::MAX );
+//             assert( (xdata.len() as int) / (self.data_fmt.eltf.uniform_size() as int) <= usize::MAX );
+            assert( self.data_fmt.length(key_slice.i(keydata)) <= usize::MAX );
+            assert( self.data_fmt.parsable(key_slice.i(keydata)) );
+
+            assert( self.data_fmt.parse(rawdata2.subrange(keylen_end as int, key_end as int)) == kvpair.key.deepv() );
+            assert( start as int + self.keylen_fmt.uniform_size() as int == keylen_end as int );
+            assert( key_end == keylen_end + self.data_fmt.spec_size(kvpair.key.deepv()) );
+
+            assert( keylen_specparsed == keylen );
+            assert( keylen == self.data_fmt.spec_size(kvpair.key.deepv()) );
+            assert( self.data_fmt.spec_size(kvpair.key.deepv()) == keylen_specparsed );
+
+            assert( start as int + self.keylen_fmt.uniform_size() + keylen_specparsed == key_end as int );
+            assert( rawdata2.subrange(keylen_end as int, key_end as int)
+                == self.get_key_slice(keylen_specparsed).i(keydata) );
+            assert( self.data_fmt.parse(self.get_key_slice(keylen_specparsed).i(keydata)) ==
+                kvpair.key.deepv() );
+        }
+
+        let end = self.data_fmt.exec_marshall(&kvpair.value, data, key_end);
+
+        proof {
+            let idata = data@.subrange(start as int, end as int);
+            let keylen = self.get_keylen_elt(idata);
+            let key_slice = self.get_key_slice(keylen);
+            let value_slice = self.get_value_subslice(SpecSlice::all(idata), keylen);
+
+            assert( self.get_keylen_slice().i(idata) == self.get_keylen_slice().i(keylendata) );  // trigger extn equality
+
+            assert( self.data_fmt.parsable(key_slice.i(idata)) );
+            assert( value_slice.wf() );
+            assert( self.data_fmt.parsable(value_slice.i(idata)) );
+
+            assert( self.parsable(data@.subrange(start as int, end as int)) );
+
+            assert( self.parse(idata).key ==
+                self.data_fmt.parse(self.get_key_slice(keylen).i(idata)) );
+
+            assert( self.data_fmt.parse(self.get_key_slice(keylen).i(rawdata2)) ==
+                kvpair.key.deepv() );
+
+            assert( self.data_fmt.parse(self.get_key_slice(keylen).i(idata)) ==
+                kvpair.key.deepv() );
+
+            assume( false );
+            assert( self.parse(idata).value ==
+                self.data_fmt.parse(self.get_value_subslice(SpecSlice::all(idata), keylen).i(idata)) );
+            assert(
+                self.data_fmt.parse(self.get_value_subslice(SpecSlice::all(idata), keylen).i(idata)) ==
+                kvpair.value.deepv() );
+
+            assert( self.parse(data@.subrange(start as int, end as int)).key == kvpair.key.deepv() );
+            assert( self.parse(data@.subrange(start as int, end as int)).value == kvpair.value.deepv() );
+
+            assert( self.parse(data@.subrange(start as int, end as int)) == kvpair.deepv() );
+        }
+        end
     }
 }
 

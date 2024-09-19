@@ -117,3 +117,7 @@ XX Linked0:  Betree, pointers,   finite child map,   functional filtered buffer 
 Linked1:  Betree, pointers,   finite child map,   pointers to buffers, entire buffer "in single page"
 Linked2:  Betree+B+forest, pointers,   finite child map,   pointers to multi-page B+tree branches in forest
 Likes:
+------------------------------------------------------------------------------
+KeyedMessageFormat as a generic Marshal.
+
+
