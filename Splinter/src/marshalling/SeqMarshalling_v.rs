@@ -319,17 +319,17 @@ pub trait SeqMarshal {
         self.elt_marshallable(value),
         self.appendable(data, value)
     {
-        let oldlen = self.length(data);
+        let newslot = self.length(data);
         &&& newdata.len() == data.len()
-        &&& self.length(newdata) == oldlen + 1
+        &&& self.length(newdata) == newslot + 1
 
         // TODO: Dafny original didn't particularly bound i because preserves_entry's body has
         // *able(i) on the LHS of all implications. Kinda mysteriously magical, tho. Not a fan.
-        &&& forall |i| i != oldlen ==> self.preserves_entry(data, i, newdata)
+        &&& forall |i| i != newslot ==> self.preserves_entry(data, i, newdata)
 
-        &&& self.gettable(newdata, oldlen)
-        &&& self.elt_parsable(newdata, oldlen)
-        &&& self.get_elt(newdata, oldlen) == value
+        &&& self.gettable(newdata, newslot)
+        &&& self.elt_parsable(newdata, newslot)
+        &&& self.get_elt(newdata, newslot) == value
         &&& self.well_formed(newdata)
     }
 

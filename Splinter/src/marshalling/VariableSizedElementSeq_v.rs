@@ -18,18 +18,23 @@ use crate::marshalling::math_v::*;
 verus! {
 
 // A VariableSizedElementSeqMarshalling conveys a variable number of variably-sized elements.
-// You can't Set one of these (because we're not gonna do de-fragmentation), only append.
+// You can't Set into one of these (because we're not gonna do de-fragmentation), only append.
 // Layout is:
 //     a preallocated capacity
 //     an array of boundary pointers that describe where to find each element [i]
 //     some free space
 //     storage for the elements, allocated from the end towards the middle.
 //
-// In principle, this means the data structure might be able to use the free space either
+// This layout this means the data structure can use the free space either
 // for more boundary pointers (if the data are small) or more data (if there are fewer,
-// bigger data). In practice, the array of boundary pointers has a preallocated capacity,
-// and this type doesn't anticipate the boundary array's size to change (when a new element is
-// appended).
+// bigger data items).
+//
+// In the implementation, the `bdyf` object "owns" the entire preallocated capacity, even
+// though we're tucking element data into the free space at the end of its allocation.
+// There's a tight coupling between this object and ResizableUniformSizedElementSeqFormat's
+// implementation, exploited in the elements_identity and table_identity proofs that show
+// that appending to the boundary table doesn't smash any elements and stuffing extra
+// elements into the free space doesn't smash the table.
 
 pub struct VariableSizedElementSeqFormat <
     EltFormat: Marshal,
@@ -70,7 +75,7 @@ impl <
         Self{ eltf: eltf, bdyf: ResizableUniformSizedElementSeqFormat::new(bdy_int_format, lenf, total_size) }
     }
 
-    // Initialize a data region to represent zero records
+    // Initialize a data region to represent a count of zero records
     pub exec fn initialize(&self, dslice: &Slice, data: &mut Vec<u8>)
     requires
         self.seq_valid(),
@@ -118,7 +123,6 @@ impl <
         self.bdyf.max_length
     }
 
-    // This ports BoundaryElementGettable
     pub open spec fn element_gettable(&self, data: Seq<u8>, idx: int) -> bool
     {
         &&& self.bdyf.gettable(data, idx)
@@ -135,7 +139,8 @@ impl <
         self.seq_valid(),
         dslice@.valid(data@),
         self.element_gettable(dslice@.i(data@), idx as int),
-    ensures start as int == self.element_data_begin(dslice@.i(data@), idx as int)
+    ensures
+        start as int == self.element_data_begin(dslice@.i(data@), idx as int),
     {
         let istart: BdyType = self.bdyf.exec_get_elt(dslice, data, idx);
         proof { BdyType::deepv_is_as_int_forall(); }
@@ -167,22 +172,6 @@ impl <
         }
     }
 
-    // This is lies, but it papers over a module type specialization in the Dafny code that we
-    // haven't shoehorned into this trait system yet.
-//     proof fn boundary_seq_easy_marshalling(&self)
-//     ensures
-//         forall |data| self.bdyf.eltf.parsable(data)
-//     {
-//     }
-
-//     // Here's another obligation we'd like to place on the choice of boundary
-//     // int: don't make me deal with counting things that are beyond the
-//     // platform usize.
-//     proof fn boundary_ints_fit_in_usize(&self)
-//         ensures forall |i| #![auto] BdyType::spec_this_fits_in_usize(BdyType::as_int(i))
-//     {
-//     }
-
     pub open spec fn size_of_length_field(&self) -> usize
     {
         LenType::uniform_size()
@@ -211,32 +200,8 @@ impl <
         self.tableable(data) ==> self.lengthable(data),
         self.tableable(data) ==> self.size_of_table(self.length(data)) <= self.total_size() as int,
     {
-        if self.bdyf.parsable(data) {
-            self.bdyf.parsable_length_bounds(data);
-        }
         if self.tableable(data) {
             self.bdyf.parsable_length_bounds(data);
-            assert( self.bdyf.parsable(data) );
-            assert( self.lengthable(data) );
-
-            assert( self.length(data) == self.bdyf.length(data) );
-
-            assert( self.size_of_table(self.length(data)) ==
-                LenType::uniform_size() as int + self.length(data) * BdyType::uniform_size() as int );
-            let bsm = self.bdyf;
-            assert(
-                bsm.length(data) * BdyType::uniform_size() as int
-                    <= bsm.total_size as int - bsm.size_of_length_field() as int );
-            assert(
-                bsm.size_of_length_field() as int + bsm.length(data) * BdyType::uniform_size() as int
-                    <= bsm.total_size as int );
-            assert( bsm.size_of_length_field() == LenType::uniform_size() as int );
-            assert( bsm.length(data) == self.length(data) );
-
-            assert( bsm.total_size as int <= self.total_size() as int );
-
-
-            assert( self.size_of_table(self.length(data)) <= self.total_size() as int );
         }
     }
 
@@ -246,7 +211,7 @@ impl <
         self.bdyf.parse(data)
     }
 
-    // A well-formed boundary seq table should be in reverse sequence
+    // A well-formed boundary seq table should be in reverse order
     pub open spec fn valid_table(&self, data: Seq<u8>) -> (b: bool)
     recommends self.seq_valid(), self.tableable(data)
     {
@@ -275,19 +240,7 @@ impl <
         self.elements_start(data) - self.size_of_table(self.length(data))
     }
 
-//     pub exec fn exec_free_space(&self, slice: &Slice, data: &Vec<u8>) -> (out: usize)
-//     requires
-//         self.seq_valid(),
-//         self.tableable(slice@.i(data@)),
-//         self.valid_table(slice@.i(data@)),
-//     ensures
-//         out as int == self.free_space(slice@.i(data@)),
-//     {
-//         0
-//         //self.elements_start(data) - self.size_of_table(self.length(data))
-//     }
-
-    // TODO hey wait this is just elements_start
+    // TODO(jonh): hey wait this is just elements_start
     spec fn upper_bound(&self, data: Seq<u8>) -> int
     {
         let len = self.length(data);
@@ -346,13 +299,14 @@ impl <
         self.bdyf.appendable(data, self.append_offset(data, value))
     {
         // Discuss with Rob why these proofs weren't needed in Dafny?
+        // TODO(jonh): urgent fix assumes
         assume( self.length(data) + 1 < usize::MAX );
         assume( self.length(data) + 1 < BdyType::max() );
         assume( self.bdyf.appendable(data, self.append_offset(data, value)) );
     }
 
-    // Show that, if the old data table is a prefix of the new,
-    // both data agree on all the elements in the old table.
+    // If the old data table is a prefix of the new, both data agree on all the elements in the old
+    // table.
     proof fn elements_identity(self, data: Seq<u8>, newdata: Seq<u8>)
     requires
         self.seq_valid(),
@@ -366,19 +320,21 @@ impl <
         forall |i| self.gettable(data, i) ==> self.gettable(newdata, i),
         forall |i| self.gettable(data, i) ==> self.get_data(newdata, i) == self.get_data(data, i),
     {
-        self.bdyf.length_ensures(data); // TODO FML
-        self.bdyf.length_ensures(newdata);  // TODO FML
-        SpecSlice::all_ensures::<u8>(); // TODO I need to study broadcasts
-                                        //
+        // TODO(jonh): study and implement broadcasts. I wasted way too much time
+        // discovering these missing spec-ensures.
+        self.bdyf.length_ensures(data);
+        self.bdyf.length_ensures(newdata);
+        SpecSlice::all_ensures::<u8>();
+
         assert forall |i| self.gettable(data, i) implies {
             &&& self.gettable(newdata, i)
             &&& self.get_data(newdata, i) == self.get_data(data, i)
         } by {
             let dt = self.table(data);
             let nt = self.table(newdata);
-            assert( nt.take(dt.len() as int)[i] == nt[i] );
+            assert( nt.take(dt.len() as int)[i] == nt[i] ); // trigger
             if 0 < i {
-                assert( nt.take(dt.len() as int)[i-1] == nt[i-1] );
+                assert( nt.take(dt.len() as int)[i-1] == nt[i-1] ); // trigger
             }
 
             // trigger subrange axioms to appeal to skip requires
@@ -387,8 +343,7 @@ impl <
             let len = self.get_data(newdata, i).len();
             assert forall |k| 0 <= k < len implies
                 self.get_data(newdata, i)[k] == self.get_data(data, i)[k] by {
-                assert( self.get_data(newdata, i)[k] == newdata.skip(es)[start + k - es] );
-                assert( self.get_data(data, i)[k] == data.skip(es)[start + k - es] );
+                assert( self.get_data(data, i)[k] == data.skip(es)[start + k - es] );   // trigger
             }
             // trigger extn equality
             assert( self.get_data(newdata, i) == self.get_data(data, i) );
@@ -414,7 +369,6 @@ impl <
 
         Self::subrange_of_matching_take(newdata, data, 0, self.size_of_length_field() as int, self.size_of_table(self.length(data)));
 
-        assert( self.bdyf.length(newdata) == self.bdyf.length(data) );
         let len = self.length(newdata);
 
         // trigger to satisify bdyf.parsable_to_len and hence tableable
@@ -438,12 +392,12 @@ impl <
             Self::subrange_of_matching_take(newdata, data, ns, ne, self.size_of_table(self.length(data)));
         }
 
-        // trigger extn equality (verus issue #1257)
+        // trigger extn equality from ensures (verus issue #1257)
         assert( self.table(newdata) == self.table(data) );
     }
 
-    // TODO move to verus seq_lib
-    proof fn subrange_of_matching_take<T>(a: Seq<T>, b: Seq<T>, s: int, e: int, l: int)
+    // placeholder until verus#1276 is merged
+    pub proof fn subrange_of_matching_take<T>(a: Seq<T>, b: Seq<T>, s: int, e: int, l: int)
     requires
         a.take(l) == b.take(l),
         l <= a.len(),
@@ -452,23 +406,12 @@ impl <
     ensures
         a.subrange(s, e) == b.subrange(s, e),
     {
-        assert( a.subrange(s, e).len() == b.subrange(s, e).len() );
-        let d = e - s;
-        assert forall |i| 0 <= i < d implies a.subrange(s, e)[i] == b.subrange(s, e)[i] by {
+        assert forall |i| 0 <= i < e - s implies a.subrange(s, e)[i] == b.subrange(s, e)[i] by {
             assert( a.subrange(s, e)[i] == a.take(l)[i + s] );
-            assert( b.subrange(s, e)[i] == b.take(l)[i + s] );
+    //             assert( b.subrange(s, e)[i] == b.take(l)[i + s] );   // either trigger will do
         }
         // trigger extn equality (verus issue #1257)
         assert( a.subrange(s, e) == b.subrange(s, e) );
-    }
-
-    proof fn lemma_seq_slice_slice(data: Seq<u8>, i: int, j: int, k: int, l: int)
-    requires
-        0<=i<=j<=data.len(),
-        0<=k<=l<=j-i,
-    ensures
-        data.subrange(i,j).subrange(k,l) =~= data.subrange(i+k, i+l)
-    {
     }
 }
 
@@ -524,13 +467,11 @@ impl <
     proof fn get_ensures(&self, dslice: SpecSlice, data: Seq<u8>, idx: int)
     {}
 
-    // TODO: want to use common impl in SeqMarshal, but can't refactor due to eltf dispatch problem
     open spec fn elt_parsable(&self, data: Seq<u8>, idx: int) -> bool
     {
         self.eltf.parsable(self.get_data(data, idx))
     }
 
-    // TODO: want to use common impl in SeqMarshal, but can't refactor due to eltf dispatch problem
     open spec fn get_elt(&self, data: Seq<u8>, idx: int) -> (elt: EltFormat::DV)
     {
         self.eltf.parse(self.get_data(data, idx))
@@ -543,18 +484,10 @@ impl <
         if olen.is_some() && idx < self.exec_max_length() && idx < olen.unwrap() {
             let ghost sdata = dslice@.i(data@);
             proof {
-
                 // Painfully re-discovered spec ensures on ::all
                 SpecSlice::all_ensures::<u8>();
 
                 self.bdyf.get_ensures(SpecSlice::all(sdata), sdata, idx as int);
-
-                // TODO(jonh) file issue about triggering for axiom_seq_subrange_len
-                assert( self.element_gettable(dslice@.i(data@), idx as int) );
-                if 0 < idx {
-                    self.bdyf.get_ensures(SpecSlice::all(sdata), sdata, idx - 1 as int);
-                    assert( self.element_gettable(dslice@.i(data@), idx - 1 as int) );
-                }
             }
             let start = self.exec_element_data_begin(dslice, data, idx);
             proof {
@@ -566,16 +499,9 @@ impl <
 
             let total_size = self.exec_total_size();
             if start <= end && end <= total_size && total_size <= dslice.len() {
-                assert( self.gettable(dslice@.i(data@), idx as int) );
                 Some(dslice.subslice(start, end))
-            } else {
-                assert( !self.gettable(dslice@.i(data@), idx as int) );
-                None
-            }
-        } else {
-            assert( !self.gettable(dslice@.i(data@), idx as int) );
-            None
-        }
+            } else { None }
+        } else { None }
     }
 
     exec fn exec_get(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (eslice: Slice)
@@ -589,10 +515,7 @@ impl <
     {
         let oeslice = self.try_get(dslice, data, idx);
         match oeslice {
-            None => {
-                assert( !self.gettable(dslice@.i(data@), idx as int) );
-                None
-            }
+            None => { None }
             Some(eslice) => {
                 proof {
                     // TODO(verus): lament of spec ensures
@@ -601,16 +524,7 @@ impl <
                     // extn equal trigger
                     assert( eslice@.i(data@) =~= self.get_data(dslice@.i(data@), idx as int) );
                 }
-                let oelt = self.eltf.try_parse(&eslice, data);
-                proof {
-                    let oelt = oelt;    // make a copy to avoid move complaint
-                    if oelt is Some {
-                        // trigger. #1239 resurrected?
-                        assert( oelt.unwrap().deepv() == self.get_elt(dslice@.i(data@), idx as int) );
-                    }
-                }
-//                 assert( oelt.deepv() == self.parse(slice@.i(data@)) );
-                oelt
+                self.eltf.try_parse(&eslice, data)
             }
         }
     }
@@ -676,7 +590,7 @@ impl <
     }
 
     open spec fn appendable(&self, data: Seq<u8>, value: EltFormat::DV) -> bool {
-        // We have room for one more bdy entry plus the new datum
+        // True if we have room for one more bdy entry plus the new datum
         BdyType::uniform_size() + self.eltf.spec_size(value) as nat
             <= self.free_space(data)
     }
@@ -697,14 +611,15 @@ impl <
                 let size_of_length_field = LenType::exec_uniform_size();
                 let size_of_boundary_entry = BdyType::exec_uniform_size();
 
-                // TODO: index_bounds_facts being public is a bit yucky
                 proof {
                     self.bdyf.parsable_length_bounds(idata);
-                    assert( tbl.len() == self.table(idata).len() );
+                    assert( tbl.len() == self.table(idata).len() );  // trigger
 
                     // trigger to learn len-1 < self.bdyf.max_length()
                     assert( self.bdyf.gettable(idata, len as int - 1) );
 
+                    // index_bounds_facts being public is a bit yucky. I guess that's a consequence
+                    // of the tight coupling between this module and Resizable*.
                     self.bdyf.index_bounds_facts(len as int - 1);
                 }
 
@@ -768,7 +683,6 @@ impl <
         }
         let (len, upper_bound) = self.exec_length_and_upper_bound(dslice, data);
         let size = self.eltf.exec_size(value);
-        assert( size <= upper_bound );
         let start: usize = upper_bound - size;
         ////////////////////////////////////////////////////////////
         // Write the value into its empty slot
@@ -789,7 +703,7 @@ impl <
                 // Sheesh, subranges don't trigger very nicely.
                 assert( self.table(middle_data).subrange(0, self.table(idata).len() as int) == self.table(middle_data) );
             }
-            assert( middle_data.skip(self.elements_start(idata)) == idata.skip(self.elements_start(idata)) );
+            assert( middle_data.skip(self.elements_start(idata)) == idata.skip(self.elements_start(idata)) );   // extn trigger
             self.elements_identity(idata, middle_data);
         }
 
@@ -807,49 +721,42 @@ impl <
 
         proof {
             let newdata = dslice@.i(data@);
-            let newslot = self.length(idata); // TODO rename from oldlen in SeqMarshalling
+            let newslot = self.length(idata);
+            let tbl_orig = self.table(idata);
+            let tbl_middle = self.table(middle_data);
+            let tbl_new = self.table(newdata);
 
-            assert({
-                &&& self.tableable(newdata)
-                &&& self.valid_table(newdata)
-            }) by {
+            assert( self.tableable(newdata) && self.valid_table(newdata) ) by {
                 assert forall |i: int| 0<=i<self.length(newdata) implies {
                     &&& self.bdyf.gettable(newdata, i)
                     &&& self.bdyf.elt_parsable(newdata, i)
                 } by {
                     if i < self.length(idata) {
+                        // trigger
                         assert( self.bdyf.preserves_entry(middle_data, i, newdata) );
                     }
                 }
 
-                let ot = self.table(middle_data);
-                let t = self.table(newdata);
-                assert forall |i| 0 <= i < ot.len() implies ot[i] == t[i] by {
+                assert forall |i| 0 <= i < tbl_middle.len() implies tbl_middle[i] == tbl_new[i] by {
+                    // trigger
                     assert( self.bdyf.preserves_entry(middle_data, i, newdata) );
                 }
-//                 assert( ot.len() + 1 == t.len() );
                 // Every element has non-negative length
-                if 0 < t.len() {
-                    // The last element ends before the end of the VSES total byte allocation
-//                     assert( t[0] <= self.total_size() as int );
-
+                if 0 < tbl_new.len() {
                     // The first element starts beyond the end of the table itself.
                     let size_of_boundary_entry = BdyType::uniform_size();
-                    let otl = ot.len() as int;
+                    let otl = tbl_middle.len() as int;
                     assert( (otl + 1) * size_of_boundary_entry == otl * size_of_boundary_entry + size_of_boundary_entry ) by(nonlinear_arith);
-//                     assert( self.size_of_table(t.len() as int) <= t.last() );
                 }
             }
 
-            let mtbl = self.table(middle_data);
-            let ntbl = self.table(newdata);
-            assert( is_prefix(mtbl, ntbl) ) by {
-                let len = mtbl.len() as int;
-                assert forall |i| 0 <= i < len implies mtbl[i] == ntbl[i] by {
+            assert( is_prefix(tbl_middle, tbl_new) ) by {
+                let len = tbl_middle.len() as int;
+                assert forall |i| 0 <= i < len implies tbl_middle[i] == tbl_new[i] by {
+                    // trigger
                     assert( self.bdyf.preserves_entry(middle_data, i, newdata) );
                 }
-                // freaken extnality
-                assert( mtbl == ntbl.take(len) );
+                assert( tbl_middle == tbl_new.take(len) );  // trigger extn
             }
 
             assert( newdata.skip(self.elements_start(middle_data)) =~= middle_data.skip(self.elements_start(middle_data)) );
@@ -864,7 +771,7 @@ impl <
             // bdy append
             let msub = middle_data_raw.subrange(dslice.start + start, after_elt as int);
             let dsub = data@.subrange(dslice.start + start, after_elt as int);
-            assert( msub == dsub );
+            assert( msub == dsub ); // trigger extn
 
             if 0 < newslot {
                 // trigger
@@ -887,23 +794,20 @@ impl <
             }
 
             assert( self.valid_table(newdata) ) by {
-                let old_t = self.table(idata);
-                let t = self.table(newdata);
-                assert forall |i, j| 0 <= i <= j < t.len() implies t[j] <= t[i] by {
+                assert forall |i, j| 0 <= i <= j < tbl_new.len() implies tbl_new[j] <= tbl_new[i] by {
                     if j < newslot {
                         // trigger preserves_entry
                         assert( self.bdyf.preserves_entry(middle_data, i, newdata) );
                         assert( self.bdyf.preserves_entry(middle_data, j, newdata) );
                         // trigger old valid_table
-                        assert( old_t[j] <= old_t[i] );
+                        assert( tbl_orig[j] <= tbl_orig[i] );
                     } else if i < j {
-//                         assert( j == newslot );
                         let k = newslot - 1;
                         // trigger preserves_entry
                         assert( self.bdyf.preserves_entry(middle_data, k, newdata) );
                         assert( self.bdyf.preserves_entry(middle_data, i, newdata) );
                         // trigger old valid_table
-                        assert( old_t[k] <= old_t[i] );
+                        assert( tbl_orig[k] <= tbl_orig[i] );
                     }
                 }
                 if 0 < newslot {
@@ -913,7 +817,6 @@ impl <
             }
         }
     }
-
 }
 
 
