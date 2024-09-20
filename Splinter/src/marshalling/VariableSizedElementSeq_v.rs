@@ -240,18 +240,6 @@ impl <
         self.elements_start(data) - self.size_of_table(self.length(data))
     }
 
-    // TODO(jonh): hey wait this is just elements_start
-    spec fn upper_bound(&self, data: Seq<u8>) -> int
-    {
-        let len = self.length(data);
-        if len == 0 {
-            self.total_size() as int
-        }
-        else {
-            self.bdyf.get_elt(data, len - 1)
-        }
-    }
-
     // exec_appendable and exec_append both need these two bits of info
     exec fn exec_length_and_upper_bound(&self, dslice: &Slice, data: &Vec<u8>) -> (len_and_bound: (usize, usize))
     requires
@@ -261,7 +249,7 @@ impl <
         self.well_formed(dslice@.i(data@)),
     ensures
         len_and_bound.0 == self.length(dslice@.i(data@)),
-        len_and_bound.1 == self.upper_bound(dslice@.i(data@)),
+        len_and_bound.1 == self.elements_start(dslice@.i(data@)),
     {
         proof { BdyType::deepv_is_as_int_forall(); }
         let len = self.exec_length(dslice, data);
@@ -284,7 +272,7 @@ impl <
         self.eltf.marshallable(value),
         self.appendable(data, value),
     {
-        self.upper_bound(data) - self.eltf.spec_size(value)
+        self.elements_start(data) - self.eltf.spec_size(value)
     }
 
     proof fn appendable_implies_bdyf_appendable(&self, data: Seq<u8>, value: EltFormat::DV)
