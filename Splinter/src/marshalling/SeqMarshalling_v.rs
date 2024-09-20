@@ -130,7 +130,9 @@ pub trait SeqMarshal {
     recommends
         self.seq_valid(),
         self.gettable(data, idx)
-    // TODO dfy has a default impl here
+    // dfy has a default impl here, but it requires asking the impl to expose its elt formatter.
+    // I'm not sure that complexity is worth the tiny savings, especially since trait limitations
+    // prevent us from supplying defaults everywhere we want (see try_get_elt).
     ;
 //     {
 //         self.spec_elt_marshalling().parsable(self.get_data(data, idx))
@@ -141,7 +143,7 @@ pub trait SeqMarshal {
         self.seq_valid(),
         self.gettable(data, idx),
         self.elt_parsable(data, idx)
-    // TODO dfy has a default impl here
+    // dfy has a default impl here; see above.
     ;
 //     {
 //         self.spec_elt_marshalling().parse(self.get_data(data, idx))
@@ -187,8 +189,9 @@ pub trait SeqMarshal {
                 &&& self.elt_parsable(dslice@.i(data@), idx as int)
         },
         oelt is Some ==> oelt.unwrap().deepv() == self.get_elt(dslice@.i(data@), idx as int)
-    // TODO the implementations of this method could be factored out into a default method here
-    // if we had a way of talking about eltm and its type in this trait.
+    // This can't be provided as a default trait (where the Dafny version had a default impl)
+    // because we need the definition of elt_parsable to be fixed. We can supply a default,
+    // but the proof of this default method doesn't know that the impl keeps that default.
     ;
 
     exec fn exec_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (elt: Self::Elt)
@@ -227,8 +230,6 @@ pub trait SeqMarshal {
             }
     }
 
-    // proof fn preserves_entry_transitive
-
     open spec fn sets(&self, data: Seq<u8>, idx: int, value: Self::DVElt, new_data: Seq<u8>) -> bool
     recommends
         self.seq_valid(),
@@ -265,7 +266,6 @@ pub trait SeqMarshal {
         dslice@.agree_beyond_slice(old(data)@, data@),
         self.sets(dslice@.i(old(data)@), idx as int, value.deepv(), dslice@.i(data@)),
     ;
-
 
     /////////////////////////////////////////////////////////////////////////
     // resizing
