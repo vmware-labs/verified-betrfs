@@ -114,19 +114,6 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
         self.resize(dslice, data, 0);
     }
 
-//     pub proof fn get__ensures_len(&self, dslice: SpecSlice, data: Seq<u8>, idx: int)
-//     requires self.valid(), 0 <= idx, idx < self.max_length()
-//     ensures self.get(dslice, data, idx).len() == self.eltf.uniform_size()
-//     {
-//         self.index_bounds_facts(idx as int);
-//         let eslice = self.get(dslice, data, idx);
-//         assert( eslice.start == self.size_of_length_field() + idx * self.eltf.uniform_size() );
-//         assert( eslice.end == self.size_of_length_field() + idx * self.eltf.uniform_size() + self.eltf.uniform_size() );
-//         assert( eslice.len() == eslice.end - eslice.start );
-//         assert( self.get(dslice, data, idx).len() == eslice.len() );
-//         assert( eslice.len() == self.eltf.uniform_size() );
-//     }
-
     // exec_append promises not to touch any bytes beyond the spot it places the appended value.
     // This is a bit of a layering violation used in VariableSizedElementSeq to share space between
     // the boundary seq and the value storage.
@@ -156,23 +143,12 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
 
     open spec fn lengthable(&self, data: Seq<u8>) -> bool {
         &&& self.total_size <= data.len()
-
-        // One thing that makes this version harder than the dafny version is that
-        // we handle lengths as 'usize', which could conceivably be smaller than the LengthInt.
-        // (Dafny uses u64s for lengths, and I suppose has some constraint that the variable ints
-        // are never bigger than the u64?)
-        &&& self.length(data) <= LenType::max()
     }
 
     open spec fn length(&self, data: Seq<u8>) -> int
     {
         self.lenf.parse(data.subrange(0, self.size_of_length_field() as int)) as int
     }
-
-//     proof fn length_ensures(&self, data: Seq<u8>)
-//     ensures self.size_of_length_field() as int <= self.size_of_length_field() as int + self.length(data) * self.uniform_size() as int
-//     {
-//     }
 
     exec fn try_length(&self, dslice: &Slice, data: &Vec<u8>) -> (out: Option<usize>)
     {
@@ -184,7 +160,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
 
         // TODO(verus): trait instability: this expression appears in exec_parse requires, but
         // mentioning it completes the proof.
-        assert( self.lenf.parsable(sslice@.i(data@)) );
+//         assert( self.lenf.parsable(sslice@.i(data@)) );
 
         let parsed_len = self.lenf.exec_parse(&sslice, data);
 
@@ -195,15 +171,12 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
             LenType::deepv_is_as_int(parsed_len);
 
             self.length_ensures(dslice@.i(data@));  // trigger for lengthable LenType::max() conjunct
-            assert( self.lengthable(dslice@.i(data@)) );
+            // goal
+//             assert( self.lengthable(dslice@.i(data@)) );
         }
 
         Some(LenType::to_usize(parsed_len))
     }
-
-//     exec fn exec_lengthable(&self, dslice: &Slice, data: &Vec<u8>) -> (l: bool) {
-//         self.try_length(dslice, data).is_some()
-//     }
 
     /////////////////////////////////////////////////////////////////////////
     // getting individual elements
@@ -252,10 +225,6 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
         if idx < self.max_length {
             proof { self.index_bounds_facts(idx as int); }
             Some( self.exec_get(dslice, data, idx) )
-//             let eslice = dslice.exec_sub(
-//                     self.exec_size_of_length_field() + (idx as usize) * self.eltf.exec_uniform_size(),
-//                     self.exec_size_of_length_field() + (idx as usize) * self.eltf.exec_uniform_size() + self.eltf.exec_uniform_size());
-//             Some( eslice )
         } else {
             None
         }
@@ -268,25 +237,15 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
 
     exec fn exec_get(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (eslice: Slice)
     {
-        proof {
-            // TODO(verus): why would this need to be triggered manually?
-            assert( self.seq_valid() );
-            assert( self.gettable(dslice@.i(data@), idx as int) );
-            assert( (idx as int) < self.spec_max_length() );
-            self.index_bounds_facts(idx as int); }
+        proof { self.index_bounds_facts(idx as int); }
         let eslice = dslice.subslice(
             self.exec_size_of_length_field() + (idx as usize) * self.eltf.exec_uniform_size(),
             self.exec_size_of_length_field() + (idx as usize) * self.eltf.exec_uniform_size() + self.eltf.exec_uniform_size());
-        // This is the postcondition. Why would it need to be triggered manually?
-        assert( eslice@ == self.get(dslice@, data@, idx as int) );
         eslice
     }
 
     exec fn try_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oelt: Option<EltFormat::U>)
-    // TODO factor out this common impl
     {
-        //proof { self.eltf.spec_elt_marshalling_ensures() };  // :v(
-
         let oeslice = self.try_get(dslice, data, idx);
         match oeslice {
             None => None,
@@ -297,14 +256,12 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
                     let edslice = self.get(SpecSlice::all(dslice@.i(data@)), dslice@.i(data@), idx as int);
                     assert( edslice.i(dslice@.i(data@)) == eslice@.i(data@));   // trigger
                 }
-                let oelt = self.eltf.try_parse(&eslice, data);
-                oelt
+                self.eltf.try_parse(&eslice, data)
             }
         }
     }
 
     exec fn exec_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (elt: EltFormat::U)
-    // TODO factor out this common impl
     {
         let eslice = self.exec_get(dslice, data, idx);
         proof { // duplicated from try_get_elt
@@ -313,11 +270,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
             let edslice = self.get(SpecSlice::all(dslice@.i(data@)), dslice@.i(data@), idx as int);
             assert( edslice.i(dslice@.i(data@)) == eslice@.i(data@));   // trigger
         }
-        let elt = self.eltf.exec_parse(&eslice, data);
-
-        // This is the postcondition. Why would it need to be triggered manually?
-        assert( elt.deepv() == self.get_elt(dslice@.i(data@), idx as int) );
-        elt
+        self.eltf.exec_parse(&eslice, data)
     }
 
     /////////////////////////////////////////////////////////////////////////
@@ -434,10 +387,12 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
                     &&& self.get_elt(sdata_new, i) == self.get_elt(sdata_old, i)
             } by {
                 self.index_bounds_facts(i);
+                // TODO(verus): #1257
                 assert( self.get_data(sdata_new, i) == self.get_data(sdata_old, i) );
             }
 
-            assert( self.resizes(dslice@.i(old(data)@), newlen as int, dslice@.i(data@)) );
+            // goal
+//             assert( self.resizes(dslice@.i(old(data)@), newlen as int, dslice@.i(data@)) );
         }
     }
 
@@ -459,24 +414,6 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
         &&& self.length(data) + 1 <= LenType::max()
     }
 
-    // appends from trait default.
-//     open spec fn appends(&self, data: Seq<u8>, value: EltFormat::DV, newdata: Seq<u8>) -> bool {
-//         let oldlen = self.length(data);
-//         &&& newdata.len() == data.len()
-//         &&& self.lengthable(newdata)
-//         &&& self.length(newdata) == oldlen + 1
-// 
-//         // TODO: Dafny original didn't particularly bound i because preserves_entry's body has
-//         // *able(i) on the LHS of all implications. Kinda mysteriously magical, tho. Not a fan.
-//         &&& forall |i| i != oldlen ==> self.preserves_entry(data, i, newdata)
-// 
-//         &&& self.gettable(newdata, oldlen)
-//         &&& self.elt_parsable(newdata, oldlen)
-//         &&& self.get_elt(newdata, oldlen) == value
-//         &&& self.well_formed(newdata)
-//     }
-
-
     exec fn exec_well_formed(&self, dslice: &Slice, data: &Vec<u8>) -> (w: bool) {
         self.exec_lengthable(dslice, data)
     }
@@ -495,47 +432,18 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
     exec fn exec_append(&self, dslice: &Slice, data: &mut Vec<u8>, value: &EltFormat::U)
     ensures self.untampered_bytes(dslice@, old(data)@, data@)
     {
-//         let ghost raw_begin = data@;
         let ghost sliced_begin = dslice@.i(data@);
         let len = self.exec_length(dslice, data);
         self.resize(dslice, data, len + 1);
 
-//         let ghost raw_middle = data@;
         let ghost sliced_middle = dslice@.i(data@);
         self.exec_set(dslice, data, len, value);
-
-//         let ghost raw_finish = data@;
-//         let ghost sliced_finish = dslice@.i(raw_finish);
 
         assert( self.preserves_entry(sliced_begin, len as int, sliced_middle) );   // trigger
         assert forall |i| i != len implies self.preserves_entry(dslice@.i(old(data)@), i, dslice@.i(data@)) by {
             assert( self.preserves_entry(dslice@.i(old(data)@), i, sliced_middle) );   // trigger
             assert( self.preserves_entry(sliced_middle, i, dslice@.i(data@)) );        // trigger
         }
-//         proof {
-//             let bfub = self.first_unused_byte(dslice@, raw_begin);
-//             let mfub = self.first_unused_byte(dslice@, raw_middle);
-//             let nfub = self.first_unused_byte(dslice@, raw_finish);
-//             let raw_len = raw_finish.len();
-//             assert( self.resizes(sliced_begin, len+1, sliced_middle) );
-//             assert( self.sets(sliced_middle, len as int, value.deepv(), sliced_finish) );
-//             assert( raw_middle.len() == raw_len);
-//             assert( raw_begin.len() == raw_len);
-//             // i is in full-slice units.
-//             // resize doesn't touch anything
-//             assert( self.untampered_bytes(dslice@, raw_begin, raw_middle) );
-//             assert forall |i| mfub <= i < raw_middle.len() implies raw_begin[i] == raw_middle[i] by {
-//             }
-//             // set doesn't touch anything
-//             assert forall |i| nfub <= i < data@.len() implies raw_middle[i] == data@[i] by {
-//                 assert( self.untampered_bytes(dslice@, raw_middle, data@) );
-//             }
-//             assert forall |i| nfub <= i < data@.len() implies raw_begin[i] == data@[i] by {
-//             }
-//             assert forall |i| self.first_unused_byte(dslice@, data@) <= i < data@.len() implies old(data)@[i] == data@[i] by {
-//             }
-//         }
-        assert( self.untampered_bytes(dslice@, old(data)@, data@) );
     }
 }
 
@@ -617,39 +525,27 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
     exec fn try_parse(&self, dslice: &Slice, data: &Vec<u8>) -> (ovalue: Option<Vec<EltFormat::U>>)
     {
         match self.try_length(dslice, data) {
-            None => {
-                proof {
-                    let ghost idata = dslice@.i(data@);
-                    assert( !self.lengthable(idata) );
-                }
-                assert( !self.seq_parsable(dslice@.i(data@)) );
-                assert( !self.parsable(dslice@.i(data@)) );
-                return None;
-            },
+            None => { None },
             Some(len) => {
-                assert( len as int == self.length(dslice@.i(data@)) );
-                assert( len <= usize::MAX );
                 let mut i: usize = 0;
                 let mut result:Vec<EltFormat::U> = Vec::with_capacity(len);
                 while i < len
-                    invariant i <= len,
+                invariant
+                    i <= len,
                     result.len() == i,
                     forall |j| 0<=j<i as nat ==> self.gettable(dslice@.i(data@), j),
                     forall |j| 0<=j<i as nat ==> self.elt_parsable(dslice@.i(data@), j),
                     forall |j| #![auto] 0<=j<i as nat ==> result[j].deepv() == self.get_elt(dslice@.i(data@), j),
                 {
-                    let ghost idata = dslice@.i(data@);
                     let oelt = self.try_get_elt(dslice, data, i);
-                    if oelt.is_none() {
-                        return None;
-                    }
+                    if oelt.is_none() { return None; }
                     result.push(oelt.unwrap());
                     i += 1;
                 }
                 // Looks like this wants extensionality, but no ~! Not sure why it's needed.
-                // Oh maybe it's the trait-ensures-don't-trigger bug?
+                // TODO(verus): Oh maybe it's the trait-ensures-don't-trigger bug?
                 assert( result.deepv() == self.parse(dslice@.i(data@)) );    // trigger.
-                return Some(result);
+                Some(result)
             }
         }
     }
@@ -683,11 +579,9 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
         let length_end = self.lenf.exec_marshall(&length_val, data, start);
         proof {
             LenType::deepv_is_as_int(length_val);
-            // Extensional equality between the thing we know holds length_val and the self.length defn
+            // trigger: Extensional equality between the thing we know holds length_val and the self.length defn
             assert( slice@.i(data@).subrange(0, self.size_of_length_field() as int)
                     == SpecSlice{start: start as int, end: length_end as int}.i(data@) );
-
-            assert( self.lengthable(slice@.i(data@)) );
         }
 
         let mut i: usize = 0;
@@ -706,24 +600,12 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
 
         while i < value.len()
         invariant
-//             // come ON, #![verifier::spinoff_loop(false)]! Do your thing! -> turns out it got
-//             renamed during the merge.
-//             self.valid(),
-//             slice == (Slice{start, end}), // shouldn't need this; slice is bound immutably. Try deleting.
-//             slice@.valid(old(data)@),
-//             self.marshallable(value.deepv()),
-
-//             0 <= i <= value.len(),
             data@.len() == old(data)@.len(),
             forall |j| 0 <= j < start ==> data@[j] == old(data)@[j],
             forall |j| end as int <= j < old(data)@.len() ==> data@[j] == old(data)@[j],
-//             self.lengthable(slice@.i(data@)),
             self.length(slice@.i(data@)) == value.len(),
-
-//             forall |j| 0 <= j < i ==> self.gettable(slice@.i(data@), j),
             forall |j| 0 <= j < i ==> self.elt_parsable(slice@.i(data@), j),
             forall |j| #![auto] 0 <= j < i ==> self.get_elt(slice@.i(data@), j) == value[j].deepv(),
-//             forall |j| #![auto] 0 <= j < value.len() ==> self.settable(slice@.i(data@), j, value[j].deepv()),
         {
             let ghost prev_data = data@;
             let ghost old_i = i;
@@ -735,9 +617,6 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
             i += 1;
 
             proof {
-//                 assert forall |j: int| 0 <= j < old_i
-//                     implies self.preserves_entry(slice@.i(prev_data), j as int, slice@.i(data@) ) by {}
-
                 assert forall |j| 0 <= j < i implies self.elt_parsable(slice@.i(data@), j) by {
                     if j < old_i {
                         assert( self.preserves_entry( slice@.i(prev_data), j, slice@.i(data@)) );    // trigger
@@ -750,7 +629,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
                 }
             }
         }
-        // This is just a postcondition; why wasn't it automatically triggered?
+        // TODO(verus): This is just a postcondition; why wasn't it automatically triggered?
         assert( self.parse(data@.subrange(start as int, end as int)) == value.deepv() );
         end
     }
