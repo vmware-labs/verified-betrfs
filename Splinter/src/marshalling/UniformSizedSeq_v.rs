@@ -146,9 +146,7 @@ impl<EltFormat: Marshal + UniformSized>
     }
 
     exec fn try_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (oelt: Option<EltFormat::U>)
-    // TODO factor out this common impl
     {
-        assume( false );    // this proof be flakin'. TODO run Mariposa
         let oeslice = self.try_get(dslice, data, idx);
         match oeslice {
             None => {
@@ -164,13 +162,13 @@ impl<EltFormat: Marshal + UniformSized>
                 }
                 let oelt = self.eltf.try_parse(&eslice, data);
 
+                assert( oelt is Some ==> oelt.unwrap().deepv() == self.get_elt(dslice@.i(data@), idx as int) ); // TODO(verus): failure to trigger ensures
                 oelt
             }
         }
     }
 
     exec fn exec_get_elt(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (elt: EltFormat::U)
-    // TODO factor out this common impl
     {
         let eslice = self.exec_get(dslice, data, idx);
         proof { // duplicated from try_get_elt
@@ -375,9 +373,7 @@ impl<EltFormat: Marshal + UniformSized>
 
     open spec fn spec_size(&self, value: Self::DV) -> usize
     {
-        let sz = (value.len() * self.eltf.uniform_size()) as usize;
-        // assert( (sz as int) == (value.len() as int) * (self.eltf.uniform_size() as int) );   // trigger!?
-        sz
+        (value.len() * self.eltf.uniform_size()) as usize
     }
 
     exec fn exec_size(&self, value: &Self::U) -> (sz: usize)
@@ -408,15 +404,11 @@ impl<EltFormat: Marshal + UniformSized>
             self.parse(data@.subrange(start as int, end as int)) == value.deepv().subrange(0, i as int),
         {
             let ghost oldend = end;
-            assert( oldend as int == start as int + self.spec_size(value.deepv().subrange(0, i as int)) as int );
+            assert( oldend as int == start as int + self.spec_size(value.deepv().subrange(0, i as int)) as int );   // trigger
             let ghost olddata = data@.subrange(start as int, end as int);
             let ghost oldi = i;
 
             proof {
-                // TODO(verus): lament of the spec ensures
-                // Also lament that this fact didn't get carried around the while invariants automatically. :v(
-                self.eltf.uniform_size_ensures();
-
                 if i as int + 1 < value.len() {
                     pos_mul_preserves_order(i as int + 1, value.len() as int, self.eltf.uniform_size() as int);
                 }
@@ -426,10 +418,6 @@ impl<EltFormat: Marshal + UniformSized>
                 assert( esz == self.eltf.uniform_size() ) by {
                     assert( self.marshallable_at(value.deepv(), i as int) );    // trigger
                 }
-
-//                 assert( self.eltf.marshallable(value[i as int].deepv()) ) by {
-//                     assert( self.marshallable_at(value.deepv(), i as int) );
-//                 }
             }
 
             assert( self.marshallable_at(value.deepv(), i as int) );     // de-flake trigger
