@@ -108,14 +108,14 @@ impl <
     }
 
     pub open spec fn max_length(&self) -> usize {
-        self.bdyf.max_length()
+        self.bdyf.spec_max_length()
     }
 
     exec fn exec_max_length(&self) -> (out: usize)
         requires self.seq_valid()
         ensures out == self.max_length()
     {
-        self.bdyf.exec_max_length()
+        self.bdyf.max_length
     }
 
     // This ports BoundaryElementGettable

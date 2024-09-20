@@ -179,7 +179,7 @@ exec fn test_resizable_seq_marshalling_append() -> (outpr: (Vec<u8>, usize))
 //           of additional expressions in the triggering context in the expanded
 //           version.
         // Any single one of these sub-asserts wakes it up.
-        assert( rusm.length(slice@.i(data@)) < rusm.max_length() );
+        assert( rusm.length(slice@.i(data@)) < rusm.spec_max_length() );
 //         assert( rusm.eltf.spec_size(v43) == rusm.eltf.uniform_size() );
 //         assert( rusm.length(slice@.i(data@)) + 1 <= <u32 as IntFormattable>::max() );
     }

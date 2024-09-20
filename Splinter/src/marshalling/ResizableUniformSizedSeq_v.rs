@@ -10,10 +10,7 @@ use crate::marshalling::Slice_v::*;
 use crate::marshalling::Marshalling_v::*;
 use crate::marshalling::IntegerMarshalling_v::*;
 use crate::marshalling::SeqMarshalling_v::*;
-// use crate::marshalling::StaticallySized_v::*;
-// use crate::marshalling::UniformSizedSeq_v::*;
 use crate::marshalling::UniformSized_v::*;
-// use crate::marshalling::LenFormat_v::*;
 use crate::marshalling::math_v::*;
 
 verus! {
@@ -29,8 +26,10 @@ pub struct ResizableUniformSizedElementSeqFormat
     pub lenf: IntFormat<LenType>,
 
     // `total_size` is like a "capacity" -- the allocated space.  It's measured in bytes.
-    // This field ports totalSize
+    // This field ports totalSize from the dfy original
     pub total_size: usize, 
+
+    pub max_length: usize,
 }
 
 impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
@@ -45,32 +44,15 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
         s.seq_valid(),
         s.total_size == total_size,
     {
-        Self{ eltf, lenf, total_size }
+        proof { eltf.uniform_size_ensures(); };
+        let max_length = (total_size - lenf.exec_uniform_size()) as usize / eltf.exec_uniform_size();
+        Self{ eltf, lenf, total_size, max_length }
     }
 
-    // "raw_valid" to avoid name collision with Marshal::valid. That led to some confusing proof
-    // failures.
-    pub open spec fn raw_valid(&self) -> bool {
-        &&& self.eltf.valid()
-        &&& self.lenf.valid()
-        &&& self.size_of_length_field() <= self.total_size
-    }
-
-    pub open spec fn max_length(&self) -> usize
-    recommends self.valid()
+    pub open spec fn spec_max_length(&self) -> usize
     {
         // Why does subtraction of usizes produce an int?
         (self.total_size - self.size_of_length_field()) as usize / self.eltf.uniform_size()
-    }
-
-    // TODO(jonh): this should probably be a const field (with a valid() invariant relating it to
-    // total_size, etc) rather than computing it every time.
-    pub exec fn exec_max_length(&self) -> (out: usize)
-        requires self.valid()
-        ensures out == self.max_length()
-    {
-        proof { self.eltf.uniform_size_ensures(); };
-        (self.total_size - self.exec_size_of_length_field()) as usize / self.eltf.exec_uniform_size()
     }
 
     // TODO(jonh): inline this defn away
@@ -86,13 +68,13 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
     }
 
     pub proof fn index_bounds_facts(&self, idx: int)
-    requires self.valid(), 0 <= idx, idx < self.max_length()
+    requires self.valid(), 0 <= idx, idx < self.spec_max_length()
     ensures
         self.size_of_length_field() as int
             <= self.size_of_length_field() as int + idx * (self.eltf.uniform_size() as int)
             <  self.size_of_length_field() as int + idx * (self.eltf.uniform_size() as int) + (self.eltf.uniform_size() as int)
             == self.size_of_length_field() as int + (idx+1) * (self.eltf.uniform_size() as int)
-            <= self.size_of_length_field() + (self.max_length() as int) * (self.eltf.uniform_size() as int)
+            <= self.size_of_length_field() + (self.spec_max_length() as int) * (self.eltf.uniform_size() as int)
             <= self.total_size
     {
         self.eltf.uniform_size_ensures();   // TODO(verus): lament of the spec ensures
@@ -100,8 +82,8 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
         pos_mul_preserves_order(idx, idx+1, self.eltf.uniform_size() as int);
         distribute_left(idx, 1, self.eltf.uniform_size() as int);
         div_mul_order(self.total_size as int, self.eltf.uniform_size() as int);
-        if idx + 1 < self.max_length() {
-            pos_mul_preserves_order(idx + 1, self.max_length() as int, self.eltf.uniform_size() as int);
+        if idx + 1 < self.spec_max_length() {
+            pos_mul_preserves_order(idx + 1, self.spec_max_length() as int, self.eltf.uniform_size() as int);
             // (idx+1)*us < m * us
         }
         euclidean_div_truncates(
@@ -166,7 +148,10 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
     type Elt = EltFormat::U;
 
     open spec fn seq_valid(&self) -> bool {
-        self.raw_valid()
+        &&& self.eltf.valid()
+        &&& self.lenf.valid()
+        &&& self.size_of_length_field() <= self.total_size
+        &&& self.max_length == self.spec_max_length()
     }
 
     open spec fn lengthable(&self, data: Seq<u8>) -> bool {
@@ -233,7 +218,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
     {
         // This conjunct forces data (and hence the slice arg to get) to be at least total_size
         &&& self.lengthable(data)
-        &&& 0 <= idx < self.max_length()
+        &&& 0 <= idx < self.spec_max_length()
     }
 
     open spec fn get(&self, dslice: SpecSlice, data: Seq<u8>, idx: int) -> (eslice: SpecSlice)
@@ -264,7 +249,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
         let olen = self.try_length(dslice, data);
         if olen.is_none() { return None; }
 
-        if idx < self.exec_max_length() {
+        if idx < self.max_length {
             proof { self.index_bounds_facts(idx as int); }
             Some( self.exec_get(dslice, data, idx) )
 //             let eslice = dslice.exec_sub(
@@ -278,7 +263,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
 
     exec fn exec_gettable(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (g: bool)
     {
-        self.try_length(dslice, data).is_some() && idx < self.exec_max_length()
+        self.try_length(dslice, data).is_some() && idx < self.max_length
     }
 
     exec fn exec_get(&self, dslice: &Slice, data: &Vec<u8>, idx: usize) -> (eslice: Slice)
@@ -287,7 +272,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
             // TODO(verus): why would this need to be triggered manually?
             assert( self.seq_valid() );
             assert( self.gettable(dslice@.i(data@), idx as int) );
-            assert( (idx as int) < self.max_length() );
+            assert( (idx as int) < self.spec_max_length() );
             self.index_bounds_facts(idx as int); }
         let eslice = dslice.subslice(
             self.exec_size_of_length_field() + (idx as usize) * self.eltf.exec_uniform_size(),
@@ -347,7 +332,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
     open spec fn settable(&self, data: Seq<u8>, idx: int, value: EltFormat::DV) -> bool
     {
         &&& self.lengthable(data)
-        &&& 0 <= idx < self.max_length() as int
+        &&& 0 <= idx < self.spec_max_length() as int
         &&& self.eltf.spec_size(value) == self.eltf.uniform_size()
     }
 
@@ -358,7 +343,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
 
         let s = {
             &&& olen.is_some()
-            &&& idx < self.exec_max_length()
+            &&& idx < self.max_length
             &&& sz == self.eltf.exec_uniform_size()
         };
         assert( s == self.settable(dslice@.i(data@), idx as int, value.deepv()) );
@@ -413,13 +398,13 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
 
     open spec fn resizable(&self, data: Seq<u8>, newlen: int) -> bool {
         &&& self.lengthable(data)
-        &&& newlen <= self.max_length() as nat
+        &&& newlen <= self.spec_max_length() as nat
         &&& newlen <= LenType::max()
     }
 
     exec fn exec_resizable(&self, dslice: &Slice, data: &Vec<u8>, newlen: usize) -> (r: bool) {
         &&& self.exec_lengthable(dslice, data)
-        &&& newlen <= self.exec_max_length()
+        &&& newlen <= self.max_length
         // Have to be able to write the length down in the alotted space
         &&& newlen <= LenType::exec_max()
     }
@@ -467,7 +452,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
     proof fn well_formed_ensures(&self, data: Seq<u8>) {}
 
     open spec fn appendable(&self, data: Seq<u8>, value: EltFormat::DV) -> bool {
-        &&& self.length(data) < self.max_length() as nat
+        &&& self.length(data) < self.spec_max_length() as nat
         &&& self.eltf.spec_size(value) == self.eltf.uniform_size()
 
         // dafny does this computation in a u64; why is it okay with overflow!?
@@ -500,7 +485,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
         let len = self.exec_length(dslice, data);
         let sz = self.eltf.exec_size(value);
         let r = {
-            &&& len < self.exec_max_length()
+            &&& len < self.max_length
             &&& sz == self.eltf.exec_uniform_size()
             &&& len + 1 <= LenType::exec_max()
         };
@@ -585,7 +570,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
     pub proof fn parsable_length_bounds(&self, data: Seq<u8>)
     requires self.seq_valid(), self.parsable(data),
     ensures
-        self.length(data) <= self.max_length() as int,
+        self.length(data) <= self.spec_max_length() as int,
         self.length(data) * self.eltf.uniform_size() as int
             <= self.total_size as int - self.size_of_length_field() as int,
     {
@@ -707,7 +692,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
 
         let mut i: usize = 0;
 
-        assert( value.len() <= self.max_length() as int ) by {
+        assert( value.len() <= self.spec_max_length() as int ) by {
             self.eltf.uniform_size_ensures();
             inequality_move_divisor(
                 value.len() as int,
