@@ -290,7 +290,7 @@ impl BetreeNode {
                     self.query_from_refines(k);
                     buffers.query_agrees_with_i(k, 0);
                     assert(buffers.query(k) == buffers.i().query(k));
-                    BufferSeq::extend_buffer_seq_lemma(buffers, 
+                    BufferSeq::extend_buffer_seq_query_ensures(buffers, 
                         self->buffers, k, offset_map.offsets[k] as int);
                 }
             }
@@ -836,22 +836,22 @@ impl BetreeNode {
 
                 if ofs < start {
                     let left = self->buffers.slice(0, start as int);
-                    BufferSeq::extend_buffer_seq_lemma(compact_slice, left, k, ofs);
-                    BufferSeq::extend_buffer_seq_lemma(compacted_bufferseq, left, k, ofs);
+                    BufferSeq::extend_buffer_seq_query_ensures(compact_slice, left, k, ofs);
+                    BufferSeq::extend_buffer_seq_query_ensures(compacted_bufferseq, left, k, ofs);
 
                     assert(left.extend(compact_slice) =~= self->buffers.slice(0, end as int));
                     assert(left.extend(compacted_bufferseq) =~= result->buffers.slice(0, start as int + 1));
                 
                     let right = self->buffers.slice(end as int, self->buffers.len() as int);
-                    BufferSeq::extend_buffer_seq_lemma(right, self->buffers.slice(0, end as int), k, ofs);
-                    BufferSeq::extend_buffer_seq_lemma(right, result->buffers.slice(0, start as int + 1), k, ofs);
+                    BufferSeq::extend_buffer_seq_query_ensures(right, self->buffers.slice(0, end as int), k, ofs);
+                    BufferSeq::extend_buffer_seq_query_ensures(right, result->buffers.slice(0, start as int + 1), k, ofs);
 
                     assert(self->buffers.slice(0, end as int).extend(right) =~= self->buffers);
                     assert(result->buffers.slice(0, start as int + 1).extend(right) =~= result->buffers);
                 } else  {
                     let right = self->buffers.slice(end as int, self->buffers.len() as int);
-                    BufferSeq::extend_buffer_seq_lemma(right, compacted_bufferseq, k, 0);
-                    BufferSeq::extend_buffer_seq_lemma(right, compact_slice, k, slice_ofs);
+                    BufferSeq::extend_buffer_seq_query_ensures(right, compacted_bufferseq, k, 0);
+                    BufferSeq::extend_buffer_seq_query_ensures(right, compact_slice, k, slice_ofs);
                     BufferSeq::common_buffer_seqs(compact_slice.extend(right), self->buffers, slice_ofs, start as int, k);
                     BufferSeq::common_buffer_seqs(compacted_bufferseq.extend(right), result->buffers, 0, start as int, k);
                 }

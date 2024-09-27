@@ -237,7 +237,7 @@ impl BufferSeq {
         }
     }
 
-    pub proof fn extend_buffer_seq_lemma(top: BufferSeq, bottom: BufferSeq, key: Key, start: int)
+    pub proof fn extend_buffer_seq_query_ensures(top: BufferSeq, bottom: BufferSeq, key: Key, start: int)
         requires 0 <= start <= bottom.len()
         ensures bottom.extend(top).query_from(key, start) == bottom.query_from(key, start).merge(top.query(key)) 
         decreases bottom.len()-start
@@ -246,7 +246,7 @@ impl BufferSeq {
             Self::common_buffer_seqs(bottom.extend(top), top, start, 0-start, key);
         } else {
             assert(bottom.extend(top).buffers[start] == bottom.buffers[start]);
-            Self::extend_buffer_seq_lemma(top, bottom, key, start+1);
+            Self::extend_buffer_seq_query_ensures(top, bottom, key, start+1);
         }
     }
 
