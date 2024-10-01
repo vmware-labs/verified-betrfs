@@ -1254,28 +1254,8 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
         ensures 
             post.inv()
     {
-        let ranking = pre.linked.the_ranking();
         let pushed = pre.linked.push_memtable(pre.memtable, new_addrs);
-        let pushed_ranking = pre.linked.push_memtable_new_ranking(pre.memtable, new_addrs, ranking);
-        
-        let buffer_addrs = pre.linked.reachable_buffer_addrs();
-        let post_buffer_addrs = pushed.reachable_buffer_addrs();
-
-        assert forall |addr| post_buffer_addrs.contains(addr) && addr != new_addrs.addr2
-        implies #[trigger] buffer_addrs.contains(addr)
-        by {
-            if pushed.root().buffers.contains(addr) {
-                assert(pre.linked.has_root());
-                pre.linked.reachable_betree_addrs_using_ranking_closed(ranking);
-                assert(pre.linked.reachable_buffer(pre.linked.root.unwrap(), addr));
-                assert(buffer_addrs.contains(addr));
-            } else {
-                let tree_addr = choose |tree_addr| pushed.reachable_buffer(tree_addr, addr);
-                let i = pushed.non_root_buffers_belongs_to_child(tree_addr, addr);
-                pre.linked.same_child_same_reachable_buffers(pushed, i, i, pushed_ranking);
-            }
-        }
-        assert(pushed.no_dangling_buffer_ptr());
+        pre.linked.push_memtable_ensures(pre.memtable, new_addrs);
         pushed.same_tight_tree_implies_same_reachable_addrs(new_linked);
     }
 
@@ -1289,7 +1269,7 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
     {
         let old_ranking = pre.linked.finite_ranking();
         pre.linked.finite_ranking_ensures();
-        
+
         let new_rank = 
             if pre.linked.has_root() { old_ranking[pre.linked.root.unwrap()]+1 } 
             else if old_ranking =~= map![] { 1 }
@@ -1307,7 +1287,7 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
         }
 
         assert forall |addr| post.linked.reachable_buffer_addrs().contains(addr)
-        implies #[trigger]  pre.linked.reachable_buffer_addrs().contains(addr)
+        implies #[trigger] pre.linked.reachable_buffer_addrs().contains(addr)
         by {
             let tree_addr = choose |tree_addr| post.linked.reachable_buffer(tree_addr, addr);
             let i = post.linked.non_root_buffers_belongs_to_child(tree_addr, addr);
@@ -1838,6 +1818,65 @@ impl<T> LinkedBetree<T> {
         broadcast use LinkedBetree::reachable_betree_addrs_ignore_ranking;
         child.agreeable_disks_same_reachable_betree_addrs(other_child, ranking);
         child.same_reachable_betree_addrs_implies_same_buffer_addrs(other_child);
+    }
+
+    pub proof fn push_memtable_ensures(self, memtable: Memtable<T>, new_addrs: TwoAddrs)
+        requires 
+            self.acyclic(),
+            self.valid_buffer_dv(),
+            self.is_fresh(new_addrs.repr()),
+            new_addrs.no_duplicates(),
+        ensures 
+            self.push_memtable(memtable, new_addrs).acyclic(),
+            self.push_memtable(memtable, new_addrs).valid_buffer_dv(),
+            self.push_memtable(memtable, new_addrs).reachable_buffer_addrs() 
+                =~= self.reachable_buffer_addrs() + set![new_addrs.addr2],
+    {
+        let ranking = self.the_ranking();
+        let pushed = self.push_memtable(memtable, new_addrs);
+        let pushed_ranking = self.push_memtable_new_ranking(memtable, new_addrs, ranking);
+
+        let buffer_addrs = self.reachable_buffer_addrs();
+        let post_buffer_addrs = pushed.reachable_buffer_addrs();
+
+        broadcast use LinkedBetree::reachable_betree_addrs_ignore_ranking;
+        self.reachable_betree_addrs_using_ranking_closed(ranking);
+        pushed.reachable_betree_addrs_using_ranking_closed(pushed_ranking);
+
+        assert(post_buffer_addrs.contains(new_addrs.addr2)) by {
+            assert(pushed.root().buffers[pushed.root().buffers.len() - 1] == new_addrs.addr2);
+            assert(pushed.reachable_buffer(new_addrs.addr1, new_addrs.addr2));
+        }
+
+        assert forall |buffer| post_buffer_addrs.contains(buffer) && buffer != new_addrs.addr2 
+            <==> #[trigger] buffer_addrs.contains(buffer)
+        by {
+            if post_buffer_addrs.contains(buffer) && buffer != new_addrs.addr2 {
+                if pushed.root().buffers.contains(buffer) {
+                    assert(self.has_root());
+                    assert(self.reachable_buffer(self.root.unwrap(), buffer));
+                    assert(buffer_addrs.contains(buffer));
+                } else {
+                    let tree_addr = choose |tree_addr| pushed.reachable_buffer(tree_addr, buffer);
+                    let i = pushed.non_root_buffers_belongs_to_child(tree_addr, buffer);
+                    self.same_child_same_reachable_buffers(pushed, i, i, pushed_ranking);
+                }
+            }
+
+            if buffer_addrs.contains(buffer) {
+                assert(self.has_root());
+                if self.root().buffers.contains(buffer) {
+                    let i = choose |i| 0 <= i < self.root().buffers.len() && self.root().buffers[i] == buffer;
+                    assert(pushed.root().buffers[i] == buffer);
+                    assert(pushed.reachable_buffer(pushed.root.unwrap(), buffer));
+                } else {
+                    let tree_addr = choose |tree_addr| self.reachable_buffer(tree_addr, buffer);
+                    let i = self.non_root_buffers_belongs_to_child(tree_addr, buffer);
+                    self.same_child_same_reachable_buffers(pushed, i, i, pushed_ranking);
+                }
+            }
+        }
+        assert(self.no_dangling_buffer_ptr());
     }
 
     pub proof fn split_new_ranking(self, request: SplitRequest, new_addrs: SplitAddrs, ranking: Ranking) -> (new_ranking: Ranking)
