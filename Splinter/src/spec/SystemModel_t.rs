@@ -22,10 +22,15 @@ type DiskLabel = AsyncDisk::Label;
 pub enum ProgramLabel{
     AcceptRequest{req: Request},
     DeliverReply{reply: Reply},
-    Execute{req: Request, reply: Reply, disk_lbl: DiskLabel}, 
 
-    // program internal operating, may interact with disk
-    Internal{disk_lbl: DiskLabel},
+    // declare application linearization point
+    Execute{req: Request, reply: Reply}, 
+
+    // disk operation: loading/flushing/evicting cache pages
+    DiskIO{disk_lbl: DiskLabel},
+
+    // program internal operation, no disk or application i/o
+    Internal{},
 
     Crash,
     None,
@@ -34,7 +39,7 @@ pub enum ProgramLabel{
 // player 1 defines program model obligation
 
 pub trait ProgramModel {
-    
+
     spec fn init(&self, disk: DiskModel) -> bool;
 
     spec fn next(&self, post: &Self, lbl: ProgramLabel) -> bool;
@@ -133,4 +138,12 @@ pub trait RefinementObligation {
 //         true
 //     }
 // }
+
+// disk token label => 
+
+// 
+// 
+
+
+
 }
