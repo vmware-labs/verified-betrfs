@@ -282,15 +282,57 @@ impl <
         self.eltf.marshallable(value),
         self.appendable(data, value),
     ensures
-        self.length(data) + 1 < usize::MAX,
-        self.length(data) + 1 < BdyType::max(),
         self.bdyf.appendable(data, self.append_offset(data, value))
     {
+
+        /*
+    // Have
+    open spec fn appendable(&self, data: Seq<u8>, value: EltFormat::DV) -> bool {
+        // True if we have room for one more bdy entry plus the new datum
+        BdyType::uniform_size() + self.eltf.spec_size(value) as nat
+            <= self.free_space(data)
+        == self.elements_start(data) - self.size_of_table(self.length(data))
+    }
+        //want
+        &&& self.length(data) < self.spec_max_length() as nat
+        &&& self.eltf.spec_size(value) == self.eltf.uniform_size()
+
+        // dafny does this computation in a u64; why is it okay with overflow!?
+        &&& self.length(data) + 1 <= LenType::max()
+
+        spec_max_length is based on bdyf.total_size
+
+        SOT = LEN * BDYSZ + LENSZ
+        BDYSZ + VSZ <= ELST - SOT
+        ELST <= TOTSZ
+        MAXL = (TOTSZ - LENSZ) / BDYSZ
+
+        BDYSZ + VSZ <= TOTSZ - SOT
+        BDYSZ + VSZ <= TOTSZ - LEN * BDYSZ - LENSZ
+        if MAXL <= LEN {
+            BDYSZ + VSZ <= TOTSZ - MAXL * BDYSZ - LENSZ
+            BDYSZ + VSZ <= TOTSZ - (TOTSZ - LENSZ) * BDYSZ - LENSZ
+            BDYSZ + VSZ <= TOTSZ - BDYSZ * TOTSZ - BDYSZ * LENSZ - LENSZ
+            BDYSZ + VSZ <= (1 - BDYSZ) * TOTSZ + (- BDYSZ - 1) * LENSZ
+            BDYSZ <= (1 - BDYSZ) * TOTSZ + (- BDYSZ - 1) * LENSZ
+            BDYSZ <= (1 - BDYSZ) * TOTSZ - (BDYSZ + 1) * LENSZ
+            BDYSZ  + (BDYSZ + 1) * LENSZ <= (1 - BDYSZ) * TOTSZ
+            (BDYSZ + 2) * LENSZ <= (1 - BDYSZ) * TOTSZ
+        }
+        */
+
+
+        assume( false ); // LEFT OFF HERE
+        assert( self.size_of_table(self.length(data)) == self.bdyf.length(data) );
+        assert( self.elements_start(data) <= self.bdyf.total_size );
+
+        assert( self.bdyf.length(data) < self.bdyf.spec_max_length() as nat );
+
+        assume( self.bdyf.length(data) + 1 <= LenType::max() );
+
         // Discuss with Rob why these proofs weren't needed in Dafny?
         // TODO(jonh): urgent fix assumes
-        assume( self.length(data) + 1 < usize::MAX );
-        assume( self.length(data) + 1 < BdyType::max() );
-        assume( self.bdyf.appendable(data, self.append_offset(data, value)) );
+        assert( self.bdyf.appendable(data, self.append_offset(data, value)) );
     }
 
     // If the old data table is a prefix of the new, both data agree on all the elements in the old
@@ -699,6 +741,23 @@ impl <
         // Append the new boundary element
         ////////////////////////////////////////////////////////////
         let new_bdy = BdyType::from_usize(start);
+
+        // Suppose len(idata) == 19
+        // suppose LenType == u16
+        // suppose total_size == 25
+        // then length(idata) == 9
+        // then LenType::max() == 65536
+        // 19 < (25 - 2) / bdy2
+//         assume( self.bdyf.length(idata) + 1 <= LenType::max() );
+// 
+// //         assert( self.bdyf.size_of_length_field() == LenType::uniform_size() );
+// 
+//         assert( self.bdyf.length(idata) < 
+//             (self.bdyf.total_size - self.bdyf.size_of_length_field()) as usize / self.bdyf.eltf.uniform_size() );
+// 
+//         assert( self.bdyf.length(idata) < self.bdyf.spec_max_length() );
+//         assert( self.bdyf.appendable(idata, self.append_offset(idata, value.deepv())) );
+
         self.bdyf.exec_append(dslice, data, &new_bdy);
 
         // Much of the tricky bit of this proof is that there are data bytes that the bdyf append
