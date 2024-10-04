@@ -14,7 +14,7 @@ verus! {
 /// Keys in the real implementation are meant to be strings.
 // TODO: this is a placeholder for the Key type, eventually should be a byte string
 // struct.
-pub struct Key(pub nat);
+pub struct Key(pub u64);
 
 /// An Element is a Be-tree pivot value. It is an enum type because we need a special
 /// value `Max` for representing a value larger than the largest key. `Max` is only used
@@ -30,7 +30,7 @@ pub enum Element {
     /// Max is the max key in the domain. Only the last pivot of a Be-tree can
     /// be Max (in which case the last bucket has an unbounded upper bound).
     Max,
-    Elem { e: nat },  // TODO: place holder
+    Elem { e: u64 },  // TODO: place holder
 }
 
 /// Pre: elem is Element::Elem (and not `Max`).

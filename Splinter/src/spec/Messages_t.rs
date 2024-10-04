@@ -10,9 +10,9 @@ verus! {
 // TODO: These are placeholders
 // TODO: (tenzinhl) convert placeholder types to enum so that
 // typchecker doesn't allow them to be interchangeably assigned
-pub struct Value(pub int);
+pub struct Value(pub u64);
 
-pub struct Delta(pub int);
+pub struct Delta(pub u64);
 
 // TODO(jonh): Need to genericize the types of Key, Value; and then we'll need to axiomitify /
 // leave-unspecified a default value
