@@ -173,6 +173,7 @@ impl PersistentState {
 /// yet to be delivered to the client.
 #[verifier::ext_equal]
 pub struct EphemeralState {
+    // pub history: Set<ID>,   // auditor can only 
     /// The set of received but not yet executed requests.
     pub requests: Set<Request>,
     /// The set of executed but not yet delivered replies.
@@ -223,7 +224,11 @@ state_machine!{ AsyncMap {
     /// on the async map.
     transition!{ request(label: Label) {
         require let Label::RequestOp{ req } = label;
-        require !pre.ephemeral.requests.contains(req);
+
+        // req.id not in the set of requests or replies
+        // set of ids that have been involved in a request (history set)
+
+        require !pre.ephemeral.requests.contains(req); // TODO: remove
         update ephemeral = EphemeralState { requests: pre.ephemeral.requests.insert(req), ..pre.ephemeral };
     } }
 
