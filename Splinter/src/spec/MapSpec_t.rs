@@ -35,6 +35,7 @@ pub enum Output {
     QueryOutput { value: Value },
     PutOutput,
     NoopOutput,
+    // TODO: Error Output (e.g. disk full)
 }
 
 // TODO ugly workaround for init!{my_init()} being a predicate from outside
@@ -308,7 +309,7 @@ state_machine!{ CrashTolerantAsyncMap {
     pub enum Label { // Unrolled version of Dafny labels for CrashTolerantMod(MapSpecMod)
         OperateOp{ base_op: AsyncMap::Label },
         CrashOp,
-        SyncOp,
+        SyncOp, // TODO(refactor): ExecuteSyncOp
         ReqSyncOp{ sync_req_id: SyncReqId },
         ReplySyncOp{ sync_req_id: SyncReqId },
         Noop,

@@ -25,7 +25,7 @@ pub enum ProgramLabel{
     DeliverReply{reply: Reply},
 
     // declares the linearization point of each operation
-    Execute{req: Request, reply: Reply}, 
+    Execute{req: Request, reply: Reply},
 
     // captures program's interaction with the disk model,
     // e.g. loading/flushing/evicting cache pages
@@ -87,7 +87,7 @@ state_machine!{ SystemModel<T: ProgramModel> {
     // and restricts interactions between program, application clients, and the disk
     pub enum Label
     {
-        // program model async operate op
+        // program model async operate op 
         ProgramAsyncOp{ program_lbl: ProgramLabel },
         // program driven disk ops
         ProgramDiskOp{ disk_lbl: DiskLabel },
@@ -96,7 +96,7 @@ state_machine!{ SystemModel<T: ProgramModel> {
         // disk internal op
         DiskInternal,
         // models moment of persistence on disk, physical disk refines to it, no corresponding transition
-        SyncOp,
+        // SyncOp,
         // // application requesting a sync
         // ReqSyncOp{ sync_req_id: SyncReqId },
         // // application receiving sync done
@@ -166,20 +166,18 @@ state_machine!{ SystemModel<T: ProgramModel> {
     transition!{ reply_sync(lbl: Label, new_program: T) {
         require lbl is ProgramAsyncOp;
         require lbl->program_lbl is ReplySync;
-        // TODO: do we want the equivalent reply id constraint?
         require pre.program.next(&new_program, lbl->program_lbl);
         update program = new_program;
     }}
 
     transition!{ crash(lbl: Label, new_program: T, new_disk: DiskModel) {
         require lbl is Crash;
-
-        // TODO: do we want the equivalent reply id constraint?
         require pre.program.next(&new_program, ProgramLabel::Crash{});
         require DiskModel::next(pre.disk, new_disk, DiskLabel::Crash{});
 
         update program = new_program;
         update disk = new_disk;
+        update id_history = Set::empty();
     }}
 
     transition!{ noop(lbl: Label) {
@@ -206,6 +204,9 @@ pub trait RefinementObligation {
             (lbl is ProgramAsyncOp && lbl->program_lbl.is_app_label()) <==> ctam_lbl is OperateOp,
             (lbl is ProgramAsyncOp && lbl->program_lbl.is_app_label())
                 ==> lbl->program_lbl.to_async_map_label() == ctam_lbl->base_op
+            // TODO:
+            // (lbl is ProgramAsyncOp && lbl->program_lbl is ReqSync) <==> ctam_lbl is ,
+            // sync respo
     ;
 
     proof fn init_refines(&self)
@@ -226,12 +227,5 @@ pub trait RefinementObligation {
 //         true
 //     }
 // }
-
-// disk token label => 
-
-// 
-// 
-
-
 
 }

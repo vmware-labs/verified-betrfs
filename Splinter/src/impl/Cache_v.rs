@@ -8,33 +8,10 @@ use builtin_macros::*;
 use state_machines_macros::state_machine;
 use vstd::{map::*, seq::*, bytes::*};
 
+use crate::spec::AsyncDisk_t;
 use crate::spec::MapSpec_t::{ID};
 
 verus!{
-
-/// Address defined for spec code
-
-/// The `AU` type is the type for a unique allocation unit identifier (thus we use `nat`s).
-/// 
-/// An Allocation Unit (AU) is the minimum disk unit the "external" (i.e.: top-level) allocator
-/// allocates to data structures like the Betree and Journal. Allocation Units
-/// are made up of contiguous disk sectors. AUs are specified as part of the
-/// Splinter implementation. The goal of having large allocation blocks is to
-/// amortize allocation costs efficiently for large amounts of data.
-pub type AU = nat;
-
-/// A page index within an AU (disk pages, so for SSDs these are on the order of 4KB).
-pub type Page = nat;
-
-/// An Address specifies a specific disk address (i.e.: an address that identifies a disk sector (or whatever
-/// atomic addressing unit the disk in question uses)).
-/// It does this by combining an AU index with a page index within the AU.
-pub struct Address {
-    /// The Allocation Unit index this address resides within.
-    pub au: AU,
-    /// Page index within AU for this address. In the range [0,page_count).
-    pub page: Page,
-}
 
 /// Returns the number of a disk pages in an Allocation Unit. 
 /// Left as an uninterpreted function since it's implementation defined.
@@ -128,8 +105,7 @@ state_machine!{ AsyncDisk {
         require lbl is DiskOps;
 
         // disallow req & resp of the same request in an atomic step
-        // => enforced via the trusted API
-        // require lbl->requests.dom().disjoint(lbl->responses.dom());
+        require lbl->requests.dom().disjoint(lbl->responses.dom());
 
         // new requests can't overlap with pending requests
         require lbl->requests.dom().disjoint(pre.requests.dom());

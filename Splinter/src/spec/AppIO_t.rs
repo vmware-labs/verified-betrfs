@@ -125,6 +125,35 @@ impl<P: ProgramModel> TrustedAPI<P> {
         Tracked::assume_new()
 //         Tracked(Ghost(P::next(pre@@, ProgramLabel::DeliverReply{reply}, nd@).unwrap()))
     }
+
+// Define different IDiskRequest and IDiskReplies
+
+    #[verifier::external_body]
+    pub fn send_disk_requests(&self, pre: Tracked<Token<P>>, requests: Vec<DiskRequest>) -> (out: (Vec<ID>, Tracked<Token<P>>))
+    // requires
+    // DiskRequest must be WF
+    //     P::next(pre@@, post@, ProgramLabel::DeliverReply{reply}),
+    ensures
+        requests.len() == out.1.len(),
+        // TODO: spec fn for 2 vecs => map of ID to requests
+        // P::next(pre@@, out.1@, ProgramLabel::ProgramDiskOp{ disk_lbl: DiskLabel::DiskOps{}})
+    {
+        // TODO(implementer): send reply to client, update ID to client map
+        Tracked::assume_new()
+//         Tracked(Ghost(P::next(pre@@, ProgramLabel::DeliverReply{reply}, nd@).unwrap()))
+    }
+
+    #[verifier::external_body]
+    pub fn receive_disk_responses(&self, pre: Tracked<Token<P>>) -> (out: (Vec<(ID, DiskResponse)>, Tracked<Token<P>>))
+    // ensures
+        // TODO: spec fn for 2 vecs => map of ID to requests
+        // P::next(pre@@, out.1@, ProgramLabel::ProgramDiskOp{ disk_lbl: DiskLabel::DiskOps{}})
+    {
+        // TODO(implementer): send reply to client, update ID to client map
+        Tracked::assume_new()
+//         Tracked(Ghost(P::next(pre@@, ProgramLabel::DeliverReply{reply}, nd@).unwrap()))
+    }
+
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -176,6 +205,7 @@ impl Program {
         }
     }
 
+    // move to implementer _v file
     pub fn verified_main(&mut self, api: &TrustedAPI<ConcreteProgramModel>, Tracked(pm): Tracked<Token<ConcreteProgramModel>>) 
     requires
         pm@ == ConcreteProgramModel::init(),
@@ -192,7 +222,7 @@ impl Program {
             assert(self@ == pm@);
             
             // let ghost pre = self@;
-            let reply = self.compute_reply(req);
+            let reply = self.compute_reply(req); // req & resps
             // let ghost post = self@;
             // assert(ConcreteProgramModel::next(pre, post, Execute(req, reply)));
             proof { pm = api.execute(pm, Ghost(self@), &req, &reply); }
@@ -204,10 +234,6 @@ impl Program {
             let Tracked(reply_pm) = api.send_reply(reply, Tracked(pm), Ghost(self@));
             proof { pm = reply_pm; }
         }
-
-        // single threaded model:
-        // 1 program model being tracked the entire execution, handed to application
-        // at receive_request, returned to client upon a reply
     }
 }
 
