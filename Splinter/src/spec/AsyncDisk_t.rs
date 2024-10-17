@@ -52,34 +52,6 @@ impl Address {
     }
 }
 
-/// IAddress defined for executable code
-
-pub type IAU = u32;
-
-pub type IPage = u32;
-
-pub struct IAddress {
-    pub au: IAU,
-    pub page: IPage,
-}
-
-/// further restricted by actual disk size
-pub closed spec(checked) fn ipage_count() -> IPage;
-
-/// further restricted by actual disk size
-pub closed spec(checked) fn iau_count() -> IAU;
-
-/// axioms relating spec and impl page and au count
-#[verifier(external_body)]
-pub broadcast proof fn page_count_equals_ipage_count()
-    ensures page_count() == ipage_count()
-;
-
-#[verifier(external_body)]
-pub broadcast proof fn au_count_equals_iau_count()
-    ensures au_count() == iau_count()
-;
-
 /// models raw disk content
 pub type UnmarshalledPage = Seq<u8>;
 

@@ -4,12 +4,17 @@
 
 use builtin::*;
 use builtin_macros::*;
+use vstd::{map::*, seq::*};
 
 use crate::spec::KeyType_t::*;
 use crate::spec::MapSpec_t::*;
-use crate::spec::SystemModel_t::*;
 use crate::spec::Messages_t::*;
 
+use crate::spec::AsyncDisk_t::*;
+use crate::spec::ImplDisk_t::*;
+use crate::spec::SystemModel_t::*;
+
+use vstd::string::View;
 
 verus!{
 
@@ -126,36 +131,69 @@ impl<P: ProgramModel> TrustedAPI<P> {
 //         Tracked(Ghost(P::next(pre@@, ProgramLabel::DeliverReply{reply}, nd@).unwrap()))
     }
 
-// Define different IDiskRequest and IDiskReplies
-
     #[verifier::external_body]
-    pub fn send_disk_requests(&self, pre: Tracked<Token<P>>, requests: Vec<DiskRequest>) -> (out: (Vec<ID>, Tracked<Token<P>>))
-    // requires
-    // DiskRequest must be WF
-    //     P::next(pre@@, post@, ProgramLabel::DeliverReply{reply}),
+    pub fn send_disk_requests(&self, pre: Tracked<Token<P>>, requests: Vec<IDiskRequest>) 
+        -> (out: (Vec<ID>, Tracked<Token<P>>))
+    requires
+        forall |req| #[trigger] requests@.contains(req) ==> {
+            &&& req is ReadReq ==> req->from.wf()
+            &&& req is WriteReq ==> req->to.wf() 
+        } 
     ensures
-        requests.len() == out.1.len(),
-        // TODO: spec fn for 2 vecs => map of ID to requests
-        // P::next(pre@@, out.1@, ProgramLabel::ProgramDiskOp{ disk_lbl: DiskLabel::DiskOps{}})
+        requests.len() == out.0.len(),
+        ({
+            let disk_lbl = AsyncDisk::Label::DiskOps{
+                requests: to_disk_reqs(out.0@, requests@),
+                responses: Map::empty(),
+            };
+            &&& P::next(pre@@, out.1@@, ProgramLabel::DiskIO{disk_lbl})
+        })
     {
-        // TODO(implementer): send reply to client, update ID to client map
-        Tracked::assume_new()
-//         Tracked(Ghost(P::next(pre@@, ProgramLabel::DeliverReply{reply}, nd@).unwrap()))
+        // TODO(implementer): assign ID, track client to ID
+        let vec = vec![0; requests.len()]; // TODO: get rid of the place holder
+        (vec, Tracked::assume_new())   
     }
 
     #[verifier::external_body]
-    pub fn receive_disk_responses(&self, pre: Tracked<Token<P>>) -> (out: (Vec<(ID, DiskResponse)>, Tracked<Token<P>>))
-    // ensures
-        // TODO: spec fn for 2 vecs => map of ID to requests
-        // P::next(pre@@, out.1@, ProgramLabel::ProgramDiskOp{ disk_lbl: DiskLabel::DiskOps{}})
+    pub fn receive_disk_responses(&self, pre: Tracked<Token<P>>) 
+        ->  (out: (Vec<(ID, IDiskResponse)>, Tracked<Token<P>>))
+    ensures
+        ({
+            let disk_lbl = AsyncDisk::Label::DiskOps{
+                requests: Map::empty(),
+                responses: to_disk_resps(out.0@),
+            };
+            &&& P::next(pre@@, out.1@@, ProgramLabel::DiskIO{disk_lbl})
+        })
     {
-        // TODO(implementer): send reply to client, update ID to client map
-        Tracked::assume_new()
-//         Tracked(Ghost(P::next(pre@@, ProgramLabel::DeliverReply{reply}, nd@).unwrap()))
+        let vec = vec![(0, IDiskResponse::WriteResp{to: IAddress{au: 0, page: 0}})]; // TODO: get rid of the place holder
+        (vec, Tracked::assume_new())   
     }
-
 }
 
+pub open spec(checked) fn to_disk_reqs(ids: Seq<ID>, reqs: Seq<IDiskRequest>) -> Map<ID, DiskRequest>
+    recommends ids.len() == reqs.len()
+    decreases ids.len()
+{
+    if ids.len() > 0 {
+        let sub_ids = ids.subrange(1, ids.len() as int);
+        let sub_reqs = reqs.subrange(1, reqs.len() as int);
+        to_disk_reqs(sub_ids, sub_reqs).insert(ids[0], reqs[0]@)
+    } else {
+        Map::empty()
+    }
+}
+
+pub open spec(checked) fn to_disk_resps(id_resps: Seq<(ID, IDiskResponse)>) -> Map<ID, DiskResponse>
+    decreases id_resps.len()
+{
+    if id_resps.len() > 0 {
+        let sub_id_resps = id_resps.subrange(1, id_resps.len() as int);
+        to_disk_resps(sub_id_resps).insert(id_resps[0].0, id_resps[0].1@)
+    } else {
+        Map::empty()
+    }
+}
 //////////////////////////////////////////////////////////////////////////////
 
 // use a state machine macro here?

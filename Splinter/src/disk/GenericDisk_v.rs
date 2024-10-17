@@ -9,6 +9,7 @@ use builtin_macros::*;
 use vstd::prelude::*;
 
 use crate::spec::AsyncDisk_t;
+use crate::spec::ImplDisk_t;
 
 verus!{
 
@@ -17,9 +18,9 @@ pub type AU = AsyncDisk_t::AU;
 pub type Page = AsyncDisk_t::Page;
 pub type Address = AsyncDisk_t::Address;
 
-pub type IAU = AsyncDisk_t::IAU;
-pub type IPage = AsyncDisk_t::IPage;
-pub type IAddress = AsyncDisk_t::IAddress;
+pub type IAU = ImplDisk_t::IAU;
+pub type IPage = ImplDisk_t::IPage;
+pub type IAddress = ImplDisk_t::IAddress;
 
 pub open spec(checked) fn page_count() -> Page
 {

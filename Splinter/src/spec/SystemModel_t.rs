@@ -95,15 +95,13 @@ state_machine!{ SystemModel<T: ProgramModel> {
         ProgramInternal,
         // disk internal op
         DiskInternal,
-        // models moment of persistence on disk, physical disk refines to it, no corresponding transition
-        // SyncOp,
-        // // application requesting a sync
-        // ReqSyncOp{ sync_req_id: SyncReqId },
-        // // application receiving sync done
-        // ReplySyncOp{ sync_req_id: SyncReqId },
         // full system crashes
         Crash,
         Noop,
+
+        // NOTE: 
+        // Sync isn't included as a system model label because 
+        // the actual sync point is driven by the program model
     }
 
     transition!{ program_async(lbl: Label, new_program: T) {
@@ -185,6 +183,23 @@ state_machine!{ SystemModel<T: ProgramModel> {
     }}
 }}
 
+impl SystemModel::Label {
+    pub open spec fn label_correspondance(self, ctam_lbl: CrashTolerantAsyncMap::Label) -> bool
+    {
+        &&& ctam_lbl is OperateOp <==> (self is ProgramAsyncOp && self->program_lbl.is_app_label())
+        &&& ctam_lbl is OperateOp ==> 
+            ctam_lbl->base_op == self->program_lbl.to_async_map_label()
+
+        &&& ctam_lbl is ReqSyncOp <==> (self is ProgramAsyncOp && self->program_lbl is ReqSync)
+        &&& ctam_lbl is ReqSyncOp ==> 
+            ctam_lbl.arrow_ReqSyncOp_sync_req_id() == self->program_lbl.arrow_ReqSync_sync_req_id()
+
+        &&& ctam_lbl is ReplySyncOp <==> (self is ProgramAsyncOp && self->program_lbl is ReplySync)
+        &&& ctam_lbl is ReplySyncOp ==> 
+            ctam_lbl.arrow_ReplySyncOp_sync_req_id() == self->program_lbl.arrow_ReplySync_sync_req_id()
+    }
+}
+
 pub trait RefinementObligation {
     /// state machine refinement traits
 
@@ -196,17 +211,12 @@ pub trait RefinementObligation {
 
     spec fn i_lbl(lbl: SystemModel::Label) -> (ctam_lbl: CrashTolerantAsyncMap::Label);
 
-    // restrict i_lbl result for application facing labels
+    // restrict i_lbl result to ensure app label correspondence 
     proof fn i_lbl_valid(lbl: SystemModel::Label, ctam_lbl: CrashTolerantAsyncMap::Label)
-        requires 
+        requires
             ctam_lbl == Self::i_lbl(lbl)            
-        ensures 
-            (lbl is ProgramAsyncOp && lbl->program_lbl.is_app_label()) <==> ctam_lbl is OperateOp,
-            (lbl is ProgramAsyncOp && lbl->program_lbl.is_app_label())
-                ==> lbl->program_lbl.to_async_map_label() == ctam_lbl->base_op
-            // TODO:
-            // (lbl is ProgramAsyncOp && lbl->program_lbl is ReqSync) <==> ctam_lbl is ,
-            // sync respo
+        ensures
+            lbl.label_correspondance(ctam_lbl)
     ;
 
     proof fn init_refines(&self)
@@ -219,13 +229,4 @@ pub trait RefinementObligation {
         ensures CrashTolerantAsyncMap::State::next(self.i(), post.i(), Self::i_lbl(lbl))
     ;
 }
-
-// Auditor defiend obligation for p
-// impl<T: ProgramModel> RefinementObligation for SystemModel::State<T> {
-//     open spec fn init(&self) -> bool
-//     {
-//         true
-//     }
-// }
-
 }

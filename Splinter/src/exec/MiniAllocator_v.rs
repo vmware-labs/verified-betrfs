@@ -11,7 +11,7 @@ use crate::allocation_layer::MiniAllocator_v;
 
 verus! {
 
-broadcast use crate::spec::AsyncDisk_t::page_count_equals_ipage_count;
+broadcast use crate::spec::ImplDisk_t::page_count_equals_ipage_count;
 
 pub struct PageAllocator {
     pub observed: IPage, // pages from [0, observed) are reachable from superblock Repr 
