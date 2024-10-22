@@ -53,20 +53,20 @@ impl Address {
 }
 
 /// models raw disk content
-pub type UnmarshalledPage = Seq<u8>;
+pub type RawPage = Seq<u8>;
 
 /// models the actual disk
 pub struct Disk{
-    pub content: Map<Address, UnmarshalledPage>,
+    pub content: Map<Address, RawPage>,
 }
 
 pub enum DiskRequest {
     ReadReq{from: Address},
-    WriteReq{to: Address, data: UnmarshalledPage},
+    WriteReq{to: Address, data: RawPage},
 }
 
 pub enum DiskResponse {
-    ReadResp{from: Address, data: UnmarshalledPage},
+    ReadResp{from: Address, data: RawPage},
     WriteResp{to: Address},
 }
 
@@ -133,7 +133,7 @@ state_machine!{ AsyncDisk {
         update responses = pre.responses.insert(id, read_resp);
     }}
 
-    transition!{ process_read_failure(lbl: Label, id: ID, fake_content: UnmarshalledPage){
+    transition!{ process_read_failure(lbl: Label, id: ID, fake_content: RawPage){
         require lbl is Internal;
 
         // read processed must have been requested
@@ -197,7 +197,7 @@ state_machine!{ AsyncDisk {
     fn process_read_inductive(pre: Self, post: Self, lbl: Label, id: ID) { }
    
     #[inductive(process_read_failure)]
-    fn process_read_failure_inductive(pre: Self, post: Self, lbl: Label, id: ID, fake_content: UnmarshalledPage) { }
+    fn process_read_failure_inductive(pre: Self, post: Self, lbl: Label, id: ID, fake_content: RawPage) { }
    
     #[inductive(process_write)]
     fn process_write_inductive(pre: Self, post: Self, lbl: Label, id: ID) { }

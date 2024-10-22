@@ -53,11 +53,11 @@ pub broadcast proof fn au_count_equals_iau_count()
 
 pub enum IDiskRequest {
     ReadReq{from: IAddress},
-    WriteReq{to: IAddress, data: UnmarshalledPage},
+    WriteReq{to: IAddress, data: RawPage},
 }
 
 pub enum IDiskResponse {
-    ReadResp{from: IAddress, data: UnmarshalledPage},
+    ReadResp{from: IAddress, data: RawPage},
     WriteResp{to: IAddress},
 }
 
