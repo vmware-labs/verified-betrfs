@@ -175,10 +175,20 @@ impl SimpleBank {
             self.wf(),
             self.valid_id(from_id),
             self.valid_id(to_id),
-            from_id != to_id
     {
-        let (from_acc, from_handle) = self.accounts[from_id].acquire_write();
-        let (to_acc, to_handle) = self.accounts[to_id].acquire_write();
+        if from_id == to_id {
+            return;
+        }
+
+        let (
+            (from_acc, from_handle),
+            (to_acc, to_handle)
+        ) =  if from_id < to_id {
+            (self.accounts[from_id].acquire_write(), self.accounts[to_id].acquire_write())
+        } else {
+            let min = self.accounts[to_id].acquire_write();
+            (self.accounts[from_id].acquire_write(), min)
+        };
 
         if from_acc.amt >= amt && to_acc.amt <= u32::MAX - amt {
             let AccountInfo{amt: from_amt, acc_token: Tracked(from_token)} = from_acc;
@@ -195,7 +205,6 @@ impl SimpleBank {
 
             let new_from_acc = AccountInfo{amt: (from_amt - amt) as u32, acc_token: Tracked(new_from_token) };
             let new_to_acc = AccountInfo{amt: (to_amt + amt) as u32, acc_token: Tracked(new_to_token) };
-
             from_handle.release_write(new_from_acc);
             to_handle.release_write(new_to_acc);
         } else {
@@ -286,7 +295,7 @@ fn main() {
     handles.push(spawn(
         move || {
             let mut i:usize = 0;
-            while i < total_accs // makes 100 transfer
+            while i < total_accs
             {
                 let from = i;
                 let to = total_accs - i - 1;
@@ -299,7 +308,7 @@ fn main() {
     handles.push(spawn(
         move || {
             let mut i:usize = 0;
-            while i < total_accs // makes 100 transfer
+            while i < total_accs
             {
                 let from = i;
                 let to = total_accs - i - 1;
@@ -312,7 +321,7 @@ fn main() {
     handles.push(spawn(
         move || {
             let mut i:usize = 0;
-            while i < 100 // makes 100 transfer
+            while i < 100 
             {
                 let from = (i % total_accs) as usize;
                 let to = (i+12) % total_accs;
@@ -322,18 +331,18 @@ fn main() {
         },
     ));
 
-    // handles.push(spawn(
-    //     move || {
-    //         let mut i:usize = 99;
-    //         while i > 0 // makes 100 transfer
-    //         {
-    //             let from =(i % total_accs) as usize;
-    //             let to = total_accs-i;
-    //             (*ptr_c).maybe_transfer(from, to, 10);
-    //             i = i - 1;
-    //         }
-    //     },
-    // ));
+    handles.push(spawn(
+        move || {
+            let mut i:usize = 99;
+            while i > 0
+            {
+                let from =(i % total_accs) as usize;
+                let to = total_accs-i;
+                (*ptr_c).maybe_transfer(from, to, 10);
+                i = i - 1;
+            }
+        },
+    ));
 
     for handle in handles.into_iter() {
         match handle.join() {
