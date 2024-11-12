@@ -4,6 +4,7 @@ use builtin::*;
 use builtin_macros::*;
 
 use vstd::prelude::*;
+use vstd::seq_lib::*;
 // use vstd::bytes::*;
 // use vstd::slice::*;
 use crate::marshalling::Slice_v::*;
@@ -397,7 +398,7 @@ impl <
         self.bdyf.length_ensures(data);
         self.tableable_ensures(data);       // grumble grumble TODO broadcast
 
-        Self::subrange_of_matching_take(newdata, data, 0, self.size_of_length_field() as int, self.size_of_table(self.length(data)));
+        subrange_of_matching_take(newdata, data, 0, self.size_of_length_field() as int, self.size_of_table(self.length(data)));
 
         let len = self.length(newdata);
 
@@ -419,29 +420,11 @@ impl <
 
             let ns = self.bdyf.size_of_length_field() + i * self.bdyf.eltf.uniform_size();
             let ne = self.bdyf.size_of_length_field() + i * self.bdyf.eltf.uniform_size() + self.bdyf.eltf.uniform_size();
-            Self::subrange_of_matching_take(newdata, data, ns, ne, self.size_of_table(self.length(data)));
+            subrange_of_matching_take(newdata, data, ns, ne, self.size_of_table(self.length(data)));
         }
 
         // trigger extn equality from ensures (verus issue #1257)
         assert( self.table(newdata) == self.table(data) );
-    }
-
-    // placeholder until verus#1276 is merged
-    pub proof fn subrange_of_matching_take<T>(a: Seq<T>, b: Seq<T>, s: int, e: int, l: int)
-    requires
-        a.take(l) == b.take(l),
-        l <= a.len(),
-        l <= b.len(),
-        0 <= s <= e <= l,
-    ensures
-        a.subrange(s, e) == b.subrange(s, e),
-    {
-        assert forall |i| 0 <= i < e - s implies a.subrange(s, e)[i] == b.subrange(s, e)[i] by {
-            assert( a.subrange(s, e)[i] == a.take(l)[i + s] );
-    //             assert( b.subrange(s, e)[i] == b.take(l)[i + s] );   // either trigger will do
-        }
-        // trigger extn equality (verus issue #1257)
-        assert( a.subrange(s, e) == b.subrange(s, e) );
     }
 }
 
@@ -725,7 +708,7 @@ impl <
         proof {
             // we didn't break the table
             assert( middle_data.take(start as int) == idata.take(start as int) );   // verus #1257
-            Self::subrange_of_matching_take(middle_data, idata, 0, self.size_of_table(self.length(idata)) as int, start as int);
+            subrange_of_matching_take(middle_data, idata, 0, self.size_of_table(self.length(idata)) as int, start as int);
             self.table_identity(idata, middle_data);
 
             // we didn't break any of the old elements
