@@ -30,7 +30,7 @@ pub struct Reply {
 }
 
 state_machine!{ BankSpec {
-    fields { 
+    fields {
         pub accounts: Map<nat, nat>,
         pub requests: Set<Request>,
         pub replies: Set<Reply>,
