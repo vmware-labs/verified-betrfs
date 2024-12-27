@@ -1,3 +1,5 @@
+// Copyright 2018-2024 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, University of Washington
+// SPDX-License-Identifier: BSD-2-Clause
 #![verifier::loop_isolation(false)]
 #![allow(non_snake_case)]   // we should probably fix up the module names to be rust-snakey
 #![allow(unused_imports)]
