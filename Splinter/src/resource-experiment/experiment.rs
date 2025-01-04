@@ -25,6 +25,9 @@ mod cache;
 //   those in a tracked context.
 // - Disk has implementations, which is dumb. What's the proof equivalent of
 //   arbitrary!() ?
+//
+// Generic CallBack trait experiment stalled out because I needed to pass
+// executable parameters.
 
 verus!{
 

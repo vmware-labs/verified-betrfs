@@ -25,7 +25,7 @@ verus!{
 
 //////////////////////////////////////////////////////////////////////////////
 
-struct Disk {
+pub struct Disk {
     block_count: usize,
 }
 
@@ -85,7 +85,7 @@ trait DiskWriteCallback: Sized {
 }
 
 impl Disk {
-    spec fn valid_lba(self, lba: usize) -> bool
+    pub open spec fn valid_lba(self, lba: usize) -> bool
     {
         lba < self.block_count
     }
@@ -94,6 +94,20 @@ impl Disk {
     {
         arbitrary()
     }
+
+    pub fn new(block_count: usize) -> (out: (Self, Tracked<Map<usize, FractionalResource<Seq<u8>, 2>>>))
+    {
+        let tracked rsrcs = Map::new(
+            |lba: usize| lba < block_count,
+            |lba: usize| {
+                let tracked(my_part, caller_part) = FractionalResource::new(Seq::empty()).split(1);
+                // discard my_part because this entire module is an axiom
+                caller_part
+            }
+        );
+        (Self{block_count}, Tracked(rsrcs))
+    }
+            
 
     fn read<CB: DiskReadCallback>(&self, lba: usize, cb: Tracked<CB>)
         -> (out: (Vec<u8>, Tracked<CB::CBResult>))
