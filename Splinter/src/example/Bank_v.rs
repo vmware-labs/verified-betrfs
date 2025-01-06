@@ -5,7 +5,7 @@ use std::sync::Arc;
 use vstd::{prelude::*, map::*, multiset::*};
 use vstd::pervasive::print_u64;
 use state_machines_macros::tokenized_state_machine;
-use crate::spec::BankSpec_t::{Request, Reply, Input, Output, ReqID};
+use crate::BankSpec_t::{Request, Reply, Input, Output, ReqID};
 
 verus! {
 
@@ -31,9 +31,6 @@ tokenized_state_machine!{Bank{
 
         #[sharding(multiset)]
         pub replies: Multiset<Reply>,
-
-        #[sharding(multiset)]
-        pub id_history: Multiset<ReqID>,
     }
 
     pub enum Label{
@@ -48,13 +45,11 @@ tokenized_state_machine!{Bank{
         init account_map = Map::new(|acc: AccID| acc < total_accounts, |acc| initial_amount);
         init requests = Multiset::empty();
         init replies = Multiset::empty();
-        init id_history = Multiset::empty();
     }}
 
     transition!{ request(lbl: Label) {
         require let Label::RequestOp{ req } = lbl;
         add requests += { req };
-        add id_history += { req.id };
     }}
 
     transition!{ transfer(lbl: Label) {
@@ -110,11 +105,6 @@ tokenized_state_machine!{Bank{
         forall |acc: AccID| acc < self.total_accounts ==> self.account_map.contains_key(acc)
     }
 
-    // #[invariant]
-    // pub open spec fn preserves_total_amt(&self) -> bool {
-    //     self.range_sum(0, self.total_accounts) == self.total_amount
-    // }
-
     #[inductive(initialize)]
     fn initialize_inductive(post: Self, total_accounts: nat, initial_amount: nat) { 
     }
@@ -135,70 +125,4 @@ tokenized_state_machine!{Bank{
     fn reply_inductive(pre: Self, post: Self, lbl: Label) { 
     }
 }}
-
-// TODO: Trusted API should not in its own _t file
-
-// external body to prevent unprotected construction
-#[verifier::external_body]
-pub struct TrustedAPI{
-    id: AtomicU64
 }
-
-impl TrustedAPI{
-    #[verifier::external_body]
-    pub closed spec fn instance(&self) -> Bank::Instance;
-
-    #[verifier::external_body]
-    pub fn new(instance: Ghost<Bank::Instance>) -> (out: Self)
-        ensures
-            out.instance() == instance@
-    {
-        TrustedAPI{id: AtomicU64::new(0)}
-    }
-
-    // NOTE: this is a tightly coupled API, we cannot ensure that the result is 
-    // comes from the tokenized state machine instance transition due to it being in proof mode
-    // we want (out.1, out.2) == self.instance().request(Bank::Label::RequestOp{req})
-    // but this ensure is rolling out the result of the ensure
-    #[verifier::external_body]
-    pub fn receive_request(&self, print: bool)
-        -> (out: (Request, Tracked<Bank::requests>, Tracked<Bank::id_history>))
-    ensures
-        out.1@@.instance == self.instance(),
-        out.1@@.key == out.0,
-        out.1@@.count == 1,
-        out.2@@.instance == self.instance(),
-        out.2@@.key == out.0.id,
-        out.2@@.count == 1,
-    {
-        let id = self.id.fetch_add(1, Ordering::SeqCst);
-        let amt = (id % 20) as u32;
-
-        let input = if id % 3 == 0 {
-            Input { from: id as usize, to: (id + 1) as usize, amt}
-        } else {
-            Input { from: (id + 1) as usize, to: id as usize, amt}
-        };
-
-        if print {
-            println!("request {}: transfer ${} from {} to {}", 
-            id, input.amt, input.from, input.to,);
-        }
-        (Request {input, id}, Tracked::assume_new(), Tracked::assume_new())
-    }
-
-    // NOTE: corresponds to a tokenized state machine reply step
-    // consumes the reply shard
-    #[verifier::external_body]
-    pub fn send_reply(&self, reply: Reply,  reply_shard: Tracked<Bank::replies>, print: bool)
-        requires 
-            reply_shard@@.instance == self.instance(),
-            reply_shard@@.key == reply
-    {
-        if print {
-            let result = if reply.output.succeeded { "succeeded" } else { "failed" };
-            println!("reply {}: {}", reply.id, result);
-        }
-    }
-}
-} 

@@ -1,7 +1,5 @@
 // Copyright 2018-2024 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
-pub mod spec;
-pub mod exec;
 
 use std::sync::Arc;
 use std::thread::*;
@@ -9,8 +7,10 @@ use std::thread::*;
 use builtin::*;
 use builtin_macros::*;
 use vstd::{map::*, seq::*, rwlock::*, slice::*};
-use crate::exec::Bank_v::*;
-use crate::spec::BankSpec_t::{Request, Reply, Input, Output, ReqID};
+use crate::Bank_v::*;
+use crate::ClientAPI_t::*;
+use crate::BankSpec_t::{Request, Reply, Input, Output, ReqID};
+use crate::BankContract_t::{*};
 
 verus!{
 
@@ -18,12 +18,12 @@ struct AccountInfo {
     pub amt: u32, // physical value
     pub acc_token: Tracked<Bank::account_map>, // permission tokens, compiled away
 }
-    
+
 struct AccountInv {
     pub key: usize,
     pub instance: Bank::Instance,
 }
-    
+
 impl RwLockPredicate<AccountInfo> for AccountInv {
     open spec fn inv(self, info: AccountInfo) -> bool {
         &&& info.amt == info.acc_token@@.value  // physical value matches the tracked ghost value
@@ -32,13 +32,16 @@ impl RwLockPredicate<AccountInfo> for AccountInv {
     }
 }
 
-struct SimpleBank {
-    pub accounts: Vec<RwLock::<AccountInfo, AccountInv>>, // AccID implied by the index
-    pub instance: Tracked<Bank::Instance>,
+pub struct SimpleBank {
+    accounts: Vec<RwLock::<AccountInfo, AccountInv>>, // AccID implied by the index
+    instance: Tracked<Bank::Instance>,
 }
-    
-impl SimpleBank {
-    pub closed spec fn wf(self) -> bool
+
+// trait implementation
+impl BankTrait for SimpleBank {
+    type Proof = Bank::State;
+
+    closed spec fn wf(&self) -> bool
     {
         forall |acc| 0 <= acc < self.accounts.len()
         ==> {
@@ -48,12 +51,32 @@ impl SimpleBank {
         }
     }
 
+    // executable struct requirements
+    // NOTE: this must return the instance of the bank, not enforced yet
+    closed spec fn instance(&self) -> Bank::Instance
+    { self.instance@ }
+
+    fn new() -> Self
+    {
+        Self::_new(1000, 15)
+    }
+
+    fn bank_main(self, api: TrustedAPI)
+    {
+        let (req, req_shard) = api.receive_request(true);
+        let (reply, reply_shard) = self.maybe_transfer(req, req_shard);
+        api.send_reply(reply, reply_shard, true);
+        unverified_concurrent_tests(self, api);
+    }
+}
+
+impl SimpleBank {
     pub closed spec fn valid_id(self, id: usize) -> bool
     {
         id < self.accounts.len()
     }
 
-    pub fn new(total_accounts: usize, initial_amount: u32) -> (out: Self)
+    pub fn _new(total_accounts: usize, initial_amount: u32) -> (out: Self)
         ensures 
             out.wf(),
             forall |acc: usize| acc < total_accounts ==> out.valid_id(acc)
@@ -63,7 +86,6 @@ impl SimpleBank {
             Tracked(account_map),   // perm map
             Tracked(requests),      // request perm map (multiset)
             Tracked(replies),       // reply perm map (multiset)
-            Tracked(id_history),    // tracked id history
         ) = Bank::Instance::initialize(total_accounts as nat, initial_amount as nat);
 
         let mut accounts = Vec::<RwLock<AccountInfo, AccountInv>>::new();
@@ -104,11 +126,11 @@ impl SimpleBank {
         -> (out: (Reply, Tracked<Bank::replies>))
         requires 
             self.wf(),
-            req_shard@@.instance == self.instance@,
+            req_shard@@.instance == self.instance(),
             req_shard@@.key == req,
             req_shard@@.count == 1,
         ensures
-            out.1@@.instance == self.instance@,
+            out.1@@.instance == self.instance(),
             out.1@@.key == out.0,
             out.1@@.count == 1,
     {
@@ -123,11 +145,11 @@ impl SimpleBank {
         -> (out: (Reply, Tracked<Bank::replies>))
         requires 
             self.wf(),
-            req_shard@@.instance == self.instance@,
+            req_shard@@.instance == self.instance(),
             req_shard@@.key == req,
             req_shard@@.count == 1,
         ensures
-            out.1@@.instance == self.instance@,
+            out.1@@.instance == self.instance(),
             out.1@@.key == out.0,
             out.1@@.count == 1,
     {
@@ -210,34 +232,13 @@ impl SimpleBank {
         }
         total
     }
-
-    // workaround cause we can't create this in normal rust
-    pub fn get_new_api(&self) -> (out: TrustedAPI)
-        ensures self.instance@ == out.instance()
-    {
-        TrustedAPI::new(Ghost(self.instance@))
-    }
 }
 
-fn basic_test() {
-    let bank = SimpleBank::new(10, 10);
-    let api = TrustedAPI::new(Ghost(bank.instance@));
-    let (req, req_shard, id_shard) = api.receive_request(true);
-    let (reply, reply_shard) = bank.maybe_transfer(req, req_shard);
-    api.send_reply(reply, reply_shard, true);
-}
 }
 
-fn main() {
-    basic_test();
-
-    let total_accs = 1000;
-    let initial_amt = 15;
+#[verifier::external_body]
+fn unverified_concurrent_tests(bank: SimpleBank, api: TrustedAPI) {
     let num_threads = 10;
-
-    let bank = SimpleBank::new(total_accs, initial_amt);
-    let api = bank.get_new_api(); // this should be associated with an instance
-
     let shared_bank = Arc::new(bank);
     let shared_api = Arc::new(api);
     println!("initial total: {}", shared_bank.get_total());
@@ -255,7 +256,7 @@ fn main() {
                 let mut i:usize = 0;
                 while i < 100
                 {
-                    let (req, req_shard, id_shard) = shared_api.receive_request(print);
+                    let (req, req_shard) = shared_api.receive_request(print);
                     let (reply, reply_shard) = shared_bank.maybe_transfer(req, req_shard);
                     if !reply.output.succeeded {
                         failure_count = failure_count + 1;
