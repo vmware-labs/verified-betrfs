@@ -335,9 +335,9 @@ pub open spec(checked) fn empty_disk() -> DiskView
     DiskView{ entries: Map::empty() }
 }
 
-pub trait Addrs {
-    spec fn no_duplicates(&self) -> bool;
-    spec fn repr(&self) -> Set<Address>;
+pub trait Addrs : Sized {
+    spec fn no_duplicates(self) -> bool;
+    spec fn repr(self) -> Set<Address>;
 }
 
 // maybe name this a none flush addr
@@ -347,12 +347,12 @@ pub struct TwoAddrs {
 }
 
 impl Addrs for TwoAddrs {
-    open spec(checked) fn no_duplicates(&self) -> bool
+    open spec(checked) fn no_duplicates(self) -> bool
     {
         &&& self.addr1 != self.addr2
     }
 
-    open spec(checked) fn repr(&self) -> Set<Address>
+    open spec(checked) fn repr(self) -> Set<Address>
     {
         set!{self.addr1, self.addr2}
     }
@@ -365,14 +365,14 @@ pub struct SplitAddrs {
 }
 
 impl Addrs for SplitAddrs {
-    open spec(checked) fn no_duplicates(&self) -> bool
+    open spec(checked) fn no_duplicates(self) -> bool
     {
         &&& self.left != self.right
         &&& self.right != self.parent
         &&& self.parent != self.left
     }
 
-    open spec(checked) fn repr(&self) -> Set<Address>
+    open spec(checked) fn repr(self) -> Set<Address>
     {
         set!{self.left, self.right, self.parent}
     }
@@ -763,7 +763,7 @@ impl<T> LinkedBetree<T> {
         &&& self.reachable_buffer_addrs() <= other.buffer_dv.repr()
     }
 
-    pub open spec(checked) fn push_memtable(self, memtable: Memtable<T>, new_addrs: TwoAddrs) -> LinkedBetree<T>
+    pub open spec(checked) fn push_memtable(self, sealed_memtable: T, new_addrs: TwoAddrs) -> LinkedBetree<T>
         recommends 
             self.wf(),
             new_addrs.no_duplicates(),
@@ -778,11 +778,11 @@ impl<T> LinkedBetree<T> {
             };
 
         let new_dv = self.dv.modify_disk(new_addrs.addr1, new_root);
-        let new_buffer_dv = self.buffer_dv.modify_disk(new_addrs.addr2, memtable.buffer);
+        let new_buffer_dv = self.buffer_dv.modify_disk(new_addrs.addr2, sealed_memtable);
         LinkedBetree{ root: Some(new_addrs.addr1), dv: new_dv, buffer_dv: new_buffer_dv }
     }
 
-    pub open spec fn valid_path_replacement<A: Addrs>(self, path: Path<T>, new_addrs: &A, path_addrs: PathAddrs) -> bool
+    pub open spec fn valid_path_replacement<A: Addrs>(self, path: Path<T>, new_addrs: A, path_addrs: PathAddrs) -> bool
     {
         &&& path.valid()
         &&& path_addrs.no_duplicates()
@@ -792,7 +792,7 @@ impl<T> LinkedBetree<T> {
         &&& self == path.linked
     }
 
-    proof fn same_tight_tree_implies_same_reachable_addrs(self, other: LinkedBetree<T>) 
+    pub proof fn same_tight_tree_implies_same_reachable_addrs(self, other: LinkedBetree<T>) 
         requires
             other.wf(),
             self.valid_view(other),
@@ -811,7 +811,7 @@ impl<T> LinkedBetree<T> {
 
 
 impl<T: Buffer> LinkedBetree<T> {
-    pub open spec(checked) fn i_buffer(self) -> LinkedBetree<SimpleBuffer>
+    pub open spec(checked) fn i_bdv(self) -> LinkedBetree<SimpleBuffer>
     {
         LinkedBetree{
             root: self.root,
@@ -1052,7 +1052,7 @@ pub open spec(checked) fn empty_image() -> StampedBetree {
 
 state_machine!{ LinkedBetreeVars<T: Buffer> {
     fields {
-        pub memtable: Memtable<T>,
+        pub memtable: Memtable, // we might want to remove the dependency 
         pub linked: LinkedBetree<T>,
     }
 
@@ -1060,8 +1060,7 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
     {
         Query{end_lsn: LSN, key: Key, value: Value},
         Put{puts: MsgHistory},
-        // Test{meow: Stamped<LinkedBetree<T>>},
-        FreezeAs{stamped_betree: StampedBetree},
+        FreezeAs{stamped_betree: StampedBetree}, // requiring SimpleBuffer here bc can't do template here
         Internal{},   // Local No-op label
     }
 
@@ -1083,18 +1082,18 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
         require let Label::FreezeAs{stamped_betree} = lbl;
         require pre.memtable.is_empty();
         require stamped_betree.seq_end == pre.memtable.seq_end;
-        require stamped_betree.value == pre.linked.i_buffer();
+        require stamped_betree.value == pre.linked.i_bdv();
     }}
 
-    transition!{ internal_flush_memtable(lbl: Label, new_memtable: Memtable<T>, new_linked: LinkedBetree<T>, new_addrs: TwoAddrs) {
+    transition!{ internal_flush_memtable(lbl: Label, sealed_memtable: T, new_linked: LinkedBetree<T>, new_addrs: TwoAddrs) {
         require lbl is Internal;
         require new_addrs.no_duplicates();
-        require new_memtable.i() == pre.memtable.i().drain();
+        require sealed_memtable.i() == pre.memtable.buffer;
 
-        let pushed = pre.linked.push_memtable(pre.memtable, new_addrs);
+        let pushed = pre.linked.push_memtable(sealed_memtable, new_addrs);
         require pushed.valid_view(new_linked);
 
-        update memtable = new_memtable;
+        update memtable = pre.memtable.drain();
         update linked = new_linked;
     }}
 
@@ -1103,13 +1102,18 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
         update linked = pre.linked.grow(new_root_addr);
     }}
 
+    pub open spec fn post_split(path: Path<T>, request: SplitRequest, 
+        new_addrs: SplitAddrs, path_addrs: PathAddrs) -> LinkedBetree<T> 
+    {
+        let split_parent = path.target().split_parent(request, new_addrs);
+        path.substitute(split_parent, path_addrs)
+    }
+
     transition!{ internal_split(lbl: Label, new_linked: LinkedBetree<T>, path: Path<T>, 
             request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs) {
         require lbl is Internal;
         require path.target().can_split_parent(request);
-        require pre.linked.valid_path_replacement(path, &new_addrs, path_addrs);
-
-        let splitted = path.substitute(path.target().split_parent(request, new_addrs), path_addrs);
+        require pre.linked.valid_path_replacement(path, new_addrs, path_addrs);
 
         // NOTE(JL): a better syntax would be to annotate some as "soft" and ammendable to overwrite 
         // for each instance of LinkedBetreeVars, useful in cases of SM extensions
@@ -1118,29 +1122,45 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
         // #[overload:is_fresh]
         // require pre.is_fresh(addrs...); // child supplies a new definition of is_fresh (pre = State machine State)
 
+        let splitted = Self::post_split(path, request, new_addrs, path_addrs);
         require splitted.valid_view(new_linked);
+
         update linked = new_linked;
     }}
+
+    pub open spec fn post_flush(path: Path<T>, child_idx: nat, buffer_gc: nat,
+        new_addrs: TwoAddrs, path_addrs: PathAddrs) -> LinkedBetree<T> 
+    {
+        let flush_parent = path.target().flush(child_idx, buffer_gc, new_addrs);
+        path.substitute(flush_parent, path_addrs)
+    }
 
     transition!{ internal_flush(lbl: Label, new_linked: LinkedBetree<T>, path: Path<T>, 
             child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, path_addrs: PathAddrs) {
         require lbl is Internal;
         require path.target().can_flush(child_idx, buffer_gc);
-        require pre.linked.valid_path_replacement(path, &new_addrs, path_addrs);
+        require pre.linked.valid_path_replacement(path, new_addrs, path_addrs);
 
-        let flushed = path.substitute(path.target().flush(child_idx, buffer_gc, new_addrs), path_addrs);
+        let flushed = Self::post_flush(path, child_idx, buffer_gc, new_addrs, path_addrs);
         require flushed.valid_view(new_linked);
 
         update linked = new_linked;
     }}
 
+    pub open spec fn post_compact(path: Path<T>, start: nat, end: nat, compacted_buffer: T,
+        new_addrs: TwoAddrs, path_addrs: PathAddrs) -> LinkedBetree<T> 
+    {
+        let compact_node = path.target().compact(start, end, compacted_buffer, new_addrs);
+        path.substitute(compact_node, path_addrs)
+    }
+
     transition!{ internal_compact(lbl: Label, new_linked: LinkedBetree<T>, path: Path<T>, 
             start: nat, end: nat, compacted_buffer: T, new_addrs: TwoAddrs, path_addrs: PathAddrs) {
         require lbl is Internal;
         require path.target().can_compact(start, end, compacted_buffer);
-        require pre.linked.valid_path_replacement(path, &new_addrs, path_addrs);
+        require pre.linked.valid_path_replacement(path, new_addrs, path_addrs);
 
-        let compacted = path.substitute(path.target().compact(start, end, compacted_buffer, new_addrs), path_addrs);
+        let compacted = Self::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs);
         require compacted.valid_view(new_linked);
 
         update linked = new_linked;
@@ -1166,55 +1186,30 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
         &&& self.linked.has_root() ==> self.linked.root().my_domain() == total_domain()
     }
 
-    pub open spec fn post_step(self, step: Step<T>) -> LinkedBetree<T> 
-    {
-        match step {
-            Step::internal_flush_memtable(_, _, new_addrs) => {
-                self.linked.push_memtable(self.memtable, new_addrs)
-            }
-            Step::internal_grow(new_root_addr) => {
-                self.linked.grow(new_root_addr)
-            }
-            Step::internal_split(_, path, request, new_addrs, path_addrs) => {
-                let split_parent = path.target().split_parent(request, new_addrs);
-                path.substitute(split_parent, path_addrs)
-            }
-            Step::internal_flush(_, path, child_idx, buffer_gc, new_addrs, path_addrs) => {
-                let flush_parent = path.target().flush(child_idx, buffer_gc, new_addrs);
-                path.substitute(flush_parent, path_addrs)
-            }
-            Step::internal_compact(_, path, start, end, compacted_buffer, new_addrs, path_addrs) => {
-                let compact_node = path.target().compact(start, end, compacted_buffer, new_addrs);
-                path.substitute(compact_node, path_addrs)
-            }
-            _ => self.linked
-        }
-    }
-
     pub open spec fn strong_step(self, step: Step<T>) -> bool
     {
         match step {
-            Step::internal_flush_memtable(_, new_linked, new_addrs) => {
+            Step::internal_flush_memtable(sealed_memtable, new_linked, new_addrs) => {
                 &&& self.linked.is_fresh(new_addrs.repr())
-                &&& self.post_step(step).same_tight_tree(new_linked)
+                &&& self.linked.push_memtable(sealed_memtable, new_addrs).same_tight_tree(new_linked)
             }
             Step::internal_grow(new_root_addr) => {
                 self.linked.is_fresh(set![new_root_addr])
             }
-            Step::internal_split(new_linked, _, _, new_addrs, path_addrs) => {
+            Step::internal_split(new_linked, path, request, new_addrs, path_addrs) => {
                 &&& self.linked.is_fresh(new_addrs.repr())
                 &&& self.linked.is_fresh(path_addrs.to_set())
-                &&& self.post_step(step).same_tight_tree(new_linked)
+                &&& Self::post_split(path, request, new_addrs, path_addrs).same_tight_tree(new_linked)
             }
-            Step::internal_flush(new_linked, _, _, _, new_addrs, path_addrs) => {
+            Step::internal_flush(new_linked, path, child_idx, buffer_gc, new_addrs, path_addrs) => {
                 &&& self.linked.is_fresh(new_addrs.repr())
                 &&& self.linked.is_fresh(path_addrs.to_set())
-                &&& self.post_step(step).same_tight_tree(new_linked)
+                &&& Self::post_flush(path, child_idx, buffer_gc, new_addrs, path_addrs).same_tight_tree(new_linked)
             }
-            Step::internal_compact(new_linked, _, _, _, _, new_addrs, path_addrs) => {
+            Step::internal_compact(new_linked, path, start, end, compacted_buffer, new_addrs, path_addrs) => {
                 &&& self.linked.is_fresh(new_addrs.repr())
                 &&& self.linked.is_fresh(path_addrs.to_set())
-                &&& self.post_step(step).same_tight_tree(new_linked)
+                &&& Self::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs).same_tight_tree(new_linked)
             }
             _ => true
         }
@@ -1231,8 +1226,8 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
         reveal(LinkedBetreeVars::State::next_by);
         match step
         {
-            Step::internal_flush_memtable(new_memtable, new_linked, new_addrs) => 
-                { Self::internal_flush_memtable_inductive(pre, post, lbl, new_memtable, new_linked, new_addrs); }
+            Step::internal_flush_memtable(sealed_memtable, new_linked, new_addrs) => 
+                { Self::internal_flush_memtable_inductive(pre, post, lbl, sealed_memtable, new_linked, new_addrs); }
             Step::internal_grow(new_root_addr) => 
                 { Self::internal_grow_inductive(pre, post, lbl, new_root_addr); }
             Step::internal_split(new_linked, path, split_request, new_addrs, path_addrs) => 
@@ -1246,16 +1241,16 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
     }
 
     proof fn internal_flush_memtable_inductive(pre: Self, post: Self, lbl: Label, 
-        new_memtable: Memtable<T>, new_linked: LinkedBetree<T>, new_addrs: TwoAddrs) 
+        sealed_memtable: T, new_linked: LinkedBetree<T>, new_addrs: TwoAddrs) 
         requires 
             pre.inv(),
-            pre.strong_step(Step::internal_flush_memtable(new_memtable, new_linked, new_addrs)),
-            Self::internal_flush_memtable(pre, post, lbl, new_memtable, new_linked, new_addrs),
+            pre.strong_step(Step::internal_flush_memtable(sealed_memtable, new_linked, new_addrs)),
+            Self::internal_flush_memtable(pre, post, lbl, sealed_memtable, new_linked, new_addrs),
         ensures 
             post.inv()
     {
-        let pushed = pre.linked.push_memtable(pre.memtable, new_addrs);
-        pre.linked.push_memtable_ensures(pre.memtable, new_addrs);
+        let pushed = pre.linked.push_memtable(sealed_memtable, new_addrs);
+        pre.linked.push_memtable_ensures(sealed_memtable, new_addrs);
         pushed.same_tight_tree_implies_same_reachable_addrs(new_linked);
     }
 
@@ -1296,16 +1291,19 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
         assert(post.linked.no_dangling_buffer_ptr());
     }
 
-    proof fn internal_split_inductive(pre: Self, post: Self, lbl: Label, new_linked: LinkedBetree<T>, path: Path<T>, 
-        request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs) 
+    pub proof fn post_split_ensures(self, path: Path<T>, request: SplitRequest, 
+        new_addrs: SplitAddrs, path_addrs: PathAddrs) 
         requires 
-            pre.inv(),
-            pre.strong_step(Step::internal_split(new_linked, path, request, new_addrs, path_addrs)),
-            Self::internal_split(pre, post, lbl, new_linked, path, request, new_addrs, path_addrs)
+            self.inv(),
+            self.linked.is_fresh(new_addrs.repr()),
+            self.linked.is_fresh(path_addrs.to_set()),
+            path.target().can_split_parent(request),
+            self.linked.valid_path_replacement(path, new_addrs, path_addrs),
         ensures 
-            post.inv()
+            path.target().split_parent(request, new_addrs).acyclic(),
+            Self::post_split(path, request, new_addrs, path_addrs).valid_buffer_dv(),
     {
-        let ranking = pre.linked.finite_ranking();
+        let ranking = self.linked.finite_ranking();
         path.target_ensures();
         path.valid_ranking_throughout(ranking);
 
@@ -1323,20 +1321,35 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
 
         assert(splitted.no_dangling_buffer_ptr());
         assert(splitted.valid_buffer_dv());
+    }
 
+    proof fn internal_split_inductive(pre: Self, post: Self, lbl: Label, new_linked: LinkedBetree<T>, path: Path<T>, 
+        request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs) 
+        requires 
+            pre.inv(),
+            pre.strong_step(Step::internal_split(new_linked, path, request, new_addrs, path_addrs)),
+            Self::internal_split(pre, post, lbl, new_linked, path, request, new_addrs, path_addrs)
+        ensures 
+            post.inv()
+    {
+        let splitted = Self::post_split(path, request, new_addrs, path_addrs);
+        pre.post_split_ensures(path, request, new_addrs, path_addrs);
         splitted.same_tight_tree_implies_same_reachable_addrs(new_linked);
     }
 
-    proof fn internal_flush_inductive(pre: Self, post: Self, lbl: Label, new_linked: LinkedBetree<T>, path: Path<T>, 
-        child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, path_addrs: PathAddrs)
+    pub proof fn post_flush_ensures(self, path: Path<T>, child_idx: nat, buffer_gc: nat,
+        new_addrs: TwoAddrs, path_addrs: PathAddrs) 
         requires 
-            pre.inv(),
-            pre.strong_step(Step::internal_flush(new_linked, path, child_idx, buffer_gc, new_addrs, path_addrs)),
-            Self::internal_flush(pre, post, lbl, new_linked, path, child_idx, buffer_gc, new_addrs, path_addrs),
+            self.inv(),
+            self.linked.is_fresh(new_addrs.repr()),
+            self.linked.is_fresh(path_addrs.to_set()),
+            path.target().can_flush(child_idx, buffer_gc),
+            self.linked.valid_path_replacement(path, new_addrs, path_addrs),
         ensures 
-            post.inv()   
+            path.target().flush(child_idx, buffer_gc, new_addrs).acyclic(),
+            Self::post_flush(path, child_idx, buffer_gc, new_addrs, path_addrs).valid_buffer_dv(),
     {
-        let ranking = pre.linked.finite_ranking();
+        let ranking = self.linked.finite_ranking();
         path.target_ensures();
         path.valid_ranking_throughout(ranking);
 
@@ -1352,20 +1365,35 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
         path.target().flush_keeps_subset_reachable_buffers(child_idx, buffer_gc, new_addrs, new_ranking);
         path.substitute_reachable_buffers_ensures(new_subtree, path_addrs, new_ranking);
         assert(flushed.valid_buffer_dv());
+    }
 
+    proof fn internal_flush_inductive(pre: Self, post: Self, lbl: Label, new_linked: LinkedBetree<T>, path: Path<T>, 
+        child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, path_addrs: PathAddrs)
+        requires 
+            pre.inv(),
+            pre.strong_step(Step::internal_flush(new_linked, path, child_idx, buffer_gc, new_addrs, path_addrs)),
+            Self::internal_flush(pre, post, lbl, new_linked, path, child_idx, buffer_gc, new_addrs, path_addrs),
+        ensures 
+            post.inv()   
+    {
+        let flushed = Self::post_flush(path, child_idx, buffer_gc, new_addrs, path_addrs);
+        pre.post_flush_ensures(path, child_idx, buffer_gc, new_addrs, path_addrs);
         flushed.same_tight_tree_implies_same_reachable_addrs(new_linked);
     }
 
-    proof fn internal_compact_inductive(pre: Self, post: Self, lbl: Label, new_linked: LinkedBetree<T>, path: Path<T>, 
-        start: nat, end: nat, compacted_buffer: T, new_addrs: TwoAddrs, path_addrs: PathAddrs) 
+    pub proof fn post_compact_ensures(self, path: Path<T>, start: nat, end: nat, compacted_buffer: T,
+        new_addrs: TwoAddrs, path_addrs: PathAddrs) 
         requires 
-            pre.inv(),
-            pre.strong_step(Step::internal_compact(new_linked, path, start, end, compacted_buffer, new_addrs, path_addrs)),
-            Self::internal_compact(pre, post, lbl, new_linked, path, start, end, compacted_buffer, new_addrs, path_addrs),
-        ensures
-            post.inv()
+            self.inv(),
+            self.linked.is_fresh(new_addrs.repr()),
+            self.linked.is_fresh(path_addrs.to_set()),
+            path.target().can_compact(start, end, compacted_buffer),
+            self.linked.valid_path_replacement(path, new_addrs, path_addrs),
+        ensures 
+            path.target().compact(start, end, compacted_buffer, new_addrs).acyclic(),
+            Self::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs).valid_buffer_dv(),
     {
-        let ranking = pre.linked.finite_ranking();
+        let ranking = self.linked.finite_ranking();
         path.target_ensures();
         path.valid_ranking_throughout(ranking);
 
@@ -1380,7 +1408,19 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
         path.target().compact_reachable_buffers_in_scope(start, end, compacted_buffer, new_addrs, new_ranking);
         path.substitute_reachable_buffers_ensures(new_subtree, path_addrs, new_ranking);
         assert(compacted.valid_buffer_dv());
+    }
 
+    proof fn internal_compact_inductive(pre: Self, post: Self, lbl: Label, new_linked: LinkedBetree<T>, path: Path<T>, 
+        start: nat, end: nat, compacted_buffer: T, new_addrs: TwoAddrs, path_addrs: PathAddrs) 
+        requires 
+            pre.inv(),
+            pre.strong_step(Step::internal_compact(new_linked, path, start, end, compacted_buffer, new_addrs, path_addrs)),
+            Self::internal_compact(pre, post, lbl, new_linked, path, start, end, compacted_buffer, new_addrs, path_addrs),
+        ensures
+            post.inv()
+    {
+        let compacted = Self::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs);
+        pre.post_compact_ensures(path, start, end, compacted_buffer, new_addrs, path_addrs);
         compacted.same_tight_tree_implies_same_reachable_addrs(new_linked);
     }
 
@@ -1820,7 +1860,7 @@ impl<T> LinkedBetree<T> {
         child.same_reachable_betree_addrs_implies_same_buffer_addrs(other_child);
     }
 
-    pub proof fn push_memtable_ensures(self, memtable: Memtable<T>, new_addrs: TwoAddrs)
+    pub proof fn push_memtable_ensures(self, memtable: T, new_addrs: TwoAddrs)
         requires 
             self.acyclic(),
             self.valid_buffer_dv(),
@@ -2238,7 +2278,7 @@ impl<T> LinkedBetree<T> {
         }
     }
 
-    pub proof fn push_memtable_new_ranking(self, memtable: Memtable<T>, new_addrs: TwoAddrs, ranking: Ranking) -> (new_ranking: Ranking)
+    pub proof fn push_memtable_new_ranking(self, memtable: T, new_addrs: TwoAddrs, ranking: Ranking) -> (new_ranking: Ranking)
         requires 
             self.wf(), 
             new_addrs.no_duplicates(),

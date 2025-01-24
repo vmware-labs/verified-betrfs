@@ -103,7 +103,7 @@ impl BetreeNode {
         }
     }
 
-    pub open spec(checked) fn push_memtable(self, memtable: Memtable<SimpleBuffer>) -> StampedBetree {
+    pub open spec(checked) fn push_memtable(self, memtable: Memtable) -> StampedBetree {
         Stamped{
             value: self.promote().merge_buffer(memtable.buffer),
             seq_end: memtable.seq_end
@@ -326,7 +326,7 @@ impl Path {
 
 state_machine!{ PagedBetree {
     fields {
-        pub memtable: Memtable<SimpleBuffer>,
+        pub memtable: Memtable,
         pub root: BetreeNode,
     }
 

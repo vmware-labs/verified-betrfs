@@ -118,7 +118,7 @@ impl BetreeNode {
         }
     }
 
-    pub open spec(checked) fn push_memtable(self, memtable: Memtable<SimpleBuffer>) -> BetreeNode
+    pub open spec(checked) fn push_memtable(self, memtable: Memtable) -> BetreeNode
     recommends
         self.wf(),
     {
@@ -610,7 +610,7 @@ impl Path{
 
 state_machine!{ FilteredBetree {
     fields {
-        pub memtable: Memtable<SimpleBuffer>,
+        pub memtable: Memtable,
         pub root: BetreeNode,
     }
 

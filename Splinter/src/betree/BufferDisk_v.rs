@@ -121,24 +121,25 @@ impl<T: Buffer> BufferDisk<T> {
         }
     }
 
-    pub broadcast proof fn subdisk_implies_same_i(self, big: Self, addrs: LinkedSeq)
+    pub broadcast proof fn agrees_implies_same_i(self, other: Self, addrs: LinkedSeq)
         requires
             self.valid_buffers(addrs),
-            self.is_sub_disk(big),
+            other.valid_buffers(addrs),
+            self.agrees_with(other),
         ensures 
-            self.i_buffer_seq(addrs) == big.i_buffer_seq(addrs)
+            self.i_buffer_seq(addrs) == other.i_buffer_seq(addrs)
     {
-        let i_small = self.i_buffer_seq(addrs);
-        let i_big = big.i_buffer_seq(addrs);
+        let i_this = self.i_buffer_seq(addrs);
+        let i_other = other.i_buffer_seq(addrs);
 
         assert forall |i| 0 <= i < addrs.len()
-        implies i_small[i] == i_big[i]
+        implies i_this[i] == i_other[i]
         by {
             if self.entries.contains_key(addrs[i]) {
-                assert(big.entries.contains_key(addrs[i])); // trigger
+                assert(other.entries.contains_key(addrs[i])); // trigger
             }
         }
-        assert(i_small =~= i_big);
+        assert(i_this =~= i_other);
     }
 }
 }  // end verus!

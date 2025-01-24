@@ -17,15 +17,21 @@ use crate::abstract_system::MsgHistory_v::*;
 verus! {
 
 #[verifier::ext_equal]
-pub struct Memtable<T> {
-    pub buffer: T,
+pub struct Memtable {
+    pub buffer: SimpleBuffer,
     pub seq_end: LSN
 }
 
-impl<T: Buffer> Memtable<T> {
-    pub open spec(checked) fn i(&self) -> Memtable<SimpleBuffer>
-    {
-        Memtable{buffer: self.buffer.i(), seq_end: self.seq_end}
+impl Memtable {
+    pub open spec(checked) fn empty_memtable(lsn: LSN) -> Self {
+        Memtable{
+            buffer: SimpleBuffer::empty(),
+            seq_end: lsn
+        }
+    }
+
+    pub open spec(checked) fn drain(self) -> Self {
+        Self::empty_memtable(self.seq_end)
     }
 
     pub open spec(checked) fn query(&self, key: Key) -> Message
@@ -43,7 +49,7 @@ impl<T: Buffer> Memtable<T> {
         self.buffer.is_empty()
     }
 
-    pub open spec(checked) fn apply_put(self, km: KeyedMessage) -> Memtable<T> {
+    pub open spec(checked) fn apply_put(self, km: KeyedMessage) -> Memtable {
         let msg = self.query(km.key).merge(km.message);
         Memtable{
             buffer: *self.buffer.insert_ref(km.key, msg),
@@ -51,7 +57,7 @@ impl<T: Buffer> Memtable<T> {
         }
     }
 
-    pub open spec(checked) fn apply_puts(self, puts: MsgHistory) -> Memtable<T>
+    pub open spec(checked) fn apply_puts(self, puts: MsgHistory) -> Memtable
         recommends puts.wf(), puts.can_follow(self.seq_end)
         decreases puts.seq_end when puts.wf()
     {
@@ -92,31 +98,17 @@ impl<T: Buffer> Memtable<T> {
         }
     }
 
-    pub proof fn apply_puts_refines(self, puts: MsgHistory)
-        requires puts.wf(), puts.can_follow(self.seq_end)
-        ensures self.apply_puts(puts).i() == self.i().apply_puts(puts)
-        decreases puts.len()
-    {
-        broadcast use Buffer::insert_refines, Buffer::query_refines;
-        if 0 < puts.len() {
-            let last_lsn = (puts.seq_end - 1) as nat;
-            self.apply_puts_refines(puts.discard_recent(last_lsn));
-        }
-    }
+    // pub proof fn apply_puts_refines(self, puts: MsgHistory)
+    //     requires puts.wf(), puts.can_follow(self.seq_end)
+    //     ensures self.apply_puts(puts).i == self.i().apply_puts(puts)
+    //     decreases puts.len()
+    // {
+    //     broadcast use Buffer::insert_refines, Buffer::query_refines;
+    //     if 0 < puts.len() {
+    //         let last_lsn = (puts.seq_end - 1) as nat;
+    //         self.apply_puts_refines(puts.discard_recent(last_lsn));
+    //     }
+    // }
 }
-
-impl Memtable<SimpleBuffer> {
-   pub open spec(checked) fn empty_memtable(lsn: LSN) -> Self {
-        Memtable{
-            buffer: SimpleBuffer::empty(),
-            seq_end: lsn
-        }
-    }
-
-    pub open spec(checked) fn drain(self) -> Self {
-        Self::empty_memtable(self.seq_end)
-    }
-}
-
 
 } // end verus!
