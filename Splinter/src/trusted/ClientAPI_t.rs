@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 use std::sync::atomic::{AtomicU64, Ordering};
 use vstd::{prelude::*};
+use vstd::tokens::InstanceId;
 
 use crate::spec::MapSpec_t::{Request, Reply, Input};
 
@@ -24,14 +25,14 @@ pub struct ClientAPI{
 
 impl ClientAPI{
     #[verifier::external_body]
-    pub fn new(instance: Ghost<KVStoreTokenized::Instance>) -> (out: Self)
+    pub fn new(instance: Ghost<InstanceId>) -> (out: Self)
         ensures out.instance() == instance
     {
         Self{id: AtomicU64::new(0)}
     }
     
     #[verifier::external_body]
-    pub closed spec fn instance(&self) -> KVStoreTokenized::Instance;
+    pub closed spec fn instance(&self) -> InstanceId;
 
     // right now this is a tightly coupled API, we cannot ensure that the result is 
     // comes from the tokenized state machine instance transition due to it being in proof mode
@@ -40,19 +41,13 @@ impl ClientAPI{
     #[verifier::external_body]
     pub fn receive_request(&self, print: bool) -> (out: (Request, Tracked<KVStoreTokenized::requests>))
     ensures
-        out.1@@.instance == self.instance(),
-        out.1@@.key == out.0,
-        out.1@@.count == 1,
+        out.1@.instance_id() == self.instance(),
+        out.1@.element() == out.0,
     {
         let id = self.id.fetch_add(1, Ordering::SeqCst);
         let amt = (id % 20) as u32;
 
-        let input = if id % 3 == 0 {
-            Input::NoopInput
-        } else {
-            Input::NoopInput
-        };
-
+        let input = Input::NoopInput;
         if print {
             println!("request {}: noooooop!", id);
         }
@@ -64,11 +59,10 @@ impl ClientAPI{
     #[verifier::external_body]
     pub fn send_reply(&self, reply: Reply,  reply_shard: Tracked<KVStoreTokenized::replies>, print: bool)
         requires 
-            reply_shard@@.instance == self.instance(),
-            reply_shard@@.key == reply
+            reply_shard@.instance_id() == self.instance(),
+            reply_shard@.element() == reply
     {
         if print {
-            //let result = if reply.output.succeeded { "succeeded" } else { "failed" };
             println!("reply {}", reply.id);
         }
     }
