@@ -15,8 +15,8 @@ use crate::spec::MapSpec_t::{AsyncMap, CrashTolerantAsyncMap};
 
 verus!{
 
-type DiskModel = AsyncDisk::State;
-type DiskLabel = AsyncDisk::Label;
+pub type DiskModel = AsyncDisk::State;
+pub type DiskLabel = AsyncDisk::Label;
 
 // Auditor defines externally visible actions that can be taken by a program model
 pub enum ProgramLabel{
@@ -63,11 +63,9 @@ impl ProgramLabel {
     }
 }
 
-pub trait ProgramModel {
-
-    spec fn init(&self, disk: DiskModel) -> bool;
-
-    spec fn next(&self, post: &Self, lbl: ProgramLabel) -> bool;
+pub trait ProgramModel : Sized {
+    spec fn init(pre: Self, disk: DiskModel) -> bool;
+    spec fn next(pre: Self, post: Self, lbl: ProgramLabel) -> bool;
 }
 
 // Crash Tolerant System Model defined by the auditor,
@@ -104,6 +102,13 @@ state_machine!{ SystemModel<T: ProgramModel> {
         // the actual sync point is driven by the program model
     }
 
+    init!{ initialize(program: T, disk: DiskModel) {
+        require T::init(program, disk);
+        init program = program;
+        init disk = disk;
+        init id_history = Set::empty();
+    }}
+
     transition!{ program_async(lbl: Label, new_program: T) {
         require lbl is ProgramAsyncOp;
         require lbl->program_lbl.is_app_label();
@@ -115,7 +120,7 @@ state_machine!{ SystemModel<T: ProgramModel> {
         // auditor's promise: new request contains unique ID
         require pre.id_history.disjoint(new_id);
         // new program must be a valid step
-        require pre.program.next(&new_program, lbl->program_lbl);
+        require T::next(pre.program, new_program, lbl->program_lbl);
 
         update program = new_program;
         update id_history = pre.id_history.union(new_id);
@@ -125,8 +130,7 @@ state_machine!{ SystemModel<T: ProgramModel> {
         require lbl is ProgramDiskOp;
         require lbl->disk_lbl is DiskOps;
 
-        require pre.program.next(
-            &new_program,
+        require T::next(pre.program, new_program,
             ProgramLabel::DiskIO{disk_lbl: lbl->disk_lbl},
         );
 
@@ -138,7 +142,7 @@ state_machine!{ SystemModel<T: ProgramModel> {
 
     transition!{ program_internal(lbl: Label, new_program: T) {
         require lbl is ProgramInternal;
-        require pre.program.next(&new_program, ProgramLabel::Internal{});        
+        require T::next(pre.program, new_program, ProgramLabel::Internal{});        
         update program = new_program;
     }}
 
@@ -155,7 +159,7 @@ state_machine!{ SystemModel<T: ProgramModel> {
         // promise unique sync id from all previous ids
         require !pre.id_history.contains(sync_req_id as u64);
 
-        require pre.program.next(&new_program, lbl->program_lbl);
+        require T::next(pre.program, new_program, lbl->program_lbl);
 
         update program = new_program;
         update id_history = pre.id_history.insert(sync_req_id as u64);
@@ -164,13 +168,13 @@ state_machine!{ SystemModel<T: ProgramModel> {
     transition!{ reply_sync(lbl: Label, new_program: T) {
         require lbl is ProgramAsyncOp;
         require lbl->program_lbl is ReplySync;
-        require pre.program.next(&new_program, lbl->program_lbl);
+        require T::next(pre.program, new_program, lbl->program_lbl);
         update program = new_program;
     }}
 
     transition!{ crash(lbl: Label, new_program: T, new_disk: DiskModel) {
         require lbl is Crash;
-        require pre.program.next(&new_program, ProgramLabel::Crash{});
+        require T::next(pre.program, new_program, ProgramLabel::Crash{});
         require DiskModel::next(pre.disk, new_disk, DiskLabel::Crash{});
 
         update program = new_program;
@@ -201,13 +205,11 @@ impl SystemModel::Label {
 }
 
 pub trait RefinementObligation {
-    /// state machine refinement traits
+    type Model: ProgramModel;
 
-    spec fn init(&self) -> bool;
-
-    spec fn next(&self, post: &Self, lbl: SystemModel::Label) -> bool;
-
-    spec fn i(&self) -> (ctam: CrashTolerantAsyncMap::State);
+    spec fn inv(model: SystemModel::State<Self::Model>) -> bool;
+    
+    spec fn i(model: SystemModel::State<Self::Model>) -> (ctam: CrashTolerantAsyncMap::State);
 
     spec fn i_lbl(lbl: SystemModel::Label) -> (ctam_lbl: CrashTolerantAsyncMap::Label);
 
@@ -219,14 +221,20 @@ pub trait RefinementObligation {
             lbl.label_correspondance(ctam_lbl)
     ;
 
-    proof fn init_refines(&self)
-        requires self.init()
-        ensures CrashTolerantAsyncMap::State::initialize(self.i())
+    proof fn init_refines(pre: SystemModel::State<Self::Model>)
+    requires
+        SystemModel::State::initialize(pre, pre.program, pre.disk)
+    ensures
+        CrashTolerantAsyncMap::State::initialize(Self::i(pre)),
+        Self::inv(pre)
     ;
-
-    proof fn next_refines(&self, post: &Self, lbl: SystemModel::Label)
-        requires self.next(post, lbl)
-        ensures CrashTolerantAsyncMap::State::next(self.i(), post.i(), Self::i_lbl(lbl))
+        
+    proof fn next_refines(pre: SystemModel::State<Self::Model>, post: SystemModel::State<Self::Model>, lbl: SystemModel::Label)
+    requires
+        SystemModel::State::next(pre, post, lbl), Self::inv(pre),
+    ensures
+        CrashTolerantAsyncMap::State::next(Self::i(pre), Self::i(post), Self::i_lbl(lbl)),
+        Self::inv(post)
     ;
 }
 }
