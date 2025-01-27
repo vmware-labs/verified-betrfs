@@ -361,7 +361,8 @@ impl BetreeNode {
     }
 
     proof fn split_commutes_with_i_nonsplit(self, request: SplitRequest, key: Key)
-        requires self.can_split_parent(request),
+        requires 
+            self.can_split_parent(request),
             self.my_domain().contains(key), 
             !self.split_keys(request).0.contains(key),
             !self.split_keys(request).1.contains(key)
@@ -370,18 +371,22 @@ impl BetreeNode {
             &&& self.split_parent(request).i_children().map[key] == self.i().split(left_keys, right_keys).child(key)
         })
     {
-        // TODO(Jialin): fix
-        assume(false);
+        let (left_keys, right_keys) = self.split_keys(request);
+        let result = self.split_parent(request);
+        let i_result = self.i().split(left_keys, right_keys);
+
         self.split_parent_wf(request);
         let child_idx = request.get_child_idx();
         let r = self->pivots.route(key);
 
         if r < child_idx {
-            assert(Element::lte(self.split_parent(request)->pivots.pivots[r], to_element(key))); // trigger for route_is_lemma
+            assert(Element::lte(result->pivots.pivots[r], to_element(key))); // trigger for route_is_lemma
+
         }
 
         self.i_children_lemma();
-        self.split_parent(request).i_children_lemma();
+        result.i_children_lemma();
+        assert(result.i_children().map[key] == i_result.child(key));
     }
 
     proof fn split_commutes_with_i(self, request: SplitRequest)
