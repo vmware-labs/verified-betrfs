@@ -1,7 +1,5 @@
 use builtin::*;
 use vstd::prelude::*;
-use builtin_macros::*;
-use state_machines_macros::state_machine;
 
 use vstd::{multiset::Multiset};
 use crate::trusted::KVStoreTokenized_v::KVStoreTokenized;

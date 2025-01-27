@@ -2,6 +2,9 @@ pub mod spec;
 pub mod trusted;
 pub mod implementation;
 
+use crate::trusted::TrustedEntry_t; // Auditor's "entry point": Auditor starts reading here
+use crate::implementation::Implementation_v;  // Implementor's entry point: Execution starts here
+
 // This file is where the generic theorem that the auditor reads
 // (in _t files) meets the implementation that the implementor supplies
 // (in _v files). Thus it can't follow the _t rule (because it mentions
@@ -11,5 +14,5 @@ pub mod implementation;
 // put into the executable.
 
 fn main() {
-    //VerifiedEntry_t::entry::<SimpleBank_v::SimpleBank>();
+    TrustedEntry_t::entry::<Implementation_v::Implementation>();
 }

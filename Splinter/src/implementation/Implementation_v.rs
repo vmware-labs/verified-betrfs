@@ -14,7 +14,7 @@ verus!{
 
 // This struct supplies KVStoreTrait, which has both the entry point to the implementation and the
 // proof hooks to satisfy the refinement obligation trait.
-struct Implementation {
+pub struct Implementation {
     state: Tracked<KVStoreTokenized::atomic_state>,
     instance: Tracked<KVStoreTokenized::Instance>,
 }
