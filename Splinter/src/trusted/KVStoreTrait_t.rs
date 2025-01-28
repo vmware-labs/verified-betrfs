@@ -1,10 +1,11 @@
 use builtin_macros::*;
+use builtin::*;
 
 use vstd::tokens::InstanceId;
 
 use crate::spec::SystemModel_t::*;
 use crate::trusted::ClientAPI_t::*;
-use crate::trusted::KVStoreTokenized_v::*;
+//use crate::trusted::KVStoreTokenized_v::*;
 
 verus!{
 
@@ -15,16 +16,16 @@ pub trait KVStoreTrait : Sized{
     spec fn wf(self) -> bool;
 
     // NOTE: this must return the instance of the bank, not enforced yet
-    spec fn instance(self) -> InstanceId;
+    spec fn instance_id(self) -> InstanceId;
 
     fn new() -> (out: Self)
         ensures out.wf()
     ;
 
-    fn kvstore_main(self, api: ClientAPI)
+    fn kvstore_main(&mut self, api: ClientAPI)
         requires 
-            self.wf(),
-            self.instance() == api.instance()
+            old(self).wf(),
+            old(self).instance_id() == api.instance_id()
     ;
 }
 

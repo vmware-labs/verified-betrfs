@@ -26,22 +26,22 @@ pub struct ClientAPI{
 impl ClientAPI{
     #[verifier::external_body]
     pub fn new(instance: Ghost<InstanceId>) -> (out: Self)
-        ensures out.instance() == instance
+        ensures out.instance_id() == instance
     {
         Self{id: AtomicU64::new(0)}
     }
     
     #[verifier::external_body]
-    pub closed spec fn instance(&self) -> InstanceId;
+    pub closed spec fn instance_id(&self) -> InstanceId;
 
     // right now this is a tightly coupled API, we cannot ensure that the result is 
     // comes from the tokenized state machine instance transition due to it being in proof mode
-    // we want (out.1, out.2) == self.instance().request(KVStoreTokenized::Label::RequestOp{req})
+    // we want (out.1, out.2) == self.instance_id().request(KVStoreTokenized::Label::RequestOp{req})
     // but this ensure is rolling out the result of the ensure
     #[verifier::external_body]
     pub fn receive_request(&self, print: bool) -> (out: (Request, Tracked<KVStoreTokenized::requests>))
     ensures
-        out.1@.instance_id() == self.instance(),
+        out.1@.instance_id() == self.instance_id(),
         out.1@.element() == out.0,
     {
         let id = self.id.fetch_add(1, Ordering::SeqCst);
@@ -59,7 +59,7 @@ impl ClientAPI{
     #[verifier::external_body]
     pub fn send_reply(&self, reply: Reply,  reply_shard: Tracked<KVStoreTokenized::replies>, print: bool)
         requires 
-            reply_shard@.instance_id() == self.instance(),
+            reply_shard@.instance_id() == self.instance_id(),
             reply_shard@.element() == reply
     {
         if print {

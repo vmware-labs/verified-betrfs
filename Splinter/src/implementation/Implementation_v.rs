@@ -4,11 +4,14 @@
 use builtin::*;
 use builtin_macros::*;
 use vstd::{pervasive::*};
+use vstd::prelude::*;
+use vstd::modes::*;
 use vstd::tokens::InstanceId;
 
 use crate::trusted::ClientAPI_t::*;
 use crate::trusted::KVStoreTrait_t::*;
 use crate::trusted::KVStoreTokenized_v::*;
+use crate::spec::MapSpec_t::{Request, Reply, Output};
 
 verus!{
 
@@ -20,6 +23,36 @@ pub struct Implementation {
 }
 
 impl Implementation {
+    pub exec fn handle(&mut self, req: Request, tracked req_shard: Tracked<KVStoreTokenized::requests>)
+            -> (out: (Reply, Tracked<KVStoreTokenized::replies>))
+    requires
+        req_shard@.instance_id() == old(self).instance_id(),
+        req_shard@.element() == req
+    ensures
+        out.1@.instance_id() == self.instance_id(),
+        out.1@.element() == out.0
+    {
+        assert(req.input is NoopInput);
+
+        let reply = Reply{output: Output::NoopOutput, id: req.id};
+
+        let ghost post_state: AtomicState = self.state@.value(); // noop!
+        let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
+        //let tracked mut state = &self.state;
+        proof {
+            tracked_swap(self.state.borrow_mut(), &mut atomic_state);
+        }
+
+        let tracked new_reply_token = self.instance.borrow().transition(
+            KVStoreTokenized::Label::ExecuteOp{req, reply},
+            post_state,
+            &mut atomic_state,
+            req_shard.get(),
+        );
+        self.state = Tracked(atomic_state);
+
+        (reply, Tracked(new_reply_token))
+    }
 }
 
 impl KVStoreTrait for Implementation {
@@ -29,7 +62,7 @@ impl KVStoreTrait for Implementation {
         true
     }
 
-    closed spec fn instance(self) -> InstanceId
+    closed spec fn instance_id(self) -> InstanceId
     {
         self.instance@.id()
     }
@@ -50,9 +83,13 @@ impl KVStoreTrait for Implementation {
         }
     }
 
-    fn kvstore_main(self, api: ClientAPI)
+    fn kvstore_main(&mut self, api: ClientAPI)
     {
-        print_u64(1);
+        let debug_print = true;
+        loop {
+            let (req, req_shard) = api.receive_request(debug_print);
+            let (reply, reply_shard) = self.handle(req, req_shard);
+        }
     }
 }
 

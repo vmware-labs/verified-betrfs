@@ -1,3 +1,4 @@
+#[allow(unused_imports)]    // lost in erasure
 use builtin::*;
 use vstd::prelude::*;
 

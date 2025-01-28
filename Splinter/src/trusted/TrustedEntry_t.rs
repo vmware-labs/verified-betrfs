@@ -12,9 +12,9 @@ use crate::trusted::ClientAPI_t::*;
 
 verus!{
     pub fn entry<T: KVStoreTrait>() {
-        let bank = T::new();
-        let api = ClientAPI::new(Ghost(bank.instance()));
-        bank.kvstore_main(api);
+        let mut kvstore = T::new();
+        let api = ClientAPI::new(Ghost(kvstore.instance_id()));
+        kvstore.kvstore_main(api);
     }
 }
 
