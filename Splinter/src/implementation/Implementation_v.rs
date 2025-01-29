@@ -7,20 +7,27 @@ use vstd::{pervasive::*};
 use vstd::prelude::*;
 use vstd::modes::*;
 use vstd::tokens::InstanceId;
+use vstd::hash_map::*;
 
 use crate::trusted::ClientAPI_t::*;
 use crate::trusted::KVStoreTrait_t::*;
 use crate::trusted::KVStoreTokenized_v::*;
 use crate::spec::MapSpec_t::{Request, Reply, Output};
+// use crate::spec::KeyType_t::*;
+use crate::spec::Messages_t::*;
 
 verus!{
+
+pub type Key = usize;
 
 // This struct supplies KVStoreTrait, which has both the entry point to the implementation and the
 // proof hooks to satisfy the refinement obligation trait.
 pub struct Implementation {
+    store: HashMapWithView<Key, Value>,
     state: Tracked<KVStoreTokenized::atomic_state>,
     instance: Tracked<KVStoreTokenized::Instance>,
 }
+
 
 impl Implementation {
     pub exec fn handle(&mut self, req: Request, tracked req_shard: Tracked<KVStoreTokenized::requests>)
@@ -78,6 +85,7 @@ impl KVStoreTrait for Implementation {
         ) = KVStoreTokenized::Instance::initialize();
 
         Implementation{
+            store: HashMapWithView::new(),
             state: Tracked(atomic_state),
             instance: Tracked(instance)
         }
