@@ -14,7 +14,7 @@ verus! {
 /// Keys in the real implementation are meant to be strings.
 // TODO: this is a placeholder for the Key type, eventually should be a byte string
 // struct.
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash, Debug)]
 pub struct Key(pub u64);
 
 impl View for Key {

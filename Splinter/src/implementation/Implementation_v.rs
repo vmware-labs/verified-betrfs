@@ -13,7 +13,7 @@ use vstd::std_specs::hash::*;
 use crate::trusted::ClientAPI_t::*;
 use crate::trusted::KVStoreTrait_t::*;
 use crate::trusted::KVStoreTokenized_v::*;
-use crate::spec::MapSpec_t::{Request, Reply, Output};
+use crate::spec::MapSpec_t::{Request, Reply, Output, Input};
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 
@@ -31,35 +31,122 @@ pub struct Implementation {
 
 
 impl Implementation {
-    pub exec fn handle(&mut self, req: Request, tracked req_shard: Tracked<KVStoreTokenized::requests>)
-            -> (out: (Reply, Tracked<KVStoreTokenized::replies>))
-    requires
-        req_shard@.instance_id() == old(self).instance_id(),
-        req_shard@.element() == req
-    ensures
-        out.1@.instance_id() == self.instance_id(),
-        out.1@.element() == out.0
+    pub open spec fn good_req(self, req: Request, req_shard: KVStoreTokenized::requests) -> bool
     {
-        assert(req.input is NoopInput);
+        &&& self.wf()
+        &&& req_shard.instance_id() == self.instance_id()
+        &&& req_shard.element() == req
+    }
 
-        let reply = Reply{output: Output::NoopOutput, id: req.id};
+    pub open spec fn good_reply(self, pre: Self, reply: Reply, reply_shard: KVStoreTokenized::replies) -> bool
+    {
+        &&& self.wf()
+        &&& self.instance_id() == pre.instance_id()
+        &&& reply_shard.instance_id() == self.instance_id()
+        &&& reply_shard.element() == reply
+    }
 
-        let ghost post_state: AtomicState = self.state@.value(); // noop!
-        let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
-        //let tracked mut state = &self.state;
-        proof {
-            tracked_swap(self.state.borrow_mut(), &mut atomic_state);
+    pub exec fn handle_noop(&mut self, req: Request, req_shard: Tracked<KVStoreTokenized::requests>)
+            -> (out: (Reply, Tracked<KVStoreTokenized::replies>))
+    requires old(self).good_req(req, req_shard@),
+        req.input is NoopInput,
+    ensures self.good_reply(*old(self), out.0, out.1@),
+    {
+        match req.input {
+            Input::NoopInput => {
+                let reply = Reply{output: Output::NoopOutput, id: req.id};
+
+                let ghost post_state: AtomicState = self.state@.value(); // noop!
+                let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
+                proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
+
+                let tracked new_reply_token = self.instance.borrow().transition(
+                    KVStoreTokenized::Label::ExecuteOp{req, reply},
+                    post_state,
+                    &mut atomic_state,
+                    req_shard.get(),
+                );
+                self.state = Tracked(atomic_state);
+
+                (reply, Tracked(new_reply_token))
+            },
+            _ => unreached(),
         }
+    }
 
-        let tracked new_reply_token = self.instance.borrow().transition(
-            KVStoreTokenized::Label::ExecuteOp{req, reply},
-            post_state,
-            &mut atomic_state,
-            req_shard.get(),
-        );
-        self.state = Tracked(atomic_state);
+    pub exec fn handle_put(&mut self, req: Request, req_shard: Tracked<KVStoreTokenized::requests>)
+            -> (out: (Reply, Tracked<KVStoreTokenized::replies>))
+    requires old(self).good_req(req, req_shard@),
+        req.input is PutInput,
+    ensures self.good_reply(*old(self), out.0, out.1@),
+    {
+        match req.input {
+        Input::PutInput{key, value} => {
+            self.store.insert(key, value);
 
-        (reply, Tracked(new_reply_token))
+            let reply = Reply{output: Output::PutOutput, id: req.id};
+
+            let ghost post_state: AtomicState = AtomicState{ store: self.store@ };
+            let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
+            proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
+
+            let tracked new_reply_token = self.instance.borrow().transition(
+                KVStoreTokenized::Label::ExecuteOp{req, reply},
+                post_state,
+                &mut atomic_state,
+                req_shard.get(),
+            );
+            self.state = Tracked(atomic_state);
+
+            (reply, Tracked(new_reply_token))
+        },
+            _ => unreached(),
+        }
+    }
+
+    pub exec fn handle_query(&mut self, req: Request, req_shard: Tracked<KVStoreTokenized::requests>)
+            -> (out: (Reply, Tracked<KVStoreTokenized::replies>))
+    requires old(self).good_req(req, req_shard@),
+        req.input is QueryInput,
+    ensures self.good_reply(*old(self), out.0, out.1@),
+    {
+        match req.input {
+        Input::QueryInput{key} => {
+            let value = match self.store.get(&key) {
+                Some(v) => *v,
+                None => Value(0),
+            };
+
+            let reply = Reply{output: Output::QueryOutput{value: value}, id: req.id};
+
+            let ghost post_state: AtomicState = AtomicState{ store: self.store@ };
+            let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
+            proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
+
+            let tracked new_reply_token = self.instance.borrow().transition(
+                KVStoreTokenized::Label::ExecuteOp{req, reply},
+                post_state,
+                &mut atomic_state,
+                req_shard.get(),
+            );
+            self.state = Tracked(atomic_state);
+
+            (reply, Tracked(new_reply_token))
+        },
+            _ => unreached(),
+        }
+    }
+
+    pub exec fn handle(&mut self, req: Request, req_shard: Tracked<KVStoreTokenized::requests>)
+            -> (out: (Reply, Tracked<KVStoreTokenized::replies>))
+    requires old(self).good_req(req, req_shard@),
+    ensures self.good_reply(*old(self), out.0, out.1@),
+    {
+        match req.input {
+            Input::NoopInput => self.handle_noop(req, req_shard),
+            Input::PutInput{..} => self.handle_put(req, req_shard),
+            Input::QueryInput{..} => self.handle_query(req, req_shard),
+        }
     }
 }
 
@@ -67,7 +154,7 @@ impl KVStoreTrait for Implementation {
     type Proof = KVStoreTokenized::State;   // Supplied in implementation/ModelRefinement_v
 
     closed spec fn wf(self) -> bool {
-        true
+        &&& self.state@.instance_id() == self.instance@.id()
     }
 
     closed spec fn instance_id(self) -> InstanceId
@@ -95,12 +182,17 @@ impl KVStoreTrait for Implementation {
         }
     }
 
-    fn kvstore_main(&mut self, api: ClientAPI)
+    fn kvstore_main(&mut self, mut api: ClientAPI)
     {
         let debug_print = true;
-        loop {
+        loop
+        invariant
+            self.wf(),
+            self.instance_id() == api.instance_id(),
+        {
             let (req, req_shard) = api.receive_request(debug_print);
             let (reply, reply_shard) = self.handle(req, req_shard);
+            api.send_reply(reply, reply_shard, true);
         }
     }
 }

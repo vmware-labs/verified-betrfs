@@ -10,6 +10,7 @@ verus! {
 // TODO: These are placeholders
 // TODO: (tenzinhl) convert placeholder types to enum so that
 // typchecker doesn't allow them to be interchangeably assigned
+#[derive(Clone,Copy,Debug)]
 pub struct Value(pub u64);
 
 pub struct Delta(pub u64);

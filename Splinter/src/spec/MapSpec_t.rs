@@ -23,6 +23,7 @@ verus! {
 /// An Input represents a possible action that can be taken on an abstract
 /// MapSpec (i.e.: abstract key-value store), and contains the relevant
 /// arguments for performing that operation.
+#[derive(Debug)]
 pub enum Input {
     QueryInput { key: Key },
     PutInput { key: Key, value: Value },
@@ -31,6 +32,7 @@ pub enum Input {
 
 /// An Output represents the result from taking an Input action (and contains
 /// any relevant return arguments from performing the corresponding action).
+#[derive(Debug)]
 pub enum Output {
     QueryOutput { value: Value },
     PutOutput,
@@ -126,11 +128,13 @@ state_machine!{ MapSpec {
 pub type ID = u64;
 
 // wishing for genericity
+#[derive(Debug)]
 pub struct Request {
     pub input: Input,
     pub id: ID,
 }
 
+#[derive(Debug)]
 pub struct Reply {
     pub output: Output,
     pub id: ID,

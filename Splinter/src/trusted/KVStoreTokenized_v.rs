@@ -4,16 +4,22 @@ use vstd::{prelude::*, multiset::*};
 //use vstd::pervasive::print_u64;
 use state_machines_macros::tokenized_state_machine;
 use crate::spec::MapSpec_t::{Request, Reply};
+use crate::spec::Messages_t::Value;
 
 verus! {
 
 pub struct AtomicState {
+    // TODO This eventually becomes a CTAMMap; until then,
+    // the implementation/ModelRefinement_v will have to assume false.
+    pub store: Map<int, Value>,
 }
 
 impl AtomicState {
     pub open spec fn init() -> Self
     {
-        AtomicState{}
+        AtomicState{
+            store: Map::empty()
+        }
     }
 
     pub open spec fn transition(pre: Self, post: Self, req: Request, reply: Reply) -> bool

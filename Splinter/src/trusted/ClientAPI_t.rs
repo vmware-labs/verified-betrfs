@@ -5,6 +5,8 @@ use vstd::{prelude::*};
 use vstd::tokens::InstanceId;
 
 use crate::spec::MapSpec_t::{Request, Reply, Input};
+use crate::spec::KeyType_t::Key;
+use crate::spec::Messages_t::Value;
 
 // ------- breaks trust boundary -------
 use crate::trusted::KVStoreTokenized_v::*;
@@ -21,6 +23,8 @@ verus! {
 #[verifier::external_body]
 pub struct ClientAPI{
     pub id: AtomicU64,
+
+    pub inputs: Vec<Input>,
 }
 
 impl ClientAPI{
@@ -28,7 +32,17 @@ impl ClientAPI{
     pub fn new(instance: Ghost<InstanceId>) -> (out: Self)
         ensures out.instance_id() == instance
     {
-        Self{id: AtomicU64::new(0)}
+        let inputs = vec![
+            Input::NoopInput{},
+            Input::PutInput{key: Key(1), value: Value(11)},
+            Input::QueryInput{key: Key(1)},
+            Input::QueryInput{key: Key(0)},
+            Input::QueryInput{key: Key(3)},
+            Input::PutInput{key: Key(3), value: Value(33)},
+            Input::QueryInput{key: Key(3)},
+        ];
+
+        Self{id: AtomicU64::new(0), inputs}
     }
     
     #[verifier::external_body]
@@ -39,20 +53,22 @@ impl ClientAPI{
     // we want (out.1, out.2) == self.instance_id().request(KVStoreTokenized::Label::RequestOp{req})
     // but this ensure is rolling out the result of the ensure
     #[verifier::external_body]
-    pub fn receive_request(&self, print: bool) -> (out: (Request, Tracked<KVStoreTokenized::requests>))
+    pub fn receive_request(&mut self, print: bool) -> (out: (Request, Tracked<KVStoreTokenized::requests>))
     ensures
+        self.instance_id() == old(self).instance_id(),
         out.1@.instance_id() == self.instance_id(),
         out.1@.element() == out.0,
     {
         let id = self.id.fetch_add(1, Ordering::SeqCst);
-        let amt = (id % 20) as u32;
+        let input = if 0 < self.inputs.len() { self.inputs.remove(0) }
+            else { Input::NoopInput{} };
 
-        let input = Input::NoopInput;
+        let request = Request {input, id};
         if print {
-            println!("request {}: noooooop!", id);
+            println!("request input {:?}", request);
         }
 
-        (Request {input, id}, Tracked::assume_new())
+        (request, Tracked::assume_new())
     }
 
     // NOTE: corresponds to a tokenized state machine reply step, consumes the reply shard
@@ -63,7 +79,8 @@ impl ClientAPI{
             reply_shard@.element() == reply
     {
         if print {
-            println!("reply {}", reply.id);
+            println!("   reply {:?}", reply);
+            println!("");
         }
     }
 }
