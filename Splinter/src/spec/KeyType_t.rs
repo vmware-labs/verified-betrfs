@@ -14,7 +14,15 @@ verus! {
 /// Keys in the real implementation are meant to be strings.
 // TODO: this is a placeholder for the Key type, eventually should be a byte string
 // struct.
+#[derive(PartialEq, Eq, Hash)]
 pub struct Key(pub u64);
+
+impl View for Key {
+    type V = int;
+    open spec fn view(&self) -> int {
+        self.0 as int
+    }
+}
 
 /// An Element is a Be-tree pivot value. It is an enum type because we need a special
 /// value `Max` for representing a value larger than the largest key. `Max` is only used
