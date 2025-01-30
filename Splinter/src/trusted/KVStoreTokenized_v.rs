@@ -5,7 +5,7 @@ use vstd::{prelude::*, multiset::*};
 use state_machines_macros::tokenized_state_machine;
 use crate::spec::FloatingSeq_t::*;
 use crate::spec::MapSpec_t::*;
-use crate::spec::Messages_t::Value;
+// use crate::spec::Messages_t::Value;
 
 verus! {
 
@@ -30,9 +30,31 @@ impl AtomicState {
         }
     }
 
-    pub open spec fn transition(pre: Self, post: Self, req: Request, reply: Reply) -> bool
+    pub open spec fn request_transition(pre: Self, post: Self, req: Request) -> bool
     {
-        true
+        let lbl = CrashTolerantAsyncMap::Label::OperateOp{
+            base_op: AsyncMap::Label::RequestOp{ req: req }
+        };
+        CrashTolerantAsyncMap::State::next(pre.store, post.store, lbl)
+    }
+
+    pub open spec fn execute_transition(pre: Self, post: Self, req: Request, reply: Reply) -> bool
+    {
+        let lbl = CrashTolerantAsyncMap::Label::OperateOp{
+            base_op: AsyncMap::Label::ExecuteOp{
+                req: req,
+                reply: reply,
+            }
+        };
+        CrashTolerantAsyncMap::State::next(pre.store, post.store, lbl)
+    }
+
+    pub open spec fn reply_transition(pre: Self, post: Self, reply: Reply) -> bool
+    {
+        let lbl = CrashTolerantAsyncMap::Label::OperateOp{
+            base_op: AsyncMap::Label::ReplyOp{ reply: reply }
+        };
+        CrashTolerantAsyncMap::State::next(pre.store, post.store, lbl)
     }
 }
 
@@ -66,37 +88,36 @@ tokenized_state_machine!{KVStoreTokenized{
         init replies = Multiset::empty();
     }}
 
-    transition!{ request(lbl: Label) {
+    transition!{ request(lbl: Label, post_atomic_state: AtomicState) {
         require let Label::RequestOp{ req } = lbl;
+
+        // Keep atomic state req list in sync with sharded reqs.
+        // This is a silly detour because we're trying to reuse the CTAM as
+        // our AtomicState, and CTAM tracks the requests & replies.
+        require AtomicState::request_transition(pre.atomic_state, post_atomic_state, req);
+        update atomic_state = post_atomic_state;
+
         add requests += { req };
     }}
 
-    transition!{ query_execute(lbl: Label) {
-        require let Label::ExecuteOp{ req, reply } = lbl;
-        require let Input::QueryInput{ key } = req.input;
-        remove requests -= {req};
-
-        // wait this isn't guaranteed to be Define message type?
-        let val = pre.atomic_state.store.versions.last().appv.kmmap[key]->value;
-
-        require reply.id == req.id;
-        require reply.output is QueryOutput;
-        require reply.output->value == val;
-
-        add replies += {reply};
-    }}
-
-    transition!{ transition(lbl: Label, post_atomic_state: AtomicState) {
+    transition!{ execute_transition(lbl: Label, post_atomic_state: AtomicState) {
         // TODO admit noops and req-only, reply-only ops, and disk IOs
         require let Label::ExecuteOp{ req, reply } = lbl;
         remove requests -= {req};
-        require AtomicState::transition(pre.atomic_state, post_atomic_state, req, reply);
+        require AtomicState::execute_transition(pre.atomic_state, post_atomic_state, req, reply);
         update atomic_state = post_atomic_state;
         add replies += {reply};
     }}
 
-    transition!{ reply(lbl: Label) {
+    transition!{ reply(lbl: Label, post_atomic_state: AtomicState) {
         require let Label::ReplyOp{ reply } = lbl;
+
+        // Keep atomic state reply list in sync with sharded replys.
+        // This is a silly detour because we're trying to reuse the CTAM as
+        // our AtomicState, and CTAM tracks the requests & replies.
+        require AtomicState::reply_transition(pre.atomic_state, post_atomic_state, reply);
+        update atomic_state = post_atomic_state;
+
         remove replies -= { reply };
     }}
 

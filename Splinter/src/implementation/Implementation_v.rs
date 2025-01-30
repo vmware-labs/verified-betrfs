@@ -86,11 +86,66 @@ impl Implementation {
             Input::NoopInput => {
                 let reply = Reply{output: Output::NoopOutput, id: req.id};
 
+                let ghost post_state = AtomicState {
+                    store: CrashTolerantAsyncMap::State {
+                        async_ephemeral: EphemeralState {
+                            requests: self.state@.value().store.async_ephemeral.requests.remove(req),
+                            replies: self.state@.value().store.async_ephemeral.replies.remove(reply),
+                        },
+                        .. self.state@.value().store
+                    }
+                };
                 let ghost post_state: AtomicState = self.state@.value(); // noop!
+
                 let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
                 proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
 
-                let tracked new_reply_token = self.instance.borrow().transition(
+                proof {
+                    let ctam = atomic_state.value().store;
+                    let async_label = AsyncMap::Label::RequestOp{ req: req };
+                    let ctam_label = CrashTolerantAsyncMap::Label::OperateOp{ base_op: async_label };
+                    let async_state_pre = AsyncMap::State {
+                        persistent: ctam.versions.last(),
+                        ephemeral: ctam.async_ephemeral
+                    };
+                    let async_state_post = AsyncMap::State {
+                        persistent: post_state.store.versions.last(),
+                        ephemeral: post_state.store.async_ephemeral
+                    };
+
+                    assume( ctam.async_ephemeral.requests.contains(req) );
+                    assume( !ctam.async_ephemeral.replies.contains(reply) );
+                    reveal(CrashTolerantAsyncMap::State::next);
+                    reveal(CrashTolerantAsyncMap::State::next_by);
+                    reveal(AsyncMap::State::next);
+                    reveal(AsyncMap::State::next_by);
+                    reveal(MapSpec::State::next);
+                    reveal(MapSpec::State::next_by);
+
+                    assert( AsyncMap::State::next_by(
+                            async_state_pre,
+                            async_state_post,
+                            async_label,
+                            AsyncMap::Step::execute(
+                                MapSpec::Label::Noop{input: req.input, output: reply.output},
+                                post_state.store.versions.last()
+                            ),
+                        )
+                    );
+                    assert( CrashTolerantAsyncMap::State::next_by(
+                            ctam, post_state.store, ctam_label,
+                            CrashTolerantAsyncMap::Step::operate(post_state.store.versions, post_state.store.async_ephemeral)
+                            )
+                    );
+                    assert( CrashTolerantAsyncMap::State::next(
+                            ctam, post_state.store,
+                            CrashTolerantAsyncMap::Label::OperateOp{ base_op: AsyncMap::Label::RequestOp{ req: req } },
+                            )
+                    );
+                    assert( AtomicState::execute_transition(atomic_state.value(), post_state, req, reply) );
+                }
+
+                let tracked new_reply_token = self.instance.borrow().execute_transition(
                     KVStoreTokenized::Label::ExecuteOp{req, reply},
                     post_state,
                     &mut atomic_state,
@@ -120,7 +175,7 @@ impl Implementation {
             let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
             proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
 
-            let tracked new_reply_token = self.instance.borrow().transition(
+            let tracked new_reply_token = self.instance.borrow().execute_transition(
                 KVStoreTokenized::Label::ExecuteOp{req, reply},
                 post_state,
                 &mut atomic_state,
@@ -153,7 +208,7 @@ impl Implementation {
             let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
             proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
 
-            let tracked new_reply_token = self.instance.borrow().transition(
+            let tracked new_reply_token = self.instance.borrow().execute_transition(
                 KVStoreTokenized::Label::ExecuteOp{req, reply},
                 post_state,
                 &mut atomic_state,
