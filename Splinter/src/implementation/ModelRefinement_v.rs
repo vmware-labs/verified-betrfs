@@ -59,21 +59,17 @@ impl RefinementObligation for KVStoreTokenized::State {
     }
  
     closed spec fn i(model: SystemModel::State<Self::Model>)
-        -> (ctam: CrashTolerantAsyncMap::State)
+        -> (mapspec: CrashTolerantAsyncMap::State)
     {
-        // SystemModel wraps program & disk, we shall ignore disk for now
-        // Model is a KVStoreTokenized::State (from type assignment above in this file)
-        // We're going to pluck the atomic_state out and that's almost the ctam,
-        // except we need to squirt the requests & replies into it.
-        
-        CrashTolerantAsyncMap::State{
-            versions: model.program.atomic_state.store.versions,
-            async_ephemeral: EphemeralState{
-                requests: model.program.requests.dom(),
-                replies: model.program.replies.dom(),
-            },
-            sync_requests: Map::empty(),
-        }
+        arbitrary()
+//         CrashTolerantAsyncMap::State{
+//             versions: model.program.atomic_state.store.versions,
+//             async_ephemeral: EphemeralState{
+//                 requests: model.program.requests.dom(),
+//                 replies: model.program.replies.dom(),
+//             },
+//             sync_requests: Map::empty(),
+//         }
     }
 
     closed spec fn i_lbl(lbl: SystemModel::Label) -> (ctam_lbl: CrashTolerantAsyncMap::Label)

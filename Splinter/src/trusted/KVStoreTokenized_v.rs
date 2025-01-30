@@ -3,58 +3,25 @@
 use vstd::{prelude::*, multiset::*};
 //use vstd::pervasive::print_u64;
 use state_machines_macros::tokenized_state_machine;
-use crate::spec::FloatingSeq_t::*;
 use crate::spec::MapSpec_t::*;
 // use crate::spec::Messages_t::Value;
 
 verus! {
 
+#[verifier::ext_equal]
 pub struct AtomicState {
-    // TODO This eventually becomes a CTAMMap; until then,
-    // the implementation/ModelRefinement_v will have to assume false.
-
-    //pub store: Map<int, Value>,
-    pub store: CrashTolerantAsyncMap::State,
+    pub store: MapSpec::State,
 }
 
 impl AtomicState {
     pub open spec fn init() -> Self
     {
-        AtomicState{
-            // TODO These types should get `exec fn new`s
-            store: CrashTolerantAsyncMap::State {
-                versions: FloatingSeq { start: 0, entries: seq![PersistentState{appv: my_init()}], },
-                async_ephemeral: AsyncMap::State::init_ephemeral_state(), 
-                sync_requests: Map::empty(),
-            }
-        }
+        AtomicState{ store: my_init() }
     }
 
-    pub open spec fn request_transition(pre: Self, post: Self, req: Request) -> bool
+    pub open spec fn map_transition(pre: Self, post: Self, map_lbl: MapSpec::Label) -> bool
     {
-        let lbl = CrashTolerantAsyncMap::Label::OperateOp{
-            base_op: AsyncMap::Label::RequestOp{ req: req }
-        };
-        CrashTolerantAsyncMap::State::next(pre.store, post.store, lbl)
-    }
-
-    pub open spec fn execute_transition(pre: Self, post: Self, req: Request, reply: Reply) -> bool
-    {
-        let lbl = CrashTolerantAsyncMap::Label::OperateOp{
-            base_op: AsyncMap::Label::ExecuteOp{
-                req: req,
-                reply: reply,
-            }
-        };
-        CrashTolerantAsyncMap::State::next(pre.store, post.store, lbl)
-    }
-
-    pub open spec fn reply_transition(pre: Self, post: Self, reply: Reply) -> bool
-    {
-        let lbl = CrashTolerantAsyncMap::Label::OperateOp{
-            base_op: AsyncMap::Label::ReplyOp{ reply: reply }
-        };
-        CrashTolerantAsyncMap::State::next(pre.store, post.store, lbl)
+        MapSpec::State::next(pre.store, post.store, map_lbl)
     }
 }
 
@@ -90,34 +57,24 @@ tokenized_state_machine!{KVStoreTokenized{
 
     transition!{ request(lbl: Label, post_atomic_state: AtomicState) {
         require let Label::RequestOp{ req } = lbl;
-
-        // Keep atomic state req list in sync with sharded reqs.
-        // This is a silly detour because we're trying to reuse the CTAM as
-        // our AtomicState, and CTAM tracks the requests & replies.
-        require AtomicState::request_transition(pre.atomic_state, post_atomic_state, req);
-        update atomic_state = post_atomic_state;
-
         add requests += { req };
     }}
 
-    transition!{ execute_transition(lbl: Label, post_atomic_state: AtomicState) {
-        // TODO admit noops and req-only, reply-only ops, and disk IOs
+    transition!{ execute_transition(lbl: Label, post_atomic_state: AtomicState, map_lbl: MapSpec::Label) {
         require let Label::ExecuteOp{ req, reply } = lbl;
+
         remove requests -= {req};
-        require AtomicState::execute_transition(pre.atomic_state, post_atomic_state, req, reply);
+
+        require getInput(map_lbl) == req.input;
+        require getOutput(map_lbl) == reply.output;
+        require AtomicState::map_transition(pre.atomic_state, post_atomic_state, map_lbl);
         update atomic_state = post_atomic_state;
+
         add replies += {reply};
     }}
 
     transition!{ reply(lbl: Label, post_atomic_state: AtomicState) {
         require let Label::ReplyOp{ reply } = lbl;
-
-        // Keep atomic state reply list in sync with sharded replys.
-        // This is a silly detour because we're trying to reuse the CTAM as
-        // our AtomicState, and CTAM tracks the requests & replies.
-        require AtomicState::reply_transition(pre.atomic_state, post_atomic_state, reply);
-        update atomic_state = post_atomic_state;
-
         remove replies -= { reply };
     }}
 

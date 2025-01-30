@@ -13,7 +13,6 @@ use vstd::std_specs::hash::*;
 use crate::trusted::ClientAPI_t::*;
 use crate::trusted::KVStoreTrait_t::*;
 use crate::trusted::KVStoreTokenized_v::*;
-use crate::spec::FloatingSeq_t::*;
 use crate::spec::MapSpec_t::{Request, Reply, Output, Input};
 use crate::spec::MapSpec_t::*;
 use crate::spec::TotalKMMap_t::*;
@@ -37,26 +36,16 @@ impl Implementation {
     pub closed spec fn i_hashmap(store: Map<int, Value>) -> Map<Key, Message>
     {
         Map::new(
-            |k: Key| store.contains_key(k.0 as int),
-            |k: Key| Message::Define{value: store[k.0 as int]}
+            |k: Key| true,
+            |k: Key| if store.contains_key(k.0 as int) { Message::Define{value: store[k.0 as int] } }
+                    else { Message::empty() }
         )
     }
 
     pub closed spec fn i(self) -> AtomicState {
         AtomicState{
-            store: CrashTolerantAsyncMap::State {
-                versions: FloatingSeq {
-                    start: 0, entries: Seq::empty().push(
-                        PersistentState{
-                            appv: MapSpec::State {
-                                kmmap: TotalKMMap(Self::i_hashmap(self.store@)),
-                            }
-
-                        }
-                   ),
-                },
-                async_ephemeral: EphemeralState{ requests: Set::empty(), replies: Set::empty(), },
-                sync_requests: Map::empty(),
+            store: MapSpec::State {
+                kmmap: TotalKMMap(Self::i_hashmap(self.store@)),
             }
         }
     }
@@ -86,70 +75,25 @@ impl Implementation {
             Input::NoopInput => {
                 let reply = Reply{output: Output::NoopOutput, id: req.id};
 
-                let ghost post_state = AtomicState {
-                    store: CrashTolerantAsyncMap::State {
-                        async_ephemeral: EphemeralState {
-                            requests: self.state@.value().store.async_ephemeral.requests.remove(req),
-                            replies: self.state@.value().store.async_ephemeral.replies.remove(reply),
-                        },
-                        .. self.state@.value().store
-                    }
-                };
-                let ghost post_state: AtomicState = self.state@.value(); // noop!
+                let ghost post_state = self.state@.value(); // noop!
 
                 let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
                 proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
 
+                let ghost map_lbl = MapSpec::Label::Noop{input: req.input, output: reply.output};
                 proof {
-                    let ctam = atomic_state.value().store;
-                    let async_label = AsyncMap::Label::RequestOp{ req: req };
-                    let ctam_label = CrashTolerantAsyncMap::Label::OperateOp{ base_op: async_label };
-                    let async_state_pre = AsyncMap::State {
-                        persistent: ctam.versions.last(),
-                        ephemeral: ctam.async_ephemeral
-                    };
-                    let async_state_post = AsyncMap::State {
-                        persistent: post_state.store.versions.last(),
-                        ephemeral: post_state.store.async_ephemeral
-                    };
-
-                    assume( ctam.async_ephemeral.requests.contains(req) );
-                    assume( !ctam.async_ephemeral.replies.contains(reply) );
-                    reveal(CrashTolerantAsyncMap::State::next);
-                    reveal(CrashTolerantAsyncMap::State::next_by);
-                    reveal(AsyncMap::State::next);
-                    reveal(AsyncMap::State::next_by);
                     reveal(MapSpec::State::next);
                     reveal(MapSpec::State::next_by);
-
-                    assert( AsyncMap::State::next_by(
-                            async_state_pre,
-                            async_state_post,
-                            async_label,
-                            AsyncMap::Step::execute(
-                                MapSpec::Label::Noop{input: req.input, output: reply.output},
-                                post_state.store.versions.last()
-                            ),
-                        )
-                    );
-                    assert( CrashTolerantAsyncMap::State::next_by(
-                            ctam, post_state.store, ctam_label,
-                            CrashTolerantAsyncMap::Step::operate(post_state.store.versions, post_state.store.async_ephemeral)
-                            )
-                    );
-                    assert( CrashTolerantAsyncMap::State::next(
-                            ctam, post_state.store,
-                            CrashTolerantAsyncMap::Label::OperateOp{ base_op: AsyncMap::Label::RequestOp{ req: req } },
-                            )
-                    );
-                    assert( AtomicState::execute_transition(atomic_state.value(), post_state, req, reply) );
+                    assert( MapSpec::State::next_by(post_state.store, post_state.store,
+                            map_lbl, MapSpec::Step::noop())); // witness to step
                 }
 
                 let tracked new_reply_token = self.instance.borrow().execute_transition(
                     KVStoreTokenized::Label::ExecuteOp{req, reply},
                     post_state,
+                    map_lbl,
                     &mut atomic_state,
-                    req_shard.get(),
+                    req_shard.get()
                 );
                 self.state = Tracked(atomic_state);
 
@@ -167,17 +111,48 @@ impl Implementation {
     {
         match req.input {
         Input::PutInput{key, value} => {
+            let ghost pre_state: AtomicState = self.i();
             self.store.insert(key, value);
+            let ghost post_state: AtomicState = self.i();
 
             let reply = Reply{output: Output::PutOutput, id: req.id};
 
-            let ghost post_state: AtomicState = self.i();
+            let ghost post_state_y = AtomicState {
+                store: MapSpec::State {
+                    kmmap: pre_state.store.kmmap.insert(key, Message::Define{value})
+                }
+            };
+
+            proof {
+                let phy_map = post_state.store.kmmap.0;
+                let other_map = post_state_y.store.kmmap.0;
+                // TODO(verus): another failure of deep extn equality
+                // This is probably a state_machine! macro problem: MapSpec::State
+                // isn't #[verifier::ext_equal].
+                assert( phy_map == other_map );
+                assert( post_state == post_state_y );
+            }
+
             let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
             proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
 
+            let ghost map_lbl = MapSpec::Label::Put{input: req.input, output: reply.output};
+            proof {
+                reveal(MapSpec::State::next);
+                reveal(MapSpec::State::next_by);
+                assert( MapSpec::State::next_by(pre_state.store, post_state.store,
+                        map_lbl, MapSpec::Step::put())); // witness to step
+                assert( req_shard@.element() == req );
+                assert( getInput(map_lbl) == req.input );
+                assert( getOutput(map_lbl) == reply.output );
+                assert( AtomicState::map_transition(pre_state, post_state, map_lbl) );
+            }
+
+            assert( pre_state == atomic_state.value() );
             let tracked new_reply_token = self.instance.borrow().execute_transition(
                 KVStoreTokenized::Label::ExecuteOp{req, reply},
                 post_state,
+                map_lbl,
                 &mut atomic_state,
                 req_shard.get(),
             );
@@ -208,9 +183,12 @@ impl Implementation {
             let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
             proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
 
+            let ghost map_lbl = MapSpec::Label::Query{input: req.input, output: reply.output};
+            // todo reveal/witness proof
             let tracked new_reply_token = self.instance.borrow().execute_transition(
                 KVStoreTokenized::Label::ExecuteOp{req, reply},
                 post_state,
+                map_lbl,
                 &mut atomic_state,
                 req_shard.get(),
             );
@@ -240,6 +218,7 @@ impl KVStoreTrait for Implementation {
 
     closed spec fn wf(self) -> bool {
         &&& self.state@.instance_id() == self.instance@.id()
+        &&& self.i() == self.state@.value()
     }
 
     closed spec fn instance_id(self) -> InstanceId
@@ -260,11 +239,21 @@ impl KVStoreTrait for Implementation {
         // axiom_usize_obeys_hash_table_key_model isn't firing!?
         assume( obeys_key_model::<Key>() );
 
-        Implementation{
+        let selff = Implementation{
             store: HashMapWithView::new(),
             state: Tracked(atomic_state),
             instance: Tracked(instance)
+        };
+        proof {
+            // TODO(verus): another failure of deep extn equality
+            // This is probably a state_machine! macro problem: MapSpec::State
+            // isn't #[verifier::ext_equal].
+            let phy_map = selff.i().store.kmmap.0;
+            let ghost_map = selff.state@.value().store.kmmap.0;
+            assert( phy_map == ghost_map );
+//              assert( selff.i() == selff.state@.value() );
         }
+        selff
     }
 
     fn kvstore_main(&mut self, mut api: ClientAPI)
