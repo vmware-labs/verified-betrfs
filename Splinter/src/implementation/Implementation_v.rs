@@ -13,7 +13,10 @@ use vstd::std_specs::hash::*;
 use crate::trusted::ClientAPI_t::*;
 use crate::trusted::KVStoreTrait_t::*;
 use crate::trusted::KVStoreTokenized_v::*;
+use crate::spec::FloatingSeq_t::*;
 use crate::spec::MapSpec_t::{Request, Reply, Output, Input};
+use crate::spec::MapSpec_t::*;
+use crate::spec::TotalKMMap_t::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 
@@ -29,8 +32,37 @@ pub struct Implementation {
     instance: Tracked<KVStoreTokenized::Instance>,
 }
 
-
 impl Implementation {
+    // The View hos HashMapWithView isn't what we need.
+    // Gotta transform Key -> Key (by way of the darn int from the HashMapWithView @ :v)
+    // and Value -> Message.
+    pub closed spec fn i_hashmap(store: Map<int, Value>) -> Map<Key, Message>
+    {
+        Map::new(
+            |k: Key| store.contains_key(k.0 as int),
+            |k: Key| Message::Define{value: store[k.0 as int]}
+        )
+    }
+
+    pub closed spec fn i(self) -> AtomicState {
+        AtomicState{
+            store: CrashTolerantAsyncMap::State {
+                versions: FloatingSeq {
+                    start: 0, entries: Seq::empty().push(
+                        PersistentState{
+                            appv: MapSpec::State {
+                                kmmap: TotalKMMap(Self::i_hashmap(self.store@)),
+                            }
+
+                        }
+                   ),
+                },
+                async_ephemeral: EphemeralState{ requests: Set::empty(), replies: Set::empty(), },
+                sync_requests: Map::empty(),
+            }
+        }
+    }
+
     pub open spec fn good_req(self, req: Request, req_shard: KVStoreTokenized::requests) -> bool
     {
         &&& self.wf()
@@ -86,7 +118,7 @@ impl Implementation {
 
             let reply = Reply{output: Output::PutOutput, id: req.id};
 
-            let ghost post_state: AtomicState = AtomicState{ store: self.store@ };
+            let ghost post_state: AtomicState = self.i();
             let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
             proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
 
@@ -119,7 +151,7 @@ impl Implementation {
 
             let reply = Reply{output: Output::QueryOutput{value: value}, id: req.id};
 
-            let ghost post_state: AtomicState = AtomicState{ store: self.store@ };
+            let ghost post_state: AtomicState = self.i();
             let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
             proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
 
