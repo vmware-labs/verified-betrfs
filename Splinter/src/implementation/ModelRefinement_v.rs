@@ -9,15 +9,27 @@ use crate::spec::SystemModel_t::*;
 
 verus!{
 
+// NOTE: KVStoreTokenized should just use program label as its own
+impl ProgramLabel {
+    pub open spec fn to_kv_lbl(self) -> KVStoreTokenized::Label{
+        match self {
+            ProgramLabel::AcceptRequest{req} => KVStoreTokenized::Label::RequestOp{req},
+            ProgramLabel::DeliverReply{reply} => KVStoreTokenized::Label::ReplyOp{reply},
+            ProgramLabel::Execute{req, reply} => KVStoreTokenized::Label::ExecuteOp{req, reply},
+            _ => KVStoreTokenized::Label::InternalOp,
+        }
+    }
+}
+
 impl ProgramModel for KVStoreTokenized::State {
     open spec fn init(pre: Self, disk: DiskModel) -> bool
     {
-        true     // placeholder; wire into real system
+        Self::initialize(pre)
     }
 
     open spec fn next(pre: Self, post: Self, lbl: ProgramLabel) -> bool
     {
-        true     // placeholder; wire into real system
+        Self::next(pre, post, lbl.to_kv_lbl())
     }
 }
 

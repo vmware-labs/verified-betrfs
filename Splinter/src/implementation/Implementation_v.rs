@@ -22,8 +22,6 @@ use crate::spec::Messages_t::*;
 
 verus!{
 
-// pub type Key = usize;
-
 // This struct supplies KVStoreTrait, which has both the entry point to the implementation and the
 // proof hooks to satisfy the refinement obligation trait.
 pub struct Implementation {

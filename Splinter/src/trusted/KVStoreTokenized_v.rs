@@ -23,8 +23,8 @@ impl AtomicState {
         AtomicState{
             // TODO These types should get `exec fn new`s
             store: CrashTolerantAsyncMap::State {
-                versions: FloatingSeq { start: 0, entries: Seq::empty(), },
-                async_ephemeral: EphemeralState{ requests: Set::empty(), replies: Set::empty(), },
+                versions: FloatingSeq { start: 0, entries: seq![PersistentState{appv: my_init()}], },
+                async_ephemeral: AsyncMap::State::init_ephemeral_state(), 
                 sync_requests: Map::empty(),
             }
         }
@@ -57,6 +57,7 @@ tokenized_state_machine!{KVStoreTokenized{
         RequestOp { req: Request },
         ExecuteOp { req: Request, reply: Reply },
         ReplyOp { reply: Reply },
+        InternalOp,
     }
 
     init!{ initialize() {
@@ -68,6 +69,21 @@ tokenized_state_machine!{KVStoreTokenized{
     transition!{ request(lbl: Label) {
         require let Label::RequestOp{ req } = lbl;
         add requests += { req };
+    }}
+
+    transition!{ query_execute(lbl: Label) {
+        require let Label::ExecuteOp{ req, reply } = lbl;
+        require let Input::QueryInput{ key } = req.input;
+        remove requests -= {req};
+
+        // wait this isn't guaranteed to be Define message type?
+        let val = pre.atomic_state.store.versions.last().appv.kmmap[key]->value;
+
+        require reply.id == req.id;
+        require reply.output is QueryOutput;
+        require reply.output->value == val;
+
+        add replies += {reply};
     }}
 
     transition!{ transition(lbl: Label, post_atomic_state: AtomicState) {
@@ -84,26 +100,34 @@ tokenized_state_machine!{KVStoreTokenized{
         remove replies -= { reply };
     }}
 
-    #[invariant]
-    pub open spec fn wf(&self) -> bool {
-        true
-    }
+    transition!{ internal(lbl: Label) {
+        require lbl is InternalOp;
+    }}
 
-    #[inductive(initialize)]
-    fn initialize_inductive(post: Self) { 
-    }
+    // #[invariant]
+    // pub open spec fn wf(&self) -> bool {
+    //     true
+    // }
 
-    #[inductive(request)]
-    fn request_inductive(pre: Self, post: Self, lbl: Label) {
-    }
+    // #[inductive(initialize)]
+    // fn initialize_inductive(post: Self) { 
+    // }
+
+    // #[inductive(request)]
+    // fn request_inductive(pre: Self, post: Self, lbl: Label) {
+    // }
    
-    #[inductive(transition)]
-    fn transition_inductive(pre: Self, post: Self, lbl: Label, post_atomic_state: AtomicState) { 
-    }
+    // #[inductive(transition)]
+    // fn transition_inductive(pre: Self, post: Self, lbl: Label, post_atomic_state: AtomicState) { 
+    // }
 
-    #[inductive(reply)]
-    fn reply_inductive(pre: Self, post: Self, lbl: Label) { 
-    }
+    // #[inductive(reply)]
+    // fn reply_inductive(pre: Self, post: Self, lbl: Label) { 
+    // }
+
+    // #[inductive(internal)]
+    // fn internal_inductive(pre: Self, post: Self, lbl: Label) {
+    // }
 }}
 }
 
