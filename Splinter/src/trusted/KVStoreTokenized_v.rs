@@ -4,6 +4,7 @@ use vstd::{prelude::*, multiset::*};
 //use vstd::pervasive::print_u64;
 use state_machines_macros::tokenized_state_machine;
 use crate::spec::MapSpec_t::*;
+use crate::spec::TotalKMMap_t::*;
 // use crate::spec::Messages_t::Value;
 
 verus! {

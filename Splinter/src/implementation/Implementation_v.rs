@@ -123,15 +123,7 @@ impl Implementation {
                 }
             };
 
-            proof {
-                let phy_map = post_state.store.kmmap.0;
-                let other_map = post_state_y.store.kmmap.0;
-                // TODO(verus): another failure of deep extn equality
-                // This is probably a state_machine! macro problem: MapSpec::State
-                // isn't #[verifier::ext_equal].
-                assert( phy_map == other_map );
-                assert( post_state == post_state_y );
-            }
+            assert( post_state == post_state_y );   // trigger extn equality
 
             let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
             proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
@@ -142,10 +134,7 @@ impl Implementation {
                 reveal(MapSpec::State::next_by);
                 assert( MapSpec::State::next_by(pre_state.store, post_state.store,
                         map_lbl, MapSpec::Step::put())); // witness to step
-                assert( req_shard@.element() == req );
-                assert( getInput(map_lbl) == req.input );
-                assert( getOutput(map_lbl) == reply.output );
-                assert( AtomicState::map_transition(pre_state, post_state, map_lbl) );
+//                 assert( AtomicState::map_transition(pre_state, post_state, map_lbl) );
             }
 
             assert( pre_state == atomic_state.value() );
@@ -177,6 +166,9 @@ impl Implementation {
                 None => Value(0),
             };
 
+            let ghost pre_state: AtomicState = self.i();
+            let ghost post_state = pre_state;
+
             let reply = Reply{output: Output::QueryOutput{value: value}, id: req.id};
 
             let ghost post_state: AtomicState = self.i();
@@ -184,7 +176,13 @@ impl Implementation {
             proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
 
             let ghost map_lbl = MapSpec::Label::Query{input: req.input, output: reply.output};
-            // todo reveal/witness proof
+            proof {
+                reveal(MapSpec::State::next);
+                reveal(MapSpec::State::next_by);
+                assert( MapSpec::State::next_by(pre_state.store, post_state.store,
+                        map_lbl, MapSpec::Step::query())); // witness to step
+//                 assert( AtomicState::map_transition(pre_state, post_state, map_lbl) );
+            }
             let tracked new_reply_token = self.instance.borrow().execute_transition(
                 KVStoreTokenized::Label::ExecuteOp{req, reply},
                 post_state,
@@ -244,15 +242,7 @@ impl KVStoreTrait for Implementation {
             state: Tracked(atomic_state),
             instance: Tracked(instance)
         };
-        proof {
-            // TODO(verus): another failure of deep extn equality
-            // This is probably a state_machine! macro problem: MapSpec::State
-            // isn't #[verifier::ext_equal].
-            let phy_map = selff.i().store.kmmap.0;
-            let ghost_map = selff.state@.value().store.kmmap.0;
-            assert( phy_map == ghost_map );
-//              assert( selff.i() == selff.state@.value() );
-        }
+        assert( selff.i() == selff.state@.value() );   // trigger extn equality
         selff
     }
 
