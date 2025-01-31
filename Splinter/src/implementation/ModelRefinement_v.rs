@@ -129,12 +129,17 @@ impl RefinementObligation for KVStoreTokenized::State {
 
     proof fn i_lbl_valid(lbl: SystemModel::Label, ctam_lbl: CrashTolerantAsyncMap::Label)
     {
-        assume(false);
+//         assert( ctam_lbl == Self::i_lbl(lbl) );
+//         assert( lbl.label_correspondance(ctam_lbl) );
     }
 
     proof fn init_refines(pre: SystemModel::State<Self::Model>)
     {
-        assume(false);
+//         assert( SystemModel::State::initialize(pre, pre.program, pre.disk) );
+        // extn equal trigger
+        assert( Self::i(pre).async_ephemeral == AsyncMap::State::init_ephemeral_state() );
+//         assert( CrashTolerantAsyncMap::State::initialize(Self::i(pre)) );
+//         assert( Self::inv(pre) );
     }
 
     proof fn next_refines(pre: SystemModel::State<Self::Model>, post: SystemModel::State<Self::Model>, lbl: SystemModel::Label)
@@ -145,7 +150,14 @@ impl RefinementObligation for KVStoreTokenized::State {
 //         reveal(KVStoreTokenized::State::next);
 //         reveal(KVStoreTokenized::State::next_by);
 
-        assume(false);
+        // requires:
+        assert( SystemModel::State::next(pre, post, lbl) );
+        assert( Self::inv(pre) );
+        // ensures:
+        assume(false);  // left off here
+        assert( CrashTolerantAsyncMap::State::next(Self::i(pre), Self::i(post), Self::i_lbl(lbl)) );
+        assert( Self::inv(post) );
+
     }
 }
 
