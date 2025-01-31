@@ -6,6 +6,7 @@ use vstd::{multiset::Multiset};
 use crate::trusted::KVStoreTokenized_v::KVStoreTokenized;
 use crate::spec::MapSpec_t::*;
 use crate::spec::SystemModel_t::*;
+use crate::spec::FloatingSeq_t::*;
 
 verus!{
 
@@ -61,20 +62,69 @@ impl RefinementObligation for KVStoreTokenized::State {
     closed spec fn i(model: SystemModel::State<Self::Model>)
         -> (mapspec: CrashTolerantAsyncMap::State)
     {
-        arbitrary()
-//         CrashTolerantAsyncMap::State{
-//             versions: model.program.atomic_state.store.versions,
-//             async_ephemeral: EphemeralState{
-//                 requests: model.program.requests.dom(),
-//                 replies: model.program.replies.dom(),
-//             },
-//             sync_requests: Map::empty(),
-//         }
+        let version = Version{ appv: model.program.atomic_state.store };
+        let versions = FloatingSeq::new(0, 1, |i| version);
+        CrashTolerantAsyncMap::State{
+            versions,
+            async_ephemeral: EphemeralState{
+                requests: model.program.requests.dom(),
+                replies: model.program.replies.dom(),
+            },
+            sync_requests: Map::empty(),
+        }
     }
 
     closed spec fn i_lbl(lbl: SystemModel::Label) -> (ctam_lbl: CrashTolerantAsyncMap::Label)
     {
-        arbitrary()
+        match lbl {
+            SystemModel::Label::ProgramAsyncOp{ program_lbl } => {
+            match program_lbl {
+                ProgramLabel::AcceptRequest{req} =>
+                    CrashTolerantAsyncMap::Label::OperateOp{
+                        base_op: AsyncMap::Label::RequestOp { req },
+                    },
+                ProgramLabel::DeliverReply{reply} =>
+                    CrashTolerantAsyncMap::Label::OperateOp{
+                        base_op: AsyncMap::Label::ReplyOp { reply },
+                    },
+                ProgramLabel::Execute{req, reply} =>
+                    CrashTolerantAsyncMap::Label::OperateOp{
+                        base_op: AsyncMap::Label::ExecuteOp  { req, reply },
+                    },
+
+        // TODO sometimes Internal operations are actually SyncOps. Should
+        // those be revealed in ProgramLabel?
+
+        // TODO: dunno.
+                ProgramLabel::DiskIO{disk_lbl: DiskLabel} =>
+                    CrashTolerantAsyncMap::Label::Noop{},
+
+        // TODO(jialin): How's this different than SystemModel::Label::ProgramInternal?
+                ProgramLabel::Internal{} =>
+                    CrashTolerantAsyncMap::Label::Noop{},
+
+                ProgramLabel::ReqSync{ sync_req_id } =>
+                    CrashTolerantAsyncMap::Label::ReqSyncOp{ sync_req_id },
+                ProgramLabel::ReplySync{ sync_req_id } =>
+                    CrashTolerantAsyncMap::Label::ReplySyncOp{ sync_req_id },
+
+        // TODO(jialin): Crash appears in SystemModel and in ProgramModel, which is weird.
+        // I think ProgramModel::Crash is an error.
+                ProgramLabel::Crash =>
+                    CrashTolerantAsyncMap::Label::CrashOp{},
+
+            }},
+            SystemModel::Label::ProgramDiskOp{ disk_lbl: DiskLabel } =>
+                CrashTolerantAsyncMap::Label::Noop{},
+            SystemModel::Label::ProgramInternal =>
+                CrashTolerantAsyncMap::Label::Noop{},
+            SystemModel::Label::DiskInternal =>
+                CrashTolerantAsyncMap::Label::Noop{},
+            SystemModel::Label::Crash =>
+                CrashTolerantAsyncMap::Label::CrashOp{},
+            SystemModel::Label::Noop =>
+                CrashTolerantAsyncMap::Label::Noop{},
+        }
     }
 
     proof fn i_lbl_valid(lbl: SystemModel::Label, ctam_lbl: CrashTolerantAsyncMap::Label)
