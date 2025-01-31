@@ -163,6 +163,14 @@ impl RefinementObligation for KVStoreTokenized::State {
 //                         let new_versions: FloatingSeq<Version> = FloatingSeq::new(0, 1, |i:int| PersistentState{appv: pre.program.atomic_state.store});
 //                         let new_async_ephemeral: EphemeralState = arbitrary();
                         let step = CrashTolerantAsyncMap::Step::operate(i_post.versions, i_post.async_ephemeral);
+                        // LEFT OFF:
+                        // I'm looking around for some ghost state, but we don't have a KVStoreTokenized
+                        // here, only a SystemModel/ProgramModel. Where are we going to tuck
+                        // ghost Versions history?
+                        assert( KVStoreTokenized::show::request(pre, post, KVStoreTokenized::Label::RequestOp{req}, post) );
+                        assert( pre.program.atomic_state.store == post.program.atomic_state.store );
+                        assert( i_post.versions == Self::i(pre).versions );
+                        assert( CrashTolerantAsyncMap::State::next_by(Self::i(pre), i_post, Self::i_lbl(lbl), CrashTolerantAsyncMap::Step::operate(i_post.versions, i_post.async_ephemeral) ) );
                         assert( CrashTolerantAsyncMap::State::next_by(Self::i(pre), i_post, Self::i_lbl(lbl), step) );
                     },
                     _ => assume(false),
