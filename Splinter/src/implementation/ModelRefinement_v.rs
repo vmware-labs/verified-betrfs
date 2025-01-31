@@ -144,12 +144,6 @@ impl RefinementObligation for KVStoreTokenized::State {
 
     proof fn next_refines(pre: SystemModel::State<Self::Model>, post: SystemModel::State<Self::Model>, lbl: SystemModel::Label)
     {
-//         reveal(SystemModel::State::next);
-//         reveal(SystemModel::State::next_by);
-// 
-//         reveal(KVStoreTokenized::State::next);
-//         reveal(KVStoreTokenized::State::next_by);
-
         reveal(CrashTolerantAsyncMap::State::next);
         reveal(CrashTolerantAsyncMap::State::next_by);
         reveal(AsyncMap::State::next);
@@ -165,10 +159,11 @@ impl RefinementObligation for KVStoreTokenized::State {
             SystemModel::Label::ProgramAsyncOp{ program_lbl } => {
                 match program_lbl {
                     ProgramLabel::AcceptRequest{req} => {
-                        let new_versions: FloatingSeq<Version> = pre.program.atomic_state.store.kmmap;
-                        let new_async_ephemeral: EphemeralState = arbitrary();
-                        let step = CrashTolerantAsyncMap::Step::operate(new_versions, new_async_ephemeral);
-                        assert( CrashTolerantAsyncMap::State::next_by(Self::i(pre), Self::i(post), Self::i_lbl(lbl), step) );
+                        let i_post: CrashTolerantAsyncMap::State = Self::i(post);
+//                         let new_versions: FloatingSeq<Version> = FloatingSeq::new(0, 1, |i:int| PersistentState{appv: pre.program.atomic_state.store});
+//                         let new_async_ephemeral: EphemeralState = arbitrary();
+                        let step = CrashTolerantAsyncMap::Step::operate(i_post.versions, i_post.async_ephemeral);
+                        assert( CrashTolerantAsyncMap::State::next_by(Self::i(pre), i_post, Self::i_lbl(lbl), step) );
                     },
                     _ => assume(false),
                 }
