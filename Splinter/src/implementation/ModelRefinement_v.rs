@@ -150,12 +150,33 @@ impl RefinementObligation for KVStoreTokenized::State {
 //         reveal(KVStoreTokenized::State::next);
 //         reveal(KVStoreTokenized::State::next_by);
 
+        reveal(CrashTolerantAsyncMap::State::next);
+        reveal(CrashTolerantAsyncMap::State::next_by);
+        reveal(AsyncMap::State::next);
+        reveal(AsyncMap::State::next_by);
+        reveal(MapSpec::State::next);
+        reveal(MapSpec::State::next_by);
+
         // requires:
         assert( SystemModel::State::next(pre, post, lbl) );
         assert( Self::inv(pre) );
         // ensures:
-        assume(false);  // left off here
+        match lbl {
+            SystemModel::Label::ProgramAsyncOp{ program_lbl } => {
+                match program_lbl {
+                    ProgramLabel::AcceptRequest{req} => {
+                        let new_versions: FloatingSeq<Version> = pre.program.atomic_state.store.kmmap;
+                        let new_async_ephemeral: EphemeralState = arbitrary();
+                        let step = CrashTolerantAsyncMap::Step::operate(new_versions, new_async_ephemeral);
+                        assert( CrashTolerantAsyncMap::State::next_by(Self::i(pre), Self::i(post), Self::i_lbl(lbl), step) );
+                    },
+                    _ => assume(false),
+                }
+            },
+            _ => assume(false),
+        }
         assert( CrashTolerantAsyncMap::State::next(Self::i(pre), Self::i(post), Self::i_lbl(lbl)) );
+        assume(false);  // left off here
         assert( Self::inv(post) );
 
     }
