@@ -17,16 +17,77 @@ verus!{
         Multiset::empty()
     }
 
-    // pub open spec(checked) fn map_sum<T>(s: Map<T, Likes>) -> Likes
-    //     decreases s.dom().len() when s.dom().finite()
-    // {
-    //     if s.dom().len() == 0 {
-    //         no_likes()
-    //     } else {
-    //         // TODO(verus): natural but fails due to lack of axiom support
-    //         // let k = choose |k| s.dom().contains(k); 
-    //         let k = s.dom().choose();
-    //         map_sum(s.remove(k)).add(s[k])
-    //     }
-    // }
+    pub open spec(checked) fn all_elems_single<V>(m: Multiset<V>) -> bool
+    {
+        forall |e| #[trigger] m.contains(e) ==> m.count(e) == 1
+    }
+
+    pub proof fn single_elems_add_ensures<V>(a: Multiset<V>, b: Multiset<V>)
+    requires 
+        all_elems_single(a),
+        all_elems_single(b),
+        a.is_disjoint_from(b),
+    ensures
+        all_elems_single(a.add(b)),
+        a.add(b).dom() == a.dom() + b.dom()
+    {
+        let r = a.add(b);
+        assert forall |e| #[trigger] r.contains(e)
+        implies r.count(e) == 1 by
+        {
+            assert(a.contains(e) || b.contains(e)); // trigger
+        }
+    }
+
+    pub proof fn single_elems_sub_ensures<V>(a: Multiset<V>, b: Multiset<V>)
+    requires 
+        all_elems_single(a),
+        b <= a,
+    ensures
+        all_elems_single(a.sub(b)),
+        a.sub(b).dom() =~= a.dom() - b.dom()
+    {
+        let r = a.sub(b);
+        let r_dom = a.dom() - b.dom();
+        assert forall |e| r.contains(e)
+        implies r.count(e) == 1 && r_dom.contains(e) 
+        by {
+            assert(a.contains(e)); // trigger
+        }
+    }
+
+    pub proof fn single_elems_eq<V>(a: Multiset<V>, b: Multiset<V>)
+    requires 
+        all_elems_single(a),
+        all_elems_single(b),
+        a.dom() =~= b.dom(),
+    ensures
+        a == b
+    {
+        assert forall |v: V| a.count(v) == b.count(v)
+        by {
+            if a.contains(v) {
+                assert(b.dom().contains(v)); 
+                assert(b.contains(v)); // trigger
+            } else if b.contains(v) {
+                assert(a.dom().contains(v)); 
+                assert(false);
+            } 
+        }
+        assert(a =~= b);
+    }
+
+    pub proof fn single_elems_insert_ensures<V>(m: Multiset<V>, new: V)
+        requires all_elems_single(m), !m.contains(new)
+        ensures #[trigger] all_elems_single(m.insert(new))
+    {
+        let post_m = m.insert(new);
+        assert forall |e| #[trigger] post_m.contains(e)
+        implies post_m.count(e) == 1
+        by {
+            if e != new {
+                assert(m.contains(e)); // trigger
+            }
+        }
+    }
 }
