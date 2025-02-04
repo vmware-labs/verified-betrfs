@@ -8,4 +8,4 @@ pub mod KeyType_t;
 pub mod MapSpec_t;
 pub mod Messages_t;
 pub mod TotalKMMap_t;
-pub mod AppIO_t;
+// pub mod AppIO_t;

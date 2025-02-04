@@ -269,7 +269,7 @@ state_machine!{ AsyncMap {
     } }
 } }
 
-pub type SyncReqId = nat;
+pub type SyncReqId = u64;
 
 /// A Version is a snapshot of a map (its key-value pairs). Specifically it wraps
 /// a `MapSpec::State`.

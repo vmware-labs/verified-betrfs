@@ -12,6 +12,7 @@ verus! {
 #[verifier::ext_equal]
 pub struct AtomicState {
     pub store: MapSpec::State,
+    // pub ghost_snapshots: Seq<AtomicState>,
 }
 
 impl AtomicState {
@@ -61,6 +62,7 @@ tokenized_state_machine!{KVStoreTokenized{
         add requests += { req };
     }}
 
+    // execute transition takes a versiosn 
     transition!{ execute_transition(lbl: Label, post_atomic_state: AtomicState, map_lbl: MapSpec::Label) {
         require let Label::ExecuteOp{ req, reply } = lbl;
 

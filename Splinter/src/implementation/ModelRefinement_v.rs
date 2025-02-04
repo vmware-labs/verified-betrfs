@@ -14,16 +14,26 @@ verus!{
 impl ProgramLabel {
     pub open spec fn to_kv_lbl(self) -> KVStoreTokenized::Label{
         match self {
-            ProgramLabel::AcceptRequest{req} => KVStoreTokenized::Label::RequestOp{req},
-            ProgramLabel::DeliverReply{reply} => KVStoreTokenized::Label::ReplyOp{reply},
-            ProgramLabel::Execute{req, reply} => KVStoreTokenized::Label::ExecuteOp{req, reply},
+            ProgramLabel::UserIO{op} => {
+                match op {
+                    ProgramUserOp::AcceptRequest{req} => KVStoreTokenized::Label::RequestOp{req},
+                    ProgramUserOp::DeliverReply{reply} => KVStoreTokenized::Label::ReplyOp{reply},
+                    ProgramUserOp::Execute{req, reply} => KVStoreTokenized::Label::ExecuteOp{req, reply},
+                    _ => KVStoreTokenized::Label::InternalOp, // TODO: remove when kv store supports sync req
+                }
+            }
             _ => KVStoreTokenized::Label::InternalOp,
         }
     }
 }
 
 impl ProgramModel for KVStoreTokenized::State {
-    open spec fn init(pre: Self, disk: DiskModel) -> bool
+    open spec fn is_mkfs(disk: DiskModel) -> bool
+    {
+        true // check superblock content
+    }
+
+    open spec fn init(pre: Self) -> bool
     {
         Self::initialize(pre)
     }
@@ -38,7 +48,6 @@ impl ProgramModel for KVStoreTokenized::State {
 pub open spec fn multiset_to_set<V>(m: Multiset<V>) -> Set<V> {
     Set::new(|v| m.contains(v))
 }
-
 
 // Attach the RefinementObligation impl to KVStoreTokenized::State itself;
 // don't need an extra type to hold it.
@@ -74,52 +83,38 @@ impl RefinementObligation for KVStoreTokenized::State {
         }
     }
 
-    closed spec fn i_lbl(lbl: SystemModel::Label) -> (ctam_lbl: CrashTolerantAsyncMap::Label)
+    // 
+    closed spec fn i_lbl(pre: SystemModel::State<Self::Model>, post: SystemModel::State<Self::Model>, lbl: SystemModel::Label) -> (ctam_lbl: CrashTolerantAsyncMap::Label)
     {
         match lbl {
-            SystemModel::Label::ProgramAsyncOp{ program_lbl } => {
-            match program_lbl {
-                ProgramLabel::AcceptRequest{req} =>
+            SystemModel::Label::ProgramUIOp{op} => {
+            match op {
+                ProgramUserOp::AcceptRequest{req} =>
                     CrashTolerantAsyncMap::Label::OperateOp{
                         base_op: AsyncMap::Label::RequestOp { req },
                     },
-                ProgramLabel::DeliverReply{reply} =>
+                ProgramUserOp::DeliverReply{reply} =>
                     CrashTolerantAsyncMap::Label::OperateOp{
                         base_op: AsyncMap::Label::ReplyOp { reply },
                     },
-                ProgramLabel::Execute{req, reply} =>
+                ProgramUserOp::Execute{req, reply} =>
                     CrashTolerantAsyncMap::Label::OperateOp{
                         base_op: AsyncMap::Label::ExecuteOp  { req, reply },
                     },
-
-        // TODO sometimes Internal operations are actually SyncOps. Should
-        // those be revealed in ProgramLabel?
-
-        // TODO: dunno.
-                ProgramLabel::DiskIO{disk_lbl: DiskLabel} =>
-                    CrashTolerantAsyncMap::Label::Noop{},
-
-        // TODO(jialin): How's this different than SystemModel::Label::ProgramInternal?
-                ProgramLabel::Internal{} =>
-                    CrashTolerantAsyncMap::Label::Noop{},
-
-                ProgramLabel::ReqSync{ sync_req_id } =>
+                // TODO: not currently supported in our transitions
+                ProgramUserOp::AcceptSyncRequest{ sync_req_id } =>
                     CrashTolerantAsyncMap::Label::ReqSyncOp{ sync_req_id },
-                ProgramLabel::ReplySync{ sync_req_id } =>
+                ProgramUserOp::DeliverSyncReply{ sync_req_id } =>
                     CrashTolerantAsyncMap::Label::ReplySyncOp{ sync_req_id },
-
-        // TODO(jialin): Crash appears in SystemModel and in ProgramModel, which is weird.
-        // I think ProgramModel::Crash is an error.
-                ProgramLabel::Crash =>
-                    CrashTolerantAsyncMap::Label::CrashOp{},
-
             }},
             SystemModel::Label::ProgramDiskOp{ disk_lbl: DiskLabel } =>
                 CrashTolerantAsyncMap::Label::Noop{},
             SystemModel::Label::ProgramInternal =>
                 CrashTolerantAsyncMap::Label::Noop{},
-            SystemModel::Label::DiskInternal =>
-                CrashTolerantAsyncMap::Label::Noop{},
+            SystemModel::Label::DiskInternal => {
+                CrashTolerantAsyncMap::Label::Noop{}
+                // NOTE: update i_lbl to sometime translate a DiskInternal => SyncExecuteOp
+            },
             SystemModel::Label::Crash =>
                 CrashTolerantAsyncMap::Label::CrashOp{},
             SystemModel::Label::Noop =>
@@ -127,10 +122,10 @@ impl RefinementObligation for KVStoreTokenized::State {
         }
     }
 
-    proof fn i_lbl_valid(lbl: SystemModel::Label, ctam_lbl: CrashTolerantAsyncMap::Label)
+    proof fn i_lbl_valid(pre: SystemModel::State<Self::Model>, post: SystemModel::State<Self::Model>, lbl: SystemModel::Label, ctam_lbl: CrashTolerantAsyncMap::Label)
     {
-//         assert( ctam_lbl == Self::i_lbl(lbl) );
-//         assert( lbl.label_correspondance(ctam_lbl) );
+        assert( ctam_lbl == Self::i_lbl(pre, post, lbl) );
+        assert( lbl.label_correspondance(ctam_lbl) );
     }
 
     proof fn init_refines(pre: SystemModel::State<Self::Model>)
@@ -159,57 +154,40 @@ impl RefinementObligation for KVStoreTokenized::State {
         reveal(SystemModel::State::next_by);
         let step = choose |step| SystemModel::State::next_by(pre, post, lbl, step);
 
-        // ensures:
-        match lbl {
-            SystemModel::Label::ProgramAsyncOp{ program_lbl } => {
-                match program_lbl {
-                    ProgramLabel::AcceptRequest{req} => {
-                        let i_post: CrashTolerantAsyncMap::State = Self::i(post);
-//                         let new_versions: FloatingSeq<Version> = FloatingSeq::new(0, 1, |i:int| PersistentState{appv: pre.program.atomic_state.store});
-//                         let new_async_ephemeral: EphemeralState = arbitrary();
-                        let step = CrashTolerantAsyncMap::Step::operate(i_post.versions, i_post.async_ephemeral);
-                        // LEFT OFF:
-                        // I'm looking around for some ghost state, but we don't have a KVStoreTokenized
-                        // here, only a SystemModel/ProgramModel. Where are we going to tuck
-                        // ghost Versions history?
 
+//         // ensures:
+//         match lbl {
+//             SystemModel::Label::ProgramUIOp{op} => {
+//                 match op {
+//                     ProgramLabel::AcceptRequest{req} => {
+//                         let i_post: CrashTolerantAsyncMap::State = Self::i(post);
+// //                         let new_versions: FloatingSeq<Version> = FloatingSeq::new(0, 1, |i:int| PersistentState{appv: pre.program.atomic_state.store});
+// //                         let new_async_ephemeral: EphemeralState = arbitrary();
+//                         let step = CrashTolerantAsyncMap::Step::operate(i_post.versions, i_post.async_ephemeral);
 
-                        assert( pre.program == post.program );
-                        assert( pre.program.atomic_state.store == post.program.atomic_state.store );
-//                         assert( pre.program.atomic_state.store == post.program.atomic_state.store ) by {
-// //                             assume(false);  // TODO(jonh): ask travis?
-// 
-//                             // What's going on? I've proved request.requires, but show failes with
-//                             // "precondition not satisfied" and a useless span covering the entire
-//                             // macro.
-//                             let lbl2 = KVStoreTokenized::Label::RequestOp{req};
-//                             assert({
-//                                 let tmp_for_match_0 = lbl2;
-//                                 match tmp_for_match_0 {
-//                                     KVStoreTokenized::Label::RequestOp { req } => true,
-//                                     _ => false,
-//                                 }
-//                             });
-//     //                         ::vstd::prelude::requires(KVStoreTokenized::State::request(
-//     //                                     pre.program, post.program, lbl2, post.program.atomic_state));
-//                             
-//                             KVStoreTokenized::show::request(pre.program, post.program, lbl2, post.program.atomic_state);
-//                             assume(false);
-//                         }
-                        assume(false);
+//                         // versions history
+//                         // to be fair this should be 
 
-                        assert( i_post.versions == Self::i(pre).versions );
-                        assert( CrashTolerantAsyncMap::State::next_by(Self::i(pre), i_post, Self::i_lbl(lbl), CrashTolerantAsyncMap::Step::operate(i_post.versions, i_post.async_ephemeral) ) );
-                        assert( CrashTolerantAsyncMap::State::next_by(Self::i(pre), i_post, Self::i_lbl(lbl), step) );
-                    },
-                    _ => assume(false),
-                }
-            },
-            _ => assume(false),
-        }
-        assert( CrashTolerantAsyncMap::State::next(Self::i(pre), Self::i(post), Self::i_lbl(lbl)) );
+//                         // LEFT OFF:
+//                         // I'm looking around for some ghost state, but we don't have a KVStoreTokenized
+//                         // here, only a SystemModel/ProgramModel. Where are we going to tuck
+//                         // ghost Versions history?
+//                         assume(false);
+//                         // assert( KVStoreTokenized::show::request(pre, post, KVStoreTokenized::Label::RequestOp{req}, post) );
+//                         // assert( pre.program.atomic_state.store == post.program.atomic_state.store );
+//                         // assert( i_post.versions == Self::i(pre).versions );
+//                         // assert( CrashTolerantAsyncMap::State::next_by(Self::i(pre), i_post, Self::i_lbl(lbl), CrashTolerantAsyncMap::Step::operate(i_post.versions, i_post.async_ephemeral) ) );
+//                         // assert( CrashTolerantAsyncMap::State::next_by(Self::i(pre), i_post, Self::i_lbl(lbl), step) );
+//                     },
+//                     _ => { assume(false); },
+//                 }
+//             }
+//             _ => { assume(false);} ,
+//         }
+        assert( CrashTolerantAsyncMap::State::next(Self::i(pre), Self::i(post), Self::i_lbl(pre, post, lbl)) );
         assume(false);  // left off here
         assert( Self::inv(post) );
+        
 
     }
 }

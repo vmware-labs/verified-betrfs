@@ -18,8 +18,8 @@ verus!{
 pub type DiskModel = AsyncDisk::State;
 pub type DiskLabel = AsyncDisk::Label;
 
-// Auditor defines externally visible actions that can be taken by a program model
-pub enum ProgramLabel{
+pub enum ProgramUserOp{
+    // add sync to request 
     // async operations with application clients
     AcceptRequest{req: Request},
     DeliverReply{reply: Reply},
@@ -27,29 +27,13 @@ pub enum ProgramLabel{
     // declares the linearization point of each operation
     Execute{req: Request, reply: Reply},
 
-    // captures program's interaction with the disk model,
-    // e.g. loading/flushing/evicting cache pages
-    // DiskIO{disk_reqs: Set<DiskRequest>, disk_resps: Set<DiskResponse>},
-    DiskIO{disk_lbl: DiskLabel},
-
-    // program internal operation, no externally visible actions
-    Internal{},
-
     // program handling application client requested sync request
-    ReqSync{ sync_req_id: SyncReqId },
-    ReplySync{ sync_req_id: SyncReqId },
-
-    // models system crashes
-    Crash,
+    AcceptSyncRequest{ sync_req_id: SyncReqId },
+    DeliverSyncReply{ sync_req_id: SyncReqId },
 }
 
-impl ProgramLabel {
-    pub open spec fn is_app_label(self) -> bool {
-        self is AcceptRequest || self is DeliverReply || self is Execute
-    }
-
+impl ProgramUserOp {
     pub open spec fn to_async_map_label(self) -> AsyncMap::Label 
-        recommends self.is_app_label()
     {
         if let Self::AcceptRequest{req} = self {
             AsyncMap::Label::RequestOp{req}
@@ -60,11 +44,25 @@ impl ProgramLabel {
         } else {
             arbitrary()
         }
-    }
+    } 
+}
+
+// Auditor defines externally visible actions that can be taken by a program model
+pub enum ProgramLabel{
+    UserIO{op: ProgramUserOp},
+
+    // captures program's interaction with the disk model,
+    // e.g. loading/flushing/evicting cache pages
+    // DiskIO{disk_reqs: Set<DiskRequest>, disk_resps: Set<DiskResponse>},
+    DiskIO{disk_lbl: DiskLabel},
+
+    // program internal operation, no externally visible actions
+    Internal{},
 }
 
 pub trait ProgramModel : Sized {
-    spec fn init(pre: Self, disk: DiskModel) -> bool;
+    spec fn is_mkfs(disk: DiskModel) -> bool;
+    spec fn init(pre: Self) -> bool;
     spec fn next(pre: Self, post: Self, lbl: ProgramLabel) -> bool;
 }
 
@@ -86,7 +84,9 @@ state_machine!{ SystemModel<T: ProgramModel> {
     pub enum Label
     {
         // program model async operate op 
-        ProgramAsyncOp{ program_lbl: ProgramLabel },
+        // current transitions only support req, repy, execute ops 
+        // expose this to enforce correspondance 
+        ProgramUIOp{ op: ProgramUserOp },
         // program driven disk ops
         ProgramDiskOp{ disk_lbl: DiskLabel },
         // program internal op
@@ -103,24 +103,27 @@ state_machine!{ SystemModel<T: ProgramModel> {
     }
 
     init!{ initialize(program: T, disk: DiskModel) {
-        require T::init(program, disk);
+        require T::is_mkfs(disk);
+        require T::init(program);
+
         init program = program;
         init disk = disk;
         init id_history = Set::empty();
     }}
 
-    transition!{ program_async(lbl: Label, new_program: T) {
-        require lbl is ProgramAsyncOp;
-        require lbl->program_lbl.is_app_label();
+    transition!{ program_ui(lbl: Label, new_program: T) {
+        require lbl is ProgramUIOp;
 
-        let new_id = if lbl->program_lbl is AcceptRequest {
-            Set::empty().insert(lbl->program_lbl.arrow_AcceptRequest_req().id)
+        let new_id = if lbl->op is AcceptRequest {
+            Set::empty().insert(lbl->op.arrow_AcceptRequest_req().id)
+        } else if lbl->op is AcceptSyncRequest {
+            Set::empty().insert(lbl->op.arrow_AcceptSyncRequest_sync_req_id())
         } else { Set::empty() };
 
         // auditor's promise: new request contains unique ID
         require pre.id_history.disjoint(new_id);
         // new program must be a valid step
-        require T::next(pre.program, new_program, lbl->program_lbl);
+        require T::next(pre.program, new_program, ProgramLabel::UserIO{op: lbl->op});
 
         update program = new_program;
         update id_history = pre.id_history.union(new_id);
@@ -133,7 +136,6 @@ state_machine!{ SystemModel<T: ProgramModel> {
         require T::next(pre.program, new_program,
             ProgramLabel::DiskIO{disk_lbl: lbl->disk_lbl},
         );
-
         require DiskModel::next(pre.disk, new_disk, lbl->disk_lbl);
         
         update program = new_program;
@@ -153,28 +155,26 @@ state_machine!{ SystemModel<T: ProgramModel> {
     }}
 
     transition!{ req_sync(lbl: Label, new_program: T) {
-        require let Label::ProgramAsyncOp{
-            program_lbl: ProgramLabel::ReqSync{sync_req_id} } = lbl;
+        require let Label::ProgramUIOp{op: ProgramUserOp::AcceptSyncRequest{sync_req_id} } = lbl;
 
         // promise unique sync id from all previous ids
         require !pre.id_history.contains(sync_req_id as u64);
-
-        require T::next(pre.program, new_program, lbl->program_lbl);
+        require T::next(pre.program, new_program, ProgramLabel::UserIO{op: lbl->op});
 
         update program = new_program;
         update id_history = pre.id_history.insert(sync_req_id as u64);
     }}
 
     transition!{ reply_sync(lbl: Label, new_program: T) {
-        require lbl is ProgramAsyncOp;
-        require lbl->program_lbl is ReplySync;
-        require T::next(pre.program, new_program, lbl->program_lbl);
+        require lbl is ProgramUIOp;
+        require lbl->op is DeliverSyncReply;
+        require T::next(pre.program, new_program, ProgramLabel::UserIO{op: lbl->op});
         update program = new_program;
     }}
 
     transition!{ crash(lbl: Label, new_program: T, new_disk: DiskModel) {
         require lbl is Crash;
-        require T::next(pre.program, new_program, ProgramLabel::Crash{});
+        require T::init(new_program); 
         require DiskModel::next(pre.disk, new_disk, DiskLabel::Crash{});
 
         update program = new_program;
@@ -190,19 +190,21 @@ state_machine!{ SystemModel<T: ProgramModel> {
 impl SystemModel::Label {
     pub open spec fn label_correspondance(self, ctam_lbl: CrashTolerantAsyncMap::Label) -> bool
     {
-        &&& ctam_lbl is OperateOp <==> (self is ProgramAsyncOp && self->program_lbl.is_app_label())
+        &&& ctam_lbl is OperateOp <==> (self is ProgramUIOp && !(self->op is AcceptSyncRequest) && !(self->op is DeliverSyncReply))
         &&& ctam_lbl is OperateOp ==> 
-            ctam_lbl->base_op == self->program_lbl.to_async_map_label()
+            ctam_lbl->base_op == self->op.to_async_map_label()
 
-        &&& ctam_lbl is ReqSyncOp <==> (self is ProgramAsyncOp && self->program_lbl is ReqSync)
+        &&& ctam_lbl is ReqSyncOp <==> (self is ProgramUIOp && self->op is AcceptSyncRequest)
         &&& ctam_lbl is ReqSyncOp ==> 
-            ctam_lbl.arrow_ReqSyncOp_sync_req_id() == self->program_lbl.arrow_ReqSync_sync_req_id()
+            ctam_lbl.arrow_ReqSyncOp_sync_req_id() == self->op.arrow_AcceptSyncRequest_sync_req_id()
 
-        &&& ctam_lbl is ReplySyncOp <==> (self is ProgramAsyncOp && self->program_lbl is ReplySync)
+        &&& ctam_lbl is ReplySyncOp <==> (self is ProgramUIOp && self->op is DeliverSyncReply)
         &&& ctam_lbl is ReplySyncOp ==> 
-            ctam_lbl.arrow_ReplySyncOp_sync_req_id() == self->program_lbl.arrow_ReplySync_sync_req_id()
+            ctam_lbl.arrow_ReplySyncOp_sync_req_id() == self->op.arrow_DeliverSyncReply_sync_req_id()
     }
 }
+
+
 
 pub trait RefinementObligation {
     type Model: ProgramModel;
@@ -211,12 +213,14 @@ pub trait RefinementObligation {
     
     spec fn i(model: SystemModel::State<Self::Model>) -> (ctam: CrashTolerantAsyncMap::State);
 
-    spec fn i_lbl(lbl: SystemModel::Label) -> (ctam_lbl: CrashTolerantAsyncMap::Label);
+    // TODO: need model to determine i_lbl's result, pre and post 
+    // 
+    spec fn i_lbl(pre: SystemModel::State<Self::Model>, post: SystemModel::State<Self::Model>, lbl: SystemModel::Label) -> (ctam_lbl: CrashTolerantAsyncMap::Label);
 
     // restrict i_lbl result to ensure app label correspondence 
-    proof fn i_lbl_valid(lbl: SystemModel::Label, ctam_lbl: CrashTolerantAsyncMap::Label)
+    proof fn i_lbl_valid(pre: SystemModel::State<Self::Model>, post: SystemModel::State<Self::Model>, lbl: SystemModel::Label, ctam_lbl: CrashTolerantAsyncMap::Label)
         requires
-            ctam_lbl == Self::i_lbl(lbl)            
+            ctam_lbl == Self::i_lbl(pre, post, lbl)
         ensures
             lbl.label_correspondance(ctam_lbl)
     ;
@@ -233,7 +237,7 @@ pub trait RefinementObligation {
     requires
         SystemModel::State::next(pre, post, lbl), Self::inv(pre),
     ensures
-        CrashTolerantAsyncMap::State::next(Self::i(pre), Self::i(post), Self::i_lbl(lbl)),
+        CrashTolerantAsyncMap::State::next(Self::i(pre), Self::i(post), Self::i_lbl(pre, post, lbl)),
         Self::inv(post)
     ;
 }
