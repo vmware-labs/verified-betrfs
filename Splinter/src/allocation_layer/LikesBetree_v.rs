@@ -158,138 +158,23 @@ impl<T> LinkedBetree<T> {
         multiset_from_set_ensures(self.reachable_betree_addrs());
     }
 
-    // proof fn children_likes_domain(self, ranking: Ranking, start: nat)
-    //     requires 
-    //         self.has_root(),
-    //         self.valid_ranking(ranking),
-    //         start <= self.root().children.len(),
-    //     ensures ({ 
-    //         let reachable_betree_addrs = self.reachable_betree_addrs_using_ranking_recur(ranking, start);
-    //         &&& self.children_likes(ranking, start).dom() =~= reachable_betree_addrs
-    //     })
-    //     decreases self.get_rank(ranking), self.root().children.len() - start
-    // {
-    //     if start == self.root().children.len() {
-    //     } else {
-    //         let reachable_betree_addrs = self.reachable_betree_addrs_using_ranking_recur(ranking, start);
-    //         assert(self.root().valid_child_index(start)); // trigger
-    //         let child = self.child_at_idx(start);
-    //         assert(child.valid_ranking(ranking));
-    //         self.child_at_idx_reachable_addrs_ensures(start);
-    //         child.tree_likes_domain(ranking);
+    proof fn same_tight_tree_implies_same_transitive_likes(self, other: Self)
+        requires             
+            self.valid_view(other),
+            self.same_tight_tree(other),
+        ensures
+            self.transitive_likes() == other.transitive_likes()
+    {
+        let (betree_likes, buffer_likes) = self.transitive_likes();
+        let (other_betree_likes, other_buffer_likes) = other.transitive_likes();
 
-    //         let child_betree_likes = child.tree_likes(ranking);
-    //         let other_betree_likes = self.children_likes(ranking, start+1);
-    //         self.children_likes_domain(ranking, start+1);
-    //         self.reachable_betree_addrs_using_ranking_recur_lemma(ranking, start);
-    //     }
-    // }
+        self.same_tight_tree_implies_same_reachable_addrs(other);
+        assert(betree_likes =~= other_betree_likes);
 
-    // proof fn tree_likes_domain(self, ranking: Ranking)
-    //     requires 
-    //         self.valid_ranking(ranking)
-    //     ensures 
-    //         self.tree_likes(ranking).dom() =~= self.reachable_betree_addrs_using_ranking(ranking),
-    //         self.tree_likes(ranking).dom() <= self.dv.entries.dom(),
-    //     decreases self.get_rank(ranking)
-    // {
-    //     if self.has_root() {
-    //         self.children_likes_domain(ranking, 0);
-    //         self.reachable_betree_addrs_ignore_ranking(self.the_ranking(), ranking);
-    //         self.reachable_betree_addrs_using_ranking_recur_lemma(ranking, 0);
-    //     }
-    // }
-
-    // broadcast proof fn children_likes_ignore_ranking(self, r1: Ranking, r2: Ranking, start: nat)
-    //     requires 
-    //         self.has_root(),
-    //         self.valid_ranking(r1),
-    //         self.valid_ranking(r2),
-    //         start <= self.root().children.len()
-    //     ensures 
-    //         #![auto] self.children_likes(r1, start) =~= self.children_likes(r2, start),
-    //     decreases 
-    //         self.get_rank(r1), self.root().children.len()-start
-    // {
-    //     if start < self.root().children.len() {
-    //         broadcast use LinkedBetree::reachable_betree_addrs_ignore_ranking;
-    //         let child = self.child_at_idx(start);
-    //         assert(self.root().valid_child_index(start));
-    //         child.tree_likes_ignore_ranking(r1, r2);
-    //         self.children_likes_ignore_ranking(r1, r2, start+1);
-    //     }
-    // }
-
-    // broadcast proof fn tree_likes_ignore_ranking(self, r1: Ranking, r2: Ranking) 
-    //     requires 
-    //         #[trigger] self.valid_ranking(r1),
-    //         #[trigger] self.valid_ranking(r2),
-    //     ensures 
-    //         self.tree_likes(r1) =~= self.tree_likes(r2)
-    //     decreases 
-    //         self.get_rank(r1)
-    // {
-    //     if self.has_root() {
-    //         self.children_likes_ignore_ranking(r1, r2, 0);
-    //     }
-    // }
-
-    // proof fn subdisk_implies_same_children_betree_addrs(self, other: Self, ranking: Ranking)
-    //     requires 
-    //         self.has_root(),
-    //         other.has_root(),
-    //         self.valid_ranking(ranking),
-    //         other.valid_ranking(ranking),
-    //         self.dv.is_sub_disk(other.dv),
-    //         self.root().children == other.root().children,
-    //         start <= self.root().children.len(),
-    //     ensures 
-    //         self.reachable_betree_addrs_using_ranking(ranking, 0)
-    //         == other.reachable_betree_addrs_using_ranking(ranking, 0)
-    //     decreases self.get_rank(ranking), self.root().children.len() - start
-    // {
-    // //         let child = self.child_at_idx(start);
-    // //         let other_child = other.child_at_idx(start);
-    // //         assert(self.root().valid_child_index(start)); // trigger
-    //         child.agreeable_disks_same_reachable_betree_addrs(other_child, ranking);
-    // //         self.subdisk_implies_same_children_likes(other, ranking, start+1);
-    // //     }
-    // }
-
-    // proof fn subdisk_implies_same_tree_likes(self, other: Self, ranking: Ranking)
-    //     requires
-    //         self.valid_ranking(ranking),
-    //         other.valid_ranking(ranking),
-    //         self.root == other.root,
-    //         self.dv.is_sub_disk(other.dv)
-    //     ensures 
-    //         self.tree_likes(ranking) =~= other.tree_likes(ranking)
-    //     decreases 
-    //         self.get_rank(ranking)
-    // {
-    //     if self.has_root() {
-    //         self.subdisk_implies_same_children_likes(other, ranking, 0);
-    //     }
-    // }
-
-    // proof fn same_tight_tree_implies_same_transitive_likes(self, other: Self)
-    //     requires             
-    //         self.valid_view(other),
-    //         self.same_tight_tree(other),
-    //     ensures
-    //         self.transitive_likes() == other.transitive_likes()
-    // {
-    //     let (betree_likes, buffer_likes) = self.transitive_likes();
-    //     let (other_betree_likes, other_buffer_likes) = other.transitive_likes();
-
-    //     other.subdisk_implies_same_tree_likes(self, self.finite_ranking());
-    //     other.tree_likes_ignore_ranking(self.finite_ranking(), other.the_ranking());
-    //     self.tree_likes_ignore_ranking(self.finite_ranking(), self.the_ranking());
-
-    //     assert(betree_likes =~= other_betree_likes);
-    //     other.tree_likes_domain(other.the_ranking());
-    //     other.subdisk_implies_same_buffer_likes(self, betree_likes);
-    // }
+        other.tree_likes_ensures();
+        other.reachable_betree_addrs_using_ranking_closed(other.the_ranking());
+        other.subdisk_implies_same_buffer_likes(self, betree_likes);
+    }
 
     proof fn buffer_likes_additive(self, betree_likes: Likes, delta: Likes)
         requires 
@@ -628,8 +513,8 @@ state_machine!{ LikesBetree {
 
         if pre.betree.linked.has_root() {
             assert(betree_likes =~= post.betree_likes) by {
-                single_elems_sub_ensures(pre.betree_likes, discard_betree);
-                single_elems_add_ensures(pre.betree_likes.sub(discard_betree), add_betree);
+                single_elems_sub(pre.betree_likes, discard_betree);
+                single_elems_add(pre.betree_likes.sub(discard_betree), add_betree);
                 single_elems_eq(post.betree_likes, betree_likes);
             }
 
@@ -673,7 +558,7 @@ state_machine!{ LikesBetree {
         } else {
             assert(betree_likes.dom() =~= pre.betree_likes.dom() + set![new_addrs.addr1]);
             assert(betree_likes =~= post.betree_likes) by {
-                single_elems_add_ensures(pre.betree_likes, add_betree);
+                single_elems_add(pre.betree_likes, add_betree);
                 single_elems_eq(post.betree_likes, betree_likes);
             }
 
@@ -752,30 +637,22 @@ state_machine!{ LikesBetree {
         path: Path<SimpleBuffer>, request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs) {
         reveal(LinkedBetreeVars::State::next_by);
 
-        /*
         broadcast use 
             LinkedBetree::reachable_betree_addrs_ignore_ranking, 
-            LinkedBetree::children_likes_ignore_ranking, 
-            LinkedBetree::tree_likes_ignore_ranking,
+            LinkedBetree::tree_likes_ensures, 
             LikesBetree::multiset_from_set_ensures;
 
         // let split_parent = path.target().split_parent(request, new_addrs);
         // let splitted = path.substitute(split_parent, path_addrs);
+        let ranking = pre.betree.linked.the_ranking();
         let splitted = LinkedBetreeVars::State::post_split(path, request, new_addrs, path_addrs);
-
-        assert(pre.inv());
-        pre.betree.linked.tree_likes_domain(pre.betree.linked.the_ranking());
-        assert(pre.betree.linked.reachable_betree_addrs() == pre.betree_likes.dom());
-        
-        // assert(new_betree.inv())
         pre.betree.post_split_ensures(path, request, new_addrs, path_addrs);
-        // assert(split_parent.acyclic());
-
-        // let old_child = path.target().child_at_idx(request.get_child_idx());
 
         path_addrs.to_multiset_ensures();
-        path.addrs_on_path_ensures();
-        
+        path.path_addrs_are_closed();
+        pre.betree.linked.reachable_betree_addrs_using_ranking_closed(ranking);
+
+        assert(path.addrs_on_path() <= pre.betree.linked.dv.entries.dom());
         // what we can say is that split_parent is a subset of the child node replaced there
         // if we relate it to path.target()
 
@@ -858,19 +735,43 @@ state_machine!{ LikesBetree {
         LinkedBetreeVars::State::inv_next_by(pre.betree, new_betree, lbl->linked_lbl, linked_step);
         assert(new_betree.inv());
 
-        // }
-
         let (betree_likes, buffer_likes) = new_betree.linked.transitive_likes();
-
         splitted.same_tight_tree_implies_same_transitive_likes(new_betree.linked);
-        assert(post.betree.linked.transitive_likes() == splitted.transitive_likes());
+        assert(post.betree.linked.transitive_likes() == splitted.transitive_likes()); 
 
+        assert(post.betree_likes =~= betree_likes) by {
+            let old_child = path.target().child_at_idx(request.get_child_idx());
 
-        // transitive likes and tree walk should be the same thing?
-        assert(post.betree_likes == betree_likes); // this differs because this walks the tree
+            let removed_tree_addrs = set![old_child.root.unwrap()] + path.addrs_on_path();
+            let added_tree_addrs = new_addrs.repr() + path_addrs.to_set();
+            let new_reachable_tree_addrs = pre.betree_likes.dom() - removed_tree_addrs + added_tree_addrs;
+
+            let discard_betree = Multiset::from_set(path.addrs_on_path()).add(old_child.root_likes());
+            let add_betree = path_addrs.to_multiset().add(new_addrs.likes());
+
+            assert(discard_betree <= pre.betree_likes) by {
+                // root is contained by path
+                path.target().child_at_idx_reachable_addrs_ensures(request.get_child_idx());
+                assert(path.target().reachable_betree_addrs().contains(old_child.root.unwrap()));
+                assert(path.target().reachable_betree_addrs() <= pre.betree_likes.dom());
+
+                single_elems_subset(Multiset::from_set(path.addrs_on_path()), pre.betree_likes);
+                assert(old_child.root_likes() <= pre.betree_likes);
+                single_elems_disjoint(Multiset::from_set(path.addrs_on_path()), old_child.root_likes());
+            }
+
+            assert(all_elems_single(add_betree)) by {
+                assert(path_addrs.to_set().disjoint(new_addrs.repr()));
+                path_addrs.lemma_multiset_has_no_duplicates();
+                single_elems_disjoint(path_addrs.to_multiset(), new_addrs.likes());
+            }
+            single_elems_disjoint(pre.betree_likes, add_betree);
+            single_elems_sub(pre.betree_likes, discard_betree);
+            single_elems_add(pre.betree_likes.sub(discard_betree), add_betree);
+            single_elems_eq(post.betree_likes, betree_likes);
+        }
+
         assume(post.buffer_likes == buffer_likes);
-        */
-
     }
    
     #[inductive(internal_flush)]

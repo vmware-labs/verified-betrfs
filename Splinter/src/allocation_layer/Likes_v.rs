@@ -22,7 +22,7 @@ verus!{
         forall |e| #[trigger] m.contains(e) ==> m.count(e) == 1
     }
 
-    pub proof fn single_elems_add_ensures<V>(a: Multiset<V>, b: Multiset<V>)
+    pub proof fn single_elems_add<V>(a: Multiset<V>, b: Multiset<V>)
     requires 
         all_elems_single(a),
         all_elems_single(b),
@@ -39,7 +39,7 @@ verus!{
         }
     }
 
-    pub proof fn single_elems_sub_ensures<V>(a: Multiset<V>, b: Multiset<V>)
+    pub proof fn single_elems_sub<V>(a: Multiset<V>, b: Multiset<V>)
     requires 
         all_elems_single(a),
         b <= a,
@@ -78,8 +78,8 @@ verus!{
     }
 
     pub proof fn single_elems_insert_ensures<V>(m: Multiset<V>, new: V)
-        requires all_elems_single(m), !m.contains(new)
-        ensures #[trigger] all_elems_single(m.insert(new))
+    requires all_elems_single(m), !m.contains(new)
+    ensures all_elems_single(m.insert(new))
     {
         let post_m = m.insert(new);
         assert forall |e| #[trigger] post_m.contains(e)
@@ -90,4 +90,45 @@ verus!{
             }
         }
     }
+
+    pub proof fn single_elems_subset<V>(a: Multiset<V>, b: Multiset<V>)
+    requires all_elems_single(a), all_elems_single(b), a.dom() <= b.dom()
+    ensures a <= b 
+    {
+        assert forall |e| true
+        implies a.count(e) <= b.count(e)
+        by {
+            if a.contains(e) {
+                assert(a.dom().contains(e));
+                assert(b.contains(e));
+                assert(b.count(e) == a.count(e));
+            }
+        }
+    }
+
+    pub proof fn single_elems_disjoint<V>(a: Multiset<V>, b: Multiset<V>)
+    requires all_elems_single(a), all_elems_single(b), a.dom().disjoint(b.dom())
+    ensures a.is_disjoint_from(b), all_elems_single(a.add(b)),
+    {
+        assert forall |e| true
+        implies a.count(e) == 0 || b.count(e) == 0
+        by {
+            if a.count(e) > 0 {
+                assert(a.dom().contains(e));
+                assert(!b.dom().contains(e));
+            }
+        }
+        assert(a.is_disjoint_from(b));
+
+        assert forall |e| #[trigger] a.add(b).contains(e)
+        implies a.add(b).count(e) == 1
+        by {
+            if a.contains(e) {
+                assert(!b.contains(e));
+            } else {
+                assert(b.contains(e));
+            }
+        }
+    }
+
 }
