@@ -56,7 +56,7 @@ tokenized_state_machine!{KVStoreTokenized{
         init replies = Multiset::empty();
     }}
 
-    transition!{ request(lbl: Label, post_atomic_state: AtomicState) {
+    transition!{ request(lbl: Label) {
         require let Label::RequestOp{ req } = lbl;
         add requests += { req };
     }}

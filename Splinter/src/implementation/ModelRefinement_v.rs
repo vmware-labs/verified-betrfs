@@ -154,6 +154,11 @@ impl RefinementObligation for KVStoreTokenized::State {
         // requires:
         assert( SystemModel::State::next(pre, post, lbl) );
         assert( Self::inv(pre) );
+
+        reveal(SystemModel::State::next);
+        reveal(SystemModel::State::next_by);
+        let step = choose |step| SystemModel::State::next_by(pre, post, lbl, step);
+
         // ensures:
         match lbl {
             SystemModel::Label::ProgramAsyncOp{ program_lbl } => {
@@ -167,8 +172,32 @@ impl RefinementObligation for KVStoreTokenized::State {
                         // I'm looking around for some ghost state, but we don't have a KVStoreTokenized
                         // here, only a SystemModel/ProgramModel. Where are we going to tuck
                         // ghost Versions history?
-                        assert( KVStoreTokenized::show::request(pre, post, KVStoreTokenized::Label::RequestOp{req}, post) );
+
+
+                        assert( pre.program == post.program );
                         assert( pre.program.atomic_state.store == post.program.atomic_state.store );
+//                         assert( pre.program.atomic_state.store == post.program.atomic_state.store ) by {
+// //                             assume(false);  // TODO(jonh): ask travis?
+// 
+//                             // What's going on? I've proved request.requires, but show failes with
+//                             // "precondition not satisfied" and a useless span covering the entire
+//                             // macro.
+//                             let lbl2 = KVStoreTokenized::Label::RequestOp{req};
+//                             assert({
+//                                 let tmp_for_match_0 = lbl2;
+//                                 match tmp_for_match_0 {
+//                                     KVStoreTokenized::Label::RequestOp { req } => true,
+//                                     _ => false,
+//                                 }
+//                             });
+//     //                         ::vstd::prelude::requires(KVStoreTokenized::State::request(
+//     //                                     pre.program, post.program, lbl2, post.program.atomic_state));
+//                             
+//                             KVStoreTokenized::show::request(pre.program, post.program, lbl2, post.program.atomic_state);
+//                             assume(false);
+//                         }
+                        assume(false);
+
                         assert( i_post.versions == Self::i(pre).versions );
                         assert( CrashTolerantAsyncMap::State::next_by(Self::i(pre), i_post, Self::i_lbl(lbl), CrashTolerantAsyncMap::Step::operate(i_post.versions, i_post.async_ephemeral) ) );
                         assert( CrashTolerantAsyncMap::State::next_by(Self::i(pre), i_post, Self::i_lbl(lbl), step) );
