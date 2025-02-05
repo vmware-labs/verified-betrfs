@@ -146,7 +146,6 @@ impl RefinementObligation for ConcreteProgramModel {
                         assert(ipre.async_ephemeral.requests.insert(req) =~= ipost.async_ephemeral.requests);
 
                         assert(AsyncMap::State::next_by(iasync_pre, iasync_post, ilbl->base_op, AsyncMap::Step::request()));
-                        assert(AsyncMap::State::next(iasync_pre, iasync_post, ilbl->base_op));
                         assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, 
                             CrashTolerantAsyncMap::Step::operate(ipost.versions, ipost.async_ephemeral)));
                     },
@@ -154,11 +153,13 @@ impl RefinementObligation for ConcreteProgramModel {
                         assert(forall |r| #[trigger] post.program.state.replies.contains(r) 
                             ==> pre.program.state.replies.contains(r));
                         assert(post.program.state._inv());
+                        assert(ipre.async_ephemeral.replies.contains(reply));
+                        assert(!post.program.state.replies.contains(reply));
+                        assert(ipost.async_ephemeral.replies =~= ipre.async_ephemeral.replies.remove(reply));
 
-                        assert(CrashTolerantAsyncMap::State::optionally_append_version(ipre.versions, ipost.versions));
                         assert(AsyncMap::State::next_by(iasync_pre, iasync_post, ilbl->base_op, AsyncMap::Step::reply()));
-
-                        assume(false);
+                        assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, 
+                            CrashTolerantAsyncMap::Step::operate(ipost.versions, ipost.async_ephemeral)));
                     },
                     ProgramUserOp::Execute{req, reply} => {
                         assume(false);
