@@ -85,6 +85,7 @@ impl Implementation {
             Input::NoopInput => {
                 let reply = Reply{output: Output::NoopOutput, id: req.id};
 
+                let ghost pre_state = self.state@.value();
                 let ghost post_state = self.state@.value(); // noop!
 
                 let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
@@ -94,8 +95,10 @@ impl Implementation {
                 proof {
                     reveal(MapSpec::State::next);
                     reveal(MapSpec::State::next_by);
-                    assert( MapSpec::State::next_by(post_state.store, post_state.store,
+                    assert( MapSpec::State::next_by(post_state.history.last().appv, post_state.history.last().appv,
                             map_lbl, MapSpec::Step::noop())); // witness to step
+                    assert( post_state.history.get_prefix(pre_state.history.len()) == pre_state.history );  // extn
+                    assert( AtomicState::map_transition(pre_state, post_state, map_lbl) );
                 }
 
                 let tracked new_reply_token = self.instance.borrow().execute_transition(
@@ -131,7 +134,7 @@ impl Implementation {
             let reply = Reply{output: Output::PutOutput, id: req.id};
 
             let ghost store = MapSpec::State {
-                    kmmap: pre_state.store.kmmap.insert(key, Message::Define{value})
+                kmmap: pre_state.mapspec().kmmap.insert(key, Message::Define{value})
             };
 
             // TODO(jonh): I find it sad that the implementation has to track the history
@@ -139,7 +142,6 @@ impl Implementation {
             // and have a proof at a higher layer carry the ghost history along. But .i() makes
             // that difficult. Hmm.
             let ghost post_state = AtomicState {
-                store,
                 history: self.state@.value().history.append(seq![ PersistentState{appv: store} ]),
             };
 
@@ -150,9 +152,10 @@ impl Implementation {
             proof {
                 reveal(MapSpec::State::next);
                 reveal(MapSpec::State::next_by);
-                assert( MapSpec::State::next_by(pre_state.store, post_state.store,
+                assert( MapSpec::State::next_by(pre_state.mapspec(), post_state.mapspec(),
                         map_lbl, MapSpec::Step::put())); // witness to step
-//                 assert( AtomicState::map_transition(pre_state, post_state, map_lbl) );
+                assert( post_state.history.get_prefix(pre_state.history.len()) == pre_state.history );  // extn
+                assert( AtomicState::map_transition(pre_state, post_state, map_lbl) );
             }
 
 //             assert( pre_state == atomic_state.value() );
@@ -169,7 +172,7 @@ impl Implementation {
         },
             _ => unreached(),
         };
-        assert( self.i().store.kmmap == self.view_store_as_kmmap() ); // trigger extn equality
+        assert( self.i().mapspec().kmmap == self.view_store_as_kmmap() ); // trigger extn equality
 //         assert( self.wf() );
         out
     }
@@ -203,21 +206,22 @@ impl Implementation {
             let ghost map_lbl = MapSpec::Label::Query{input: req.input, output: reply.output};
             proof {
                 assert( old(self).wf() );
-                if pre_state.store.kmmap.0.contains_key(key) {
-                    assume( pre_state.store.kmmap[key]->value == value );
+                if pre_state.mapspec().kmmap.0.contains_key(key) {
+                    assume( pre_state.mapspec().kmmap[key]->value == value );
                 } else {
                     // TODO jonh left off here
 //                     assert( old(self).store@ == old(self).i().store );
 
-                    assert( !pre_state.store.kmmap.0.contains_key(key) );
+                    assert( !pre_state.mapspec().kmmap.0.contains_key(key) );
                     assert( !old(self).store@.contains_key(key@) );
-                    assert( pre_state.store.kmmap[key]->value == value );
+                    assert( pre_state.mapspec().kmmap[key]->value == value );
                 }
                 reveal(MapSpec::State::next);
                 reveal(MapSpec::State::next_by);
-                assert( MapSpec::State::next_by(pre_state.store, post_state.store,
+                assert( MapSpec::State::next_by(pre_state.mapspec(), post_state.mapspec(),
                         map_lbl, MapSpec::Step::query())); // witness to step
-//                 assert( AtomicState::map_transition(pre_state, post_state, map_lbl) );
+                assert( post_state.history.get_prefix(pre_state.history.len()) == pre_state.history );  // extn
+                assert( AtomicState::map_transition(pre_state, post_state, map_lbl) );
             }
             let tracked new_reply_token = self.instance.borrow().execute_transition(
                 KVStoreTokenized::Label::ExecuteOp{req, reply},
@@ -252,7 +256,7 @@ impl KVStoreTrait for Implementation {
 
     closed spec fn wf(self) -> bool {
         &&& self.state@.instance_id() == self.instance@.id()
-        &&& self.i().store.kmmap == self.view_store_as_kmmap()
+        &&& self.i().mapspec().kmmap == self.view_store_as_kmmap()
     }
 
     closed spec fn instance_id(self) -> InstanceId
@@ -279,7 +283,7 @@ impl KVStoreTrait for Implementation {
             instance: Tracked(instance)
         };
 //         assert( selff.i() == selff.state@.value() );   // trigger extn equality
-        assert( selff.i().store.kmmap == selff.view_store_as_kmmap() ); // trigger extn equality
+        assert( selff.i().mapspec().kmmap == selff.view_store_as_kmmap() ); // trigger extn equality
 //         assert( selff.wf() );
         selff
     }

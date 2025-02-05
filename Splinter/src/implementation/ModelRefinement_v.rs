@@ -50,7 +50,7 @@ impl RefinementObligation for ConcreteProgramModel {
         &&& forall |reply| model.program.state.replies.contains(reply)
             ==> #[trigger] model.id_history.contains(reply.id)
 
-        &&& model.program.state.atomic_state.history.last().appv == model.program.state.atomic_state.store
+        &&& model.program.state.atomic_state.wf()
     }
 
     closed spec fn i(model: SystemModel::State<Self::Model>)
@@ -164,15 +164,14 @@ impl RefinementObligation for ConcreteProgramModel {
             },
             SystemModel::Step::reply_sync(new_program) => {
                 assume( false );
+                assert( CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl,
+                        CrashTolerantAsyncMap::Step::reply_sync() ) );
                 assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
             },
             SystemModel::Step::crash(new_program, new_disk) => {
-                assert( ipost.async_ephemeral == AsyncMap::State::init_ephemeral_state() );
-                assert( ipost.versions.len() == 1 );
+                // This Implementation, which doesn't actually use the disk, isn't crash tolerant!
+                // So of course this step cannot succeed.
                 assume( false ); // jonh LEFT OFF HERE
-                assert( ipost.versions == ipre.versions.get_prefix(ipre.stable_index() + 1) );
-                assert( CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl,
-                        CrashTolerantAsyncMap::Step::crash() ) );
             },
             SystemModel::Step::noop() => {
                 assert( ipre == ipost );

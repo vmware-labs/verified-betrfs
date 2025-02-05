@@ -11,23 +11,31 @@ verus! {
 
 #[verifier::ext_equal]
 pub struct AtomicState {
-    pub store: MapSpec::State,
     pub history: FloatingSeq<PersistentState>,
 }
 
 impl AtomicState {
     pub open spec fn init() -> Self
     {
-        let store = my_init();
-        AtomicState{
-            store,
-            history: SingletonVersions(store),
-        }
+        AtomicState{ history: SingletonVersions(my_init()) }
     }
 
     pub open spec fn map_transition(pre: Self, post: Self, map_lbl: MapSpec::Label) -> bool
     {
-        MapSpec::State::next(pre.store, post.store, map_lbl)
+        // new thing appends no more than one map
+        &&& pre.history.len() <= post.history.len() <= pre.history.len() + 1
+        // new thing appends to the history
+        &&& post.history.get_prefix(pre.history.len()) == pre.history
+        &&& MapSpec::State::next(pre.history.last().appv, post.history.last().appv, map_lbl)
+    }
+
+    pub open spec fn wf(self) -> bool {
+      &&& self.history.is_active(self.history.len()-1)
+      &&& forall |i| #[trigger] self.history.is_active(i) ==> self.history[i].appv.invariant()
+    }
+
+    pub open spec fn mapspec(self) -> MapSpec::State {
+        self.history.last().appv
     }
 }
 
@@ -91,7 +99,7 @@ tokenized_state_machine!{KVStoreTokenized{
 
     #[invariant]
     pub open spec fn wf(&self) -> bool {
-       &&& self.atomic_state.store.kmmap.wf()
+        self.atomic_state.wf()
     }
 
     #[inductive(initialize)]
@@ -104,12 +112,20 @@ tokenized_state_machine!{KVStoreTokenized{
    
     #[inductive(execute_transition)]
     fn execute_transition_inductive(pre: Self, post: Self, lbl: Label, post_atomic_state: AtomicState, map_lbl: MapSpec::Label) { 
-        assert( pre.atomic_state.store.kmmap.wf() );
-        MapSpec::State::inv_next(pre.atomic_state.store, post.atomic_state.store, map_lbl);
+        MapSpec::State::inv_next(pre.atomic_state.mapspec(), post.atomic_state.mapspec(), map_lbl);
         // TODO(jialin): we should be getting MapSpec::invariant here; how do we invoke it?
         // I don't see *anything* in the expand file that summarizes pre.inv & next(pre,post) => post.inv.
         // Is this a known hole in the macro? => Yup! 
-        assert( post.atomic_state.store.kmmap.wf() );
+
+        let ghost pre_history = pre.atomic_state.history;
+        let ghost post_history = post.atomic_state.history;
+        assert forall |i| #[trigger] post_history.is_active(i) implies post_history[i].appv.invariant() by {
+            if i < post_history.len() - 1 {
+                assert( pre_history.is_active(i) ); // trigger AtomicState::wf forall
+            }
+        }
+//         assert( post.atomic_state.wf() );
+//         assert( post.wf() );
     }
 
     #[inductive(reply)]
