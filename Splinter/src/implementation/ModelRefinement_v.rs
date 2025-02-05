@@ -195,26 +195,6 @@ impl RefinementObligation for ConcreteProgramModel {
                 assume( false );
                 assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
             },
-<<<<<<< HEAD
-=======
-            SystemModel::Step::req_sync(new_program) => {
-                let sync_req_id = ilbl.arrow_ReqSyncOp_sync_req_id();
-                assume(false);
-                assert( !ipre.sync_requests.dom().contains(sync_req_id) );
-                assert( ipost.sync_requests ==
-                    ipre.sync_requests.insert(sync_req_id, (ipre.versions.len() - 1) as nat) );
-
-                assert( CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl,
-                        CrashTolerantAsyncMap::Step::req_sync() ) );
-                assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
-            },
-            SystemModel::Step::reply_sync(new_program) => {
-                assume( false );
-                assert( CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl,
-                        CrashTolerantAsyncMap::Step::reply_sync() ) );
-                assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
-            },
->>>>>>> 7088750c (work on req_sync)
             SystemModel::Step::crash(new_program, new_disk) => {
                 // This Implementation, which doesn't actually use the disk, is only "crash
                 // tolerant" in the sense that it doesn't support sync. Since we never sync,
