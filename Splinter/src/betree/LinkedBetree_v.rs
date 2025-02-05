@@ -2182,7 +2182,7 @@ impl<T> LinkedBetree<T> {
             self.valid_ranking(ranking),
             other.valid_ranking(ranking),
             self.dv.agrees_with(other.dv),
-            0 <= ofs < other.root().children.len() - self.root().children.len(),
+            0 <= ofs <= other.root().children.len() - self.root().children.len(),
             self.root().children == other.root().children.subrange(ofs, ofs + self.root().children.len()),
         ensures
             self.reachable_betree_addrs_using_ranking_recur(ranking, 0)
@@ -2342,42 +2342,43 @@ impl<T> LinkedBetree<T> {
 
         self.child_at_idx_reachable_addrs_ensures(request.get_child_idx()); 
         assert(tree_addrs.contains(child.root.unwrap()));
-        self.reachable_betree_addrs_using_ranking_closed(self.the_ranking());
+        self.reachable_betree_addrs_using_ranking_closed(ranking);
         assert(new_addrs.repr().disjoint(tree_addrs));
-        self.dv.subdisk_implies_ranking_validity(result.dv, result.the_ranking());
 
         assert forall |addr| #[trigger] result_tree_addrs.contains(addr) && addr != result.root.unwrap()
         implies (tree_addrs - set![child.root.unwrap()] + new_addrs.repr()).contains(addr)
         by {
             if new_addrs.repr().contains(addr) {
             } else {
-                // addr comes from result.child_at_idx(idx) subtree
-                result.reachable_betree_addrs_using_ranking_closed(result.the_ranking());
-                let idx = result.get_child_given_betree_addr(result.the_ranking(), addr, 0);
+                result.reachable_betree_addrs_using_ranking_closed(ranking);
+                let idx = result.get_child_given_betree_addr(ranking, addr, 0);
                 result.child_at_idx_reachable_addrs_ensures(idx);
-                assert(result.child_at_idx(idx).reachable_betree_addrs().contains(addr)); 
 
+                let r_child = result.child_at_idx(idx);
                 // sub children sub reachable betree addrs
                 if idx == request.get_child_idx() || idx == request.get_child_idx() + 1 {
-                    let rc_ranking = result.child_at_idx(idx).the_ranking();
-                    let c_ranking = child.the_ranking();
-
-
-                    if idx == request.get_child_idx() {
-                        self.child_at_idx(idx).sub_children_sub_reachable_tree_addrs(
-                            result.child_at_idx(idx), ranking, 0
-                        );
+                    let splitted_child_len = r_child.root().children.len() as int;
+                    if child.root().is_leaf() || idx == request.get_child_idx() {
+                        assert(r_child.root().children =~= child.root().children.subrange(0, splitted_child_len));
+                        r_child.sub_children_sub_reachable_tree_addrs(child, ranking, 0);
+                    } else {
+                        assert(child.root().is_index());
+                        assert(idx == request.get_child_idx() + 1);
+                        let pivot_idx = request->child_pivot_idx as int;
+                        assert(r_child.root().children =~= child.root().children.subrange(pivot_idx, pivot_idx + splitted_child_len));
+                        r_child.sub_children_sub_reachable_tree_addrs(child, ranking, pivot_idx);
                     }
-                    assume(result.child_at_idx(idx).reachable_betree_addrs_using_ranking_recur(rc_ranking, 0)
-                        <= child.reachable_betree_addrs_using_ranking_recur(c_ranking, 0));
-                    
+                    assert(r_child.reachable_betree_addrs_using_ranking_recur(ranking, 0)
+                        <= child.reachable_betree_addrs_using_ranking_recur(ranking, 0));
+                    assert(child.reachable_betree_addrs_using_ranking_recur(ranking, 0) 
+                        <= child.reachable_betree_addrs_using_ranking(ranking));
                     assert(tree_addrs.contains(addr));
-                    child.root_not_in_subtree(c_ranking);
+                    child.root_not_in_subtree(ranking);
                     assert(addr !== child.root.unwrap());
                 } else {
                     let old_idx = if idx < request.get_child_idx() { idx } else { (idx-1) as nat };
                     assert(self.root().valid_child_index(old_idx)); // trigger
-                    result.child_at_idx(idx).agreeable_disks_same_reachable_betree_addrs(self.child_at_idx(old_idx), result.the_ranking());
+                    result.child_at_idx(idx).agreeable_disks_same_reachable_betree_addrs(self.child_at_idx(old_idx), ranking);
                     self.child_at_idx_reachable_addrs_ensures(old_idx);
                     assert(tree_addrs.contains(addr));
                     assert(!new_addrs.repr().contains(addr));
