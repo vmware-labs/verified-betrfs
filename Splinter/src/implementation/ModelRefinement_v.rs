@@ -10,23 +10,6 @@ use crate::implementation::ConcreteProgramModel_v::*;
 
 verus!{
 
-// NOTE: KVStoreTokenized should just use program label as its own
-impl ProgramLabel {
-    pub open spec fn to_kv_lbl(self) -> KVStoreTokenized::Label{
-        match self {
-            ProgramLabel::UserIO{op} => {
-                match op {
-                    ProgramUserOp::AcceptRequest{req} => KVStoreTokenized::Label::RequestOp{req},
-                    ProgramUserOp::DeliverReply{reply} => KVStoreTokenized::Label::ReplyOp{reply},
-                    ProgramUserOp::Execute{req, reply} => KVStoreTokenized::Label::ExecuteOp{req, reply},
-                    _ => KVStoreTokenized::Label::InternalOp, // TODO: remove when kv store supports sync req
-                }
-            }
-            _ => KVStoreTokenized::Label::InternalOp,
-        }
-    }
-}
-
 // TODO: put into vstd/multiset_lib.rs
 pub open spec fn multiset_to_set<V>(m: Multiset<V>) -> Set<V> {
     Set::new(|v| m.contains(v))
@@ -39,18 +22,19 @@ impl RefinementObligation for ConcreteProgramModel {
 
     closed spec fn inv(model: SystemModel::State<Self::Model>) -> bool
     {
-        &&& model.program.state.requests_have_unique_ids()
-        &&& model.program.state.replies_have_unique_ids()
-        &&& forall |req, reply| model.program.state.requests.contains(req) 
-            && model.program.state.replies.contains(reply) 
-            ==> #[trigger] req.id != #[trigger] reply.id
+        model.inv()
+        // &&& model.program.state.requests_have_unique_ids()
+        // &&& model.program.state.replies_have_unique_ids()
+        // &&& forall |req, reply| model.program.state.requests.contains(req) 
+        //     && model.program.state.replies.contains(reply) 
+        //     ==> #[trigger] req.id != #[trigger] reply.id
 
-        &&& forall |req| model.program.state.requests.contains(req)
-            ==> #[trigger] model.id_history.contains(req.id)
-        &&& forall |reply| model.program.state.replies.contains(reply)
-            ==> #[trigger] model.id_history.contains(reply.id)
+        // &&& forall |req| model.program.state.requests.contains(req)
+        //     ==> #[trigger] model.id_history.contains(req.id)
+        // &&& forall |reply| model.program.state.replies.contains(reply)
+        //     ==> #[trigger] model.id_history.contains(reply.id)
 
-        &&& model.program.state.atomic_state.wf()
+        // &&& model.program.state.atomic_state.wf()
     }
 
     closed spec fn i(model: SystemModel::State<Self::Model>)
@@ -122,6 +106,9 @@ impl RefinementObligation for ConcreteProgramModel {
 
     proof fn next_refines(pre: SystemModel::State<Self::Model>, post: SystemModel::State<Self::Model>, lbl: SystemModel::Label)
     {
+        reveal(KVStoreTokenized::State::next);
+        reveal(KVStoreTokenized::State::next_by);
+
         reveal(CrashTolerantAsyncMap::State::next);
         reveal(CrashTolerantAsyncMap::State::next_by);
         reveal(AsyncMap::State::next);
@@ -143,7 +130,50 @@ impl RefinementObligation for ConcreteProgramModel {
 
         match step {
             SystemModel::Step::program_ui(new_program) => {
-                assume( false );
+                match lbl->op {
+                    ProgramUserOp::AcceptRequest{req} => {
+                        broadcast use insert_new_preserves_cardinality;
+                        let new_id = lbl->op.arrow_AcceptRequest_req().id;
+                        assert(!pre.id_history.contains(new_id)); // trigger
+                        assert(post.program.state._inv());
+                        assert(CrashTolerantAsyncMap::State::optionally_append_version(ipre.versions, ipost.versions));
+
+                        let iasync_pre = AsyncMap::State { persistent: ipre.versions.last(), ephemeral: ipre.async_ephemeral };
+                        let iasync_post = AsyncMap::State { persistent: ipost.versions.last(), ephemeral: ipost.async_ephemeral };
+
+                        assert(!ipre.async_ephemeral.requests.contains(req));
+                        assert(ipre.versions == ipost.versions); // true
+                        assert(ipre.async_ephemeral.requests.insert(req) =~= ipost.async_ephemeral.requests);
+
+                        assert(AsyncMap::State::next_by(iasync_pre, iasync_post, ilbl->base_op, AsyncMap::Step::request()));
+                        assert(AsyncMap::State::next(iasync_pre, iasync_post, ilbl->base_op));
+                        assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, 
+                            CrashTolerantAsyncMap::Step::operate(ipost.versions, ipost.async_ephemeral)));
+                    },
+                    ProgramUserOp::DeliverReply{reply} => {
+                        assume(false);
+                    },
+                    ProgramUserOp::Execute{req, reply} => {
+                        assume(false);
+                    },
+                    ProgramUserOp::AcceptSyncRequest{ sync_req_id } => {
+                        // TODO: can't support this until we add this into KVstore tokenized
+                        // might be able to just track sync reqs in a different field
+                        assume(false); 
+                    },
+                    ProgramUserOp::DeliverSyncReply{ sync_req_id } => {
+                        // TODO: ditto
+                        assume(false); 
+                    },
+                }
+                // // auditor's promise: new request contains unique ID
+                // require pre.id_history.disjoint(new_id);
+                // // new program must be a valid step
+                // require T::next(pre.program, new_program, ProgramLabel::UserIO{op: lbl->op});
+        
+                // update program = new_program;
+                // update id_history = pre.id_history.union(new_id);
+
                 assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
             },
             SystemModel::Step::program_disk(new_program, new_disk) => {
@@ -244,6 +274,8 @@ broadcast proof fn insert_new_preserves_cardinality<V>(m: Multiset<V>, new: V)
     }
 }
 
+// this is an inv on the system model
+
 impl KVStoreTokenized::State {
 //     pub open spec fn _i(self) -> BankSpec::State
 //     {
@@ -253,14 +285,14 @@ impl KVStoreTokenized::State {
 //             replies: self.replies.dom(),
 //         }
 //     }
-// 
-//     closed spec fn _inv(self) -> bool
-//     {
-//         &&& self.requests_have_unique_ids()
-//         &&& self.replies_have_unique_ids()
-//         &&& forall |req, reply| self.requests.contains(req) && self.replies.contains(reply) 
-//             ==> #[trigger] req.id != #[trigger] reply.id
-//     }
+
+    pub closed spec fn _inv(self) -> bool
+    {
+        &&& self.requests_have_unique_ids()
+        &&& self.replies_have_unique_ids()
+        &&& forall |req, reply| self.requests.contains(req) && self.replies.contains(reply) 
+            ==> #[trigger] req.id != #[trigger] reply.id
+    }
 
     pub open spec(checked) fn requests_have_unique_ids(self) -> bool 
     {
@@ -279,6 +311,37 @@ impl KVStoreTokenized::State {
             && #[trigger] reply1.id == #[trigger] reply2.id
             ==> reply1 == reply2
     }
+}
+
+impl SystemModel::State<ConcreteProgramModel> {
+    pub open spec fn inv(self) -> bool
+    {
+        &&& self.program.state._inv()
+        &&& forall |req| self.program.state.requests.contains(req)
+            ==> #[trigger] self.id_history.contains(req.id)
+        &&& forall |reply| self.program.state.replies.contains(reply)
+            ==> #[trigger] self.id_history.contains(reply.id)
+
+        &&& self.program.state.atomic_state.wf()
+    }
+
+    // proof fn accept_request_preserves_inv(self, post: Self, 
+    //     lbl: SystemModel::Label, new_program: ConcreteProgramModel)
+    //     requires 
+    //         self.inv(), 
+    //         Self::program_ui(self, post, lbl, new_program),
+    //         lbl->op is AcceptRequest, 
+    //     ensures post.inv(),
+    // {
+    //     reveal(KVStoreTokenized::State::next);
+    //     reveal(KVStoreTokenized::State::next_by);
+
+    //     broadcast use insert_new_preserves_cardinality;
+
+    //     let new_id = lbl->op.arrow_AcceptRequest_req().id;
+    //     assert(!self.id_history.contains(new_id)); // trigger
+    //     assert(post.program.state._inv());
+    // }
 }
 
 }

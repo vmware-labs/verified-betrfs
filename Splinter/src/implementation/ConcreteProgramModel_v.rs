@@ -32,4 +32,21 @@ impl ProgramModel for ConcreteProgramModel {
     }
 }
 
+// NOTE: KVStoreTokenized should just use program label as its own
+impl ProgramLabel {
+    pub open spec fn to_kv_lbl(self) -> KVStoreTokenized::Label{
+        match self {
+            ProgramLabel::UserIO{op} => {
+                match op {
+                    ProgramUserOp::AcceptRequest{req} => KVStoreTokenized::Label::RequestOp{req},
+                    ProgramUserOp::DeliverReply{reply} => KVStoreTokenized::Label::ReplyOp{reply},
+                    ProgramUserOp::Execute{req, reply} => KVStoreTokenized::Label::ExecuteOp{req, reply},
+                    _ => KVStoreTokenized::Label::InternalOp, // TODO: remove when kv store supports sync req
+                }
+            }
+            _ => KVStoreTokenized::Label::InternalOp,
+        }
+    }
+}
+
 }
