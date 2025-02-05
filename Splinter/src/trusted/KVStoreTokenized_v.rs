@@ -4,6 +4,7 @@ use vstd::{prelude::*, multiset::*};
 //use vstd::pervasive::print_u64;
 use state_machines_macros::tokenized_state_machine;
 use crate::spec::MapSpec_t::*;
+use crate::spec::FloatingSeq_t::*;
 use crate::spec::TotalKMMap_t::*;
 // use crate::spec::Messages_t::Value;
 
@@ -12,13 +13,17 @@ verus! {
 #[verifier::ext_equal]
 pub struct AtomicState {
     pub store: MapSpec::State,
-    // pub ghost_snapshots: Seq<AtomicState>,
+    pub history: Ghost<FloatingSeq<PersistentState>>,
 }
 
 impl AtomicState {
     pub open spec fn init() -> Self
     {
-        AtomicState{ store: my_init() }
+        let store = my_init();
+        AtomicState{
+            store,
+            history: Ghost(SingletonVersions(store)),
+        }
     }
 
     pub open spec fn map_transition(pre: Self, post: Self, map_lbl: MapSpec::Label) -> bool
@@ -85,30 +90,40 @@ tokenized_state_machine!{KVStoreTokenized{
         require lbl is InternalOp;
     }}
 
-    // #[invariant]
-    // pub open spec fn wf(&self) -> bool {
-    //     true
-    // }
+    #[invariant]
+    pub open spec fn wf(&self) -> bool {
+       &&& self.atomic_state.store.kmmap.wf()
+    }
 
-    // #[inductive(initialize)]
-    // fn initialize_inductive(post: Self) { 
-    // }
+    #[inductive(initialize)]
+    fn initialize_inductive(post: Self) { 
+    }
 
-    // #[inductive(request)]
-    // fn request_inductive(pre: Self, post: Self, lbl: Label) {
-    // }
+    #[inductive(request)]
+    fn request_inductive(pre: Self, post: Self, lbl: Label) {
+    }
    
-    // #[inductive(transition)]
-    // fn transition_inductive(pre: Self, post: Self, lbl: Label, post_atomic_state: AtomicState) { 
-    // }
+    #[inductive(execute_transition)]
+    fn execute_transition_inductive(pre: Self, post: Self, lbl: Label, post_atomic_state: AtomicState, map_lbl: MapSpec::Label) { 
+        assert( pre.atomic_state.store.kmmap.wf() );
+        reveal( MapSpec::State::next );
+        reveal( MapSpec::State::next_by );
+        assert( MapSpec::State::next(pre.atomic_state.store, post.atomic_state.store, map_lbl) );
+        assert( pre.atomic_state.store.invariant() );
+        // TODO(jialin): we should be getting MapSpec::invariant here; how do we invoke it?
+        // I don't see *anything* in the expand file that summarizes pre.inv & next(pre,post) => post.inv.
+        // Is this a known hole in the macro?
+        assume( post.atomic_state.store.invariant() );
+        assert( post.atomic_state.store.kmmap.wf() );
+    }
 
-    // #[inductive(reply)]
-    // fn reply_inductive(pre: Self, post: Self, lbl: Label) { 
-    // }
+    #[inductive(reply)]
+    fn reply_inductive(pre: Self, post: Self, lbl: Label, post_atomic_state: AtomicState) { 
+    }
 
-    // #[inductive(internal)]
-    // fn internal_inductive(pre: Self, post: Self, lbl: Label) {
-    // }
+    #[inductive(internal)]
+    fn internal_inductive(pre: Self, post: Self, lbl: Label) {
+    }
 }}
 }
 

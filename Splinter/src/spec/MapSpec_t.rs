@@ -122,6 +122,32 @@ state_machine!{ MapSpec {
             require let Output::NoopOutput = output;
         }
     }
+
+    #[invariant]
+    pub open spec(checked) fn the_inv(self) -> bool {
+        &&& self.kmmap.wf()
+    }
+
+    #[inductive(my_init_2)]
+    fn my_init_2_inductive(post: Self) { }
+   
+    #[inductive(query)]
+    fn query_inductive(pre: Self, post: Self, label: Label) { }
+   
+    #[inductive(put)]
+    fn put_inductive(pre: Self, post: Self, label: Label) {
+//         let key = label.arrow_Put_input().arrow_PutInput_key();
+//         let value = label.arrow_Put_input().arrow_PutInput_value();
+//         assert( pre.kmmap.wf() );
+
+        pre.kmmap.insert_lemma();
+        // clumsily trigger lemma we just called
+//         assert( pre.kmmap.insert(key, Message::Define{value}).wf() );
+//         assert( post.kmmap.wf() );
+    }
+   
+    #[inductive(noop)]
+    fn noop_inductive(pre: Self, post: Self, label: Label) { }
 }}  // Async things
 
 
@@ -275,6 +301,10 @@ pub type SyncReqId = u64;
 /// a `MapSpec::State`.
 #[verifier::ext_equal]
 pub type Version = PersistentState;
+
+pub open spec fn SingletonVersions(appv: MapSpec::State) -> FloatingSeq<Version> {
+    FloatingSeq::new(0, 1, |i| Version{ appv })
+}
 
 // TODO(jonh): was sad to concretize Map (because no module functors). Is there a traity alternative?
 // TODO(jonh): also sad to cram Async into CrashTolerant (because Async wasn't really a real state machine).

@@ -6,7 +6,7 @@ use vstd::{multiset::Multiset};
 use crate::trusted::KVStoreTokenized_v::KVStoreTokenized;
 use crate::spec::MapSpec_t::*;
 use crate::spec::SystemModel_t::*;
-use crate::spec::FloatingSeq_t::*;
+use crate::implementation::ConcreteProgramModel_v::*;
 
 verus!{
 
@@ -27,23 +27,6 @@ impl ProgramLabel {
     }
 }
 
-impl ProgramModel for KVStoreTokenized::State {
-    open spec fn is_mkfs(disk: DiskModel) -> bool
-    {
-        true // check superblock content
-    }
-
-    open spec fn init(pre: Self) -> bool
-    {
-        Self::initialize(pre)
-    }
-
-    open spec fn next(pre: Self, post: Self, lbl: ProgramLabel) -> bool
-    {
-        Self::next(pre, post, lbl.to_kv_lbl())
-    }
-}
-
 // TODO: put into vstd/multiset_lib.rs
 pub open spec fn multiset_to_set<V>(m: Multiset<V>) -> Set<V> {
     Set::new(|v| m.contains(v))
@@ -51,33 +34,33 @@ pub open spec fn multiset_to_set<V>(m: Multiset<V>) -> Set<V> {
 
 // Attach the RefinementObligation impl to KVStoreTokenized::State itself;
 // don't need an extra type to hold it.
-impl RefinementObligation for KVStoreTokenized::State {
-    type Model = Self;
+impl RefinementObligation for ConcreteProgramModel {
+    type Model = ConcreteProgramModel;
 
     closed spec fn inv(model: SystemModel::State<Self::Model>) -> bool
     {
-        &&& model.program.requests_have_unique_ids()
-        &&& model.program.replies_have_unique_ids()
-        &&& forall |req, reply| model.program.requests.contains(req) 
-            && model.program.replies.contains(reply) 
+        &&& model.program.state.requests_have_unique_ids()
+        &&& model.program.state.replies_have_unique_ids()
+        &&& forall |req, reply| model.program.state.requests.contains(req) 
+            && model.program.state.replies.contains(reply) 
             ==> #[trigger] req.id != #[trigger] reply.id
 
-        &&& forall |req| model.program.requests.contains(req)
+        &&& forall |req| model.program.state.requests.contains(req)
             ==> #[trigger] model.id_history.contains(req.id)
-        &&& forall |reply| model.program.replies.contains(reply)
+        &&& forall |reply| model.program.state.replies.contains(reply)
             ==> #[trigger] model.id_history.contains(reply.id)
+
+        &&& model.program.state.atomic_state.history@.last().appv == model.program.state.atomic_state.store
     }
- 
+
     closed spec fn i(model: SystemModel::State<Self::Model>)
         -> (mapspec: CrashTolerantAsyncMap::State)
     {
-        let version = Version{ appv: model.program.atomic_state.store };
-        let versions = FloatingSeq::new(0, 1, |i| version);
         CrashTolerantAsyncMap::State{
-            versions,
+            versions: model.program.state.atomic_state.history@,
             async_ephemeral: EphemeralState{
-                requests: model.program.requests.dom(),
-                replies: model.program.replies.dom(),
+                requests: model.program.state.requests.dom(),
+                replies: model.program.state.replies.dom(),
             },
             sync_requests: Map::empty(),
         }
@@ -153,6 +136,52 @@ impl RefinementObligation for KVStoreTokenized::State {
         reveal(SystemModel::State::next);
         reveal(SystemModel::State::next_by);
         let step = choose |step| SystemModel::State::next_by(pre, post, lbl, step);
+
+        let ipre = Self::i(pre);
+        let ipost = Self::i(post);
+        let ilbl = Self::i_lbl(pre, post, lbl);
+
+        match step {
+            SystemModel::Step::program_ui(new_program) => {
+                assume( false );
+                assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
+            },
+            SystemModel::Step::program_disk(new_program, new_disk) => {
+                assume( false );
+                assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
+            },
+            SystemModel::Step::program_internal(new_program) => {
+                assume( false );
+                assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
+            },
+            SystemModel::Step::disk_internal(new_disk) => {
+                assume( false );
+                assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
+            },
+            SystemModel::Step::req_sync(new_program) => {
+                assume( false );
+                assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
+            },
+            SystemModel::Step::reply_sync(new_program) => {
+                assume( false );
+                assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
+            },
+            SystemModel::Step::crash(new_program, new_disk) => {
+                assert( ipost.async_ephemeral == AsyncMap::State::init_ephemeral_state() );
+                assert( ipost.versions.len() == 1 );
+                assume( false ); // jonh LEFT OFF HERE
+                assert( ipost.versions == ipre.versions.get_prefix(ipre.stable_index() + 1) );
+                assert( CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl,
+                        CrashTolerantAsyncMap::Step::crash() ) );
+            },
+            SystemModel::Step::noop() => {
+                assert( ipre == ipost );
+                assert( CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl,
+                        CrashTolerantAsyncMap::Step::noop() ) );
+            },
+            SystemModel::Step::dummy_to_use_type_params(dummy) => {
+            },
+        }
 
 
 //         // ensures:

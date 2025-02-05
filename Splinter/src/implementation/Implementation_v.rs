@@ -15,9 +15,9 @@ use crate::trusted::KVStoreTrait_t::*;
 use crate::trusted::KVStoreTokenized_v::*;
 use crate::spec::MapSpec_t::{Request, Reply, Output, Input};
 use crate::spec::MapSpec_t::*;
-use crate::spec::TotalKMMap_t::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
+use crate::implementation::ConcreteProgramModel_v::*;
 
 verus!{
 
@@ -43,11 +43,13 @@ impl Implementation {
     }
 
     pub closed spec fn i(self) -> AtomicState {
-        AtomicState{
-            store: MapSpec::State {
-                kmmap: TotalKMMap(Self::i_hashmap(self.store@)),
-            }
-        }
+        self.state@.value()
+//         TODO deleteme
+//         AtomicState{
+//             store: MapSpec::State {
+//                 kmmap: TotalKMMap(Self::i_hashmap(self.store@)),
+//             }
+//         }
     }
 
     pub open spec fn good_req(self, req: Request, req_shard: KVStoreTokenized::requests) -> bool
@@ -105,25 +107,33 @@ impl Implementation {
 
     pub exec fn handle_put(&mut self, req: Request, req_shard: Tracked<KVStoreTokenized::requests>)
             -> (out: (Reply, Tracked<KVStoreTokenized::replies>))
-    requires old(self).good_req(req, req_shard@),
+    requires
+        old(self).wf(),
+        old(self).good_req(req, req_shard@),
         req.input is PutInput,
-    ensures self.good_reply(*old(self), out.0, out.1@),
+    ensures
+        self.wf(),
+        self.good_reply(*old(self), out.0, out.1@),
     {
         match req.input {
         Input::PutInput{key, value} => {
             let ghost pre_state: AtomicState = self.i();
             self.store.insert(key, value);
-            let ghost post_state: AtomicState = self.i();
 
             let reply = Reply{output: Output::PutOutput, id: req.id};
 
-            let ghost post_state_y = AtomicState {
-                store: MapSpec::State {
+            let ghost store = MapSpec::State {
                     kmmap: pre_state.store.kmmap.insert(key, Message::Define{value})
-                }
             };
 
-            assert( post_state == post_state_y );   // trigger extn equality
+            // TODO(jonh): I find it sad that the implementation has to track the history
+            // value. It'd be nice if the implementation could just take local valid steps,
+            // and have a proof at a higher layer carry the ghost history along. But .i() makes
+            // that difficult. Hmm.
+            let ghost post_state = AtomicState {
+                store,
+                history: Ghost(self.state@.value().history@.append(seq![ PersistentState{appv: store} ])),
+            };
 
             let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
             proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
@@ -137,7 +147,7 @@ impl Implementation {
 //                 assert( AtomicState::map_transition(pre_state, post_state, map_lbl) );
             }
 
-            assert( pre_state == atomic_state.value() );
+//             assert( pre_state == atomic_state.value() );
             let tracked new_reply_token = self.instance.borrow().execute_transition(
                 KVStoreTokenized::Label::ExecuteOp{req, reply},
                 post_state,
@@ -155,15 +165,19 @@ impl Implementation {
 
     pub exec fn handle_query(&mut self, req: Request, req_shard: Tracked<KVStoreTokenized::requests>)
             -> (out: (Reply, Tracked<KVStoreTokenized::replies>))
-    requires old(self).good_req(req, req_shard@),
+    requires
+        old(self).wf(),
+        old(self).good_req(req, req_shard@),
         req.input is QueryInput,
-    ensures self.good_reply(*old(self), out.0, out.1@),
+    ensures
+        self.wf(),
+        self.good_reply(*old(self), out.0, out.1@),
     {
         match req.input {
         Input::QueryInput{key} => {
             let value = match self.store.get(&key) {
                 Some(v) => *v,
-                None => Value(0),
+                None => { Value(0) },
             };
 
             let ghost pre_state: AtomicState = self.i();
@@ -177,6 +191,16 @@ impl Implementation {
 
             let ghost map_lbl = MapSpec::Label::Query{input: req.input, output: reply.output};
             proof {
+                assert( old(self).wf() );
+                if pre_state.store.kmmap.0.contains_key(key) {
+                    assume( pre_state.store.kmmap[key]->value == value );
+                } else {
+                    // TODO jonh left off here
+                    assume( false );
+//                     assert( old(self).store@ == old(self).i().store );
+                    assert( !old(self).store@.contains_key(key@) );
+                    assert( pre_state.store.kmmap[key]->value == value );
+                }
                 reveal(MapSpec::State::next);
                 reveal(MapSpec::State::next_by);
                 assert( MapSpec::State::next_by(pre_state.store, post_state.store,
@@ -212,7 +236,7 @@ impl Implementation {
 }
 
 impl KVStoreTrait for Implementation {
-    type Proof = KVStoreTokenized::State;   // Supplied in implementation/ModelRefinement_v
+    type Proof = ConcreteProgramModel;
 
     closed spec fn wf(self) -> bool {
         &&& self.state@.instance_id() == self.instance@.id()
