@@ -207,7 +207,8 @@ impl Implementation {
             proof {
                 assert( old(self).wf() );
                 if pre_state.mapspec().kmmap.0.contains_key(key) {
-                    assume( pre_state.mapspec().kmmap[key]->value == value );
+                    assume( false );
+                    assert( pre_state.mapspec().kmmap[key]->value == value );
                 } else {
                     // TODO jonh left off here
 //                     assert( old(self).store@ == old(self).i().store );
