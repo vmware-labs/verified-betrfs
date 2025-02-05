@@ -86,9 +86,9 @@ tokenized_state_machine!{KVStoreTokenized{
     // execute transition takes a versiosn 
     transition!{ execute_transition(lbl: Label, post_atomic_state: AtomicState, map_lbl: MapSpec::Label) {
         require let Label::ExecuteOp{ req, reply } = lbl;
+        require req.id == reply.id;
 
         remove requests -= {req};
-
         require getInput(map_lbl) == req.input;
         require getOutput(map_lbl) == reply.output;
         require AtomicState::map_transition(pre.atomic_state, post_atomic_state, map_lbl);

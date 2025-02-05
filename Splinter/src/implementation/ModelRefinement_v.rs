@@ -23,18 +23,6 @@ impl RefinementObligation for ConcreteProgramModel {
     closed spec fn inv(model: SystemModel::State<Self::Model>) -> bool
     {
         model.inv()
-        // &&& model.program.state.requests_have_unique_ids()
-        // &&& model.program.state.replies_have_unique_ids()
-        // &&& forall |req, reply| model.program.state.requests.contains(req) 
-        //     && model.program.state.replies.contains(reply) 
-        //     ==> #[trigger] req.id != #[trigger] reply.id
-
-        // &&& forall |req| model.program.state.requests.contains(req)
-        //     ==> #[trigger] model.id_history.contains(req.id)
-        // &&& forall |reply| model.program.state.replies.contains(reply)
-        //     ==> #[trigger] model.id_history.contains(reply.id)
-
-        // &&& model.program.state.atomic_state.wf()
     }
 
     closed spec fn i(model: SystemModel::State<Self::Model>)
@@ -50,7 +38,6 @@ impl RefinementObligation for ConcreteProgramModel {
         }
     }
 
-    // 
     closed spec fn i_lbl(pre: SystemModel::State<Self::Model>, post: SystemModel::State<Self::Model>, lbl: SystemModel::Label) -> (ctam_lbl: CrashTolerantAsyncMap::Label)
     {
         match lbl {
@@ -139,6 +126,7 @@ impl RefinementObligation for ConcreteProgramModel {
                         let new_id = lbl->op.arrow_AcceptRequest_req().id;
                         assert(!pre.id_history.contains(new_id)); // trigger
                         assert(post.program.state._inv());
+                        assert(post.inv());
                         assert(CrashTolerantAsyncMap::State::optionally_append_version(ipre.versions, ipost.versions));
 
                         assert(!ipre.async_ephemeral.requests.contains(req));
@@ -150,11 +138,19 @@ impl RefinementObligation for ConcreteProgramModel {
                             CrashTolerantAsyncMap::Step::operate(ipost.versions, ipost.async_ephemeral)));
                     },
                     ProgramUserOp::DeliverReply{reply} => {
-                        assert(forall |r| #[trigger] post.program.state.replies.contains(r) 
-                            ==> pre.program.state.replies.contains(r));
-                        assert(post.program.state._inv());
+                        assert(post.program.state._inv()) by {
+                            assert(forall |r| #[trigger] post.program.state.replies.contains(r) 
+                                ==> pre.program.state.replies.contains(r));
+                        }
+                        assert(post.inv());
                         assert(ipre.async_ephemeral.replies.contains(reply));
-                        assert(!post.program.state.replies.contains(reply));
+                        assert(!post.program.state.replies.contains(reply)) by {
+                            if (post.program.state.replies.contains(reply)) {
+                                assert(pre.program.state.replies.contains(reply));
+                                assert(pre.program.state.replies.count(reply) > 1);
+                                assert(false);
+                            }
+                        }
                         assert(ipost.async_ephemeral.replies =~= ipre.async_ephemeral.replies.remove(reply));
 
                         assert(AsyncMap::State::next_by(iasync_pre, iasync_post, ilbl->base_op, AsyncMap::Step::reply()));
@@ -162,39 +158,51 @@ impl RefinementObligation for ConcreteProgramModel {
                             CrashTolerantAsyncMap::Step::operate(ipost.versions, ipost.async_ephemeral)));
                     },
                     ProgramUserOp::Execute{req, reply} => {
-                        assume(false);
+                        let kv_lbl = ProgramLabel::UserIO{op: lbl->op}.to_kv_lbl();
+                        assert(kv_lbl is ExecuteOp);
+                        assert(KVStoreTokenized::State::next(pre.program.state, post.program.state, kv_lbl));
+
+                        let map_lbl = choose |map_lbl| #[trigger] KVStoreTokenized::State::next_by(
+                                pre.program.state, post.program.state, kv_lbl, 
+                                KVStoreTokenized::Step::execute_transition(post.program.state.atomic_state, map_lbl));
+
+                        pre.program.state.execute_transition_magic(post.program.state, kv_lbl, map_lbl);
+                        assert(post.program.state._inv());
+                        assume( Self::inv(post) );
+
+                        assert(ipost.async_ephemeral.requests =~= ipre.async_ephemeral.requests.remove(req));
+                        assert(ipost.async_ephemeral.replies =~= ipre.async_ephemeral.replies.insert(reply));
+                        assert(AsyncMap::State::next_by(iasync_pre, iasync_post, ilbl->base_op, 
+                            AsyncMap::Step::execute(map_lbl, iasync_post.persistent)));                        
+                        assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, 
+                                CrashTolerantAsyncMap::Step::operate(ipost.versions, ipost.async_ephemeral)));
+
                     },
                     ProgramUserOp::AcceptSyncRequest{ sync_req_id } => {
                         // TODO: can't support this until we add this into KVstore tokenized
                         // might be able to just track sync reqs in a different field
-                        assume(false); 
+                        assume( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
                     },
                     ProgramUserOp::DeliverSyncReply{ sync_req_id } => {
                         // TODO: ditto
-                        assume(false);
+                        assume( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
                     },
                 }
-                // // auditor's promise: new request contains unique ID
-                // require pre.id_history.disjoint(new_id);
-                // // new program must be a valid step
-                // require T::next(pre.program, new_program, ProgramLabel::UserIO{op: lbl->op});
-        
-                // update program = new_program;
-                // update id_history = pre.id_history.union(new_id);
-
-                assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
             },
             SystemModel::Step::program_disk(new_program, new_disk) => {
                 assume( false );
                 assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
+                assert( Self::inv(post) );
             },
             SystemModel::Step::program_internal(new_program) => {
                 assume( false );
                 assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
+                assert( Self::inv(post) );
             },
             SystemModel::Step::disk_internal(new_disk) => {
                 assume( false );
                 assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
+                assert( Self::inv(post) );
             },
             SystemModel::Step::crash(new_program, new_disk) => {
                 // This Implementation, which doesn't actually use the disk, is only "crash
@@ -205,51 +213,18 @@ impl RefinementObligation for ConcreteProgramModel {
                 assert( ipost.async_ephemeral == AsyncMap::State::init_ephemeral_state() ); // extn equality
                 assert( CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl,
                         CrashTolerantAsyncMap::Step::crash() ) );
+                assert( Self::inv(post) );
             },
             SystemModel::Step::noop() => {
                 assert( ipre == ipost );
                 assert( CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl,
                         CrashTolerantAsyncMap::Step::noop() ) );
+                assert( Self::inv(post) );
             },
             SystemModel::Step::dummy_to_use_type_params(dummy) => {
             },
         }
-
-
-//         // ensures:
-//         match lbl {
-//             SystemModel::Label::ProgramUIOp{op} => {
-//                 match op {
-//                     ProgramLabel::AcceptRequest{req} => {
-//                         let i_post: CrashTolerantAsyncMap::State = Self::i(post);
-// //                         let new_versions: FloatingSeq<Version> = FloatingSeq::new(0, 1, |i:int| PersistentState{appv: pre.program.atomic_state.store});
-// //                         let new_async_ephemeral: EphemeralState = arbitrary();
-//                         let step = CrashTolerantAsyncMap::Step::operate(i_post.versions, i_post.async_ephemeral);
-
-//                         // versions history
-//                         // to be fair this should be 
-
-//                         // LEFT OFF:
-//                         // I'm looking around for some ghost state, but we don't have a KVStoreTokenized
-//                         // here, only a SystemModel/ProgramModel. Where are we going to tuck
-//                         // ghost Versions history?
-//                         assume(false);
-//                         // assert( KVStoreTokenized::show::request(pre, post, KVStoreTokenized::Label::RequestOp{req}, post) );
-//                         // assert( pre.program.atomic_state.store == post.program.atomic_state.store );
-//                         // assert( i_post.versions == Self::i(pre).versions );
-//                         // assert( CrashTolerantAsyncMap::State::next_by(Self::i(pre), i_post, Self::i_lbl(lbl), CrashTolerantAsyncMap::Step::operate(i_post.versions, i_post.async_ephemeral) ) );
-//                         // assert( CrashTolerantAsyncMap::State::next_by(Self::i(pre), i_post, Self::i_lbl(lbl), step) );
-//                     },
-//                     _ => { assume(false); },
-//                 }
-//             }
-//             _ => { assume(false);} ,
-//         }
         assert( CrashTolerantAsyncMap::State::next(Self::i(pre), Self::i(post), Self::i_lbl(pre, post, lbl)) );
-        assume(false);  // left off here
-        assert( Self::inv(post) );
-        
-
     }
 }
 
@@ -275,15 +250,6 @@ broadcast proof fn insert_new_preserves_cardinality<V>(m: Multiset<V>, new: V)
 // this is an inv on the system model
 
 impl KVStoreTokenized::State {
-//     pub open spec fn _i(self) -> BankSpec::State
-//     {
-//         BankSpec::State{
-//             accounts: self.account_map,
-//             requests: self.requests.dom(),
-//             replies: self.replies.dom(),
-//         }
-//     }
-
     pub closed spec fn _inv(self) -> bool
     {
         &&& self.requests_have_unique_ids()
@@ -309,6 +275,37 @@ impl KVStoreTokenized::State {
             && #[trigger] reply1.id == #[trigger] reply2.id
             ==> reply1 == reply2
     }
+
+    proof fn execute_transition_magic(self, post: Self, lbl: KVStoreTokenized::Label, map_lbl: MapSpec::Label)
+        requires
+            self._inv(), 
+            Self::execute_transition(self, post, lbl, post.atomic_state, map_lbl),
+        ensures 
+            post._inv(),
+            CrashTolerantAsyncMap::State::optionally_append_version(
+                self.atomic_state.history, post.atomic_state.history),
+    {
+        broadcast use insert_new_preserves_cardinality;
+        reveal(MapSpec::State::next);
+        reveal(MapSpec::State::next_by);
+
+        let req = lbl.arrow_ExecuteOp_req();
+        let reply = lbl.arrow_ExecuteOp_reply();
+
+        assert(forall |req| #[trigger] post.requests.contains(req) 
+            ==> self.requests.contains(req));
+        assert(post._inv());
+
+        let history = self.atomic_state.history;
+        let post_history = post.atomic_state.history;
+
+        if history.len() == post_history.len() {
+            assert(post_history.get_prefix(history.len()) == post_history); // trigger
+        } else {
+            assert(post_history.get_prefix(history.len()) == history); // trigger
+        }
+        assert(CrashTolerantAsyncMap::State::optionally_append_version(history, post_history));
+    }
 }
 
 impl SystemModel::State<ConcreteProgramModel> {
@@ -319,27 +316,7 @@ impl SystemModel::State<ConcreteProgramModel> {
             ==> #[trigger] self.id_history.contains(req.id)
         &&& forall |reply| self.program.state.replies.contains(reply)
             ==> #[trigger] self.id_history.contains(reply.id)
-
         &&& self.program.state.atomic_state.wf()
     }
-
-    // proof fn accept_request_preserves_inv(self, post: Self, 
-    //     lbl: SystemModel::Label, new_program: ConcreteProgramModel)
-    //     requires 
-    //         self.inv(), 
-    //         Self::program_ui(self, post, lbl, new_program),
-    //         lbl->op is AcceptRequest, 
-    //     ensures post.inv(),
-    // {
-    //     reveal(KVStoreTokenized::State::next);
-    //     reveal(KVStoreTokenized::State::next_by);
-
-    //     broadcast use insert_new_preserves_cardinality;
-
-    //     let new_id = lbl->op.arrow_AcceptRequest_req().id;
-    //     assert(!self.id_history.contains(new_id)); // trigger
-    //     assert(post.program.state._inv());
-    // }
 }
-
 }
