@@ -154,24 +154,6 @@ state_machine!{ SystemModel<T: ProgramModel> {
         update disk = new_disk;
     }}
 
-    transition!{ req_sync(lbl: Label, new_program: T) {
-        require let Label::ProgramUIOp{op: ProgramUserOp::AcceptSyncRequest{sync_req_id} } = lbl;
-
-        // promise unique sync id from all previous ids
-        require !pre.id_history.contains(sync_req_id as u64);
-        require T::next(pre.program, new_program, ProgramLabel::UserIO{op: lbl->op});
-
-        update program = new_program;
-        update id_history = pre.id_history.insert(sync_req_id as u64);
-    }}
-
-    transition!{ reply_sync(lbl: Label, new_program: T) {
-        require lbl is ProgramUIOp;
-        require lbl->op is DeliverSyncReply;
-        require T::next(pre.program, new_program, ProgramLabel::UserIO{op: lbl->op});
-        update program = new_program;
-    }}
-
     transition!{ crash(lbl: Label, new_program: T, new_disk: DiskModel) {
         require lbl is Crash;
         require T::init(new_program); 

@@ -130,6 +130,9 @@ impl RefinementObligation for ConcreteProgramModel {
 
         match step {
             SystemModel::Step::program_ui(new_program) => {
+                let iasync_pre = AsyncMap::State { persistent: ipre.versions.last(), ephemeral: ipre.async_ephemeral };
+                let iasync_post = AsyncMap::State { persistent: ipost.versions.last(), ephemeral: ipost.async_ephemeral };
+
                 match lbl->op {
                     ProgramUserOp::AcceptRequest{req} => {
                         broadcast use insert_new_preserves_cardinality;
@@ -137,9 +140,6 @@ impl RefinementObligation for ConcreteProgramModel {
                         assert(!pre.id_history.contains(new_id)); // trigger
                         assert(post.program.state._inv());
                         assert(CrashTolerantAsyncMap::State::optionally_append_version(ipre.versions, ipost.versions));
-
-                        let iasync_pre = AsyncMap::State { persistent: ipre.versions.last(), ephemeral: ipre.async_ephemeral };
-                        let iasync_post = AsyncMap::State { persistent: ipost.versions.last(), ephemeral: ipost.async_ephemeral };
 
                         assert(!ipre.async_ephemeral.requests.contains(req));
                         assert(ipre.versions == ipost.versions); // true
@@ -151,6 +151,13 @@ impl RefinementObligation for ConcreteProgramModel {
                             CrashTolerantAsyncMap::Step::operate(ipost.versions, ipost.async_ephemeral)));
                     },
                     ProgramUserOp::DeliverReply{reply} => {
+                        assert(forall |r| #[trigger] post.program.state.replies.contains(r) 
+                            ==> pre.program.state.replies.contains(r));
+                        assert(post.program.state._inv());
+
+                        assert(CrashTolerantAsyncMap::State::optionally_append_version(ipre.versions, ipost.versions));
+                        assert(AsyncMap::State::next_by(iasync_pre, iasync_post, ilbl->base_op, AsyncMap::Step::reply()));
+
                         assume(false);
                     },
                     ProgramUserOp::Execute{req, reply} => {
@@ -163,7 +170,7 @@ impl RefinementObligation for ConcreteProgramModel {
                     },
                     ProgramUserOp::DeliverSyncReply{ sync_req_id } => {
                         // TODO: ditto
-                        assume(false); 
+                        assume(false);
                     },
                 }
                 // // auditor's promise: new request contains unique ID
@@ -186,16 +193,6 @@ impl RefinementObligation for ConcreteProgramModel {
             },
             SystemModel::Step::disk_internal(new_disk) => {
                 assume( false );
-                assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
-            },
-            SystemModel::Step::req_sync(new_program) => {
-                assume( false );
-                assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
-            },
-            SystemModel::Step::reply_sync(new_program) => {
-                assume( false );
-                assert( CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl,
-                        CrashTolerantAsyncMap::Step::reply_sync() ) );
                 assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
             },
             SystemModel::Step::crash(new_program, new_disk) => {
