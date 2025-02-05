@@ -13,7 +13,7 @@ use vstd::prelude::*;
 
 use crate::spec::Messages_t::*;
 use crate::spec::MapSpec_t;
-use crate::spec::MapSpec_t::*;
+use crate::spec::MapSpec_t::{SyncReqId, *};
 
 use crate::abstract_system::AbstractCrashAwareJournal_v::*;
 use crate::abstract_system::AbstractCrashAwareMap_v::*;
@@ -27,7 +27,7 @@ verus! {
 
 /// SyncReqId's are used to assign sync requests unique IDs. Actual value is meaningless beyond
 /// identifying a specific sync request.
-type SyncReqId = nat;
+// type SyncReqId = nat;
 
 /// SyncReqs represents a set of outstanding sync requests. Sync requests are stored as key-value
 /// pairs: (key, map_lsn), where "key" is the sync request ID, and "map_lsn" was the last executed
