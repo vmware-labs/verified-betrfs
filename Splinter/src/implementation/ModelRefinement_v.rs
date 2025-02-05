@@ -169,9 +169,14 @@ impl RefinementObligation for ConcreteProgramModel {
                 assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
             },
             SystemModel::Step::crash(new_program, new_disk) => {
-                // This Implementation, which doesn't actually use the disk, isn't crash tolerant!
-                // So of course this step cannot succeed.
-                assume( false ); // jonh LEFT OFF HERE
+                // This Implementation, which doesn't actually use the disk, is only "crash
+                // tolerant" in the sense that it doesn't support sync. Since we never sync,
+                // we maintain the invariant that the first allowed crash Version is the initial
+                // state, which of course is exactly what we get when we "recover" without a disk.
+                assert( ipost.versions == ipre.versions.get_prefix(ipre.stable_index() + 1) ); // extn equality
+                assert( ipost.async_ephemeral == AsyncMap::State::init_ephemeral_state() ); // extn equality
+                assert( CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl,
+                        CrashTolerantAsyncMap::Step::crash() ) );
             },
             SystemModel::Step::noop() => {
                 assert( ipre == ipost );

@@ -32,6 +32,13 @@ impl AtomicState {
     pub open spec fn wf(self) -> bool {
       &&& self.history.is_active(self.history.len()-1)
       &&& forall |i| #[trigger] self.history.is_active(i) ==> self.history[i].appv.invariant()
+
+      // In this silly version, we never persist, so stable_index cannot be allowed to advance;
+      // that's what will allow us to crash because it lets us forget everything.
+      &&& self.history.first_active_index() == 0
+      // ...and of course the beginning version had better stay stuck at state 0, so we know
+      // where the crash is going to return to.
+      &&& self.history[0] == SingletonVersions(my_init())[0]
     }
 
     pub open spec fn mapspec(self) -> MapSpec::State {
