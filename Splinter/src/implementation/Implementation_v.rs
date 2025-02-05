@@ -263,7 +263,7 @@ impl KVStoreTrait for Implementation {
             Tracked(replies),       // reply perm map (multiset), empty
         ) = KVStoreTokenized::Instance::initialize();
 
-        // axiom_usize_obeys_hash_table_key_model isn't firing!?
+        // verus/source/vstd/std_specs/hash.rs says the best we can do right now is assume this.
         assume( obeys_key_model::<Key>() );
 
         let selff = Implementation{
