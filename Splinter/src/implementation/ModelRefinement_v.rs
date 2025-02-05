@@ -176,7 +176,6 @@ impl RefinementObligation for ConcreteProgramModel {
                             AsyncMap::Step::execute(map_lbl, iasync_post.persistent)));                        
                         assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, 
                                 CrashTolerantAsyncMap::Step::operate(ipost.versions, ipost.async_ephemeral)));
-
                     },
                     ProgramUserOp::AcceptSyncRequest{ sync_req_id } => {
                         // TODO: can't support this until we add this into KVstore tokenized
@@ -190,18 +189,20 @@ impl RefinementObligation for ConcreteProgramModel {
                 }
             },
             SystemModel::Step::program_disk(new_program, new_disk) => {
-                assume( false );
-                assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
+                assert(new_program == pre.program);
+                assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, 
+                    CrashTolerantAsyncMap::Step::noop()));
                 assert( Self::inv(post) );
             },
             SystemModel::Step::program_internal(new_program) => {
-                assume( false );
-                assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
+                assert(new_program == pre.program);
+                assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, 
+                    CrashTolerantAsyncMap::Step::noop()));
                 assert( Self::inv(post) );
             },
             SystemModel::Step::disk_internal(new_disk) => {
-                assume( false );
-                assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
+                assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, 
+                    CrashTolerantAsyncMap::Step::noop()));
                 assert( Self::inv(post) );
             },
             SystemModel::Step::crash(new_program, new_disk) => {
@@ -224,7 +225,7 @@ impl RefinementObligation for ConcreteProgramModel {
             SystemModel::Step::dummy_to_use_type_params(dummy) => {
             },
         }
-        assert( CrashTolerantAsyncMap::State::next(Self::i(pre), Self::i(post), Self::i_lbl(pre, post, lbl)) );
+        assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
     }
 }
 
