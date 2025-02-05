@@ -13,8 +13,8 @@ use vstd::std_specs::hash::*;
 use crate::trusted::ClientAPI_t::*;
 use crate::trusted::KVStoreTrait_t::*;
 use crate::trusted::KVStoreTokenized_v::*;
-use crate::spec::MapSpec_t::{Request, Reply, Output, Input};
 use crate::spec::MapSpec_t::*;
+use crate::spec::TotalKMMap_t::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 use crate::implementation::ConcreteProgramModel_v::*;
@@ -30,6 +30,14 @@ pub struct Implementation {
 }
 
 impl Implementation {
+    pub closed spec(checked) fn view_store_as_kmmap(self) -> TotalKMMap
+     {
+        TotalKMMap(Map::new(
+                |k: Key| true,
+                |k: Key| if self.store@.contains_key(k@) { Message::Define{value: self.store@[k@]} }
+                         else { Message::empty() }))
+    }
+
     // The View hos HashMapWithView isn't what we need.
     // Gotta transform Key -> Key (by way of the darn int from the HashMapWithView @ :v)
     // and Value -> Message.
@@ -115,7 +123,7 @@ impl Implementation {
         self.wf(),
         self.good_reply(*old(self), out.0, out.1@),
     {
-        match req.input {
+        let out = match req.input {
         Input::PutInput{key, value} => {
             let ghost pre_state: AtomicState = self.i();
             self.store.insert(key, value);
@@ -160,7 +168,10 @@ impl Implementation {
             (reply, Tracked(new_reply_token))
         },
             _ => unreached(),
-        }
+        };
+        assert( self.i().store.kmmap == self.view_store_as_kmmap() ); // trigger extn equality
+//         assert( self.wf() );
+        out
     }
 
     pub exec fn handle_query(&mut self, req: Request, req_shard: Tracked<KVStoreTokenized::requests>)
@@ -196,8 +207,9 @@ impl Implementation {
                     assume( pre_state.store.kmmap[key]->value == value );
                 } else {
                     // TODO jonh left off here
-                    assume( false );
 //                     assert( old(self).store@ == old(self).i().store );
+
+                    assert( !pre_state.store.kmmap.0.contains_key(key) );
                     assert( !old(self).store@.contains_key(key@) );
                     assert( pre_state.store.kmmap[key]->value == value );
                 }
@@ -240,7 +252,7 @@ impl KVStoreTrait for Implementation {
 
     closed spec fn wf(self) -> bool {
         &&& self.state@.instance_id() == self.instance@.id()
-        &&& self.i() == self.state@.value()
+        &&& self.i().store.kmmap == self.view_store_as_kmmap()
     }
 
     closed spec fn instance_id(self) -> InstanceId
@@ -266,7 +278,9 @@ impl KVStoreTrait for Implementation {
             state: Tracked(atomic_state),
             instance: Tracked(instance)
         };
-        assert( selff.i() == selff.state@.value() );   // trigger extn equality
+//         assert( selff.i() == selff.state@.value() );   // trigger extn equality
+        assert( selff.i().store.kmmap == selff.view_store_as_kmmap() ); // trigger extn equality
+//         assert( selff.wf() );
         selff
     }
 
