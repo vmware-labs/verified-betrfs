@@ -6,14 +6,13 @@ use state_machines_macros::tokenized_state_machine;
 use crate::spec::MapSpec_t::*;
 use crate::spec::FloatingSeq_t::*;
 use crate::spec::TotalKMMap_t::*;
-// use crate::spec::Messages_t::Value;
 
 verus! {
 
 #[verifier::ext_equal]
 pub struct AtomicState {
     pub store: MapSpec::State,
-    pub history: Ghost<FloatingSeq<PersistentState>>,
+    pub history: Ghost<FloatingSeq<PersistentState>>, // TODO: isn't the entire atomic state already ghost? 
 }
 
 impl AtomicState {
@@ -106,14 +105,10 @@ tokenized_state_machine!{KVStoreTokenized{
     #[inductive(execute_transition)]
     fn execute_transition_inductive(pre: Self, post: Self, lbl: Label, post_atomic_state: AtomicState, map_lbl: MapSpec::Label) { 
         assert( pre.atomic_state.store.kmmap.wf() );
-        reveal( MapSpec::State::next );
-        reveal( MapSpec::State::next_by );
-        assert( MapSpec::State::next(pre.atomic_state.store, post.atomic_state.store, map_lbl) );
-        assert( pre.atomic_state.store.invariant() );
+        MapSpec::State::inv_next(pre.atomic_state.store, post.atomic_state.store, map_lbl);
         // TODO(jialin): we should be getting MapSpec::invariant here; how do we invoke it?
         // I don't see *anything* in the expand file that summarizes pre.inv & next(pre,post) => post.inv.
-        // Is this a known hole in the macro?
-        assume( post.atomic_state.store.invariant() );
+        // Is this a known hole in the macro? => Yup! 
         assert( post.atomic_state.store.kmmap.wf() );
     }
 

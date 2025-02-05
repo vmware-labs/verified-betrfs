@@ -148,6 +148,30 @@ state_machine!{ MapSpec {
    
     #[inductive(noop)]
     fn noop_inductive(pre: Self, post: Self, label: Label) { }
+
+    pub proof fn inv_next(pre: Self, post: Self, lbl: Label)
+        requires pre.the_inv(), Self::next(pre, post, lbl)
+        ensures post.the_inv()
+    {
+        reveal(MapSpec::State::next);
+        reveal(MapSpec::State::next_by);
+
+        let step = choose |step| Self::next_by(pre, post, lbl, step);
+        match step {
+            MapSpec::Step::query() => {
+                Self::query_inductive(pre, post, lbl);
+            },
+            MapSpec::Step::put() => {
+                Self::put_inductive(pre, post, lbl);
+            },
+            MapSpec::Step::noop() => {
+                Self::noop_inductive(pre, post, lbl);
+            },
+            _ => {
+                assert(false);
+            },
+        }
+    }
 }}  // Async things
 
 
