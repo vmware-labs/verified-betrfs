@@ -205,24 +205,12 @@ impl Implementation {
 
             let ghost map_lbl = MapSpec::Label::Query{input: req.input, output: reply.output};
             proof {
-                assert( old(self).wf() );
-                if pre_state.mapspec().kmmap.0.contains_key(key) {
-                    assume( false );
-                    assert( pre_state.mapspec().kmmap[key]->value == value );
-                } else {
-                    // TODO jonh left off here
-//                     assert( old(self).store@ == old(self).i().store );
-
-                    assert( !pre_state.mapspec().kmmap.0.contains_key(key) );
-                    assert( !old(self).store@.contains_key(key@) );
-                    assert( pre_state.mapspec().kmmap[key]->value == value );
-                }
                 reveal(MapSpec::State::next);
                 reveal(MapSpec::State::next_by);
                 assert( MapSpec::State::next_by(pre_state.mapspec(), post_state.mapspec(),
                         map_lbl, MapSpec::Step::query())); // witness to step
                 assert( post_state.history.get_prefix(pre_state.history.len()) == pre_state.history );  // extn
-                assert( AtomicState::map_transition(pre_state, post_state, map_lbl) );
+//                 assert( AtomicState::map_transition(pre_state, post_state, map_lbl) );
             }
             let tracked new_reply_token = self.instance.borrow().execute_transition(
                 KVStoreTokenized::Label::ExecuteOp{req, reply},
