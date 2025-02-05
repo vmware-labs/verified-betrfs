@@ -2175,6 +2175,36 @@ impl<T> LinkedBetree<T> {
         new_ranking
     }
 
+    proof fn sub_children_sub_reachable_tree_addrs(self, other: LinkedBetree<T>, ranking: Ranking, ofs: int)
+        requires 
+            self.has_root(),
+            other.has_root(),
+            self.valid_ranking(ranking),
+            other.valid_ranking(ranking),
+            self.dv.agrees_with(other.dv),
+            0 <= ofs < other.root().children.len() - self.root().children.len(),
+            self.root().children == other.root().children.subrange(ofs, ofs + self.root().children.len()),
+        ensures
+            self.reachable_betree_addrs_using_ranking_recur(ranking, 0)
+            <= other.reachable_betree_addrs_using_ranking_recur(ranking, 0)
+    {
+        let sub_tree_addrs = self.reachable_betree_addrs_using_ranking_recur(ranking, 0);
+        let other_sub_tree_addrs = other.reachable_betree_addrs_using_ranking_recur(ranking, 0);
+
+        let children = self.root().children;
+        let other_children = other.root().children;
+
+        assert forall |addr| sub_tree_addrs.contains(addr) 
+        implies other_sub_tree_addrs.contains(addr) 
+        by {
+            self.reachable_betree_addrs_using_ranking_recur_lemma(ranking, 0);
+            let i = self.get_child_given_betree_addr(ranking, addr, 0);
+            assert(other.root().valid_child_index((i+ofs) as nat)); // trigger
+            self.child_at_idx(i).agreeable_disks_same_reachable_betree_addrs(other.child_at_idx((i+ofs) as nat), ranking);
+            other.reachable_betree_addrs_using_ranking_recur_lemma(ranking, 0);
+        }
+    }
+
     proof fn split_leaf_preserves_reachable_buffers(self, other: LinkedBetree<T>, ranking: Ranking)
         requires 
             self.has_root(),
@@ -2332,6 +2362,12 @@ impl<T> LinkedBetree<T> {
                     let rc_ranking = result.child_at_idx(idx).the_ranking();
                     let c_ranking = child.the_ranking();
 
+
+                    if idx == request.get_child_idx() {
+                        self.child_at_idx(idx).sub_children_sub_reachable_tree_addrs(
+                            result.child_at_idx(idx), ranking, 0
+                        );
+                    }
                     assume(result.child_at_idx(idx).reachable_betree_addrs_using_ranking_recur(rc_ranking, 0)
                         <= child.reachable_betree_addrs_using_ranking_recur(c_ranking, 0));
                     
@@ -2434,85 +2470,6 @@ impl<T> LinkedBetree<T> {
                 }
             }
         }
-    }
-
-    pub proof fn meow(self, request: SplitRequest, new_addrs: SplitAddrs) 
-        requires 
-            self.acyclic(),
-            self.can_split_parent(request),
-            self.dv.is_fresh(new_addrs.repr()),
-            new_addrs.no_duplicates(),
-        ensures ({
-            let child = self.child_at_idx(request.get_child_idx() as nat);
-            let result = self.split_parent(request, new_addrs);
-            &&& result.reachable_betree_addrs() =~= 
-                self.reachable_betree_addrs() - set![child.root.unwrap()] + new_addrs.repr()
-        })
-    {
-        let child_idx = request.get_child_idx();
-        let child = self.child_at_idx(child_idx as nat);
-
-        let new_parent = self.split_parent(request, new_addrs);
-        let left_child = new_parent.child_at_idx(child_idx);
-        let right_child = new_parent.child_at_idx((child_idx+1) as nat);
-
-        assert(new_parent.root().valid_child_index(child_idx));
-        assert(new_parent.root().valid_child_index((child_idx+1) as nat));
-
-        // assert(left_child.valid_ranking(ranking));
-        // assert(right_child.valid_ranking(ranking));
-
-        assume(false);
-        // let child_buffers = child.reachable_buffer_addrs();
-        // let left_buffers = left_child.reachable_buffer_addrs();
-        // let right_buffers = right_child.reachable_buffer_addrs();
-
-        // self.child_at_idx_reachable_addrs_ensures(child_idx);
-        // new_parent.child_at_idx_reachable_addrs_ensures(child_idx);
-        // new_parent.child_at_idx_reachable_addrs_ensures((child_idx+1) as nat);
-
-        // if request is SplitLeaf {
-        //     child.split_leaf_preserves_reachable_buffers(left_child, ranking);
-        //     child.split_leaf_preserves_reachable_buffers(right_child, ranking);
-        // } else {
-        //     child.split_index_preserves_reachable_buffers(
-        //         left_child, right_child, request->child_pivot_idx, ranking);
-        // }
-        // assert(child_buffers == left_buffers + right_buffers);
-
-        // assert forall |addr| self.reachable_buffer_addrs().contains(addr)
-        // implies new_parent.reachable_buffer_addrs().contains(addr)
-        // by {
-        //     if self.root().buffers.contains(addr) {
-        //         assert(new_parent.root().buffers.contains(addr));
-        //         new_parent.reachable_betree_addrs_using_ranking_closed(ranking);
-        //         assert(new_parent.reachable_buffer(new_parent.root.unwrap(), addr));
-        //     } else {
-        //         let tree_addr = choose |tree_addr| self.reachable_buffer(tree_addr, addr);
-        //         let i = self.non_root_buffers_belongs_to_child(tree_addr, addr);
-        //         if i != child_idx {
-        //             let new_i = if i < child_idx { i } else { (i + 1) as nat };
-        //             self.same_child_same_reachable_buffers(new_parent, i, new_i, ranking);
-        //         }
-        //     }
-        // }
-
-        // assert forall |addr| new_parent.reachable_buffer_addrs().contains(addr) 
-        // implies self.reachable_buffer_addrs().contains(addr)
-        // by {
-        //     if new_parent.root().buffers.contains(addr) {
-        //         assert(self.root().buffers.contains(addr));
-        //         self.reachable_betree_addrs_using_ranking_closed(ranking);
-        //         assert(self.reachable_buffer(self.root.unwrap(), addr));
-        //     } else { 
-        //         let tree_addr = choose |tree_addr| new_parent.reachable_buffer(tree_addr, addr);
-        //         let new_i = new_parent.non_root_buffers_belongs_to_child(tree_addr, addr);
-        //         if new_i != child_idx && new_i != child_idx + 1 {
-        //             let i = if new_i < child_idx { new_i } else { (new_i - 1) as nat};
-        //             self.same_child_same_reachable_buffers(new_parent, i, new_i, ranking);
-        //         }
-        //     }
-        // }
     }
 
     pub proof fn flush_new_ranking(self, child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, ranking: Ranking) -> (new_ranking: Ranking)
