@@ -140,7 +140,7 @@ impl Implementation {
             // that difficult. Hmm.
             let ghost post_state = AtomicState {
                 store,
-                history: Ghost(self.state@.value().history@.append(seq![ PersistentState{appv: store} ])),
+                history: self.state@.value().history.append(seq![ PersistentState{appv: store} ]),
             };
 
             let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();

@@ -50,14 +50,14 @@ impl RefinementObligation for ConcreteProgramModel {
         &&& forall |reply| model.program.state.replies.contains(reply)
             ==> #[trigger] model.id_history.contains(reply.id)
 
-        &&& model.program.state.atomic_state.history@.last().appv == model.program.state.atomic_state.store
+        &&& model.program.state.atomic_state.history.last().appv == model.program.state.atomic_state.store
     }
 
     closed spec fn i(model: SystemModel::State<Self::Model>)
         -> (mapspec: CrashTolerantAsyncMap::State)
     {
         CrashTolerantAsyncMap::State{
-            versions: model.program.state.atomic_state.history@,
+            versions: model.program.state.atomic_state.history,
             async_ephemeral: EphemeralState{
                 requests: model.program.state.requests.dom(),
                 replies: model.program.state.replies.dom(),

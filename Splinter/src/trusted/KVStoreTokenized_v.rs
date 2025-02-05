@@ -12,7 +12,7 @@ verus! {
 #[verifier::ext_equal]
 pub struct AtomicState {
     pub store: MapSpec::State,
-    pub history: Ghost<FloatingSeq<PersistentState>>, // TODO: isn't the entire atomic state already ghost? 
+    pub history: FloatingSeq<PersistentState>,
 }
 
 impl AtomicState {
@@ -21,7 +21,7 @@ impl AtomicState {
         let store = my_init();
         AtomicState{
             store,
-            history: Ghost(SingletonVersions(store)),
+            history: SingletonVersions(store),
         }
     }
 
