@@ -168,7 +168,7 @@ impl RefinementObligation for ConcreteProgramModel {
 
                         pre.program.state.execute_transition_magic(post.program.state, kv_lbl, map_lbl);
                         assert(post.program.state._inv());
-                        assume( Self::inv(post) );
+                        assert(post.inv());
 
                         assert(ipost.async_ephemeral.requests =~= ipre.async_ephemeral.requests.remove(req));
                         assert(ipost.async_ephemeral.replies =~= ipre.async_ephemeral.replies.insert(reply));
@@ -252,6 +252,7 @@ broadcast proof fn insert_new_preserves_cardinality<V>(m: Multiset<V>, new: V)
 impl KVStoreTokenized::State {
     pub closed spec fn _inv(self) -> bool
     {
+        &&& self.wf()
         &&& self.requests_have_unique_ids()
         &&& self.replies_have_unique_ids()
         &&& forall |req, reply| self.requests.contains(req) && self.replies.contains(reply) 
@@ -292,6 +293,8 @@ impl KVStoreTokenized::State {
         let req = lbl.arrow_ExecuteOp_req();
         let reply = lbl.arrow_ExecuteOp_reply();
 
+        KVStoreTokenized::State::execute_transition_inductive(
+            self, post, lbl, post.atomic_state, map_lbl);
         assert(forall |req| #[trigger] post.requests.contains(req) 
             ==> self.requests.contains(req));
         assert(post._inv());
@@ -316,7 +319,7 @@ impl SystemModel::State<ConcreteProgramModel> {
             ==> #[trigger] self.id_history.contains(req.id)
         &&& forall |reply| self.program.state.replies.contains(reply)
             ==> #[trigger] self.id_history.contains(reply.id)
-        &&& self.program.state.atomic_state.wf()
+        // &&& self.program.state.atomic_state.wf()
     }
 }
 }

@@ -120,7 +120,7 @@ tokenized_state_machine!{KVStoreTokenized{
     }
    
     #[inductive(execute_transition)]
-    fn execute_transition_inductive(pre: Self, post: Self, lbl: Label, post_atomic_state: AtomicState, map_lbl: MapSpec::Label) { 
+    pub fn execute_transition_inductive(pre: Self, post: Self, lbl: Label, post_atomic_state: AtomicState, map_lbl: MapSpec::Label) { 
         MapSpec::State::inv_next(pre.atomic_state.mapspec(), post.atomic_state.mapspec(), map_lbl);
         // TODO(jialin): we should be getting MapSpec::invariant here; how do we invoke it?
         // I don't see *anything* in the expand file that summarizes pre.inv & next(pre,post) => post.inv.
