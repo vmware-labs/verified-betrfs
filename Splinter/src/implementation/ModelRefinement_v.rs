@@ -300,10 +300,14 @@ impl KVStoreTokenized::State {
     pub closed spec fn _inv(self) -> bool
     {
         &&& self.wf()
+        // op requests have unique ids,
         &&& self.requests_have_unique_ids()
         &&& self.replies_have_unique_ids()
+        // even across the req-reply split:
         &&& forall |req, reply| self.requests.contains(req) && self.replies.contains(reply) 
             ==> #[trigger] req.id != #[trigger] reply.id
+        // sync requests have unique ids
+        &&& unique_keys(self.sync_requests)
     }
 
     pub open spec(checked) fn requests_have_unique_ids(self) -> bool 
