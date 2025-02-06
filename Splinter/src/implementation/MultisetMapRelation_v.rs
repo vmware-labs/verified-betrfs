@@ -27,10 +27,6 @@ pub open spec(checked) fn unique_keys<K,V>(m: Multiset<(K,V)>) -> bool
     &&& forall |p1,p2| #[trigger] m.contains(p1) && #[trigger] m.contains(p2) ==> p1==p2 || p1.0 != p2.0
 }
 
-pub proof fn insert_preserves_unique_keys<K,V>(kvs: Multiset<(K,V)>, k: K, v: V)
-{
-}
-
 pub proof fn unique_multiset_insert<K,V>(pre: Multiset<(K,V)>, k: K, v: V)
 requires
     unique_keys(pre),
@@ -89,16 +85,6 @@ ensures
     }
 }
 
-pub proof fn map_multiset_membership<K,V>(kvs: Multiset<(K,V)>, k: K, v: V)
-requires
-    unique_keys(kvs),
-    multiset_to_map(kvs).contains_key(k),
-    multiset_to_map(kvs)[k] == v,
-ensures
-    kvs.contains((k,v)),
-{
-}
-
 pub proof fn multiset_map_membership<K,V>(kvs: Multiset<(K,V)>, k: K, v: V)
 requires
     unique_keys(kvs),
@@ -139,7 +125,6 @@ ensures
     assert forall |k0| mpost.contains_key(k0) implies mpre_i.contains_key(k0) by {
         assert( post.contains((k0, mpost[k0])) );   // trigger
     }
-//     assert forall |k0| #![auto] mpre_i.contains_key(k0) implies mpre_i[k0] == mpost[k0] by {}
     assert( mpost == mpre_i );  // extn
 }
 
