@@ -189,12 +189,12 @@ tokenized_state_machine!{KVStoreTokenized{
 // could assert the invariant and assume-false it here, moving the assumption
 // down in the stack to the tok layer.
         
-        assume( false );
+        assume( false ); // auditor supplies unique IDs
     }
    
     #[inductive(deliver_sync_reply)]
     fn deliver_sync_reply_inductive(pre: Self, post: Self, lbl: Label, version: nat) {
-        assume( false );
+        assume( false ); // auditor supplies unique IDs
     }
 }}
 }
