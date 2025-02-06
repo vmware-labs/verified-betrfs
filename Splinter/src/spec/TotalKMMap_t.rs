@@ -29,6 +29,7 @@ impl TotalKMMap {
     pub open spec(checked) fn spec_index(self, idx: Key) -> Message
         recommends
             self.wf(),
+            self.0.contains_key(idx),
     {
         self.0[idx]
     }

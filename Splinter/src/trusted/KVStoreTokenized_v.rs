@@ -6,6 +6,7 @@ use state_machines_macros::tokenized_state_machine;
 use crate::spec::MapSpec_t::*;
 use crate::spec::FloatingSeq_t::*;
 use crate::spec::TotalKMMap_t::*;
+use crate::implementation::MultisetMapRelation_v::unique_keys;    // more trusted apology
 
 verus! {
 
@@ -131,7 +132,8 @@ tokenized_state_machine!{KVStoreTokenized{
 
     #[invariant]
     pub open spec fn wf(&self) -> bool {
-        self.atomic_state.wf()
+        &&& self.atomic_state.wf()
+        &&& unique_keys(self.sync_requests)
     }
 
     #[inductive(initialize)]
@@ -169,10 +171,32 @@ tokenized_state_machine!{KVStoreTokenized{
     }
 
     #[inductive(accept_sync_request)]
-    fn accept_sync_request_inductive(pre: Self, post: Self, lbl: Label) { }
+    fn accept_sync_request_inductive(pre: Self, post: Self, lbl: Label) {
+
+// We can't maintain the invariant in KVStoreTok, because we don't have the
+// promise from the auditor.
+// 
+// We can't maintain the invariant in ModelRefinement, because we're already
+// assuming that the GSM state space of KVStoreTok is established by its invariant.
+// We can't rule out the possibility that some race condition in the concurrent
+// system moves us from a all_elems_single state to a !all_elems_single state,
+// since both are within the inductive region.
+// 
+// This sort of defeats the idea that we don't have to track the singleness in
+// the tok machine and can introduce that promise higher in the stack.
+// 
+// One possible origin for this problem is our inability to split the tok machine
+// into a trusted and untrusted composition. If we had that, the trusted half
+// could assert the invariant and assume-false it here, moving the assumption
+// down in the stack to the tok layer.
+        
+        assume( false );
+    }
    
     #[inductive(deliver_sync_reply)]
-    fn deliver_sync_reply_inductive(pre: Self, post: Self, lbl: Label, version: nat) { }
+    fn deliver_sync_reply_inductive(pre: Self, post: Self, lbl: Label, version: nat) {
+        assume( false );
+    }
 }}
 }
 

@@ -7,22 +7,13 @@ use crate::trusted::KVStoreTokenized_v::KVStoreTokenized;
 use crate::spec::MapSpec_t::*;
 use crate::spec::SystemModel_t::*;
 use crate::implementation::ConcreteProgramModel_v::*;
+use crate::implementation::MultisetMapRelation_v::*;
 
 verus!{
 
 // TODO: put into vstd/multiset_lib.rs
 pub open spec fn multiset_to_set<V>(m: Multiset<V>) -> Set<V> {
     Set::new(|v| m.contains(v))
-}
-
-impl ConcreteProgramModel {
-    closed spec fn i_sync_requests(sync_requests: Multiset<(SyncReqId, nat)>) -> Map<SyncReqId, nat>
-    {
-        Map::new(
-            |k| exists |pr| sync_requests.contains(pr) && pr.0 == k,
-            |k| {let pr = choose |pr| sync_requests.contains(pr) && pr.0 == k; pr.1}
-        )
-    }
 }
 
 // Attach the RefinementObligation impl to KVStoreTokenized::State itself;
@@ -44,7 +35,7 @@ impl RefinementObligation for ConcreteProgramModel {
                 requests: model.program.state.requests.dom(),
                 replies: model.program.state.replies.dom(),
             },
-            sync_requests: Self::i_sync_requests(model.program.state.sync_requests),
+            sync_requests: multiset_to_map(model.program.state.sync_requests),
         }
     }
 
@@ -203,39 +194,24 @@ impl RefinementObligation for ConcreteProgramModel {
                         let cur_version = (pre.program.state.atomic_state.history.len()-1) as nat;
                         let post_set = ipost.sync_requests.dom();
                         assert( post.program.state.sync_requests == pre.program.state.sync_requests.insert((sync_req_id, cur_version)) );
-                        assert forall |id| pre_set.insert(sync_req_id).contains(id)
-                            implies post_set.contains(id) by {
-                            // Find witnesses to nasty exists in i_sync_requests
-                            if id == sync_req_id {
-                                assert( post.program.state.sync_requests.contains((id, cur_version)) );
-                            } else {
-                                let pr = choose |pr| pre.program.state.sync_requests.contains(pr) && pr.0 == id;
-                                assert( post.program.state.sync_requests.contains(pr) );
-                            }
-                        }
-                        assert forall |id| post_set.contains(id)
-                            implies pre_set.insert(sync_req_id).contains(id) by {
-                            // Find witnesses to nasty exists in i_sync_requests
-                            if id == sync_req_id {
-                                assert( pre_set.insert(sync_req_id).contains(id) );
-                            } else {
-                                let pr = choose |pr| post.program.state.sync_requests.contains(pr) && pr.0 == id;
-                                assert( pre.program.state.sync_requests.contains(pr) );
-                            }
-                        }
-                        assert( ipost.sync_requests.dom() == ipre.sync_requests.dom().insert(sync_req_id) );
-                        assert forall |id| ipost.sync_requests.contains_key(id) ==>
-                            ipost.sync_requests[id] == ipre.sync_requests.insert(sync_req_id, cur_version)[id] by {
-                            assume( false );
-                        }
+//                         }
+                        unique_multiset_map_equiv(pre.program.state.sync_requests, sync_req_id, cur_version);
                         assert( ipost.sync_requests ==
                                 ipre.sync_requests.insert(sync_req_id, cur_version as nat) );
 //                         assert( ipost.sync_requests ==
 //                                 ipre.sync_requests.insert(sync_req_id, (ipre.versions.len() - 1) as nat) );
                         assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ctam_lbl, 
                             CrashTolerantAsyncMap::Step::req_sync()));                        
-                        assume( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
-                        assume( Self::inv(post) );  // leff off
+                        assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
+
+                        assert forall |sync_req_pr| #![auto] post.program.state.sync_requests.contains(sync_req_pr)
+                            implies post.id_history.contains(sync_req_pr.0) by {
+                            if sync_req_pr.0 != sync_req_id {
+                                // trigger pre inv
+                                assert( pre.program.state.sync_requests.contains(sync_req_pr) );
+                            }
+                        }
+                        assert( Self::inv(post) );  // leff off
                     },
                     ProgramUserOp::DeliverSyncReply{ sync_req_id } => {
                         // TODO: ditto
@@ -286,11 +262,6 @@ impl RefinementObligation for ConcreteProgramModel {
         }
         assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
     }
-}
-
-pub open spec(checked) fn all_elems_single<V>(m: Multiset<V>) -> bool
-{
-    forall |e| #[trigger] m.contains(e) ==> m.count(e) == 1
 }
 
 broadcast proof fn insert_new_preserves_cardinality<V>(m: Multiset<V>, new: V)
@@ -380,7 +351,7 @@ impl SystemModel::State<ConcreteProgramModel> {
         &&& forall |reply| self.program.state.replies.contains(reply)
             ==> #[trigger] self.id_history.contains(reply.id)
         // &&& self.program.state.atomic_state.wf()
-        &&& forall |sync_req_pr| self.program.state.sync_requests.contains(sync_req_pr)
+        &&& forall |sync_req_pr| #![auto] self.program.state.sync_requests.contains(sync_req_pr)
             ==> self.id_history.contains(sync_req_pr.0)
     }
 }
