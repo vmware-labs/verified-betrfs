@@ -41,7 +41,8 @@ impl ProgramLabel {
                     ProgramUserOp::AcceptRequest{req} => KVStoreTokenized::Label::RequestOp{req},
                     ProgramUserOp::DeliverReply{reply} => KVStoreTokenized::Label::ReplyOp{reply},
                     ProgramUserOp::Execute{req, reply} => KVStoreTokenized::Label::ExecuteOp{req, reply},
-                    _ => KVStoreTokenized::Label::InternalOp, // TODO: remove when kv store supports sync req
+                    ProgramUserOp::AcceptSyncRequest{sync_req_id} => KVStoreTokenized::Label::RequestSyncOp{sync_req_id},
+                    ProgramUserOp::DeliverSyncReply{sync_req_id} => KVStoreTokenized::Label::ReplySyncOp{sync_req_id},
                 }
             }
             _ => KVStoreTokenized::Label::InternalOp,

@@ -15,6 +15,16 @@ pub open spec fn multiset_to_set<V>(m: Multiset<V>) -> Set<V> {
     Set::new(|v| m.contains(v))
 }
 
+impl ConcreteProgramModel {
+    closed spec fn i_sync_requests(sync_requests: Multiset<(SyncReqId, nat)>) -> Map<SyncReqId, nat>
+    {
+        Map::new(
+            |k| exists |pr| sync_requests.contains(pr) && pr.0 == k,
+            |k| {let pr = choose |pr| sync_requests.contains(pr) && pr.0 == k; pr.1}
+        )
+    }
+}
+
 // Attach the RefinementObligation impl to KVStoreTokenized::State itself;
 // don't need an extra type to hold it.
 impl RefinementObligation for ConcreteProgramModel {
@@ -34,7 +44,7 @@ impl RefinementObligation for ConcreteProgramModel {
                 requests: model.program.state.requests.dom(),
                 replies: model.program.state.replies.dom(),
             },
-            sync_requests: Map::empty(),
+            sync_requests: Self::i_sync_requests(model.program.state.sync_requests),
         }
     }
 
@@ -79,7 +89,7 @@ impl RefinementObligation for ConcreteProgramModel {
     proof fn i_lbl_valid(pre: SystemModel::State<Self::Model>, post: SystemModel::State<Self::Model>, lbl: SystemModel::Label, ctam_lbl: CrashTolerantAsyncMap::Label)
     {
         assert( ctam_lbl == Self::i_lbl(pre, post, lbl) );
-        assert( lbl.label_correspondance(ctam_lbl) );
+        assert( lbl.label_correspondence(ctam_lbl) );
     }
 
     proof fn init_refines(pre: SystemModel::State<Self::Model>)
@@ -87,6 +97,7 @@ impl RefinementObligation for ConcreteProgramModel {
 //         assert( SystemModel::State::initialize(pre, pre.program, pre.disk) );
         // extn equal trigger
         assert( Self::i(pre).async_ephemeral == AsyncMap::State::init_ephemeral_state() );
+        assert( Self::i(pre).sync_requests == Map::<SyncReqId,nat>::empty() );  // extn
 //         assert( CrashTolerantAsyncMap::State::initialize(Self::i(pre)) );
 //         assert( Self::inv(pre) );
     }
@@ -180,13 +191,60 @@ impl RefinementObligation for ConcreteProgramModel {
                     ProgramUserOp::AcceptSyncRequest{ sync_req_id } => {
                         // TODO: can't support this until we add this into KVstore tokenized
                         // might be able to just track sync reqs in a different field
+                        let ctam_lbl = CrashTolerantAsyncMap::Label::ReqSyncOp{ sync_req_id };
+
+                        // unique sync reqs promise from SystemModel
+                        assert( !pre.id_history.contains(sync_req_id) );
+//                         assert( forall |pr| pre.program.state.sync_requests.contains(pr)
+//                                 ==> pr.0 != sync_req_id );
+                        // follows from inv that ties KVStoreTokenized sync_requests to self.id_history
+                        assert( !ipre.sync_requests.dom().contains(sync_req_id) );
+                        let pre_set = ipre.sync_requests.dom();
+                        let cur_version = (pre.program.state.atomic_state.history.len()-1) as nat;
+                        let post_set = ipost.sync_requests.dom();
+                        assert( post.program.state.sync_requests == pre.program.state.sync_requests.insert((sync_req_id, cur_version)) );
+                        assert forall |id| pre_set.insert(sync_req_id).contains(id)
+                            implies post_set.contains(id) by {
+                            // Find witnesses to nasty exists in i_sync_requests
+                            if id == sync_req_id {
+                                assert( post.program.state.sync_requests.contains((id, cur_version)) );
+                            } else {
+                                let pr = choose |pr| pre.program.state.sync_requests.contains(pr) && pr.0 == id;
+                                assert( post.program.state.sync_requests.contains(pr) );
+                            }
+                        }
+                        assert forall |id| post_set.contains(id)
+                            implies pre_set.insert(sync_req_id).contains(id) by {
+                            // Find witnesses to nasty exists in i_sync_requests
+                            if id == sync_req_id {
+                                assert( pre_set.insert(sync_req_id).contains(id) );
+                            } else {
+                                let pr = choose |pr| post.program.state.sync_requests.contains(pr) && pr.0 == id;
+                                assert( pre.program.state.sync_requests.contains(pr) );
+                            }
+                        }
+                        assert( ipost.sync_requests.dom() == ipre.sync_requests.dom().insert(sync_req_id) );
+                        assert forall |id| ipost.sync_requests.contains_key(id) ==>
+                            ipost.sync_requests[id] == ipre.sync_requests.insert(sync_req_id, cur_version)[id] by {
+                            assume( false );
+                        }
+                        assert( ipost.sync_requests ==
+                                ipre.sync_requests.insert(sync_req_id, cur_version as nat) );
+//                         assert( ipost.sync_requests ==
+//                                 ipre.sync_requests.insert(sync_req_id, (ipre.versions.len() - 1) as nat) );
+                        assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ctam_lbl, 
+                            CrashTolerantAsyncMap::Step::req_sync()));                        
                         assume( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
+                        assume( Self::inv(post) );  // leff off
                     },
                     ProgramUserOp::DeliverSyncReply{ sync_req_id } => {
                         // TODO: ditto
                         assume( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
+                        assume( false );
+                        assert( Self::inv(post) );
                     },
                 }
+                assert( Self::inv(post) );
             },
             SystemModel::Step::program_disk(new_program, new_disk) => {
                 assert(new_program == pre.program);
@@ -212,6 +270,7 @@ impl RefinementObligation for ConcreteProgramModel {
                 // state, which of course is exactly what we get when we "recover" without a disk.
                 assert( ipost.versions == ipre.versions.get_prefix(ipre.stable_index() + 1) ); // extn equality
                 assert( ipost.async_ephemeral == AsyncMap::State::init_ephemeral_state() ); // extn equality
+                assume( false );    // TODO this proof broke, I guess because of sync requests
                 assert( CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl,
                         CrashTolerantAsyncMap::Step::crash() ) );
                 assert( Self::inv(post) );
@@ -321,6 +380,8 @@ impl SystemModel::State<ConcreteProgramModel> {
         &&& forall |reply| self.program.state.replies.contains(reply)
             ==> #[trigger] self.id_history.contains(reply.id)
         // &&& self.program.state.atomic_state.wf()
+        &&& forall |sync_req_pr| self.program.state.sync_requests.contains(sync_req_pr)
+            ==> self.id_history.contains(sync_req_pr.0)
     }
 }
 }

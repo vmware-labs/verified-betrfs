@@ -261,6 +261,7 @@ impl KVStoreTrait for Implementation {
             Tracked(atomic_state),  // non sharded state
             Tracked(requests),      // request perm map (multiset), empty
             Tracked(replies),       // reply perm map (multiset), empty
+            Tracked(sync_requests), // sync req map (multiset), empty
         ) = KVStoreTokenized::Instance::initialize();
 
         // verus/source/vstd/std_specs/hash.rs says the best we can do right now is assume this.

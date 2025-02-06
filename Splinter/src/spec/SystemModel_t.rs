@@ -33,14 +33,17 @@ pub enum ProgramUserOp{
 }
 
 impl ProgramUserOp {
-    pub open spec fn to_async_map_label(self) -> AsyncMap::Label 
+    pub open spec fn to_ctam_label(self) -> CrashTolerantAsyncMap::Label 
     {
         if let Self::AcceptRequest{req} = self {
-            AsyncMap::Label::RequestOp{req}
+            CrashTolerantAsyncMap::Label::OperateOp{
+                base_op: AsyncMap::Label::RequestOp{req} }
         } else if let Self::DeliverReply{reply} = self {
-            AsyncMap::Label::ReplyOp{reply}
+            CrashTolerantAsyncMap::Label::OperateOp{
+                base_op: AsyncMap::Label::ReplyOp{reply} }
         } else if let Self::Execute{req, reply} = self {
-            AsyncMap::Label::ExecuteOp{req, reply}
+            CrashTolerantAsyncMap::Label::OperateOp{
+                base_op: AsyncMap::Label::ExecuteOp{req, reply} }
         } else {
             arbitrary()
         }
@@ -170,19 +173,48 @@ state_machine!{ SystemModel<T: ProgramModel> {
 }}
 
 impl SystemModel::Label {
-    pub open spec fn label_correspondance(self, ctam_lbl: CrashTolerantAsyncMap::Label) -> bool
+    // I think this needed to be looser than what I just wrote.
+    pub open spec fn label_correspondence(self, ctam_lbl: CrashTolerantAsyncMap::Label) -> bool
     {
-        &&& ctam_lbl is OperateOp <==> (self is ProgramUIOp && !(self->op is AcceptSyncRequest) && !(self->op is DeliverSyncReply))
-        &&& ctam_lbl is OperateOp ==> 
-            ctam_lbl->base_op == self->op.to_async_map_label()
-
-        &&& ctam_lbl is ReqSyncOp <==> (self is ProgramUIOp && self->op is AcceptSyncRequest)
-        &&& ctam_lbl is ReqSyncOp ==> 
-            ctam_lbl.arrow_ReqSyncOp_sync_req_id() == self->op.arrow_AcceptSyncRequest_sync_req_id()
-
-        &&& ctam_lbl is ReplySyncOp <==> (self is ProgramUIOp && self->op is DeliverSyncReply)
-        &&& ctam_lbl is ReplySyncOp ==> 
-            ctam_lbl.arrow_ReplySyncOp_sync_req_id() == self->op.arrow_DeliverSyncReply_sync_req_id()
+        match self {
+            Self::ProgramUIOp{op} => {
+                match op {
+                    ProgramUserOp::AcceptRequest{req} => {
+                        ctam_lbl == CrashTolerantAsyncMap::Label::OperateOp{
+                            base_op: AsyncMap::Label::RequestOp{req} }
+                    },
+                    ProgramUserOp::DeliverReply{reply} => {
+                        ctam_lbl == CrashTolerantAsyncMap::Label::OperateOp{
+                            base_op: AsyncMap::Label::ReplyOp{reply} }
+                    },
+                    ProgramUserOp::Execute{req, reply} => {
+                        ctam_lbl == CrashTolerantAsyncMap::Label::OperateOp{
+                            base_op: AsyncMap::Label::ExecuteOp{req, reply} }
+                    },
+                    ProgramUserOp::AcceptSyncRequest{sync_req_id} => {
+                        ctam_lbl == CrashTolerantAsyncMap::Label::ReqSyncOp{sync_req_id}
+                    },
+                    ProgramUserOp::DeliverSyncReply{sync_req_id} => {
+                        ctam_lbl == CrashTolerantAsyncMap::Label::ReplySyncOp{sync_req_id}
+                    },
+                }
+            },
+            Self::ProgramDiskOp{disk_lbl} => {
+                ctam_lbl == CrashTolerantAsyncMap::Label::Noop{}
+            },
+            Self::ProgramInternal => {
+                ctam_lbl == CrashTolerantAsyncMap::Label::Noop{}
+            },
+            Self::DiskInternal => {
+                ctam_lbl == CrashTolerantAsyncMap::Label::Noop{}
+            },
+            Self::Crash => {
+                ctam_lbl == CrashTolerantAsyncMap::Label::CrashOp{}
+            },
+            Self::Noop => {
+                ctam_lbl == CrashTolerantAsyncMap::Label::Noop{}
+            },
+        }
     }
 }
 
@@ -204,7 +236,7 @@ pub trait RefinementObligation {
         requires
             ctam_lbl == Self::i_lbl(pre, post, lbl)
         ensures
-            lbl.label_correspondance(ctam_lbl)
+            lbl.label_correspondence(ctam_lbl)
     ;
 
     proof fn init_refines(pre: SystemModel::State<Self::Model>)

@@ -62,7 +62,14 @@ tokenized_state_machine!{KVStoreTokenized{
         #[sharding(multiset)]
         pub replies: Multiset<Reply>,
 
-        // 
+        // Jon tried sharding(map), but:
+        // error: unable to prove inherent safety condition: the given key must be absent from the map before the update
+        // Not sure how to think about this; this isn't an invariant we have at the
+        // KVStoreTokenized level; we only get it higher in the stack.
+//         #[sharding(map)]
+//         pub sync_requests: Map<SyncReqId, nat>,
+        #[sharding(multiset)]
+        pub sync_requests: Multiset<(SyncReqId, nat)>,
     }
 
     pub enum Label{
@@ -70,12 +77,15 @@ tokenized_state_machine!{KVStoreTokenized{
         ExecuteOp { req: Request, reply: Reply },
         ReplyOp { reply: Reply },
         InternalOp,
+        RequestSyncOp { sync_req_id: SyncReqId },
+        ReplySyncOp { sync_req_id: SyncReqId },
     }
 
     init!{ initialize() {
         init atomic_state = AtomicState::init();
         init requests = Multiset::empty();
         init replies = Multiset::empty();
+        init sync_requests = Multiset::empty();
     }}
 
     transition!{ request(lbl: Label) {
@@ -100,6 +110,19 @@ tokenized_state_machine!{KVStoreTokenized{
     transition!{ reply(lbl: Label, post_atomic_state: AtomicState) {
         require let Label::ReplyOp{ reply } = lbl;
         remove replies -= { reply };
+    }}
+
+    transition!{ accept_sync_request(lbl: Label) {
+        require let Label::RequestSyncOp{sync_req_id} = lbl;
+        let cur_version = (pre.atomic_state.history.len() - 1) as nat;
+        add sync_requests += {(sync_req_id, cur_version)};
+    }}
+
+    transition!{ deliver_sync_reply(lbl: Label, version: nat) {
+        require let Label::ReplySyncOp{sync_req_id} = lbl;
+        let stable_version = pre.atomic_state.history.first_active_index();
+        remove sync_requests -= {(sync_req_id, version)};
+        require version <= stable_version;
     }}
 
     transition!{ internal(lbl: Label) {
@@ -144,6 +167,12 @@ tokenized_state_machine!{KVStoreTokenized{
     #[inductive(internal)]
     fn internal_inductive(pre: Self, post: Self, lbl: Label) {
     }
+
+    #[inductive(accept_sync_request)]
+    fn accept_sync_request_inductive(pre: Self, post: Self, lbl: Label) { }
+   
+    #[inductive(deliver_sync_reply)]
+    fn deliver_sync_reply_inductive(pre: Self, post: Self, lbl: Label, version: nat) { }
 }}
 }
 
