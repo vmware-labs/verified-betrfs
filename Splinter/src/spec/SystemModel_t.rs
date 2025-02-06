@@ -77,6 +77,10 @@ state_machine!{ SystemModel<T: ProgramModel> {
         pub program: T,
         // trusted disk model
         pub disk: DiskModel,
+
+        // TODO(jonh): we can delete id_history assumption at this layer, now that we
+        // found we have to encode it at the KVStoreTokenized layer.
+        //
         // history of application requests that have been accepted,
         // auditor uses this to promise that every request has a unique ID 
         pub id_history: Set<ID>, 

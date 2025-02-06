@@ -5,7 +5,6 @@ use vstd::{prelude::*, multiset::*};
 use state_machines_macros::tokenized_state_machine;
 use crate::spec::MapSpec_t::*;
 use crate::spec::FloatingSeq_t::*;
-use crate::spec::TotalKMMap_t::*;
 use crate::implementation::MultisetMapRelation_v::unique_keys;    // more trusted apology
 
 verus! {

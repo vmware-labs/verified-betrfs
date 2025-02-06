@@ -75,6 +75,16 @@ ensures
     assert( unique_keys(post) );
 }
 
+pub proof fn map_multiset_membership<K,V>(kvs: Multiset<(K,V)>, k: K, v: V)
+requires
+    unique_keys(kvs),
+    multiset_to_map(kvs).contains_key(k),
+    multiset_to_map(kvs)[k] == v,
+ensures
+    kvs.contains((k,v)),
+{
+}
+
 pub proof fn multiset_map_membership<K,V>(kvs: Multiset<(K,V)>, k: K, v: V)
 requires
     unique_keys(kvs),
@@ -85,7 +95,7 @@ ensures
 {
 }
 
-pub proof fn unique_multiset_map_equiv<K,V>(pre: Multiset<(K,V)>, k: K, v: V)
+pub proof fn unique_multiset_map_insert_equiv<K,V>(pre: Multiset<(K,V)>, k: K, v: V)
 requires
     unique_keys(pre),
     !multiset_to_map(pre).contains_key(k),
@@ -117,6 +127,18 @@ ensures
     }
 //     assert forall |k0| #![auto] mpre_i.contains_key(k0) implies mpre_i[k0] == mpost[k0] by {}
     assert( mpost == mpre_i );  // extn
+}
+
+pub proof fn unique_multiset_map_remove_equiv<K,V>(pre: Multiset<(K,V)>, k: K, v: V)
+requires
+    unique_keys(pre),
+    pre.contains((k, v)),
+ensures ({
+    &&& unique_keys(pre.remove((k,v)))
+    &&& multiset_to_map(pre.remove((k,v))) == multiset_to_map(pre).remove(k)
+})
+{
+    assume(false);
 }
 
 }//verus!

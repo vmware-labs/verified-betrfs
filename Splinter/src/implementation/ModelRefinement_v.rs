@@ -195,7 +195,7 @@ impl RefinementObligation for ConcreteProgramModel {
                         let post_set = ipost.sync_requests.dom();
                         assert( post.program.state.sync_requests == pre.program.state.sync_requests.insert((sync_req_id, cur_version)) );
 //                         }
-                        unique_multiset_map_equiv(pre.program.state.sync_requests, sync_req_id, cur_version);
+                        unique_multiset_map_insert_equiv(pre.program.state.sync_requests, sync_req_id, cur_version);
                         assert( ipost.sync_requests ==
                                 ipre.sync_requests.insert(sync_req_id, cur_version as nat) );
 //                         assert( ipost.sync_requests ==
@@ -211,12 +211,28 @@ impl RefinementObligation for ConcreteProgramModel {
                                 assert( pre.program.state.sync_requests.contains(sync_req_pr) );
                             }
                         }
-                        assert( Self::inv(post) );  // leff off
+                        assert( Self::inv(post) );
                     },
                     ProgramUserOp::DeliverSyncReply{ sync_req_id } => {
-                        // TODO: ditto
-                        assume( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
-                        assume( false );
+                        let pgmlbl = ProgramLabel::UserIO{op: lbl->op};
+                        let kvlbl = pgmlbl.to_kv_lbl();
+                        let kvstep = choose |kvstep| KVStoreTokenized::State::next_by(pre.program.state, post.program.state, kvlbl, kvstep);
+
+                        // Dig the version (value) out of the KVStoreTokenized Step
+//                         assert( kvstep is deliver_sync_reply );
+                        let version:nat = kvstep.arrow_deliver_sync_reply_0();
+                        assert( pre.program.state.sync_requests.contains((sync_req_id, version)) ); // trigger
+                        unique_multiset_map_remove_equiv(pre.program.state.sync_requests, sync_req_id, version);
+
+                        let ctam_lbl = CrashTolerantAsyncMap::Label::ReplySyncOp{ sync_req_id };
+                        assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ctam_lbl, 
+                            CrashTolerantAsyncMap::Step::reply_sync()));                        
+
+                        assert forall |sync_req_pr| #![auto] post.program.state.sync_requests.contains(sync_req_pr)
+                            implies post.id_history.contains(sync_req_pr.0) by {
+                            // trigger pre inv
+                            assert( pre.program.state.sync_requests.contains(sync_req_pr) );
+                        }
                         assert( Self::inv(post) );
                     },
                 }
