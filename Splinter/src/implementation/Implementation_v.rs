@@ -18,6 +18,7 @@ use crate::spec::TotalKMMap_t::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 use crate::implementation::ConcreteProgramModel_v::*;
+use crate::implementation::AtomicState_v::*;
 
 verus!{
 
@@ -60,16 +61,22 @@ impl Implementation {
 //         }
     }
 
-    pub open spec fn good_req(self, req: Request, req_shard: KVStoreTokenized::requests) -> bool
+    closed spec fn inv(self) -> bool {
+        &&& self.state@.instance_id() == self.instance@.id()
+        &&& self.state@.value().recovery_state is RecoveryComplete
+        &&& self.i().mapspec().kmmap == self.view_store_as_kmmap()
+    }
+
+    pub closed spec fn good_req(self, req: Request, req_shard: KVStoreTokenized::requests) -> bool
     {
-        &&& self.wf()
+        &&& self.inv()
         &&& req_shard.instance_id() == self.instance_id()
         &&& req_shard.element() == req
     }
 
-    pub open spec fn good_reply(self, pre: Self, reply: Reply, reply_shard: KVStoreTokenized::replies) -> bool
+    pub closed spec fn good_reply(self, pre: Self, reply: Reply, reply_shard: KVStoreTokenized::replies) -> bool
     {
-        &&& self.wf()
+        &&& self.inv()
         &&& self.instance_id() == pre.instance_id()
         &&& reply_shard.instance_id() == self.instance_id()
         &&& reply_shard.element() == reply
@@ -119,11 +126,9 @@ impl Implementation {
     pub exec fn handle_put(&mut self, req: Request, req_shard: Tracked<KVStoreTokenized::requests>)
             -> (out: (Reply, Tracked<KVStoreTokenized::replies>))
     requires
-        old(self).wf(),
         old(self).good_req(req, req_shard@),
         req.input is PutInput,
     ensures
-        self.wf(),
         self.good_reply(*old(self), out.0, out.1@),
     {
         let out = match req.input {
@@ -143,6 +148,7 @@ impl Implementation {
             // that difficult. Hmm.
             let ghost post_state = AtomicState {
                 history: self.state@.value().history.append(seq![ PersistentState{appv: store} ]),
+                ..self.state@.value()
             };
 
             let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
@@ -180,11 +186,9 @@ impl Implementation {
     pub exec fn handle_query(&mut self, req: Request, req_shard: Tracked<KVStoreTokenized::requests>)
             -> (out: (Reply, Tracked<KVStoreTokenized::replies>))
     requires
-        old(self).wf(),
         old(self).good_req(req, req_shard@),
         req.input is QueryInput,
     ensures
-        self.wf(),
         self.good_reply(*old(self), out.0, out.1@),
     {
         match req.input {
@@ -229,8 +233,10 @@ impl Implementation {
 
     pub exec fn handle(&mut self, req: Request, req_shard: Tracked<KVStoreTokenized::requests>)
             -> (out: (Reply, Tracked<KVStoreTokenized::replies>))
-    requires old(self).good_req(req, req_shard@),
-    ensures self.good_reply(*old(self), out.0, out.1@),
+    requires
+        old(self).good_req(req, req_shard@),
+    ensures
+        self.good_reply(*old(self), out.0, out.1@),
     {
         match req.input {
             Input::NoopInput => self.handle_noop(req, req_shard),
@@ -243,9 +249,9 @@ impl Implementation {
 impl KVStoreTrait for Implementation {
     type Proof = ConcreteProgramModel;
 
-    closed spec fn wf(self) -> bool {
+    closed spec fn wf_init(self) -> bool {
         &&& self.state@.instance_id() == self.instance@.id()
-        &&& self.i().mapspec().kmmap == self.view_store_as_kmmap()
+        &&& self.state@.value().recovery_state is Begin
     }
 
     closed spec fn instance_id(self) -> InstanceId
@@ -254,7 +260,7 @@ impl KVStoreTrait for Implementation {
     }
 
     fn new() -> (out: Self)
-        ensures out.wf()
+        ensures out.wf_init()
     {
         let tracked (
             Tracked(instance),
@@ -273,7 +279,7 @@ impl KVStoreTrait for Implementation {
             instance: Tracked(instance)
         };
 //         assert( selff.i() == selff.state@.value() );   // trigger extn equality
-        assert( selff.i().mapspec().kmmap == selff.view_store_as_kmmap() ); // trigger extn equality
+//         assert( selff.i().mapspec().kmmap == selff.view_store_as_kmmap() ); // trigger extn equality
 //         assert( selff.wf() );
         selff
     }
@@ -283,7 +289,7 @@ impl KVStoreTrait for Implementation {
         let debug_print = true;
         loop
         invariant
-            self.wf(),
+            self.wf_init(),
             self.instance_id() == api.instance_id(),
         {
             let (req, req_shard) = api.receive_request(debug_print);

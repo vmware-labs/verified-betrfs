@@ -13,18 +13,18 @@ verus!{
 pub trait KVStoreTrait : Sized{
     type Proof: RefinementObligation;
 
-    spec fn wf(self) -> bool;
+    spec fn wf_init(self) -> bool;
 
     // NOTE: this must return the instance of the bank, not enforced yet
     spec fn instance_id(self) -> InstanceId;
 
     fn new() -> (out: Self)
-        ensures out.wf()
+        ensures out.wf_init()
     ;
 
     fn kvstore_main(&mut self, api: ClientAPI)
         requires 
-            old(self).wf(),
+            old(self).wf_init(),
             old(self).instance_id() == api.instance_id()
     ;
 }

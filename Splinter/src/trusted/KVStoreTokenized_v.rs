@@ -4,47 +4,9 @@ use vstd::{prelude::*, multiset::*};
 //use vstd::pervasive::print_u64;
 use state_machines_macros::tokenized_state_machine;
 use crate::spec::MapSpec_t::*;
-use crate::spec::FloatingSeq_t::*;
-use crate::implementation::MultisetMapRelation_v::unique_keys;    // more trusted apology
+use crate::implementation::AtomicState_v::*;    // apologies for auditor _t code calling impl _v code
 
 verus! {
-
-#[verifier::ext_equal]
-pub struct AtomicState {
-    pub history: FloatingSeq<PersistentState>,
-}
-
-impl AtomicState {
-    pub open spec fn init() -> Self
-    {
-        AtomicState{ history: SingletonVersions(my_init()) }
-    }
-
-    pub open spec fn map_transition(pre: Self, post: Self, map_lbl: MapSpec::Label) -> bool
-    {
-        // new thing appends no more than one map
-        &&& pre.history.len() <= post.history.len() <= pre.history.len() + 1
-        // new thing appends to the history
-        &&& post.history.get_prefix(pre.history.len()) == pre.history
-        &&& MapSpec::State::next(pre.history.last().appv, post.history.last().appv, map_lbl)
-    }
-
-    pub open spec fn wf(self) -> bool {
-      &&& self.history.is_active(self.history.len()-1)
-      &&& forall |i| #[trigger] self.history.is_active(i) ==> self.history[i].appv.invariant()
-
-      // In this silly version, we never persist, so stable_index cannot be allowed to advance;
-      // that's what will allow us to crash because it lets us forget everything.
-      &&& self.history.first_active_index() == 0
-      // ...and of course the beginning version had better stay stuck at state 0, so we know
-      // where the crash is going to return to.
-      &&& self.history[0] == SingletonVersions(my_init())[0]
-    }
-
-    pub open spec fn mapspec(self) -> MapSpec::State {
-        self.history.last().appv
-    }
-}
 
 tokenized_state_machine!{KVStoreTokenized{
     fields {

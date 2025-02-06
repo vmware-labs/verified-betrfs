@@ -66,6 +66,8 @@ pub enum DiskRequest {
 }
 
 pub enum DiskResponse {
+    // TODO(jialin): Why are there Addresses here, since the ids of the corresponding requests
+    // determine them?
     ReadResp{from: Address, data: RawPage},
     WriteResp{to: Address},
 }

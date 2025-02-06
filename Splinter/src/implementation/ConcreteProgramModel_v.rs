@@ -4,6 +4,7 @@ use vstd::prelude::*;
 
 use crate::trusted::KVStoreTokenized_v::KVStoreTokenized;
 use crate::spec::SystemModel_t::*;
+use crate::implementation::DiskLayout_v::*;
 
 verus!{
 
@@ -17,7 +18,7 @@ impl ConcreteProgramModel {
 impl ProgramModel for ConcreteProgramModel {
     open spec fn is_mkfs(disk: DiskModel) -> bool
     {
-        true // check superblock content
+        mkfs(disk.disk)
     }
 
     open spec fn init(pre: Self) -> bool
