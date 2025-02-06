@@ -262,9 +262,9 @@ impl RefinementObligation for ConcreteProgramModel {
                 // state, which of course is exactly what we get when we "recover" without a disk.
                 assert( ipost.versions == ipre.versions.get_prefix(ipre.stable_index() + 1) ); // extn equality
                 assert( ipost.async_ephemeral == AsyncMap::State::init_ephemeral_state() ); // extn equality
-                assume( false );    // TODO this proof broke, I guess because of sync requests
+                assert( ipost.sync_requests == Map::<SyncReqId, nat>::empty() );    // extn equality
                 assert( CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl,
-                        CrashTolerantAsyncMap::Step::crash() ) );
+                        CrashTolerantAsyncMap::Step::crash() ) );   // step witness
                 assert( Self::inv(post) );
             },
             SystemModel::Step::noop() => {
