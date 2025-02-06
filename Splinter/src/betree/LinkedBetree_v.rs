@@ -457,13 +457,13 @@ impl<T> LinkedBetree<T> {
         &&& exists |ranking| self.valid_ranking(ranking)
     }
 
-    pub open spec(checked) fn subtree_disjoint(self) -> bool
-        recommends self.acyclic()
-    {
-        forall |i, j| #[trigger] self.root().unique_child_idx(i, j)
-            ==> self.child_at_idx(i).reachable_betree_addrs().disjoint(
-                self.child_at_idx(j).reachable_betree_addrs())
-    }
+    // pub open spec(checked) fn subtree_disjoint(self) -> bool
+    //     recommends self.acyclic()
+    // {
+    //     forall |i, j| #[trigger] self.root().unique_child_idx(i, j)
+    //         ==> self.child_at_idx(i).reachable_betree_addrs().disjoint(
+    //             self.child_at_idx(j).reachable_betree_addrs())
+    // }
 
     pub open spec(checked) fn the_ranking(self) -> Ranking
         recommends self.acyclic()
@@ -1206,7 +1206,7 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
 
     pub open spec(checked) fn inv(self) -> bool {
         &&& self.linked.acyclic()
-        &&& self.linked.subtree_disjoint()
+        // &&& self.linked.subtree_disjoint()
         &&& self.linked.valid_buffer_dv()
         &&& self.linked.has_root() ==> self.linked.root().my_domain() == total_domain()
     }
@@ -1365,49 +1365,17 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
             let subtree_addrs = subtree.reachable_betree_addrs();
             let new_subtree_addrs = new_subtree.reachable_betree_addrs();
 
+            // path.target_preserves_subtree_disjoint();
             path.target().split_parent_reachable_betree_ensures(request, new_addrs, new_ranking);
-            // subtree.child_at_idx_reachable_addrs_ensures(request.get_child_idx()); 
-            // assert(subtree_addrs.contains(old_child.root.unwrap()));
-
-            // path.path_addrs_are_closed();
-            // path.linked.reachable_betree_addrs_using_ranking_closed(path.linked.the_ranking());
-            // assert(new_addrs.repr().disjoint(subtree_addrs));
-
-            // assert forall |addr| #[trigger] new_subtree_addrs.contains(addr)
-            // implies (subtree_addrs - set![old_child.root.unwrap()] + new_addrs.repr()).contains(addr)
-            // by {
-            //     if addr != new_subtree.root.unwrap() {
-            //         new_subtree.reachable_betree_addrs_using_ranking_closed(new_subtree.the_ranking());
-            //         let child_idx = new_subtree.get_child_given_betree_addr(new_subtree.the_ranking(), addr, 0) as int;
-            //         if child_idx < request.get_child_idx() {
-            //             assert(new_subtree.root().children[child_idx] == subtree.root().children[child_idx]);
-            //             assert(!new_addrs.repr().contains(addr));
-            //             assert(old_child.root.unwrap() != addr);
-            //         }
-
-            //         // meow
-
-            //         assume(false);
-            //         // if child_idx == request.get_child_idx() || child_idx == request.get_child_idx() + 1 {
-            //         //     // assert();
-            //         //     assume(false);
-            //         // } else {
-            //         //     assert(new_subtree.root().children[child_idx] == subtree.root().children[child_idx+1]);
-            //         //     // child gets splitted into two
-            //         //     assume(false);
-            //         // }
-
-            //     }
-            // }
-
-            // assume(new_subtree_addrs == (subtree_addrs - set![old_child.root.unwrap()] + new_addrs.repr()));
-
+            assert(path.addrs_on_path().contains(subtree.root.unwrap()));
             assert(new_subtree_addrs - subtree_addrs =~= new_addrs.repr());
-            assert(subtree_addrs - new_subtree_addrs =~= set![old_child.root.unwrap()]);
+            assert(subtree_addrs - new_subtree_addrs =~= set![subtree.root.unwrap(), old_child.root.unwrap()]);
             path.substitute_reachable_betree_ensures(new_subtree, path_addrs, new_ranking);
         }
 
-        assume( path.addrs_on_path().disjoint(set![old_child.root.unwrap()]) );
+        assume( path.addrs_on_path().disjoint(set![old_child.root.unwrap()]) ); 
+        // old child is reached via the path so if it's in there then old child must have a higher rank than some addr in path, 
+        // but that's not possible because the ranking of each addr in path is larger than the target() which contains oldchild
 
         path.target().split_parent_same_reachable_buffers(request, new_addrs, new_ranking);
         path.substitute_reachable_buffers_ensures(new_subtree, path_addrs, new_ranking);
@@ -1751,11 +1719,11 @@ impl<T> LinkedBetree<T> {
             let other_reachable = other.reachable_betree_addrs_using_ranking_recur(ranking, child_idx);
 
             let child = self.child_at_idx(child_idx);
-            let other_child = other.child_at_idx(child_idx);
+            let otheresult_child = other.child_at_idx(child_idx);
             assert(self.root().valid_child_index(child_idx)); // trigger
             assert(other.root().valid_child_index(child_idx)); // trigger
 
-            child.agreeable_disks_same_reachable_betree_addrs(other_child, ranking);
+            child.agreeable_disks_same_reachable_betree_addrs(otheresult_child, ranking);
             self.agreeable_disks_same_reachable_betree_addrs_recur_lemma(other, ranking, child_idx+1);
             assert(reachable =~= other_reachable);
         }
@@ -1932,24 +1900,24 @@ impl<T> LinkedBetree<T> {
             // self.dv.entries.restrict(self.reachable_betree_addrs()).agrees(other.dv.entries),
         ensures ({
             let child = self.child_at_idx(idx);
-            let other_child = other.child_at_idx(other_idx);
+            let otheresult_child = other.child_at_idx(other_idx);
 
             &&& child.acyclic()
-            &&& other_child.acyclic()
-            &&& child.reachable_buffer_addrs() == other_child.reachable_buffer_addrs()
+            &&& otheresult_child.acyclic()
+            &&& child.reachable_buffer_addrs() == otheresult_child.reachable_buffer_addrs()
             &&& child.reachable_buffer_addrs() <= self.reachable_buffer_addrs()
-            &&& other_child.reachable_buffer_addrs() <= other.reachable_buffer_addrs()
+            &&& otheresult_child.reachable_buffer_addrs() <= other.reachable_buffer_addrs()
         })
     {
         let child = self.child_at_idx(idx);
-        let other_child = other.child_at_idx(other_idx);
+        let otheresult_child = other.child_at_idx(other_idx);
 
         self.child_at_idx_reachable_addrs_ensures(idx);
         other.child_at_idx_reachable_addrs_ensures(other_idx);
 
         broadcast use LinkedBetree::reachable_betree_addrs_ignore_ranking;
-        child.agreeable_disks_same_reachable_betree_addrs(other_child, ranking);
-        child.same_reachable_betree_addrs_implies_same_buffer_addrs(other_child);
+        child.agreeable_disks_same_reachable_betree_addrs(otheresult_child, ranking);
+        child.same_reachable_betree_addrs_implies_same_buffer_addrs(otheresult_child);
     }
 
     proof fn get_parent_of_reachable_addr(self, ranking: Ranking, addr: Address) -> (parent: Self)
@@ -2001,13 +1969,13 @@ impl<T> LinkedBetree<T> {
             self.valid_buffer_dv(),
             self.is_fresh(new_addrs.repr()),
             new_addrs.no_duplicates(),
-            self.subtree_disjoint(),
+            // self.subtree_disjoint(),
         ensures ({
             let result = self.push_memtable(memtable, new_addrs);
             let discard = if self.has_root() {set![self.root.unwrap()]} else {set![]};
             &&& result.acyclic()
             &&& result.valid_buffer_dv()
-            &&& result.subtree_disjoint()
+            // &&& result.subtree_disjoint()
             &&& result.reachable_betree_addrs() == self.reachable_betree_addrs() - discard + set![new_addrs.addr1]
             &&& result.reachable_buffer_addrs() == self.reachable_buffer_addrs() + set![new_addrs.addr2]
         })
@@ -2023,22 +1991,22 @@ impl<T> LinkedBetree<T> {
         self.reachable_betree_addrs_using_ranking_closed(ranking);
         pushed.reachable_betree_addrs_using_ranking_closed(pushed_ranking);
 
-        assert (pushed.subtree_disjoint()) by {
-            if self.has_root() {
-                assert forall |i, j| #[trigger] pushed.root().unique_child_idx(i, j)
-                implies pushed.child_at_idx(i).reachable_betree_addrs().disjoint(
-                        pushed.child_at_idx(j).reachable_betree_addrs())
-                by {
-                    assert(self.root().unique_child_idx(i, j));
-                    pushed.child_at_idx(i).agreeable_disks_same_reachable_betree_addrs(
-                        self.child_at_idx(i), pushed_ranking);
-                    pushed.child_at_idx(j).agreeable_disks_same_reachable_betree_addrs(
-                        self.child_at_idx(j), pushed_ranking);
-                    assert(self.child_at_idx(i).reachable_betree_addrs().disjoint(
-                        self.child_at_idx(j).reachable_betree_addrs()));
-                }
-            }
-        }
+        // assert (pushed.subtree_disjoint()) by {
+        //     if self.has_root() {
+        //         assert forall |i, j| #[trigger] pushed.root().unique_child_idx(i, j)
+        //         implies pushed.child_at_idx(i).reachable_betree_addrs().disjoint(
+        //                 pushed.child_at_idx(j).reachable_betree_addrs())
+        //         by {
+        //             assert(self.root().unique_child_idx(i, j));
+        //             pushed.child_at_idx(i).agreeable_disks_same_reachable_betree_addrs(
+        //                 self.child_at_idx(i), pushed_ranking);
+        //             pushed.child_at_idx(j).agreeable_disks_same_reachable_betree_addrs(
+        //                 self.child_at_idx(j), pushed_ranking);
+        //             assert(self.child_at_idx(i).reachable_betree_addrs().disjoint(
+        //                 self.child_at_idx(j).reachable_betree_addrs()));
+        //         }
+        //     }
+        // }
 
         let discard = if self.has_root() {set![self.root.unwrap()]} else {set![]};
         if self.has_root() {
@@ -2192,7 +2160,7 @@ impl<T> LinkedBetree<T> {
         let other_sub_tree_addrs = other.reachable_betree_addrs_using_ranking_recur(ranking, 0);
 
         let children = self.root().children;
-        let other_children = other.root().children;
+        let otheresult_children = other.root().children;
 
         assert forall |addr| sub_tree_addrs.contains(addr) 
         implies other_sub_tree_addrs.contains(addr) 
@@ -2322,20 +2290,22 @@ impl<T> LinkedBetree<T> {
             self.split_parent(request, new_addrs).valid_ranking(ranking),
             self.dv.is_fresh(new_addrs.repr()),
             new_addrs.no_duplicates(),
-            self.subtree_disjoint(),
+            // self.subtree_disjoint(),
         ensures ({
             let child = self.child_at_idx(request.get_child_idx());
             let result = self.split_parent(request, new_addrs);
+            let removed_addrs = set![self.root.unwrap(), child.root.unwrap()];
 
             &&& self.reachable_betree_addrs().contains(child.root.unwrap())
             &&& self.reachable_betree_addrs().disjoint(new_addrs.repr())
-            &&& result.reachable_betree_addrs() =~= self.reachable_betree_addrs() - set![child.root.unwrap()] + new_addrs.repr()
+            &&& result.reachable_betree_addrs() =~= self.reachable_betree_addrs() - removed_addrs + new_addrs.repr()
         })
     {
         broadcast use LinkedBetree::reachable_betree_addrs_ignore_ranking;
 
         let child = self.child_at_idx(request.get_child_idx());
         let result = self.split_parent(request, new_addrs);
+        child.root_not_in_subtree(ranking);
 
         let tree_addrs = self.reachable_betree_addrs();
         let result_tree_addrs = result.reachable_betree_addrs();
@@ -2344,37 +2314,26 @@ impl<T> LinkedBetree<T> {
         assert(tree_addrs.contains(child.root.unwrap()));
         self.reachable_betree_addrs_using_ranking_closed(ranking);
         assert(new_addrs.repr().disjoint(tree_addrs));
+        result.reachable_betree_addrs_using_ranking_closed(ranking);
 
         assert forall |addr| #[trigger] result_tree_addrs.contains(addr) && addr != result.root.unwrap()
-        implies (tree_addrs - set![child.root.unwrap()] + new_addrs.repr()).contains(addr)
+        implies (tree_addrs - set![self.root.unwrap(), child.root.unwrap()] + new_addrs.repr()).contains(addr)
         by {
             if new_addrs.repr().contains(addr) {
             } else {
-                result.reachable_betree_addrs_using_ranking_closed(ranking);
                 let idx = result.get_child_given_betree_addr(ranking, addr, 0);
                 result.child_at_idx_reachable_addrs_ensures(idx);
 
-                let r_child = result.child_at_idx(idx);
-                // sub children sub reachable betree addrs
+                let result_child = result.child_at_idx(idx);
                 if idx == request.get_child_idx() || idx == request.get_child_idx() + 1 {
-                    let splitted_child_len = r_child.root().children.len() as int;
-                    if child.root().is_leaf() || idx == request.get_child_idx() {
-                        assert(r_child.root().children =~= child.root().children.subrange(0, splitted_child_len));
-                        r_child.sub_children_sub_reachable_tree_addrs(child, ranking, 0);
-                    } else {
-                        assert(child.root().is_index());
-                        assert(idx == request.get_child_idx() + 1);
-                        let pivot_idx = request->child_pivot_idx as int;
-                        assert(r_child.root().children =~= child.root().children.subrange(pivot_idx, pivot_idx + splitted_child_len));
-                        r_child.sub_children_sub_reachable_tree_addrs(child, ranking, pivot_idx);
-                    }
-                    assert(r_child.reachable_betree_addrs_using_ranking_recur(ranking, 0)
-                        <= child.reachable_betree_addrs_using_ranking_recur(ranking, 0));
-                    assert(child.reachable_betree_addrs_using_ranking_recur(ranking, 0) 
+                    let splitted_child_len = result_child.root().children.len() as int;
+                    let ofs = if child.root().is_leaf() || idx == request.get_child_idx() { 0 } else { request->child_pivot_idx as int };
+                    assert(result_child.root().children =~= child.root().children.subrange(ofs, ofs+splitted_child_len));
+                    result_child.sub_children_sub_reachable_tree_addrs(child, ranking, ofs);
+                    assert(child.reachable_betree_addrs_using_ranking_recur(ranking, 0)
                         <= child.reachable_betree_addrs_using_ranking(ranking));
                     assert(tree_addrs.contains(addr));
-                    child.root_not_in_subtree(ranking);
-                    assert(addr !== child.root.unwrap());
+                    assert(addr != child.root.unwrap());
                 } else {
                     let old_idx = if idx < request.get_child_idx() { idx } else { (idx-1) as nat };
                     assert(self.root().valid_child_index(old_idx)); // trigger
@@ -2383,18 +2342,74 @@ impl<T> LinkedBetree<T> {
                     assert(tree_addrs.contains(addr));
                     assert(!new_addrs.repr().contains(addr));
                     assert(self.root().unique_child_idx(old_idx, request.get_child_idx()));
+
+                    // this is the case for 
                     assert(addr != child.root.unwrap());
                 }
+                self.root_not_in_subtree(ranking);
+                self.reachable_betree_addrs_using_ranking_recur_lemma(ranking, 0);
+                assert(addr != self.root.unwrap());
             }
         }
 
-        assert forall |addr| (tree_addrs - set![child.root.unwrap()] + new_addrs.repr()).contains(addr) 
+        assert forall |addr| (tree_addrs - set![self.root.unwrap(), child.root.unwrap()] + new_addrs.repr()).contains(addr) 
         implies #[trigger] result_tree_addrs.contains(addr)
         by {
+            if new_addrs.repr().contains(addr) {
+                if addr == new_addrs.parent {
+                } else {
+                    let idx = if addr == new_addrs.left { request.get_child_idx() } else { request.get_child_idx() + 1 };
+                    let result_child = result.child_at_idx(idx);
+                    assert(result.root().valid_child_index(idx));
+                    assert(result_child.root == Some(addr));
 
+                    result.reachable_betree_addrs_using_ranking_recur_lemma(ranking, 0);
+                    result_child.reachable_betree_addrs_using_ranking_closed(ranking);
+                    assert(result_child.reachable_betree_addrs_using_ranking(ranking) <= result_tree_addrs);
+                }
+            } else {
+                assert(tree_addrs.contains(addr));
+                let idx = self.get_child_given_betree_addr(ranking, addr, 0);
+                self.child_at_idx_reachable_addrs_ensures(idx);
+    
+                if idx == request.get_child_idx() {
+                    let left_child = result.child_at_idx(idx);
+                    assert(left_child.valid_ranking(ranking)) by { assert(result.root().valid_child_index(idx)); }
+                    result.child_at_idx_reachable_addrs_ensures(idx);
 
+                    if child.root().is_leaf() {
+                        assert(left_child.root().children =~= child.root().children.subrange(0, left_child.root().children.len() as int));
+                        child.sub_children_sub_reachable_tree_addrs(left_child, ranking, 0);
+                        assert(left_child.reachable_betree_addrs_using_ranking_recur(ranking, 0)
+                            <= left_child.reachable_betree_addrs_using_ranking(ranking));
+                        assert(result_tree_addrs.contains(addr));
+                    } else {
+                        assert(addr != child.root.unwrap());
+                        child.reachable_betree_addrs_using_ranking_closed(ranking);
+                        let grandchild_idx = child.get_child_given_betree_addr(ranking, addr, 0);
+                        let grandchild = child.child_at_idx(grandchild_idx);
+                        assert(grandchild.reachable_betree_addrs_using_ranking(ranking).contains(addr));
 
-            assume(false);
+                        let right_child = result.child_at_idx(idx+1);
+                        assert(right_child.valid_ranking(ranking)) by { assert(result.root().valid_child_index(idx+1)); }
+                        result.child_at_idx_reachable_addrs_ensures(idx+1);
+
+                        let (target_child, target_idx) = 
+                                if grandchild_idx < left_child.root().children.len() { 
+                                    (left_child, grandchild_idx) 
+                                } else { 
+                                    (right_child, (grandchild_idx - left_child.root().children.len()) as nat) 
+                                };
+                        grandchild.agreeable_disks_same_reachable_betree_addrs(target_child.child_at_idx(target_idx), ranking);
+                        target_child.child_at_idx_reachable_addrs_ensures(target_idx);
+                    }
+                } else {
+                    let result_idx = if idx <= request.get_child_idx() { idx } else { (idx+1) as nat };
+                    assert(result.root().valid_child_index(result_idx));
+                    result.child_at_idx(result_idx).agreeable_disks_same_reachable_betree_addrs(self.child_at_idx(idx), ranking);
+                    result.child_at_idx_reachable_addrs_ensures(result_idx);
+                }
+            }
         }
     }
 
@@ -2704,6 +2719,7 @@ impl<T: Buffer> Path<T>{
         ensures 
             self.target().dv == self.linked.dv,
             self.target().buffer_dv == self.linked.buffer_dv,
+            self.addrs_on_path().contains(self.target().root.unwrap()),
         decreases 
             self.depth
     {
@@ -2711,6 +2727,35 @@ impl<T: Buffer> Path<T>{
             self.subpath().target_ensures();
         }
     }
+
+    // pub proof fn target_preserves_subtree_disjoint(self)
+    //     requires 
+    //         self.valid(),
+    //         self.linked.acyclic(),
+    //         self.linked.subtree_disjoint(),
+    //     ensures 
+    //         self.target().acyclic(),
+    //         self.target().subtree_disjoint()
+    //     decreases self.depth
+    // {
+    //     if 0 < self.depth {
+    //         broadcast use LinkedBetree::reachable_betree_addrs_ignore_ranking;
+    //         let subtree = self.subpath().linked;
+    //         assert forall |i, j| #[trigger] subtree.root().unique_child_idx(i, j)
+    //         implies subtree.child_at_idx(i).reachable_betree_addrs().disjoint(
+    //             subtree.child_at_idx(j).reachable_betree_addrs())
+    //         by {
+    //             // wait a second can we actually promise this?
+    //             // this isn't vaild 
+
+    //             assume(false);
+    //         }
+    //         self.subpath().target_preserves_subtree_disjoint();
+    //     }
+    // }
+
+    // path disjoint how do we want to say the subtree disjoint 
+    // subpath preserves 
 
     pub proof fn path_addrs_are_closed(self) 
         requires self.valid()
