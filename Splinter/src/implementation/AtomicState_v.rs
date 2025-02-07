@@ -33,7 +33,7 @@ pub struct AtomicState {
 
 pub enum DiskEventLabel{
     InitiateRecovery{},
-    CompleteRecovery{rawPage: RawPage},
+    CompleteRecovery{raw_page: RawPage},
     ExecuteSyncBegin{},
     ExecuteSyncEnd{},
 }
@@ -87,15 +87,15 @@ impl AtomicState {
         &&& post == Self{ recovery_state: RecoveryState::AwaitingSuperblock, ..pre }
     }
 
-    pub open spec fn complete_recovery(pre: Self, post: Self, disk_lbl: AsyncDisk::Label, disk_req_id: ID, rawPage: RawPage) -> bool
+    pub open spec fn complete_recovery(pre: Self, post: Self, disk_lbl: AsyncDisk::Label, disk_req_id: ID, raw_page: RawPage) -> bool
     {
         // &&& pre.recovery_state is AwaitingSuperblock // can prove this by invariant
         &&& disk_lbl == AsyncDisk::Label::DiskOps{
             requests: Map::empty(),
-            responses: Map::empty().insert(disk_req_id, DiskResponse::ReadResp{from: spec_superblock_addr(), data: rawPage }),
+            responses: Map::empty().insert(disk_req_id, DiskResponse::ReadResp{from: spec_superblock_addr(), data: raw_page }),
             }
         &&& {
-            let superblock = spec_unmarshall(rawPage);
+            let superblock = spec_unmarshall(raw_page);
             post == Self{
                 recovery_state: RecoveryState::RecoveryComplete,
                 history: FloatingSeq::new(superblock.version_index, superblock.version_index+1, |i| superblock.state),
@@ -140,7 +140,7 @@ impl AtomicState {
     {
         match disk_event_lbl {
             DiskEventLabel::InitiateRecovery{} => Self::initiate_recovery(pre, post, disk_lbl, disk_req_id),
-            DiskEventLabel::CompleteRecovery{rawPage} => Self::complete_recovery(pre, post, disk_lbl, disk_req_id, rawPage),
+            DiskEventLabel::CompleteRecovery{raw_page} => Self::complete_recovery(pre, post, disk_lbl, disk_req_id, raw_page),
             DiskEventLabel::ExecuteSyncBegin{} => Self::execute_sync_begin(pre, post, disk_lbl, disk_req_id),
             DiskEventLabel::ExecuteSyncEnd{} => Self::execute_sync_end(pre, post, disk_lbl, disk_req_id),
         }
@@ -158,10 +158,10 @@ impl AtomicState {
                 DiskEventLabel::InitiateRecovery{} => {
                     assert( post.wf() );
                 },
-                DiskEventLabel::CompleteRecovery{rawPage} => {
+                DiskEventLabel::CompleteRecovery{raw_page} => {
                     assert( post.history.is_active(post.history.len()-1) );
                     assert forall |i| #[trigger] post.history.is_active(i) implies post.history[i].appv.invariant() by {
-                        let superblock = spec_unmarshall(rawPage);
+                        let superblock = spec_unmarshall(raw_page);
                         assert( i == superblock.version_index );
                         assert( post.history[i] == superblock.state );
                         assert( superblock.state.appv.invariant() ) by {

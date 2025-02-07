@@ -20,6 +20,7 @@ use crate::spec::Messages_t::*;
 use crate::implementation::ConcreteProgramModel_v::*;
 use crate::implementation::AtomicState_v::*;
 use crate::implementation::MultisetMapRelation_v::*;
+use crate::spec::FloatingSeq_t::*;
 
 #[allow(unused_imports)]
 use vstd::multiset::*;
@@ -249,6 +250,132 @@ impl Implementation {
             Input::QueryInput{..} => self.handle_query(req, req_shard),
         }
     }
+
+    fn recover(&mut self, api: &mut ClientAPI)
+    requires
+        old(self).wf_init(),
+        old(self).instance_id() == old(api).instance_id()
+    ensures
+        self.inv(),
+        self.instance_id() == api.instance_id()
+    {
+        {
+            let ghost pre_state: AtomicState = self.i();
+            let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
+            proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
+
+            let disk_req = IDiskRequest::ReadReq{from: superblock_addr() };
+            let tracked empty_disk_responses = MultisetToken::empty(self.instance_id());
+
+            let ghost post_state = AtomicState { recovery_state: RecoveryState::AwaitingSuperblock, ..pre_state };
+
+            let req_id_perm = Tracked( api.send_disk_request_predict_id() );
+
+            let ghost disk_event_lbl = DiskEventLabel::InitiateRecovery{};
+            let ghost disk_lbl = AsyncDisk::Label::DiskOps{
+                        requests: Map::empty().insert(req_id_perm@, disk_req@),
+                        responses: Map::empty()
+                    };
+            let ghost disk_req_id = req_id_perm@;
+            let ghost disk_response_tuples = Multiset::empty();
+
+            let ghost disk_request_tuples = multiset_map_singleton(req_id_perm@, disk_req@);
+            proof { multiset_map_singleton_ensures(req_id_perm@, disk_req@); }
+
+//             assert( disk_response_tuples <= empty_disk_responses.multiset() );
+//             assert( empty_disk_responses.instance_id() == self.instance@.id() );
+            assert( disk_lbl->responses == multiset_to_map(disk_response_tuples) ); // extn equality
+//             assert( AtomicState::disk_transition(
+//                 atomic_state.value(), post_state, disk_event_lbl, disk_lbl, disk_req_id) );
+            // I needed an awful lot of tedious debugging-in-the-dark to figure out which
+            // VerusSync require clause I'd violated. :v(
+//             assert( disk_lbl->requests == multiset_to_map(disk_request_tuples) );
+            let tracked disk_request_tokens = self.instance.borrow().disk_transition(
+                KVStoreTokenized::Label::DiskOp{
+                    disk_event_lbl,
+                    disk_request_tuples,
+                    disk_response_tuples,
+                    disk_lbl,
+                    disk_req_id,
+                },
+                post_state,
+                &mut atomic_state,
+                empty_disk_responses,
+            );
+            assert( atomic_state.value() == post_state );
+
+            let disk_req_id = api.send_disk_request(disk_req, req_id_perm, Tracked(disk_request_tokens));
+            self.state = Tracked(atomic_state);
+        }
+
+        ////////////////////////////////////////
+        assert( self.state@.value().recovery_state is AwaitingSuperblock );
+        ////////////////////////////////////////
+
+        {
+            let ghost pre_state: AtomicState = self.i();
+            let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
+            proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
+
+            let disk_resp = IDiskRequest::ReadReq{from: superblock_addr() };
+            let (disk_req_id, i_disk_response, disk_response_token) = api.receive_disk_response();
+            let (from,raw_page) = match i_disk_response {
+                IDiskResponse::ReadResp{from, data} => (from,data),
+                IDiskResponse::WriteResp{to} => {
+                    // TODO This assert-false should be an assumption we pull down from the system:
+                    // whenever state is AwaitingSuperblock, the only possible responses in the
+                    // disk bus buffer are ReadResps.
+                    assume(false);
+                    unreached()
+                }
+            };
+            // TODO likewise, by system-level invariant, the from address in the response can only
+            // be the superblock addr. (Although this we should fix by removing addresses from disk
+            // responses.)
+            assume( from@ == spec_superblock_addr() );
+
+            let superblock = unmarshall(raw_page);
+            let ghost post_state = AtomicState {
+                recovery_state: RecoveryState::RecoveryComplete,
+                history: FloatingSeq::new(superblock.version_index, superblock.version_index+1, |i| superblock.state),
+                in_flight_version: None,
+                persistent_version: superblock.version_index,
+            };
+
+            let ghost disk_response_tuples = multiset_map_singleton(disk_req_id, i_disk_response@);
+            proof { multiset_map_singleton_ensures(disk_req_id, i_disk_response@); }
+
+            let ghost disk_event_lbl = DiskEventLabel::CompleteRecovery{raw_page};
+            let ghost disk_lbl = AsyncDisk::Label::DiskOps{
+                        requests: Map::empty(),
+                        responses: Map::empty().insert(disk_req_id, i_disk_response@),
+                    };
+            let ghost disk_request_tuples = Multiset::empty();
+//             assert( i_disk_response@ == DiskResponse::ReadResp{from: spec_superblock_addr(), data: raw_page} );
+//             assert( disk_lbl->responses == Map::empty().insert(disk_req_id, DiskResponse::ReadResp{from: spec_superblock_addr(), data: raw_page}) );
+            assert( AtomicState::disk_transition(
+                pre_state, post_state, disk_event_lbl, disk_lbl, disk_req_id) );
+            assume( false ); // left off
+            let tracked disk_request_tokens = self.instance.borrow().disk_transition(
+                KVStoreTokenized::Label::DiskOp{
+                    disk_event_lbl,
+                    disk_request_tuples,
+                    disk_response_tuples,
+                    disk_lbl,
+                    disk_req_id,
+                },
+                post_state,
+                &mut atomic_state,
+                disk_response_token.get(),
+            );
+
+            self.state = Tracked(atomic_state);
+        }
+
+        assert( self.state@.value().recovery_state is RecoveryComplete );
+
+        assert( self.wf_init() );
+    }
 }
 
 impl KVStoreTrait for Implementation {
@@ -293,77 +420,8 @@ impl KVStoreTrait for Implementation {
 
     fn kvstore_main(&mut self, mut api: ClientAPI)
     {
-        assert( self.state@.value().recovery_state is Begin );
+        self.recover(&mut api);
 
-        ////////////////////////////////////////
-        // Recovery procedure
-        ////////////////////////////////////////
-        {
-            let disk_req = IDiskRequest::ReadReq{from: superblock_addr() };
-            let tracked empty_disk_responses = MultisetToken::empty(self.instance_id());
-
-            let ghost pre_state: AtomicState = self.i();
-            let ghost post_state = AtomicState { recovery_state: RecoveryState::AwaitingSuperblock, ..pre_state };
-
-            let req_id_perm = Tracked( api.send_disk_request_prophetically_allocate_id() );
-
-            let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
-            proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
-
-            let ghost disk_event_lbl = DiskEventLabel::InitiateRecovery{};
-            let ghost disk_lbl = AsyncDisk::Label::DiskOps{
-                        requests: Map::empty().insert(req_id_perm@, disk_req@),
-                        responses: Map::empty()
-                    };
-            let ghost disk_req_id = req_id_perm@;
-            let ghost disk_response_tuples = Multiset::empty();
-
-            let ghost disk_request_tuples = multiset_map_singleton(req_id_perm@, disk_req@);
-            proof { multiset_map_singleton_ensures(req_id_perm@, disk_req@); }
-
-            assert( disk_response_tuples <= empty_disk_responses.multiset() );
-            assert( empty_disk_responses.instance_id() == self.instance@.id() );
-            assert( disk_lbl->responses == multiset_to_map(disk_response_tuples) );
-            assert( AtomicState::disk_transition(
-                atomic_state.value(), post_state, disk_event_lbl, disk_lbl, disk_req_id) );
-            // I needed an awful lot of tedious debugging-in-the-dark to figure out which
-            // VerusSync require clause I'd violated. :v(
-            assert( disk_lbl->requests == multiset_to_map(disk_request_tuples) );
-            let tracked disk_request_tokens = self.instance.borrow().disk_transition(
-                KVStoreTokenized::Label::DiskOp{
-                    disk_event_lbl,
-                    disk_request_tuples,
-                    disk_response_tuples,
-                    disk_lbl,
-                    disk_req_id,
-                },
-                post_state,
-                &mut atomic_state,
-                empty_disk_responses,
-            );
-            assert( atomic_state.value() == post_state );
-
-            let disk_req_id = api.send_disk_request(disk_req, req_id_perm, Tracked(disk_request_tokens));
-            self.state = Tracked(atomic_state);
-        }
-
-        assert( self.state@.value().recovery_state is AwaitingSuperblock );
-
-        {
-            let ghost pre_state: AtomicState = self.i();
-            let ghost post_state = AtomicState { recovery_state: RecoveryState::AwaitingSuperblock, ..pre_state };
-
-            let disk_resp = IDiskRequest::ReadReq{from: superblock_addr() };
-        }
-
-        assume( false ); // jonh left off here
-        assert( self.state@.value().recovery_state is RecoveryComplete );
-
-        assert( self.wf_init() );
-
-        ////////////////////////////////////////
-        // Normal operations
-        ////////////////////////////////////////
         let debug_print = true;
         loop
         invariant

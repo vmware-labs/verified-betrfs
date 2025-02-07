@@ -89,7 +89,7 @@ impl ClientAPI{
     }
 
     #[verifier::external_body]
-    pub proof fn send_disk_request_prophetically_allocate_id(&self) -> (tracked out: ID)
+    pub proof fn send_disk_request_predict_id(&self) -> (tracked out: ID)
     {
         //Tracked::assume_new()
         let Tracked(out) = Tracked::assume_new(); out
@@ -102,7 +102,6 @@ impl ClientAPI{
     ensures
         self.instance_id() == old(self).instance_id(),
         out == id_perm@,
-//         out.1@.element() == out.0, TODO
     {
         let id = self.id.fetch_add(1, Ordering::SeqCst);
         id
@@ -110,11 +109,15 @@ impl ClientAPI{
 
     // TODO make this async or polling Option or maybe a cheap proof-free way to poll whether a
     // response is waiting?
-//     #[verifier::external_body]
-//     pub fn receive_disk_response(&mut self) -> (out: IDiskResponse, disk_response_tokens: Tracked<KVStoreTokenized::disk_responses_multiset>)
-//     {
-//     }
-//     ensures
+    #[verifier::external_body]
+    pub fn receive_disk_response(&mut self)
+        -> (out: (ID, IDiskResponse, Tracked<KVStoreTokenized::disk_responses_multiset>))
+    ensures
+        self.instance_id() == old(self).instance_id(),
+        out.2@.multiset() == multiset_map_singleton(out.0, out.1@),
+    {
+        (0, arbitrary(), Tracked::assume_new())
+    }
         
 
     // Seems like it should always be okay to brew up a token containing an empty multiset (an empty shard).

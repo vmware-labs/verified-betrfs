@@ -19,9 +19,18 @@ pub closed spec fn spec_marshall(superblock: Superblock) -> (out: RawPage)
     arbitrary()
 }
 
-pub closed spec fn spec_unmarshall(rawPage: RawPage) -> (out: Superblock)
+pub closed spec fn spec_unmarshall(raw_page: RawPage) -> (out: Superblock)
 {
     arbitrary()
+}
+
+// This is gonna be hard because Superblock isn't physical yet :vP
+pub fn unmarshall(raw_page: RawPage) -> (out: Superblock)
+ensures
+    out == spec_unmarshall(raw_page)
+{
+    assume( false ); // TODO
+    unreached()
 }
 
 pub open spec fn spec_superblock_addr() -> Address {
