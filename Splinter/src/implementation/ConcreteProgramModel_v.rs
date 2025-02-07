@@ -18,7 +18,9 @@ impl ConcreteProgramModel {
 impl ProgramModel for ConcreteProgramModel {
     open spec fn is_mkfs(disk: DiskModel) -> bool
     {
-        mkfs(disk.disk)
+        &&& mkfs(disk.disk)
+        &&& disk.requests.is_empty()
+        &&& disk.responses.is_empty()
     }
 
     open spec fn init(pre: Self) -> bool

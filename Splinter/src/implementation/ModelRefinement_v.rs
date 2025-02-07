@@ -19,6 +19,12 @@ pub open spec fn multiset_to_set<V>(m: Multiset<V>) -> Set<V> {
     Set::new(|v| m.contains(v))
 }
 
+broadcast proof fn unmarshall_marshall(sb: Superblock)
+    ensures sb == #[trigger] spec_unmarshall(spec_marshall(sb))
+{
+    assume(false);
+}
+
 // Attach the RefinementObligation impl to KVStoreTokenized::State itself;
 // don't need an extra type to hold it.
 impl RefinementObligation for ConcreteProgramModel {
@@ -100,12 +106,14 @@ impl RefinementObligation for ConcreteProgramModel {
 
     proof fn init_refines(pre: SystemModel::State<Self::Model>)
     {
-//         assert( SystemModel::State::initialize(pre, pre.program, pre.disk) );
-        // extn equal trigger
+        assert( SystemModel::State::initialize(pre, pre.program, pre.disk) );
         assert( Self::i(pre).async_ephemeral == AsyncMap::State::init_ephemeral_state() );
         assert( Self::i(pre).sync_requests == Map::<SyncReqId,nat>::empty() );  // extn
-        assume( CrashTolerantAsyncMap::State::initialize(Self::i(pre)) );
-        assume( Self::inv(pre) );
+        assert( Self::inv(pre) );
+
+        assert( ConcreteProgramModel::is_mkfs(pre.disk) );
+        broadcast use unmarshall_marshall;
+        assert( CrashTolerantAsyncMap::State::initialize(Self::i(pre)) );
     }
 
     proof fn next_refines(pre: SystemModel::State<Self::Model>, post: SystemModel::State<Self::Model>, lbl: SystemModel::Label)
@@ -379,9 +387,8 @@ impl KVStoreTokenized::State {
     }
 
     pub open spec fn consistent_superblock(self, disk: Disk) -> bool
-        recommends self.atomic_state.client_ready()
     {
-        spec_marshall(self.atomic_state.to_sb()) == disk.content[spec_superblock_addr()]
+        self.atomic_state.client_ready() ==> spec_marshall(self.atomic_state.to_sb()) == disk.content[superblock_addr()]
     }
 }
 
