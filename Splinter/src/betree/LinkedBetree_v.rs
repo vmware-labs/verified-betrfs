@@ -2077,6 +2077,7 @@ impl<T> LinkedBetree<T> {
         new_ranking
     }
 
+    // TODO: remove
     proof fn sub_children_sub_reachable_tree_addrs(self, other: LinkedBetree<T>, ranking: Ranking, ofs: int)
         requires 
             self.has_root(),
@@ -2216,136 +2217,6 @@ impl<T> LinkedBetree<T> {
         }
         assert(reachable_buffers =~= split_reachable_buffers);
     }
-
-    // proof fn split_parent_reachable_betree_ensures(self, request: SplitRequest, new_addrs: SplitAddrs, ranking: Ranking) 
-    //     requires 
-    //         self.can_split_parent(request),
-    //         self.valid_ranking(ranking),
-    //         self.split_parent(request, new_addrs).valid_ranking(ranking),
-    //         self.dv.is_fresh(new_addrs.repr()),
-    //         new_addrs.no_duplicates(),
-    //         // self.subtree_disjoint(),
-    //     ensures ({
-    //         let child = self.child_at_idx(request.get_child_idx());
-    //         let result = self.split_parent(request, new_addrs);
-    //         let removed_addrs = set![self.root.unwrap(), child.root.unwrap()];
-
-    //         &&& self.reachable_betree_addrs().contains(child.root.unwrap())
-    //         &&& self.reachable_betree_addrs().disjoint(new_addrs.repr())
-    //         &&& result.reachable_betree_addrs() =~= self.reachable_betree_addrs() - removed_addrs + new_addrs.repr()
-    //     })
-    // {
-    //     broadcast use LinkedBetree::reachable_betree_addrs_ignore_ranking;
-
-    //     let child = self.child_at_idx(request.get_child_idx());
-    //     let result = self.split_parent(request, new_addrs);
-    //     child.root_not_in_subtree(ranking);
-
-    //     let tree_addrs = self.reachable_betree_addrs();
-    //     let result_tree_addrs = result.reachable_betree_addrs();
-
-    //     self.child_at_idx_reachable_addrs_ensures(request.get_child_idx()); 
-    //     assert(tree_addrs.contains(child.root.unwrap()));
-    //     self.reachable_betree_addrs_using_ranking_closed(ranking);
-    //     assert(new_addrs.repr().disjoint(tree_addrs));
-    //     result.reachable_betree_addrs_using_ranking_closed(ranking);
-
-    //     assert forall |addr| #[trigger] result_tree_addrs.contains(addr) && addr != result.root.unwrap()
-    //     implies (tree_addrs - set![self.root.unwrap(), child.root.unwrap()] + new_addrs.repr()).contains(addr)
-    //     by {
-    //         if new_addrs.repr().contains(addr) {
-    //         } else {
-    //             let idx = result.get_child_given_betree_addr(ranking, addr, 0);
-    //             result.child_at_idx_reachable_addrs_ensures(idx);
-
-    //             let result_child = result.child_at_idx(idx);
-    //             if idx == request.get_child_idx() || idx == request.get_child_idx() + 1 {
-    //                 let splitted_child_len = result_child.root().children.len() as int;
-    //                 let ofs = if child.root().is_leaf() || idx == request.get_child_idx() { 0 } else { request->child_pivot_idx as int };
-    //                 assert(result_child.root().children =~= child.root().children.subrange(ofs, ofs+splitted_child_len));
-    //                 result_child.sub_children_sub_reachable_tree_addrs(child, ranking, ofs);
-    //                 assert(child.reachable_betree_addrs_using_ranking_recur(ranking, 0)
-    //                     <= child.reachable_betree_addrs_using_ranking(ranking));
-    //                 assert(tree_addrs.contains(addr));
-    //                 assert(addr != child.root.unwrap());
-    //             } else {
-    //                 let old_idx = if idx < request.get_child_idx() { idx } else { (idx-1) as nat };
-    //                 assert(self.root().valid_child_index(old_idx)); // trigger
-    //                 result.child_at_idx(idx).agreeable_disks_same_reachable_betree_addrs(self.child_at_idx(old_idx), ranking);
-    //                 self.child_at_idx_reachable_addrs_ensures(old_idx);
-    //                 assert(tree_addrs.contains(addr));
-    //                 assert(!new_addrs.repr().contains(addr));
-    //                 assert(self.root().unique_child_idx(old_idx, request.get_child_idx()));
-
-    //                 // this is the case for 
-    //                 assert(addr != child.root.unwrap());
-    //             }
-    //             self.root_not_in_subtree(ranking);
-    //             self.reachable_betree_addrs_using_ranking_recur_lemma(ranking, 0);
-    //             assert(addr != self.root.unwrap());
-    //         }
-    //     }
-
-    //     assert forall |addr| (tree_addrs - set![self.root.unwrap(), child.root.unwrap()] + new_addrs.repr()).contains(addr) 
-    //     implies #[trigger] result_tree_addrs.contains(addr)
-    //     by {
-    //         if new_addrs.repr().contains(addr) {
-    //             if addr == new_addrs.parent {
-    //             } else {
-    //                 let idx = if addr == new_addrs.left { request.get_child_idx() } else { request.get_child_idx() + 1 };
-    //                 let result_child = result.child_at_idx(idx);
-    //                 assert(result.root().valid_child_index(idx));
-    //                 assert(result_child.root == Some(addr));
-
-    //                 result.reachable_betree_addrs_using_ranking_recur_lemma(ranking, 0);
-    //                 result_child.reachable_betree_addrs_using_ranking_closed(ranking);
-    //                 assert(result_child.reachable_betree_addrs_using_ranking(ranking) <= result_tree_addrs);
-    //             }
-    //         } else {
-    //             assert(tree_addrs.contains(addr));
-    //             let idx = self.get_child_given_betree_addr(ranking, addr, 0);
-    //             self.child_at_idx_reachable_addrs_ensures(idx);
-    
-    //             if idx == request.get_child_idx() {
-    //                 let left_child = result.child_at_idx(idx);
-    //                 assert(left_child.valid_ranking(ranking)) by { assert(result.root().valid_child_index(idx)); }
-    //                 result.child_at_idx_reachable_addrs_ensures(idx);
-
-    //                 if child.root().is_leaf() {
-    //                     assert(left_child.root().children =~= child.root().children.subrange(0, left_child.root().children.len() as int));
-    //                     child.sub_children_sub_reachable_tree_addrs(left_child, ranking, 0);
-    //                     assert(left_child.reachable_betree_addrs_using_ranking_recur(ranking, 0)
-    //                         <= left_child.reachable_betree_addrs_using_ranking(ranking));
-    //                     assert(result_tree_addrs.contains(addr));
-    //                 } else {
-    //                     assert(addr != child.root.unwrap());
-    //                     child.reachable_betree_addrs_using_ranking_closed(ranking);
-    //                     let grandchild_idx = child.get_child_given_betree_addr(ranking, addr, 0);
-    //                     let grandchild = child.child_at_idx(grandchild_idx);
-    //                     assert(grandchild.reachable_betree_addrs_using_ranking(ranking).contains(addr));
-
-    //                     let right_child = result.child_at_idx(idx+1);
-    //                     assert(right_child.valid_ranking(ranking)) by { assert(result.root().valid_child_index(idx+1)); }
-    //                     result.child_at_idx_reachable_addrs_ensures(idx+1);
-
-    //                     let (target_child, target_idx) = 
-    //                             if grandchild_idx < left_child.root().children.len() { 
-    //                                 (left_child, grandchild_idx) 
-    //                             } else { 
-    //                                 (right_child, (grandchild_idx - left_child.root().children.len()) as nat) 
-    //                             };
-    //                     grandchild.agreeable_disks_same_reachable_betree_addrs(target_child.child_at_idx(target_idx), ranking);
-    //                     target_child.child_at_idx_reachable_addrs_ensures(target_idx);
-    //                 }
-    //             } else {
-    //                 let result_idx = if idx <= request.get_child_idx() { idx } else { (idx+1) as nat };
-    //                 assert(result.root().valid_child_index(result_idx));
-    //                 result.child_at_idx(result_idx).agreeable_disks_same_reachable_betree_addrs(self.child_at_idx(idx), ranking);
-    //                 result.child_at_idx_reachable_addrs_ensures(result_idx);
-    //             }
-    //         }
-    //     }
-    // }
 
     pub proof fn split_parent_same_reachable_buffers(self, request: SplitRequest, new_addrs: SplitAddrs, ranking: Ranking) 
         requires 
