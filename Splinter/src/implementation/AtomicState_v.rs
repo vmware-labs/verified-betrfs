@@ -81,7 +81,7 @@ impl AtomicState {
         // Haven't started operating yet
         &&& pre.recovery_state is Begin
         &&& disk_lbl == AsyncDisk::Label::DiskOps{
-            requests: Map::empty().insert(disk_req_id, DiskRequest::ReadReq{from: superblock_addr() }),
+            requests: Map::empty().insert(disk_req_id, DiskRequest::ReadReq{from: spec_superblock_addr() }),
             responses: Map::empty()
             }
         &&& post == Self{ recovery_state: RecoveryState::AwaitingSuperblock, ..pre }
@@ -92,7 +92,7 @@ impl AtomicState {
         // &&& pre.recovery_state is AwaitingSuperblock // can prove this by invariant
         &&& disk_lbl == AsyncDisk::Label::DiskOps{
             requests: Map::empty(),
-            responses: Map::empty().insert(disk_req_id, DiskResponse::ReadResp{from: superblock_addr(), data: rawPage }),
+            responses: Map::empty().insert(disk_req_id, DiskResponse::ReadResp{from: spec_superblock_addr(), data: rawPage }),
             }
         &&& {
             let superblock = spec_unmarshall(rawPage);
@@ -111,7 +111,7 @@ impl AtomicState {
         &&& pre.client_ready()
         &&& pre.in_flight_version is None
         &&& disk_lbl == AsyncDisk::Label::DiskOps{
-                requests: map!{disk_req_id => DiskRequest::WriteReq{to: superblock_addr(), data: spec_marshall(sb) }},
+                requests: map!{disk_req_id => DiskRequest::WriteReq{to: spec_superblock_addr(), data: spec_marshall(sb) }},
                 responses: map!{}
             }
         &&& post == Self{ in_flight_version: Some(sb.version_index), .. pre }
@@ -123,7 +123,7 @@ impl AtomicState {
         // &&& pre.in_flight_version is Some // provable
         &&& disk_lbl == AsyncDisk::Label::DiskOps{
             requests: Map::empty(),
-            responses: Map::empty().insert(disk_req_id, DiskResponse::WriteResp{to: superblock_addr()}),
+            responses: Map::empty().insert(disk_req_id, DiskResponse::WriteResp{to: spec_superblock_addr()}),
         }
         &&& {
             let new_persistent_version = pre.in_flight_version->0;
@@ -146,10 +146,61 @@ impl AtomicState {
         }
     }
 
+    pub proof fn disk_transition_preserves_wf(pre: Self, post: Self, disk_event_lbl: DiskEventLabel, disk_lbl: AsyncDisk::Label, disk_req_id: ID)
+    requires
+        pre.wf(),
+        Self::disk_transition(pre, post, disk_event_lbl, disk_lbl, disk_req_id),
+    ensures
+        post.wf(),
+    {
+        if post.recovery_state is RecoveryComplete {
+            match disk_event_lbl {
+                DiskEventLabel::InitiateRecovery{} => {
+                    assert( post.wf() );
+                },
+                DiskEventLabel::CompleteRecovery{rawPage} => {
+                    assert( post.history.is_active(post.history.len()-1) );
+                    assert forall |i| #[trigger] post.history.is_active(i) implies post.history[i].appv.invariant() by {
+                        let superblock = spec_unmarshall(rawPage);
+                        assert( i == superblock.version_index );
+                        assert( post.history[i] == superblock.state );
+                        assert( superblock.state.appv.invariant() ) by {
+                            // TODO remember that invariant survives disk
+                            assume( false );
+                        }
+                    }
+                },
+                DiskEventLabel::ExecuteSyncBegin{} => {
+                    assert( post.wf() );
+                },
+                DiskEventLabel::ExecuteSyncEnd{} => {
+                    assert( pre.in_flight_version is Some ) by {
+                        // TODO remember that in_flight_version is Some whenever an IO is in
+                        // flight. This seems like a system property, not a wf, since we can't
+                        // see the IO buffer from here. How are we gonna get this wf down
+                        // to Implementation!? Maybe it moves to inv, so Impl doesn't need to
+                        // show it as part of wf?
+                        assume( false );
+                    }
+                    let new_version = pre.in_flight_version->0;
+                    assert( pre.history.is_active(new_version as int) );
+                    assert( post.history.is_active(post.history.len()-1) );
+                    assert forall |i| #[trigger] post.history.is_active(i) implies post.history[i].appv.invariant() by {
+                        assert( pre.history.is_active(i) );
+                    }
+                    assert( post.wf() );
+                },
+            }
+        }
+    }
+
     pub open spec fn wf(self) -> bool {
         self.recovery_state is RecoveryComplete ==> {
             &&& self.history.is_active(self.history.len()-1)
             &&& forall |i| #[trigger] self.history.is_active(i) ==> self.history[i].appv.invariant()
+            &&& self.in_flight_version is Some ==> {
+                self.history.is_active(self.in_flight_version->0 as int)
+            }
         }
     }
 

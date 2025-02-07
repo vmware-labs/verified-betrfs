@@ -19,6 +19,7 @@ use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 use crate::implementation::ConcreteProgramModel_v::*;
 use crate::implementation::AtomicState_v::*;
+use crate::implementation::MultisetMapRelation_v::*;
 
 #[allow(unused_imports)]
 use vstd::multiset::*;
@@ -26,6 +27,7 @@ use vstd::multiset::*;
 use vstd::tokens::*;
 #[allow(unused_imports)]
 use crate::spec::AsyncDisk_t::*;
+use crate::spec::ImplDisk_t::*;
 #[allow(unused_imports)]
 use crate::implementation::DiskLayout_v::*;
 
@@ -253,13 +255,17 @@ impl Implementation {
             Input::QueryInput{..} => self.handle_query(req, req_shard),
         }
     }
+
+    closed spec fn wf(self) -> bool {
+        &&& self.state@.instance_id() == self.instance@.id()
+    }
 }
 
 impl KVStoreTrait for Implementation {
     type Proof = ConcreteProgramModel;
 
     closed spec fn wf_init(self) -> bool {
-        &&& self.state@.instance_id() == self.instance@.id()
+        &&& self.wf()
         &&& self.state@.value().recovery_state is Begin
     }
 
@@ -302,36 +308,68 @@ impl KVStoreTrait for Implementation {
         ////////////////////////////////////////
         // Recovery procedure
         ////////////////////////////////////////
-//         let disk_req = DiskRequest::ReadReq{from: superblock_addr() };
-//         let empty_disk_responses = MultisetToken::empty(self.instance_id());
+        {
+            let disk_req = IDiskRequest::ReadReq{from: superblock_addr() };
+            let tracked empty_disk_responses = MultisetToken::empty(self.instance_id());
 
-        let ghost pre_state: AtomicState = self.i();
-        let ghost post_state = AtomicState { recovery_state: RecoveryState::AwaitingSuperblock, ..pre_state };
+            let ghost pre_state: AtomicState = self.i();
+            let ghost post_state = AtomicState { recovery_state: RecoveryState::AwaitingSuperblock, ..pre_state };
 
-        let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
-        proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
+            let req_id_perm = Tracked( api.send_disk_request_prophetically_allocate_id() );
 
-//         let tracked new_reply_token = self.instance.borrow().disk_transition(
-//             KVStoreTokenized::Label::DiskOp{
-//                 disk_event_lbl: DiskEventLabel::InitiateRecovery{},
-//                 disk_request_tuples: Multiset::empty().insert((disk_req_id, disk_req)),
-//                 disk_response_tuples: Multiset::empty(),
-//                 disk_lbl: AsyncDisk::Label::DiskOps{
-//                     requests: Map::empty().insert(disk_req_id, disk_req),
-//                     responses: Map::empty()
-//                 },
-//                 disk_req_id,
-//             },
-//             post_state,
-//             &mut atomic_state,
-//             empty_disk_responses,
-//         );
+            let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
+            proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
 
-//         let tracked Tracked(disk_req_token) = disk_req_token;
-//         let (disk_req_id, disk_req_token) = api.send_disk_request(disk_req);
+            let ghost disk_event_lbl = DiskEventLabel::InitiateRecovery{};
+            let ghost disk_lbl = AsyncDisk::Label::DiskOps{
+                        requests: Map::empty().insert(req_id_perm@, disk_req@),
+                        responses: Map::empty()
+                    };
+            let ghost disk_req_id = req_id_perm@;
+            let ghost disk_response_tuples = Multiset::empty();
+            let ghost disk_request_tuples = Multiset::empty().insert((req_id_perm@, disk_req@));
+            assert( disk_response_tuples <= empty_disk_responses.multiset() );
+            assert( empty_disk_responses.instance_id() == self.instance@.id() );
+            assert( disk_lbl->responses == multiset_to_map(disk_response_tuples) );
+            assert( AtomicState::disk_transition(
+                atomic_state.value(), post_state, disk_event_lbl, disk_lbl, disk_req_id) );
+            // I needed an awful lot of tedious debugging-in-the-dark to figure out which
+            // VerusSync require clause I'd violated. :v(
+            // TODO replace this proof call with a multiset_to_map singleton constructor that includes
+            // the necessary ensures clause.
+            proof { unique_multiset_map_insert_equiv(Multiset::empty(), req_id_perm@, disk_req@); }
+            assert( disk_lbl->requests == multiset_to_map(disk_request_tuples) );
+            let tracked disk_request_tokens = self.instance.borrow().disk_transition(
+                KVStoreTokenized::Label::DiskOp{
+                    disk_event_lbl,
+                    disk_request_tuples,
+                    disk_response_tuples,
+                    disk_lbl,
+                    disk_req_id,
+                },
+                post_state,
+                &mut atomic_state,
+                empty_disk_responses,
+            );
+            assert( atomic_state.value() == post_state );
+
+            let disk_req_id = api.send_disk_request(disk_req, req_id_perm, Tracked(disk_request_tokens));
+            self.state = Tracked(atomic_state);
+        }
 
         assert( self.state@.value().recovery_state is AwaitingSuperblock );
+
+        {
+            let ghost pre_state: AtomicState = self.i();
+            let ghost post_state = AtomicState { recovery_state: RecoveryState::AwaitingSuperblock, ..pre_state };
+
+            let disk_resp = IDiskRequest::ReadReq{from: superblock_addr() };
+        }
+
+        assume( false ); // jonh left off here
         assert( self.state@.value().recovery_state is RecoveryComplete );
+
+        assert( self.wf_init() );
 
         ////////////////////////////////////////
         // Normal operations
@@ -339,10 +377,12 @@ impl KVStoreTrait for Implementation {
         let debug_print = true;
         loop
         invariant
-            self.wf_init(),
+            self.wf(),
+            self.state@.value().recovery_state is RecoveryComplete,
             self.instance_id() == api.instance_id(),
         {
             let (req, req_shard) = api.receive_request(debug_print);
+            assume( false ); // jonh left mess here
             let (reply, reply_shard) = self.handle(req, req_shard);
             api.send_reply(reply, reply_shard, true);
         }

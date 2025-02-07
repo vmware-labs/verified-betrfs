@@ -128,6 +128,19 @@ ensures
     assert( mpost == mpre_i );  // extn
 }
 
+pub open spec fn multiset_map_singleton<K,V>(k: K, v: V) -> (out: Multiset<(K,V)>)
+{
+    Multiset::empty().insert((k,v))
+}
+
+pub proof fn multiset_map_singleton_ensures<K,V>(k: K, v: V)
+ensures
+    multiset_to_map(multiset_map_singleton(k,v)) == Map::empty().insert(k,v),
+{
+    unique_multiset_map_insert_equiv(Multiset::empty(), k, v);
+    assume( false );    // TOOD jonh left off here
+}
+
 pub proof fn unique_multiset_map_remove_equiv<K,V>(pre: Multiset<(K,V)>, k: K, v: V)
 requires
     unique_keys(pre),

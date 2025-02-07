@@ -76,6 +76,7 @@ tokenized_state_machine!{KVStoreTokenized{
 
         require AtomicState::disk_transition(
             pre.atomic_state, post_atomic_state, disk_event_lbl, disk_lbl, disk_req_id);
+        update atomic_state = post_atomic_state;
 
         require disk_lbl->requests == multiset_to_map(disk_request_tuples);
         add disk_requests += (disk_request_tuples);
@@ -168,7 +169,10 @@ tokenized_state_machine!{KVStoreTokenized{
     }
 
     #[inductive(disk_transition)]
-    fn disk_transition_inductive(pre: Self, post: Self, lbl: Label, post_atomic_state: AtomicState) { }
+    fn disk_transition_inductive(pre: Self, post: Self, lbl: Label, post_atomic_state: AtomicState) {
+        assume( false );
+//         AtomicState::disk_transition_preserves_wf(... pre, post, disk_event_lbl, disk_lbl, disk_req_id),
+    }
 
     #[inductive(reply)]
     fn reply_inductive(pre: Self, post: Self, lbl: Label, post_atomic_state: AtomicState) { 

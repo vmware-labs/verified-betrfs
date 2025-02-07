@@ -4,6 +4,7 @@ use vstd::{prelude::*};
 //use vstd::pervasive::print_u64;
 use crate::spec::MapSpec_t::*;
 use crate::spec::AsyncDisk_t::*;
+use crate::spec::ImplDisk_t::*;
 
 verus! {
 
@@ -23,14 +24,20 @@ pub closed spec fn spec_unmarshall(rawPage: RawPage) -> (out: Superblock)
     arbitrary()
 }
 
-pub open spec fn superblock_addr() -> Address {
+pub open spec fn spec_superblock_addr() -> Address {
     Address{au: 0, page: 0}
+}
+
+pub fn superblock_addr() -> (out: IAddress)
+ensures out@ == spec_superblock_addr()
+{
+    IAddress{au: 0, page: 0}
 }
 
 pub open spec fn mkfs(disk: Disk) -> bool
 {
-    &&& disk.content.contains_key(superblock_addr())
-    &&& disk.content[superblock_addr()] ==
+    &&& disk.content.contains_key(spec_superblock_addr())
+    &&& disk.content[spec_superblock_addr()] ==
         spec_marshall(Superblock{
             state: PersistentState{ appv: my_init() },
             version_index: 0,

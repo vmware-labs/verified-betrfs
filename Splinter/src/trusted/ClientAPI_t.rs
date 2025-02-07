@@ -8,6 +8,9 @@ use crate::spec::MapSpec_t::{Request, Reply, Input, ID};
 use crate::spec::KeyType_t::Key;
 use crate::spec::Messages_t::Value;
 use crate::spec::AsyncDisk_t::*;
+use crate::spec::ImplDisk_t::*;
+
+use crate::implementation::MultisetMapRelation_v::*;    // TODO move to _t, I guess
 
 // ------- breaks trust boundary -------
 use crate::trusted::KVStoreTokenized_v::*;
@@ -86,15 +89,33 @@ impl ClientAPI{
     }
 
     #[verifier::external_body]
-    pub fn send_disk_request(&mut self, disk_req: DiskRequest) -> (out: (ID, Tracked<KVStoreTokenized::disk_requests_multiset>))
+    pub proof fn send_disk_request_prophetically_allocate_id(&self) -> (tracked out: ID)
+    {
+        //Tracked::assume_new()
+        let Tracked(out) = Tracked::assume_new(); out
+    }
+
+    #[verifier::external_body]
+    pub fn send_disk_request(&mut self, disk_req: IDiskRequest, id_perm: Tracked<ID>, disk_request_tokens: Tracked<KVStoreTokenized::disk_requests_multiset>) -> (out: ID)
+    requires
+        disk_request_tokens@.multiset() == multiset_map_singleton(id_perm@, disk_req@),
     ensures
         self.instance_id() == old(self).instance_id(),
-        out.1@.instance_id() == self.instance_id(),
+        out == id_perm@,
 //         out.1@.element() == out.0, TODO
     {
         let id = self.id.fetch_add(1, Ordering::SeqCst);
-        (id, Tracked::assume_new())
+        id
     }
+
+    // TODO make this async or polling Option or maybe a cheap proof-free way to poll whether a
+    // response is waiting?
+//     #[verifier::external_body]
+//     pub fn receive_disk_response(&mut self) -> (out: IDiskResponse, disk_response_tokens: Tracked<KVStoreTokenized::disk_responses_multiset>)
+//     {
+//     }
+//     ensures
+        
 
     // Seems like it should always be okay to brew up a token containing an empty multiset (an empty shard).
     // Yeah, MultisetToken::empty() does that.

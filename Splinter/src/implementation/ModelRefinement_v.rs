@@ -43,7 +43,7 @@ impl RefinementObligation for ConcreteProgramModel {
                 sync_requests: multiset_to_map(model.program.state.sync_requests),
             }
         } else {
-            let sb = spec_unmarshall(model.disk.disk.content[superblock_addr()]);
+            let sb = spec_unmarshall(model.disk.disk.content[spec_superblock_addr()]);
             CrashTolerantAsyncMap::State{
                 versions: FloatingSeq::new(sb.version_index, sb.version_index+1, |i| sb.state ),
                 async_ephemeral: AsyncMap::State::init_ephemeral_state(),
@@ -380,7 +380,7 @@ impl KVStoreTokenized::State {
     pub open spec fn consistent_superblock(self, disk: Disk) -> bool
         recommends self.atomic_state.client_ready()
     {
-        spec_marshall(self.atomic_state.to_sb()) == disk.content[superblock_addr()]
+        spec_marshall(self.atomic_state.to_sb()) == disk.content[spec_superblock_addr()]
     }
 }
 

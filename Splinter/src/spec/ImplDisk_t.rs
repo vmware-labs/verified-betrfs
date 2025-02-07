@@ -51,15 +51,19 @@ pub broadcast proof fn au_count_equals_iau_count()
     ensures au_count() == iau_count()
 ;
 
-pub enum IDiskRequest {
-    ReadReq{from: IAddress},
-    WriteReq{to: IAddress, data: RawPage},
-}
+pub type IDiskRequest = GenericDiskRequest<IAddress>;
+pub type IDiskResponse = GenericDiskResponse<IAddress>;
 
-pub enum IDiskResponse {
-    ReadResp{from: IAddress, data: RawPage},
-    WriteResp{to: IAddress},
-}
+// TODO delete
+// pub enum IDiskRequest {
+//     ReadReq{from: IAddress},
+//     WriteReq{to: IAddress, data: RawPage},
+// }
+// 
+// pub enum IDiskResponse {
+//     ReadResp{from: IAddress, data: RawPage},
+//     WriteResp{to: IAddress},
+// }
 
 impl IDiskRequest {
     pub open spec fn view(self) -> DiskRequest {

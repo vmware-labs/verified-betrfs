@@ -60,17 +60,21 @@ pub struct Disk{
     pub content: Map<Address, RawPage>,
 }
 
-pub enum DiskRequest {
-    ReadReq{from: Address},
-    WriteReq{to: Address, data: RawPage},
+pub enum GenericDiskRequest<A> {
+    ReadReq{from: A},
+    WriteReq{to: A, data: RawPage},
 }
 
-pub enum DiskResponse {
+pub type DiskRequest = GenericDiskRequest<Address>;
+
+pub enum GenericDiskResponse<A> {
     // TODO(jialin): Why are there Addresses here, since the ids of the corresponding requests
     // determine them?
-    ReadResp{from: Address, data: RawPage},
-    WriteResp{to: Address},
+    ReadResp{from: A, data: RawPage},
+    WriteResp{to: A},
 }
+
+pub type DiskResponse = GenericDiskResponse<Address>;
 
 state_machine!{ AsyncDisk {
     fields {
