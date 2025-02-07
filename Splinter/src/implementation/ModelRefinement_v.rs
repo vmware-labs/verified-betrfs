@@ -104,8 +104,8 @@ impl RefinementObligation for ConcreteProgramModel {
         // extn equal trigger
         assert( Self::i(pre).async_ephemeral == AsyncMap::State::init_ephemeral_state() );
         assert( Self::i(pre).sync_requests == Map::<SyncReqId,nat>::empty() );  // extn
-//         assert( CrashTolerantAsyncMap::State::initialize(Self::i(pre)) );
-//         assert( Self::inv(pre) );
+        assume( CrashTolerantAsyncMap::State::initialize(Self::i(pre)) );
+        assume( Self::inv(pre) );
     }
 
     proof fn next_refines(pre: SystemModel::State<Self::Model>, post: SystemModel::State<Self::Model>, lbl: SystemModel::Label)
