@@ -3,12 +3,13 @@
 
 use builtin::*;
 use builtin_macros::*;
-use vstd::{pervasive::*};
+use vstd::{pervasive::*, multiset::*};
 use vstd::prelude::*;
 use vstd::modes::*;
 use vstd::tokens::InstanceId;
 use vstd::hash_map::*;
 use vstd::std_specs::hash::*;
+use vstd::tokens::*;
 
 use crate::trusted::ClientAPI_t::*;
 use crate::trusted::KVStoreTrait_t::*;
@@ -17,8 +18,10 @@ use crate::spec::MapSpec_t::*;
 use crate::spec::TotalKMMap_t::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
+use crate::spec::AsyncDisk_t::*;
 use crate::implementation::ConcreteProgramModel_v::*;
 use crate::implementation::AtomicState_v::*;
+use crate::implementation::DiskLayout_v::*;
 
 verus!{
 
@@ -268,6 +271,8 @@ impl KVStoreTrait for Implementation {
             Tracked(requests),      // request perm map (multiset), empty
             Tracked(replies),       // reply perm map (multiset), empty
             Tracked(sync_requests), // sync req map (multiset), empty
+            Tracked(disk_requests),
+            Tracked(disk_responses),
         ) = KVStoreTokenized::Instance::initialize();
 
         // verus/source/vstd/std_specs/hash.rs says the best we can do right now is assume this.
@@ -286,6 +291,45 @@ impl KVStoreTrait for Implementation {
 
     fn kvstore_main(&mut self, mut api: ClientAPI)
     {
+        assert( self.state@.value().recovery_state is Begin );
+
+        ////////////////////////////////////////
+        // Recovery procedure
+        ////////////////////////////////////////
+//         let disk_req = DiskRequest::ReadReq{from: superblock_addr() };
+//         let empty_disk_responses = MultisetToken::empty(self.instance_id());
+
+        let ghost pre_state: AtomicState = self.i();
+        let ghost post_state = AtomicState { recovery_state: RecoveryState::AwaitingSuperblock, ..pre_state };
+
+        let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
+        proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
+
+//         let tracked new_reply_token = self.instance.borrow().disk_transition(
+//             KVStoreTokenized::Label::DiskOp{
+//                 disk_event_lbl: DiskEventLabel::InitiateRecovery{},
+//                 disk_request_tuples: Multiset::empty().insert((disk_req_id, disk_req)),
+//                 disk_response_tuples: Multiset::empty(),
+//                 disk_lbl: AsyncDisk::Label::DiskOps{
+//                     requests: Map::empty().insert(disk_req_id, disk_req),
+//                     responses: Map::empty()
+//                 },
+//                 disk_req_id,
+//             },
+//             post_state,
+//             &mut atomic_state,
+//             empty_disk_responses,
+//         );
+
+//         let tracked Tracked(disk_req_token) = disk_req_token;
+//         let (disk_req_id, disk_req_token) = api.send_disk_request(disk_req);
+
+        assert( self.state@.value().recovery_state is AwaitingSuperblock );
+        assert( self.state@.value().recovery_state is RecoveryComplete );
+
+        ////////////////////////////////////////
+        // Normal operations
+        ////////////////////////////////////////
         let debug_print = true;
         loop
         invariant

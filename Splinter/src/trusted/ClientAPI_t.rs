@@ -4,9 +4,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use vstd::{prelude::*};
 use vstd::tokens::InstanceId;
 
-use crate::spec::MapSpec_t::{Request, Reply, Input};
+use crate::spec::MapSpec_t::{Request, Reply, Input, ID};
 use crate::spec::KeyType_t::Key;
 use crate::spec::Messages_t::Value;
+use crate::spec::AsyncDisk_t::*;
 
 // ------- breaks trust boundary -------
 use crate::trusted::KVStoreTokenized_v::*;
@@ -83,6 +84,28 @@ impl ClientAPI{
             println!("");
         }
     }
+
+    #[verifier::external_body]
+    pub fn send_disk_request(&mut self, disk_req: DiskRequest) -> (out: (ID, Tracked<KVStoreTokenized::disk_requests_multiset>))
+    ensures
+        self.instance_id() == old(self).instance_id(),
+        out.1@.instance_id() == self.instance_id(),
+//         out.1@.element() == out.0, TODO
+    {
+        let id = self.id.fetch_add(1, Ordering::SeqCst);
+        (id, Tracked::assume_new())
+    }
+
+    // Seems like it should always be okay to brew up a token containing an empty multiset (an empty shard).
+    // Yeah, MultisetToken::empty() does that.
+//     #[verifier::external_body]
+//     pub proof fn receive_disk_nothing(&self) -> (out: KVStoreTokenized::disk_requests_multiset)
+//     ensures
+//         out@.instance_id() == self.instance_id(),
+//     {
+//         Tracked::assume_new()
+//     }
+
 }
 } 
 

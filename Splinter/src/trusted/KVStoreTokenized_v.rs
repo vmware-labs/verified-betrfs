@@ -5,6 +5,8 @@ use vstd::{prelude::*, multiset::*};
 use state_machines_macros::tokenized_state_machine;
 use crate::spec::MapSpec_t::*;
 use crate::implementation::AtomicState_v::*;    // apologies for auditor _t code calling impl _v code
+use crate::spec::AsyncDisk_t::*;
+use crate::implementation::MultisetMapRelation_v::*;
 
 verus! {
 
@@ -32,6 +34,12 @@ tokenized_state_machine!{KVStoreTokenized{
 //         pub sync_requests: Map<SyncReqId, nat>,
         #[sharding(multiset)]
         pub sync_requests: Multiset<(SyncReqId, nat)>,
+
+        #[sharding(multiset)]
+        pub disk_requests: Multiset<(ID, DiskRequest)>,
+
+        #[sharding(multiset)]
+        pub disk_responses: Multiset<(ID, DiskResponse)>,
     }
 
     pub enum Label{
@@ -41,6 +49,13 @@ tokenized_state_machine!{KVStoreTokenized{
         InternalOp,
         RequestSyncOp { sync_req_id: SyncReqId },
         ReplySyncOp { sync_req_id: SyncReqId },
+
+        DiskOp{
+            disk_event_lbl: DiskEventLabel,
+            disk_request_tuples: Multiset<(ID, DiskRequest)>,
+            disk_response_tuples: Multiset<(ID, DiskResponse)>,
+            disk_lbl: AsyncDisk::Label,
+            disk_req_id: ID },
     }
 
     init!{ initialize() {
@@ -48,6 +63,22 @@ tokenized_state_machine!{KVStoreTokenized{
         init requests = Multiset::empty();
         init replies = Multiset::empty();
         init sync_requests = Multiset::empty();
+        init disk_requests = Multiset::empty();
+        init disk_responses = Multiset::empty();
+    }}
+
+    transition!{ disk_transition(lbl: Label, post_atomic_state: AtomicState) {
+        require let Label::DiskOp{ disk_event_lbl, disk_request_tuples, disk_response_tuples, disk_lbl, disk_req_id } = lbl;
+
+        require disk_lbl is DiskOps;
+        remove disk_responses -= (disk_response_tuples);
+        require disk_lbl->responses == multiset_to_map(disk_response_tuples);
+
+        require AtomicState::disk_transition(
+            pre.atomic_state, post_atomic_state, disk_event_lbl, disk_lbl, disk_req_id);
+
+        require disk_lbl->requests == multiset_to_map(disk_request_tuples);
+        add disk_requests += (disk_request_tuples);
     }}
 
     transition!{ request(lbl: Label) {
@@ -121,6 +152,9 @@ tokenized_state_machine!{KVStoreTokenized{
 //         assert( post.atomic_state.wf() );
 //         assert( post.wf() );
     }
+
+    #[inductive(disk_transition)]
+    fn disk_transition_inductive(pre: Self, post: Self, lbl: Label, post_atomic_state: AtomicState) { }
 
     #[inductive(reply)]
     fn reply_inductive(pre: Self, post: Self, lbl: Label, post_atomic_state: AtomicState) { 

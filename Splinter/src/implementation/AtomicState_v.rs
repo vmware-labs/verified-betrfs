@@ -31,6 +31,13 @@ pub struct AtomicState {
     pub in_flight_version: Option<nat>,
 }
 
+pub enum DiskEventLabel{
+    InitiateRecovery{},
+    CompleteRecovery{rawPage: RawPage},
+    ExecuteSyncBegin{},
+    ExecuteSyncEnd{},
+}
+
 impl AtomicState {
     // this is process init, which should do filesystem recovery before operation
     pub open spec fn init() -> Self
@@ -41,6 +48,16 @@ impl AtomicState {
             persistent_version: arbitrary(),  // unknown
             in_flight_version: arbitrary(),
         }
+    }
+
+    pub open spec fn map_transition(pre: Self, post: Self, map_lbl: MapSpec::Label) -> bool
+    {
+        &&& pre.recovery_state is RecoveryComplete
+        // new thing appends no more than one map
+        &&& pre.history.len() <= post.history.len() <= pre.history.len() + 1
+        // new thing appends to the history
+        &&& post.history.get_prefix(pre.history.len()) == pre.history
+        &&& MapSpec::State::next(pre.history.last().appv, post.history.last().appv, map_lbl)
     }
 
     pub open spec fn initiate_recovery(pre: Self, post: Self, disk_lbl: AsyncDisk::Label, disk_req_id: ID) -> bool
@@ -72,17 +89,7 @@ impl AtomicState {
         }
     }
 
-    pub open spec fn map_transition(pre: Self, post: Self, map_lbl: MapSpec::Label) -> bool
-    {
-        &&& pre.recovery_state is RecoveryComplete
-        // new thing appends no more than one map
-        &&& pre.history.len() <= post.history.len() <= pre.history.len() + 1
-        // new thing appends to the history
-        &&& post.history.get_prefix(pre.history.len()) == pre.history
-        &&& MapSpec::State::next(pre.history.last().appv, post.history.last().appv, map_lbl)
-    }
-
-    pub open spec fn execute_sync_begin(pre: Self, post: Self, disk_req_id: ID, disk_lbl: AsyncDisk::Label) -> bool
+    pub open spec fn execute_sync_begin(pre: Self, post: Self, disk_lbl: AsyncDisk::Label, disk_req_id: ID) -> bool
     {
         let version_index = (pre.history.len() - 1) as nat;
         let rawPage = spec_marshall(Superblock{version_index, state: pre.history.last()});
@@ -95,7 +102,7 @@ impl AtomicState {
         &&& post == Self{ in_flight_version: Some(version_index), .. pre }
     }
 
-    pub open spec fn execute_sync_end(pre: Self, post: Self, disk_req_id: ID, disk_lbl: AsyncDisk::Label) -> bool
+    pub open spec fn execute_sync_end(pre: Self, post: Self, disk_lbl: AsyncDisk::Label, disk_req_id: ID) -> bool
     {
         &&& pre.recovery_state is RecoveryComplete
         // &&& pre.in_flight_version is Some // provable
@@ -111,6 +118,16 @@ impl AtomicState {
                 in_flight_version: None,
                 persistent_version: new_persistent_version,
             }
+        }
+    }
+
+    pub open spec fn disk_transition(pre: Self, post: Self, disk_event_lbl: DiskEventLabel, disk_lbl: AsyncDisk::Label, disk_req_id: ID) -> bool
+    {
+        match disk_event_lbl {
+            DiskEventLabel::InitiateRecovery{} => Self::initiate_recovery(pre, post, disk_lbl, disk_req_id),
+            DiskEventLabel::CompleteRecovery{rawPage} => Self::complete_recovery(pre, post, disk_lbl, disk_req_id, rawPage),
+            DiskEventLabel::ExecuteSyncBegin{} => Self::execute_sync_begin(pre, post, disk_lbl, disk_req_id),
+            DiskEventLabel::ExecuteSyncEnd{} => Self::execute_sync_end(pre, post, disk_lbl, disk_req_id),
         }
     }
 
