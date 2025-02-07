@@ -47,7 +47,7 @@ impl ProgramUserOp {
         } else {
             arbitrary()
         }
-    } 
+    }
 }
 
 // Auditor defines externally visible actions that can be taken by a program model

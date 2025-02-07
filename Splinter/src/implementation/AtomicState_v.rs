@@ -52,12 +52,25 @@ impl AtomicState {
 
     pub open spec fn map_transition(pre: Self, post: Self, map_lbl: MapSpec::Label) -> bool
     {
-        &&& pre.recovery_state is RecoveryComplete
+        &&& pre.client_ready()
         // new thing appends no more than one map
         &&& pre.history.len() <= post.history.len() <= pre.history.len() + 1
         // new thing appends to the history
         &&& post.history.get_prefix(pre.history.len()) == pre.history
         &&& MapSpec::State::next(pre.history.last().appv, post.history.last().appv, map_lbl)
+        &&& post == Self{ history: post.history, ..pre }
+    }
+
+    pub open spec fn client_ready(self) -> bool
+    {
+        self.recovery_state is RecoveryComplete
+    }
+
+    pub open spec(checked) fn to_sb(self) -> Superblock
+        recommends self.client_ready()
+    {
+        let version_index = (self.history.len() - 1) as nat;
+        Superblock{version_index, state: self.history.last()}
     }
 
     pub open spec fn initiate_recovery(pre: Self, post: Self, disk_lbl: AsyncDisk::Label, disk_req_id: ID) -> bool
@@ -91,20 +104,19 @@ impl AtomicState {
 
     pub open spec fn execute_sync_begin(pre: Self, post: Self, disk_lbl: AsyncDisk::Label, disk_req_id: ID) -> bool
     {
-        let version_index = (pre.history.len() - 1) as nat;
-        let rawPage = spec_marshall(Superblock{version_index, state: pre.history.last()});
-        &&& pre.recovery_state is RecoveryComplete
+        let sb = pre.to_sb();
+        &&& pre.client_ready()
         &&& pre.in_flight_version is None
         &&& disk_lbl == AsyncDisk::Label::DiskOps{
-            requests: Map::empty().insert(disk_req_id, DiskRequest::WriteReq{to: superblock_addr(), data: rawPage }),
-            responses: Map::empty()
+                requests: map!{disk_req_id => DiskRequest::WriteReq{to: superblock_addr(), data: spec_marshall(sb) }},
+                responses: map!{}
             }
-        &&& post == Self{ in_flight_version: Some(version_index), .. pre }
+        &&& post == Self{ in_flight_version: Some(sb.version_index), .. pre }
     }
 
     pub open spec fn execute_sync_end(pre: Self, post: Self, disk_lbl: AsyncDisk::Label, disk_req_id: ID) -> bool
     {
-        &&& pre.recovery_state is RecoveryComplete
+        &&& pre.client_ready()
         // &&& pre.in_flight_version is Some // provable
         &&& disk_lbl == AsyncDisk::Label::DiskOps{
             requests: Map::empty(),

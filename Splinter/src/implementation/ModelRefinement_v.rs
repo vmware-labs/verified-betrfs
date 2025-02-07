@@ -4,10 +4,14 @@ use vstd::prelude::*;
 
 use vstd::{multiset::Multiset};
 use crate::trusted::KVStoreTokenized_v::KVStoreTokenized;
+use crate::spec::AsyncDisk_t::Disk;
 use crate::spec::MapSpec_t::*;
 use crate::spec::SystemModel_t::*;
+use crate::spec::FloatingSeq_t::FloatingSeq;
 use crate::implementation::ConcreteProgramModel_v::*;
 use crate::implementation::MultisetMapRelation_v::*;
+use crate::implementation::DiskLayout_v::*;
+use crate::implementation::AtomicState_v::*;
 
 verus!{
 
@@ -29,13 +33,25 @@ impl RefinementObligation for ConcreteProgramModel {
     closed spec fn i(model: SystemModel::State<Self::Model>)
         -> (mapspec: CrashTolerantAsyncMap::State)
     {
-        CrashTolerantAsyncMap::State{
-            versions: model.program.state.atomic_state.history,
-            async_ephemeral: EphemeralState{
-                requests: model.program.state.requests.dom(),
-                replies: model.program.state.replies.dom(),
-            },
-            sync_requests: multiset_to_map(model.program.state.sync_requests),
+        let atomic_state = model.program.state.atomic_state;
+        if atomic_state.client_ready() {
+            CrashTolerantAsyncMap::State{
+                versions: atomic_state.history,
+                async_ephemeral: EphemeralState{
+                    requests: model.program.state.requests.dom(),
+                    replies: model.program.state.replies.dom(),
+                },
+                sync_requests: multiset_to_map(model.program.state.sync_requests),
+            }
+        } else {
+            let sb = spec_unmarshall(model.disk.disk.content[superblock_addr()]);
+            CrashTolerantAsyncMap::State{
+                versions: FloatingSeq::new(sb.version_index, sb.version_index+1, |i| sb.state ),
+                async_ephemeral: AsyncMap::State::init_ephemeral_state(),
+                sync_requests: Map::empty(),
+            }
+            // TODO: add to system inv to relate superblock content on disk and 
+            // persistent field in atomic state
         }
     }
 
@@ -297,6 +313,7 @@ broadcast proof fn insert_new_preserves_cardinality<V>(m: Multiset<V>, new: V)
 // this is an inv on the system model
 
 impl KVStoreTokenized::State {
+
     pub closed spec fn _inv(self) -> bool
     {
         &&& self.wf()
@@ -360,12 +377,19 @@ impl KVStoreTokenized::State {
         }
         assert(CrashTolerantAsyncMap::State::optionally_append_version(history, post_history));
     }
+
+    pub open spec fn consistent_superblock(self, disk: Disk) -> bool
+        recommends self.atomic_state.client_ready()
+    {
+        spec_marshall(self.atomic_state.to_sb()) == disk.content[superblock_addr()]
+    }
 }
 
 impl SystemModel::State<ConcreteProgramModel> {
     pub open spec fn inv(self) -> bool
     {
         &&& self.program.state._inv()
+        &&& self.program.state.consistent_superblock(self.disk.disk)
         &&& forall |req| self.program.state.requests.contains(req)
             ==> #[trigger] self.id_history.contains(req.id)
         &&& forall |reply| self.program.state.replies.contains(reply)

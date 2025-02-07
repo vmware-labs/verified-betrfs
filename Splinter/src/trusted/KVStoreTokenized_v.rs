@@ -82,16 +82,19 @@ tokenized_state_machine!{KVStoreTokenized{
     }}
 
     transition!{ request(lbl: Label) {
+        require pre.atomic_state.client_ready();
         require let Label::RequestOp{ req } = lbl;
         add requests += { req };
     }}
 
     // execute transition takes a versiosn 
     transition!{ execute_transition(lbl: Label, post_atomic_state: AtomicState, map_lbl: MapSpec::Label) {
+        require pre.atomic_state.client_ready();
         require let Label::ExecuteOp{ req, reply } = lbl;
         require req.id == reply.id;
 
-        remove requests -= {req};
+        remove requests -= { req };
+
         require getInput(map_lbl) == req.input;
         require getOutput(map_lbl) == reply.output;
         require AtomicState::map_transition(pre.atomic_state, post_atomic_state, map_lbl);
@@ -101,17 +104,20 @@ tokenized_state_machine!{KVStoreTokenized{
     }}
 
     transition!{ reply(lbl: Label, post_atomic_state: AtomicState) {
+        require pre.atomic_state.client_ready();
         require let Label::ReplyOp{ reply } = lbl;
         remove replies -= { reply };
     }}
 
     transition!{ accept_sync_request(lbl: Label) {
+        require pre.atomic_state.client_ready();
         require let Label::RequestSyncOp{sync_req_id} = lbl;
         let cur_version = (pre.atomic_state.history.len() - 1) as nat;
         add sync_requests += {(sync_req_id, cur_version)};
     }}
 
     transition!{ deliver_sync_reply(lbl: Label, version: nat) {
+        require pre.atomic_state.client_ready();
         require let Label::ReplySyncOp{sync_req_id} = lbl;
         let stable_version = pre.atomic_state.history.first_active_index();
         remove sync_requests -= {(sync_req_id, version)};
@@ -119,12 +125,20 @@ tokenized_state_machine!{KVStoreTokenized{
     }}
 
     transition!{ internal(lbl: Label) {
+        require pre.atomic_state.client_ready();
         require lbl is InternalOp;
     }}
+
 
     #[invariant]
     pub open spec fn wf(&self) -> bool {
         &&& self.atomic_state.wf()
+        &&& !(self.atomic_state.recovery_state is RecoveryComplete)
+            ==> {
+                &&& self.requests.len() == 0
+                &&& self.replies.len() == 0
+                &&& self.sync_requests.len() == 0
+            }
     }
 
     #[inductive(initialize)]
