@@ -249,17 +249,13 @@ impl Implementation {
             Input::QueryInput{..} => self.handle_query(req, req_shard),
         }
     }
-
-    closed spec fn wf(self) -> bool {
-        &&& self.state@.instance_id() == self.instance@.id()
-    }
 }
 
 impl KVStoreTrait for Implementation {
     type Proof = ConcreteProgramModel;
 
     closed spec fn wf_init(self) -> bool {
-        &&& self.wf()
+        &&& self.state@.instance_id() == self.instance@.id()
         &&& self.state@.value().recovery_state is Begin
     }
 
@@ -371,12 +367,11 @@ impl KVStoreTrait for Implementation {
         let debug_print = true;
         loop
         invariant
-            self.wf(),
+            self.inv(),
             self.state@.value().recovery_state is RecoveryComplete,
             self.instance_id() == api.instance_id(),
         {
             let (req, req_shard) = api.receive_request(debug_print);
-            assume( false ); // jonh left mess here
             let (reply, reply_shard) = self.handle(req, req_shard);
             api.send_reply(reply, reply_shard, true);
         }
