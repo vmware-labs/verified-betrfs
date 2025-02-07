@@ -273,19 +273,19 @@ impl<T: Buffer> LinkedBetree<T>{
         }
     }
 
-    proof fn same_tight_tree_preserves_i_with_ranking(self, other: Self, ranking: Ranking, other_ranking: Ranking)
+    // valid_view    
+    proof fn valid_view_preserves_i_with_ranking(self, other: Self, ranking: Ranking)
         requires 
             self.valid_ranking(ranking),
-            other.valid_ranking(other_ranking),
+            other.valid_ranking(ranking),
             self.valid_view(other),
-            self.same_tight_tree(other),
             self.valid_buffer_dv(),
             other.valid_buffer_dv(),
         ensures
             self.i() == other.i()
         decreases 
             self.get_rank(ranking),
-            other.get_rank(other_ranking),
+            other.get_rank(ranking),
     {
         broadcast use BufferDisk::agrees_implies_same_i;
         if self.has_root() {
@@ -307,25 +307,26 @@ impl<T: Buffer> LinkedBetree<T>{
 
                 self.child_at_idx_reachable_addrs_ensures(i as nat);
                 self.reachable_betree_addrs_using_ranking_closed(self.the_ranking());
-                child.same_tight_tree_preserves_i_with_ranking(other_child, ranking, other_ranking);
+                child.valid_view_preserves_i_with_ranking(other_child, ranking);
             }
             assert(self.i()->children =~= other.i()->children);
         }
     }
 
-    proof fn same_tight_tree_preserves_i(self, other: Self)
+    proof fn valid_view_preserves_i(self, other: Self)
     requires 
         self.acyclic(),
         other.acyclic(),
         self.valid_view(other),
-        self.same_tight_tree(other),
         self.valid_buffer_dv(),
         other.valid_buffer_dv(),
     ensures
         self.i() == other.i()
     {
         if self.has_root() {
-            self.same_tight_tree_preserves_i_with_ranking(other, self.the_ranking(), other.the_ranking());
+            let ranking = self.the_ranking();
+            other.dv.subdisk_implies_ranking_validity(self.dv, ranking);
+            self.valid_view_preserves_i_with_ranking(other, ranking);
         }
     }
 
@@ -974,7 +975,7 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
             self.inv(),
             post.inv(), 
             self.linked.is_fresh(new_addrs.repr()),
-            self.linked.push_memtable(sealed_memtable, new_addrs).same_tight_tree(new_linked),
+            self.linked.push_memtable(sealed_memtable, new_addrs).reachable_buffers_preserved(new_linked),
             LinkedBetreeVars::State::internal_flush_memtable(self, post, lbl, sealed_memtable, new_linked, new_addrs)
         ensures
             FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_flush_memtable())
@@ -984,13 +985,11 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
         post.linked.i_wf();
 
         let result = self.linked.push_memtable(sealed_memtable, new_addrs);
+        self.linked.push_memtable_ensures(sealed_memtable, new_addrs);
         result.i_children_lemma();
 
-        self.linked.push_memtable_ensures(sealed_memtable, new_addrs);
-        assert(result.acyclic());
-
         if self.linked.has_root() {
-            self.linked.i_children_lemma();            
+            self.linked.i_children_lemma();
             self.linked.valid_buffer_dv_throughout();
 
             assert forall |i: nat| i < self.linked.i()->children.len()
@@ -1001,11 +1000,13 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
                 self.linked.child_at_idx(i).subdisk_preserves_i(result.child_at_idx(i));
             }
             self.linked.buffer_dv.agrees_implies_same_i(result.buffer_dv, self.linked.root().buffers);
+            assert(result.i()->children =~= self.linked.i().push_memtable(self.memtable)->children);
+        } else {
+            assert(result.root().valid_child_index(0)); // trigger
+            assert(result.i()->children =~= seq![FilteredBetree_v::BetreeNode::Nil]);
         }
-    
-        assert(result.i()->children =~= self.linked.i().push_memtable(self.memtable)->children);
         assert(result.i()->buffers =~= self.linked.i().push_memtable(self.memtable)->buffers);
-        result.same_tight_tree_preserves_i(post.linked);
+        result.valid_view_preserves_i(post.linked);
     }
 
     proof fn internal_grow_refines(self, post: Self, lbl: LinkedBetreeVars::Label, new_root_addr: Address)
@@ -1030,7 +1031,7 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
             post.inv(),
             self.linked.is_fresh(new_addrs.repr()),
             self.linked.is_fresh(path_addrs.to_set()),
-            Self::post_split(path, request, new_addrs, path_addrs).same_tight_tree(new_linked),
+            Self::post_split(path, request, new_addrs, path_addrs).reachable_buffers_preserved(new_linked),
             LinkedBetreeVars::State::internal_split(self, post, lbl, new_linked, path, request, new_addrs, path_addrs)
         ensures 
             FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_split(path.i(), request))
@@ -1047,7 +1048,7 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
         self.post_split_ensures(path, request, new_addrs, path_addrs);
         path.target().split_parent_commutes_with_i(request, new_addrs);
         path.substitute_commutes_with_i(new_subtree, path_addrs);
-        splitted.same_tight_tree_preserves_i(post.linked);
+        splitted.valid_view_preserves_i(post.linked);
     }
 
     proof fn internal_flush_refines(self, post: Self, lbl: LinkedBetreeVars::Label, new_linked: LinkedBetree<T>, 
@@ -1057,7 +1058,7 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
             post.inv(), 
             self.linked.is_fresh(new_addrs.repr()),
             self.linked.is_fresh(path_addrs.to_set()),
-            Self::post_flush(path, child_idx, buffer_gc, new_addrs, path_addrs).same_tight_tree(new_linked),
+            Self::post_flush(path, child_idx, buffer_gc, new_addrs, path_addrs).reachable_buffers_preserved(new_linked),
             LinkedBetreeVars::State::internal_flush(self, post, lbl, new_linked, path, child_idx, buffer_gc, new_addrs, path_addrs)
         ensures 
             FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_flush(path.i(), child_idx, buffer_gc))
@@ -1074,7 +1075,7 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
         self.post_flush_ensures(path, child_idx, buffer_gc, new_addrs, path_addrs);
         path.target().flush_commutes_with_i(child_idx, buffer_gc, new_addrs);
         path.substitute_commutes_with_i(new_subtree, path_addrs);
-        flushed.same_tight_tree_preserves_i(post.linked);
+        flushed.valid_view_preserves_i(post.linked);
     }
 
     proof fn internal_compact_refines(self, post: Self, lbl: LinkedBetreeVars::Label, new_linked: LinkedBetree<T>,
@@ -1084,7 +1085,7 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
             post.inv(), 
             self.linked.is_fresh(new_addrs.repr()),
             self.linked.is_fresh(path_addrs.to_set()),
-            Self::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs).same_tight_tree(new_linked),
+            Self::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs).reachable_buffers_preserved(new_linked),
             LinkedBetreeVars::State::internal_compact(self, post, lbl, new_linked, 
                 path, start, end, compacted_buffer, new_addrs, path_addrs)
         ensures 
@@ -1103,7 +1104,7 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
         self.post_compact_ensures(path, start, end, compacted_buffer, new_addrs, path_addrs);
         path.target().compact_commutes_with_i(start, end, compacted_buffer, new_addrs);
         path.substitute_commutes_with_i(new_subtree, path_addrs);
-        compacted.same_tight_tree_preserves_i(post.linked);
+        compacted.valid_view_preserves_i(post.linked);
     }
 
     proof fn internal_noop_noop(self, post: Self, lbl: LinkedBetreeVars::Label)
