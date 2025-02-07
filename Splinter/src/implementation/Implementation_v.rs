@@ -3,13 +3,12 @@
 
 use builtin::*;
 use builtin_macros::*;
-use vstd::{pervasive::*, multiset::*};
+use vstd::pervasive::*;
 use vstd::prelude::*;
 use vstd::modes::*;
 use vstd::tokens::InstanceId;
 use vstd::hash_map::*;
 use vstd::std_specs::hash::*;
-use vstd::tokens::*;
 
 use crate::trusted::ClientAPI_t::*;
 use crate::trusted::KVStoreTrait_t::*;
@@ -18,9 +17,16 @@ use crate::spec::MapSpec_t::*;
 use crate::spec::TotalKMMap_t::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
-use crate::spec::AsyncDisk_t::*;
 use crate::implementation::ConcreteProgramModel_v::*;
 use crate::implementation::AtomicState_v::*;
+
+#[allow(unused_imports)]
+use vstd::multiset::*;
+#[allow(unused_imports)]
+use vstd::tokens::*;
+#[allow(unused_imports)]
+use crate::spec::AsyncDisk_t::*;
+#[allow(unused_imports)]
 use crate::implementation::DiskLayout_v::*;
 
 verus!{

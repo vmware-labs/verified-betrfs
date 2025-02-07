@@ -11,7 +11,6 @@ use crate::spec::FloatingSeq_t::FloatingSeq;
 use crate::implementation::ConcreteProgramModel_v::*;
 use crate::implementation::MultisetMapRelation_v::*;
 use crate::implementation::DiskLayout_v::*;
-use crate::implementation::AtomicState_v::*;
 
 verus!{
 

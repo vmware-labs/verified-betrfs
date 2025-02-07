@@ -67,7 +67,10 @@ impl AtomicState {
     }
 
     pub open spec(checked) fn to_sb(self) -> Superblock
-        recommends self.client_ready()
+    recommends
+        self.client_ready(),
+        0 < self.history.len(),
+        self.history.is_active(self.history.len()-1),
     {
         let version_index = (self.history.len() - 1) as nat;
         Superblock{version_index, state: self.history.last()}
