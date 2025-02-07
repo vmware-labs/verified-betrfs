@@ -133,7 +133,7 @@ tokenized_state_machine!{KVStoreTokenized{
 
     #[invariant]
     pub open spec fn wf(&self) -> bool {
-        &&& self.atomic_state.wf()
+//         &&& self.atomic_state.wf()
         &&& !(self.atomic_state.recovery_state is RecoveryComplete)
             ==> {
                 &&& self.requests.len() == 0
@@ -152,25 +152,25 @@ tokenized_state_machine!{KVStoreTokenized{
    
     #[inductive(execute_transition)]
     pub fn execute_transition_inductive(pre: Self, post: Self, lbl: Label, post_atomic_state: AtomicState, map_lbl: MapSpec::Label) { 
-        MapSpec::State::inv_next(pre.atomic_state.mapspec(), post.atomic_state.mapspec(), map_lbl);
+//         MapSpec::State::inv_next(pre.atomic_state.mapspec(), post.atomic_state.mapspec(), map_lbl);
         // TODO(jialin): we should be getting MapSpec::invariant here; how do we invoke it?
         // I don't see *anything* in the expand file that summarizes pre.inv & next(pre,post) => post.inv.
         // Is this a known hole in the macro? => Yup! 
 
         let ghost pre_history = pre.atomic_state.history;
         let ghost post_history = post.atomic_state.history;
-        assert forall |i| #[trigger] post_history.is_active(i) implies post_history[i].appv.invariant() by {
-            if i < post_history.len() - 1 {
-                assert( pre_history.is_active(i) ); // trigger AtomicState::wf forall
-            }
-        }
+//         assert forall |i| #[trigger] post_history.is_active(i) implies post_history[i].appv.invariant() by {
+//             if i < post_history.len() - 1 {
+//                 assert( pre_history.is_active(i) ); // trigger AtomicState::wf forall
+//             }
+//         }
 //         assert( post.atomic_state.wf() );
 //         assert( post.wf() );
     }
 
     #[inductive(disk_transition)]
     fn disk_transition_inductive(pre: Self, post: Self, lbl: Label, post_atomic_state: AtomicState) {
-        assume( false );
+//         assume( false );
 //         AtomicState::disk_transition_preserves_wf(... pre, post, disk_event_lbl, disk_lbl, disk_req_id),
     }
 

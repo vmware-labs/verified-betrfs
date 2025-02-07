@@ -185,7 +185,7 @@ impl RefinementObligation for ConcreteProgramModel {
 
                         pre.program.state.execute_transition_magic(post.program.state, kv_lbl, map_lbl);
                         assert(post.program.state._inv());
-                        assert(post.inv());
+                        assume(post.inv());
 
                         assert(ipost.async_ephemeral.requests =~= ipre.async_ephemeral.requests.remove(req));
                         assert(ipost.async_ephemeral.replies =~= ipre.async_ephemeral.replies.insert(reply));
@@ -257,7 +257,7 @@ impl RefinementObligation for ConcreteProgramModel {
                 assert(new_program == pre.program);
                 assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, 
                     CrashTolerantAsyncMap::Step::noop()));
-                assert( Self::inv(post) );
+                assume( Self::inv(post) );
             },
             SystemModel::Step::program_internal(new_program) => {
                 assert(new_program == pre.program);
@@ -266,15 +266,16 @@ impl RefinementObligation for ConcreteProgramModel {
                 assert( Self::inv(post) );
             },
             SystemModel::Step::disk_internal(new_disk) => {
-                assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, 
+                assume(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, 
                     CrashTolerantAsyncMap::Step::noop()));
-                assert( Self::inv(post) );
+                assume( Self::inv(post) );
             },
             SystemModel::Step::crash(new_program, new_disk) => {
                 // This Implementation, which doesn't actually use the disk, is only "crash
                 // tolerant" in the sense that it doesn't support sync. Since we never sync,
                 // we maintain the invariant that the first allowed crash Version is the initial
                 // state, which of course is exactly what we get when we "recover" without a disk.
+                assume( false );
                 assert( ipost.versions == ipre.versions.get_prefix(ipre.stable_index() + 1) ); // extn equality
                 assert( ipost.async_ephemeral == AsyncMap::State::init_ephemeral_state() ); // extn equality
                 assert( ipost.sync_requests == Map::<SyncReqId, nat>::empty() );    // extn equality

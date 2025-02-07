@@ -64,12 +64,6 @@ impl Implementation {
 
     pub closed spec fn i(self) -> AtomicState {
         self.state@.value()
-//         TODO deleteme
-//         AtomicState{
-//             store: MapSpec::State {
-//                 kmmap: TotalKMMap(Self::i_hashmap(self.store@)),
-//             }
-//         }
     }
 
     closed spec fn inv(self) -> bool {
@@ -327,7 +321,10 @@ impl KVStoreTrait for Implementation {
                     };
             let ghost disk_req_id = req_id_perm@;
             let ghost disk_response_tuples = Multiset::empty();
-            let ghost disk_request_tuples = Multiset::empty().insert((req_id_perm@, disk_req@));
+
+            let ghost disk_request_tuples = multiset_map_singleton(req_id_perm@, disk_req@);
+            proof { multiset_map_singleton_ensures(req_id_perm@, disk_req@); }
+
             assert( disk_response_tuples <= empty_disk_responses.multiset() );
             assert( empty_disk_responses.instance_id() == self.instance@.id() );
             assert( disk_lbl->responses == multiset_to_map(disk_response_tuples) );
@@ -335,9 +332,6 @@ impl KVStoreTrait for Implementation {
                 atomic_state.value(), post_state, disk_event_lbl, disk_lbl, disk_req_id) );
             // I needed an awful lot of tedious debugging-in-the-dark to figure out which
             // VerusSync require clause I'd violated. :v(
-            // TODO replace this proof call with a multiset_to_map singleton constructor that includes
-            // the necessary ensures clause.
-            proof { unique_multiset_map_insert_equiv(Multiset::empty(), req_id_perm@, disk_req@); }
             assert( disk_lbl->requests == multiset_to_map(disk_request_tuples) );
             let tracked disk_request_tokens = self.instance.borrow().disk_transition(
                 KVStoreTokenized::Label::DiskOp{

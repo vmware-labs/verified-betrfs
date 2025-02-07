@@ -138,7 +138,7 @@ ensures
     multiset_to_map(multiset_map_singleton(k,v)) == Map::empty().insert(k,v),
 {
     unique_multiset_map_insert_equiv(Multiset::empty(), k, v);
-    assume( false );    // TOOD jonh left off here
+    assert( multiset_to_map(Multiset::<(K,V)>::empty()) == Map::<K,V>::empty() );   // extn equality
 }
 
 pub proof fn unique_multiset_map_remove_equiv<K,V>(pre: Multiset<(K,V)>, k: K, v: V)
