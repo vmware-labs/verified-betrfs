@@ -114,6 +114,7 @@ impl ClientAPI{
         -> (out: (ID, IDiskResponse, Tracked<KVStoreTokenized::disk_responses_multiset>))
     ensures
         self.instance_id() == old(self).instance_id(),
+        out.2@.instance_id() == self.instance_id(),
         out.2@.multiset() == multiset_map_singleton(out.0, out.1@),
     {
         (0, arbitrary(), Tracked::assume_new())

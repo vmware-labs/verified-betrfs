@@ -351,11 +351,11 @@ impl Implementation {
                         responses: Map::empty().insert(disk_req_id, i_disk_response@),
                     };
             let ghost disk_request_tuples = Multiset::empty();
-//             assert( i_disk_response@ == DiskResponse::ReadResp{from: spec_superblock_addr(), data: raw_page} );
-//             assert( disk_lbl->responses == Map::empty().insert(disk_req_id, DiskResponse::ReadResp{from: spec_superblock_addr(), data: raw_page}) );
-            assert( AtomicState::disk_transition(
-                pre_state, post_state, disk_event_lbl, disk_lbl, disk_req_id) );
-            assume( false ); // left off
+
+            // extn; why isn't it triggered by requires in macro output?
+            // (Might also make a nice broadcast lemma, if that was usable.)
+            assert( disk_lbl->requests == multiset_to_map(disk_request_tuples) );
+
             let tracked disk_request_tokens = self.instance.borrow().disk_transition(
                 KVStoreTokenized::Label::DiskOp{
                     disk_event_lbl,
@@ -374,7 +374,9 @@ impl Implementation {
 
         assert( self.state@.value().recovery_state is RecoveryComplete );
 
-        assert( self.wf_init() );
+        assume( false );// jonh LEFT OFF
+        assert( self.i().mapspec().kmmap == self.view_store_as_kmmap() );
+        assert( self.inv() );
     }
 }
 

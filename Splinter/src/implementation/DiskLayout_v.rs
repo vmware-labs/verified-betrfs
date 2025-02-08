@@ -1,15 +1,19 @@
 // Copyright 2018-2024 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 use vstd::{prelude::*};
+use vstd::hash_map::*;
 //use vstd::pervasive::print_u64;
 use crate::spec::MapSpec_t::*;
 use crate::spec::AsyncDisk_t::*;
 use crate::spec::ImplDisk_t::*;
+use crate::spec::KeyType_t::*;
+use crate::spec::Messages_t::*;
 
 verus! {
 
 pub struct Superblock {
     pub state: PersistentState,
+    //pub state: HashMapWithView<Key, Value>,
     // need version so recovery knows the shape of the (mostly-empty) history to reconstruct (the LSN)
     pub version_index: nat,
 }
