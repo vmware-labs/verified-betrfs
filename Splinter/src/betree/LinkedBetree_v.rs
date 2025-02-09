@@ -1029,7 +1029,7 @@ impl<T> Path<T>{
         decreases self.depth
     {
         if self.depth == 0 {
-            set!{self.linked.root.unwrap()}
+            set!{}
         } else {
             self.subpath().addrs_on_path() + set!{self.linked.root.unwrap()}
         }
@@ -1329,16 +1329,10 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
             let old_child = path.target().child_at_idx(request.get_child_idx());
             let result = Self::post_split(path, request, new_addrs, path_addrs);
 
-            // let removed_tree_addrs = set![old_child.root.unwrap()] + path.addrs_on_path();
-            // let added_tree_addrs = new_addrs.repr() + path_addrs.to_set();
-            // let new_reachable_tree_addrs = self.linked.reachable_betree_addrs() - removed_tree_addrs + added_tree_addrs;
-
             &&& split_parent.acyclic()
             &&& result.acyclic()
             &&& result.valid_buffer_dv()
-            // &&& result.reachable_betree_addrs() =~= new_reachable_tree_addrs
             &&& result.reachable_buffer_addrs() <= self.linked.reachable_buffer_addrs()
-            // &&& path.addrs_on_path().disjoint(set![old_child.root.unwrap()])
         })
     {
         let ranking = path.linked.finite_ranking();
@@ -1356,25 +1350,6 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
             path.substitute_ensures(new_subtree, path_addrs);
             let _ = path.ranking_after_substitution(new_subtree, path_addrs, new_ranking);
         }
-
-        // let removed_tree_addrs = set![old_child.root.unwrap()] + path.addrs_on_path();
-        // let added_tree_addrs = new_addrs.repr() + path_addrs.to_set();
-        // let new_reachable_tree_addrs = self.linked.reachable_betree_addrs() - removed_tree_addrs + added_tree_addrs;
-
-        // assert(splitted.reachable_betree_addrs() =~= new_reachable_tree_addrs) by {
-        //     let subtree_addrs = subtree.reachable_betree_addrs();
-        //     let new_subtree_addrs = new_subtree.reachable_betree_addrs();
-
-        //     path.target().split_parent_reachable_betree_ensures(request, new_addrs, new_ranking);
-        //     assert(path.addrs_on_path().contains(subtree.root.unwrap()));
-        //     assert(new_subtree_addrs - subtree_addrs =~= new_addrs.repr());
-        //     assert(subtree_addrs - new_subtree_addrs =~= set![subtree.root.unwrap(), old_child.root.unwrap()]);
-        //     path.substitute_reachable_betree_ensures(new_subtree, path_addrs, new_ranking);
-        // }
-
-        // assume( path.addrs_on_path().disjoint(set![old_child.root.unwrap()]) ); 
-        // old child is reached via the path so if it's in there then old child must have a higher rank than some addr in path, 
-        // but that's not possible because the ranking of each addr in path is larger than the target() which contains oldchild
 
         path.target().split_parent_same_reachable_buffers(request, new_addrs, new_ranking);
         path.substitute_reachable_buffers_ensures(new_subtree, path_addrs, new_ranking);
@@ -2524,7 +2499,6 @@ impl<T: Buffer> Path<T>{
         ensures 
             self.target().dv == self.linked.dv,
             self.target().buffer_dv == self.linked.buffer_dv,
-            self.addrs_on_path().contains(self.target().root.unwrap()),
         decreases 
             self.depth
     {
@@ -2533,53 +2507,24 @@ impl<T: Buffer> Path<T>{
         }
     }
 
-    // pub proof fn target_preserves_subtree_disjoint(self)
-    //     requires 
-    //         self.valid(),
-    //         self.linked.acyclic(),
-    //         self.linked.subtree_disjoint(),
-    //     ensures 
+    // pub proof fn path_addrs_are_closed(self) 
+    //     requires self.valid()
+    //     ensures
+    //         self.addrs_on_path().finite(),
+    //         self.addrs_on_path() <= self.linked.reachable_betree_addrs(),
     //         self.target().acyclic(),
-    //         self.target().subtree_disjoint()
+    //         self.target().reachable_betree_addrs() <= self.linked.reachable_betree_addrs(),
     //     decreases self.depth
     // {
+    //     broadcast use LinkedBetree::reachable_betree_addrs_ignore_ranking;
     //     if 0 < self.depth {
-    //         broadcast use LinkedBetree::reachable_betree_addrs_ignore_ranking;
-    //         let subtree = self.subpath().linked;
-    //         assert forall |i, j| #[trigger] subtree.root().unique_child_idx(i, j)
-    //         implies subtree.child_at_idx(i).reachable_betree_addrs().disjoint(
-    //             subtree.child_at_idx(j).reachable_betree_addrs())
-    //         by {
-    //             // wait a second can we actually promise this?
-    //             // this isn't vaild 
-
-    //             assume(false);
-    //         }
-    //         self.subpath().target_preserves_subtree_disjoint();
+    //         self.linked.reachable_betree_addrs_using_ranking_closed(self.linked.the_ranking());
+    //         let root = self.linked.root();
+    //         self.linked.child_at_idx_reachable_addrs_ensures(root.pivots.route(self.key) as nat);
+    //         assert(self.subpath().linked.reachable_betree_addrs() <= self.linked.reachable_betree_addrs());
+    //         self.subpath().path_addrs_are_closed();
     //     }
     // }
-
-    // path disjoint how do we want to say the subtree disjoint 
-    // subpath preserves 
-
-    pub proof fn path_addrs_are_closed(self) 
-        requires self.valid()
-        ensures
-            self.addrs_on_path().finite(),
-            self.addrs_on_path() <= self.linked.reachable_betree_addrs(),
-            self.target().acyclic(),
-            self.target().reachable_betree_addrs() <= self.linked.reachable_betree_addrs(),
-        decreases self.depth
-    {
-        broadcast use LinkedBetree::reachable_betree_addrs_ignore_ranking;
-        if 0 < self.depth {
-            self.linked.reachable_betree_addrs_using_ranking_closed(self.linked.the_ranking());
-            let root = self.linked.root();
-            self.linked.child_at_idx_reachable_addrs_ensures(root.pivots.route(self.key) as nat);
-            assert(self.subpath().linked.reachable_betree_addrs() <= self.linked.reachable_betree_addrs());
-            self.subpath().path_addrs_are_closed();
-        }
-    }
 
     pub proof fn valid_ranking_throughout(self, ranking: Ranking)
         requires 
