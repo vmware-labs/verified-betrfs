@@ -73,7 +73,7 @@ impl AtomicState {
         self.history.is_active(self.history.len()-1),
     {
         let version_index = (self.history.len() - 1) as nat;
-        Superblock{version_index, state: self.history.last()}
+        Superblock{version_index, store: self.history.last()}
     }
 
     pub open spec fn initiate_recovery(pre: Self, post: Self, disk_lbl: AsyncDisk::Label, disk_req_id: ID) -> bool

@@ -34,6 +34,20 @@ use crate::implementation::DiskLayout_v::*;
 
 verus!{
 
+pub closed spec(checked) fn view_store_as_kmmap(store: HashMapWithView<Key, Value>) -> TotalKMMap
+{
+    TotalKMMap(Map::new(
+            |k: Key| true,
+            |k: Key| if store@.contains_key(k@) { Message::Define{value: store@[k@]} }
+                     else { Message::empty() }))
+}
+
+pub closed spec(checked) fn view_store_as_singleton_floating_seq(at_index: nat, store: HashMapWithView<Key, Value>) -> FloatingSeq<Version>
+{
+    FloatingSeq::new(at_index, at_index+1,
+          |i| Version{ appv: MapSpec::State{ kmmap: view_store_as_kmmap(store) } } )
+}
+
 // This struct supplies KVStoreTrait, which has both the entry point to the implementation and the
 // proof hooks to satisfy the refinement obligation trait.
 pub struct Implementation {
@@ -44,11 +58,8 @@ pub struct Implementation {
 
 impl Implementation {
     pub closed spec(checked) fn view_store_as_kmmap(self) -> TotalKMMap
-     {
-        TotalKMMap(Map::new(
-                |k: Key| true,
-                |k: Key| if self.store@.contains_key(k@) { Message::Define{value: self.store@[k@]} }
-                         else { Message::empty() }))
+    {
+        view_store_as_kmmap(self.store)
     }
 
     // The View hos HashMapWithView isn't what we need.
@@ -337,7 +348,7 @@ impl Implementation {
             let superblock = unmarshall(raw_page);
             let ghost post_state = AtomicState {
                 recovery_state: RecoveryState::RecoveryComplete,
-                history: FloatingSeq::new(superblock.version_index, superblock.version_index+1, |i| superblock.state),
+                history: view_store_as_singleton_floating_seq(superblock.version_index, superblock.store),
                 in_flight_version: None,
                 persistent_version: superblock.version_index,
             };
@@ -374,7 +385,6 @@ impl Implementation {
 
         assert( self.state@.value().recovery_state is RecoveryComplete );
 
-        assume( false );// jonh LEFT OFF
         assert( self.i().mapspec().kmmap == self.view_store_as_kmmap() );
         assert( self.inv() );
     }

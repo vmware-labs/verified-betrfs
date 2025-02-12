@@ -12,10 +12,23 @@ use crate::spec::Messages_t::*;
 verus! {
 
 pub struct Superblock {
-    pub state: PersistentState,
-    //pub state: HashMapWithView<Key, Value>,
+    pub store: PersistentState,
     // need version so recovery knows the shape of the (mostly-empty) history to reconstruct (the LSN)
     pub version_index: nat,
+}
+
+pub struct ISuperblock {
+    pub store: HashMapWithView<Key, Value>,
+    // need version so recovery knows the shape of the (mostly-empty) history to reconstruct (the LSN)
+    pub version_index: nat,
+}
+
+impl View for ISuperblock {
+    type V = Superblock;
+    spec fn view(&self) -> Self::V
+    {
+        Superblock{ store: self.store, version_index: self.version_index }
+    }
 }
 
 pub closed spec fn spec_marshall(superblock: Superblock) -> (out: RawPage)
@@ -29,7 +42,7 @@ pub closed spec fn spec_unmarshall(raw_page: RawPage) -> (out: Superblock)
 }
 
 // This is gonna be hard because Superblock isn't physical yet :vP
-pub fn unmarshall(raw_page: RawPage) -> (out: Superblock)
+pub fn unmarshall(raw_page: RawPage) -> (out: ISuperblock)
 ensures
     out == spec_unmarshall(raw_page)
 {

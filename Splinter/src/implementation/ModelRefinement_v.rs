@@ -11,6 +11,7 @@ use crate::spec::FloatingSeq_t::FloatingSeq;
 use crate::implementation::ConcreteProgramModel_v::*;
 use crate::implementation::MultisetMapRelation_v::*;
 use crate::implementation::DiskLayout_v::*;
+use crate::implementation::Implementation_v::*;
 
 verus!{
 
@@ -50,8 +51,9 @@ impl RefinementObligation for ConcreteProgramModel {
             }
         } else {
             let sb = spec_unmarshall(model.disk.disk.content[spec_superblock_addr()]);
+            let state = view_store_as_kmmap(sb.store);
             CrashTolerantAsyncMap::State{
-                versions: FloatingSeq::new(sb.version_index, sb.version_index+1, |i| sb.state ),
+                versions: view_store_as_singleton_floating_seq(sb.version_index, sb.store),
                 async_ephemeral: AsyncMap::State::init_ephemeral_state(),
                 sync_requests: Map::empty(),
             }
