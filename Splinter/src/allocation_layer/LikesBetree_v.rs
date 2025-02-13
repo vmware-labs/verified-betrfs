@@ -809,7 +809,7 @@ state_machine!{ LikesBetree {
     }
 
     #[inductive(internal_flush_memtable)]
-    #[verifier::spinoff_prover]
+    // #[verifier::spinoff_prover]
     fn internal_flush_memtable_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, new_addrs: TwoAddrs) { 
         reveal(LinkedBetreeVars::State::next_by);
 
@@ -955,7 +955,7 @@ state_machine!{ LikesBetree {
     }
 
     #[inductive(internal_split)]
-    #[verifier::spinoff_prover]
+    // #[verifier::spinoff_prover]
     fn internal_split_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
         path: Path<SimpleBuffer>, request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs) {
         reveal(LinkedBetreeVars::State::next_by);
@@ -1008,55 +1008,49 @@ state_machine!{ LikesBetree {
             path.substitute_likes_ensures(new_subtree, path_addrs, split_ranking);
             pre.betree.linked.tree_likes_ignore_ranking(split_ranking, ranking);
 
-            assert(splitted_likes =~= post.betree_likes) by {
-                path_addrs.to_multiset_ensures();
-                assert(removed.is_disjoint_from(new_path_likes));
-                assert(splitted_likes == splitted_likes.sub(new_subtree_likes).add(new_subtree_likes));
-                assert(splitted_likes == pre.betree_likes.sub(old_path_likes).add(new_path_likes).sub(subtree_likes).add(new_subtree_likes));
-                assert(splitted_likes == pre.betree_likes.sub(old_path_likes).sub(removed).add(new_path_likes).add(new_addrs.likes()));
-            }
+            path_addrs.to_multiset_ensures();
+            assert(removed.is_disjoint_from(new_path_likes));
+            assert(splitted_likes == splitted_likes.sub(new_subtree_likes).add(new_subtree_likes));
+            assert(splitted_likes == pre.betree_likes.sub(old_path_likes).add(new_path_likes).sub(subtree_likes).add(new_subtree_likes));
+            assert(splitted_likes == pre.betree_likes.sub(old_path_likes).sub(removed).add(new_path_likes).add(new_addrs.likes()));
+            assert(splitted_likes =~= post.betree_likes);
 
             // buffer likes updates
             path.substitute_ensures(new_subtree, path_addrs);
 
             assert(subtree_likes <= pre.betree_likes);
-            assert(pre.betree_likes.sub(subtree_likes).add(subtree_likes) == pre.betree_likes); // trigger
             assert(new_subtree_likes <= splitted_likes);
+
+            new_subtree.tree_likes_domain(split_ranking);
+            new_subtree.subdisk_implies_same_buffer_likes(splitted, new_subtree_likes);
+            assert(splitted.buffer_likes(new_subtree_likes) == new_subtree.buffer_likes(new_subtree_likes));
             assert(splitted_likes.sub(new_subtree_likes).add(new_subtree_likes) == splitted_likes); // trigger
 
-            assert(splitted.buffer_likes(new_subtree_likes) == new_subtree.buffer_likes(new_subtree_likes)) by {                
-                new_subtree.tree_likes_domain(split_ranking);
-                new_subtree.subdisk_implies_same_buffer_likes(splitted, new_subtree_likes);
-            }
+            pre.betree.linked.tree_likes_domain(ranking);
+            subtree.subdisk_implies_same_buffer_likes(pre.betree.linked, subtree_likes);
+            assert(pre.betree.linked.buffer_likes(subtree_likes) == subtree.buffer_likes(subtree_likes));
+            assert(pre.betree_likes.sub(subtree_likes).add(subtree_likes) == pre.betree_likes); // trigger
 
-            assert(pre.betree.linked.buffer_likes(subtree_likes) == subtree.buffer_likes(subtree_likes))
-            by {
-                pre.betree.linked.tree_likes_domain(ranking);
-                subtree.subdisk_implies_same_buffer_likes(pre.betree.linked, subtree_likes);
-            }
+            splitted.tree_likes_domain(splitted.the_ranking());
+            splitted.buffer_likes_additive(splitted_likes.sub(new_subtree_likes), new_subtree_likes);
+            assert(splitted.buffer_likes(splitted_likes) =~=  
+            splitted.buffer_likes(splitted_likes.sub(new_subtree_likes)).add(new_subtree.buffer_likes(new_subtree_likes)));
+        
+            pre.betree.linked.tree_likes_domain(ranking);
+            pre.betree.linked.buffer_likes_additive(pre.betree_likes.sub(subtree_likes), subtree_likes);
+            assert(pre.betree.linked.buffer_likes(pre.betree_likes) ==  
+                pre.betree.linked.buffer_likes(pre.betree_likes.sub(subtree_likes)).add(subtree.buffer_likes(subtree_likes)));
     
-            assert(splitted.buffer_likes(splitted_likes) =~= pre.buffer_likes.add(added_buffers))
-            by {
-                splitted.tree_likes_domain(splitted.the_ranking());
-                splitted.buffer_likes_additive(splitted_likes.sub(new_subtree_likes), new_subtree_likes);
-                assert(splitted.buffer_likes(splitted_likes) =~=  
-                splitted.buffer_likes(splitted_likes.sub(new_subtree_likes)).add(new_subtree.buffer_likes(new_subtree_likes)));
-           
-                pre.betree.linked.tree_likes_domain(ranking);
-                pre.betree.linked.buffer_likes_additive(pre.betree_likes.sub(subtree_likes), subtree_likes);
-                assert(pre.betree.linked.buffer_likes(pre.betree_likes) ==  
-                    pre.betree.linked.buffer_likes(pre.betree_likes.sub(subtree_likes)).add(subtree.buffer_likes(subtree_likes)));
-          
-                path.substitute_buffer_likes_ensures(new_subtree, path_addrs, split_ranking);
-                // assert(splitted.buffer_likes(splitted_likes) =~= 
-                //     splitted.buffer_likes(splitted_likes.sub(new_subtree_likes)
-                //     ).add(subtree.buffer_likes(subtree_likes).add(added_buffers)));
-                // assert(splitted.buffer_likes(splitted_likes) =~= 
-                //     pre.betree.linked.buffer_likes(pre.betree_likes.sub(subtree_likes)
-                //     ).add(subtree.buffer_likes(subtree_likes).add(added_buffers)));
-                // assert(splitted.buffer_likes(splitted_likes) =~= 
-                //     pre.betree.linked.buffer_likes(pre.betree_likes).add(added_buffers));
-            }
+            assert(splitted.buffer_likes(splitted_likes) =~= pre.buffer_likes.add(added_buffers));
+                
+            assert(splitted.buffer_likes(splitted_likes) =~= 
+                splitted.buffer_likes(splitted_likes.sub(new_subtree_likes)
+                ).add(subtree.buffer_likes(subtree_likes).add(added_buffers)));
+            assert(splitted.buffer_likes(splitted_likes) =~= 
+                pre.betree.linked.buffer_likes(pre.betree_likes.sub(subtree_likes)
+                ).add(subtree.buffer_likes(subtree_likes).add(added_buffers)));
+            assert(splitted.buffer_likes(splitted_likes) =~= 
+                pre.betree.linked.buffer_likes(pre.betree_likes).add(added_buffers));
         }
         splitted.valid_view_implies_same_transitive_likes(new_betree.linked);
     }
@@ -1089,7 +1083,7 @@ state_machine!{ LikesBetree {
             let linked_step = LinkedBetreeVars::Step::internal_compact(new_betree.linked, path, start, end, compacted_buffer, new_addrs, path_addrs);
             LinkedBetreeVars::State::inv_next_by(pre.betree, new_betree, lbl->linked_lbl, linked_step);
         }
-    
+
         let (betree_likes, buffer_likes) = new_betree.linked.transitive_likes();
         assume(post.betree_likes == betree_likes);
         assume(post.buffer_likes == buffer_likes);    
@@ -1126,7 +1120,10 @@ impl<T: Buffer> Path<T>{
             &&& target_likes <= self.linked.tree_likes(ranking).sub(old_path_likes)
             &&& result_likes.sub(replacement_likes) =~= 
                 self.linked.tree_likes(ranking).sub(old_path_likes).sub(target_likes).add(new_path_likes)
-            })
+            &&& result.buffer_likes(new_path_likes) =~= self.linked.buffer_likes(old_path_likes)
+            &&& result.buffer_likes(result_likes.sub(replacement_likes)) =~= 
+                self.linked.buffer_likes(self.linked.tree_likes(ranking).sub(target_likes))
+        })
         decreases self.depth
     {
         let result = self.substitute(replacement, path_addrs);
@@ -1227,83 +1224,10 @@ impl<T: Buffer> Path<T>{
                 );
                 assert(self.linked.valid_ranking(s_ranking)); // trigger
             }
-        }
-    }
-
-    proof fn substitute_buffer_likes_ensures(self, replacement: LinkedBetree<T>, path_addrs: PathAddrs, ranking: Ranking)
-        requires
-            self.linked.valid_ranking(ranking),
-            self.can_substitute(replacement, path_addrs), 
-            self.ranking_for_substitution(replacement, path_addrs, ranking),
-            path_addrs.no_duplicates(),
-            replacement.is_fresh(path_addrs.to_set()),
-            self.linked.dv.is_fresh(set![replacement.root.unwrap()])
-        ensures ({
-            let result = self.substitute(replacement, path_addrs);
-            let result_likes = result.tree_likes(result.the_ranking());
-            let replacement_likes = replacement.tree_likes(ranking);
-            let target_likes = self.target().tree_likes(ranking);
-            let old_path_likes = self.addrs_on_path().to_multiset();
-            let new_path_likes = path_addrs.to_multiset();
-
-            &&& result.buffer_likes(new_path_likes) =~= self.linked.buffer_likes(old_path_likes)
-            &&& result.buffer_likes(result_likes.sub(replacement_likes)) =~= 
-                self.linked.buffer_likes(self.linked.tree_likes(ranking).sub(target_likes))
-            })
-        decreases self.depth
-    {
-        let result = self.substitute(replacement, path_addrs);
-        let s_ranking = self.ranking_after_substitution(replacement, path_addrs, ranking);
-
-        broadcast use LinkedBetree::tree_likes_ignore_ranking;
-        path_addrs.to_multiset_ensures();
-        self.addrs_on_path().to_multiset_ensures();
-
-        if self.depth > 0 {
-            let node = self.linked.root();
-            let r = node.pivots.route(self.key) as nat;
-            node.pivots.route_lemma(self.key);
-
-            let subtree = self.subpath().linked;
-            let new_subtree = self.subpath().substitute(replacement, path_addrs.subrange(1, path_addrs.len() as int));
-
-            self.substitute_ensures(replacement, path_addrs);
-            self.subpath().substitute_ensures(replacement, path_addrs.subrange(1, path_addrs.len() as int));
-
-            let subtree_likes = subtree.tree_likes(s_ranking);
-            let new_subtree_likes = new_subtree.tree_likes(s_ranking);
-            new_subtree.dv.subdisk_implies_ranking_validity(result.dv, s_ranking);
-
-            self.valid_ranking_throughout(ranking);
-            self.subpath().substitute_likes_ensures(replacement, path_addrs.subrange(1, path_addrs.len() as int), ranking);
-
-            let result_likes = result.tree_likes(result.the_ranking());
-            assert(result_likes == result.tree_likes(s_ranking));
-
-            let old_path_likes = self.addrs_on_path().to_multiset();
-            let new_path_likes = path_addrs.to_multiset();
-
-            let old_sub_path_likes = self.subpath().addrs_on_path().to_multiset();
-            let new_sub_path_likes = path_addrs.subrange(1, path_addrs.len() as int).to_multiset();
-
-            assert(old_path_likes =~= self.linked.root_likes().add(old_sub_path_likes)) by {
-                self.subpath().addrs_on_path().to_multiset_ensures();
-                singleton_ensures(self.linked.root.unwrap());
-                assert(seq![self.linked.root.unwrap()] + self.subpath().addrs_on_path() =~= self.addrs_on_path());
-                lemma_multiset_commutative(seq![self.linked.root.unwrap()], self.subpath().addrs_on_path());
-            }
-
-            assert(new_path_likes =~= result.root_likes().add(new_sub_path_likes)) by {
-                singleton_ensures(result.root.unwrap());
-                assert(seq![result.root.unwrap()] + path_addrs.subrange(1, path_addrs.len() as int) =~= path_addrs);
-                lemma_multiset_commutative(seq![result.root.unwrap()], path_addrs.subrange(1, path_addrs.len() as int));
-            }
-
-            self.substitute_likes_ensures(replacement, path_addrs, ranking);
 
             // buffer GOALs
             assert(result.buffer_likes(new_path_likes) == self.linked.buffer_likes(old_path_likes)) by {
-                self.subpath().substitute_buffer_likes_ensures(replacement, path_addrs.subrange(1, path_addrs.len() as int), ranking);
+                // self.subpath().substitute_buffer_likes_ensures(replacement, path_addrs.subrange(1, path_addrs.len() as int), ranking);
 
                 assert(new_subtree.buffer_likes(new_sub_path_likes) == subtree.buffer_likes(old_sub_path_likes));
                 assert(new_subtree.valid_ranking(s_ranking)); // trigger
@@ -1362,8 +1286,143 @@ impl<T: Buffer> Path<T>{
 
                 self.linked.subdisk_implies_same_buffer_likes(result, self.linked.tree_likes(ranking).sub(target_likes));
             }
-        }
+        }   
     }
+
+    // proof fn substitute_buffer_likes_ensures(self, replacement: LinkedBetree<T>, path_addrs: PathAddrs, ranking: Ranking)
+    //     requires
+    //         self.linked.valid_ranking(ranking),
+    //         self.can_substitute(replacement, path_addrs), 
+    //         self.ranking_for_substitution(replacement, path_addrs, ranking),
+    //         path_addrs.no_duplicates(),
+    //         replacement.is_fresh(path_addrs.to_set()),
+    //         self.linked.dv.is_fresh(set![replacement.root.unwrap()])
+    //     ensures ({
+    //         let result = self.substitute(replacement, path_addrs);
+    //         let result_likes = result.tree_likes(result.the_ranking());
+    //         let replacement_likes = replacement.tree_likes(ranking);
+    //         let target_likes = self.target().tree_likes(ranking);
+    //         let old_path_likes = self.addrs_on_path().to_multiset();
+    //         let new_path_likes = path_addrs.to_multiset();
+
+    //         &&& result.buffer_likes(new_path_likes) =~= self.linked.buffer_likes(old_path_likes)
+    //         &&& result.buffer_likes(result_likes.sub(replacement_likes)) =~= 
+    //             self.linked.buffer_likes(self.linked.tree_likes(ranking).sub(target_likes))
+    //         })
+    //     decreases self.depth
+    // {
+    //     let result = self.substitute(replacement, path_addrs);
+    //     let s_ranking = self.ranking_after_substitution(replacement, path_addrs, ranking);
+
+    //     broadcast use LinkedBetree::tree_likes_ignore_ranking;
+    //     path_addrs.to_multiset_ensures();
+    //     self.addrs_on_path().to_multiset_ensures();
+
+    //     if self.depth > 0 {
+    //         let node = self.linked.root();
+    //         let r = node.pivots.route(self.key) as nat;
+    //         node.pivots.route_lemma(self.key);
+
+    //         let subtree = self.subpath().linked;
+    //         let new_subtree = self.subpath().substitute(replacement, path_addrs.subrange(1, path_addrs.len() as int));
+
+    //         self.substitute_ensures(replacement, path_addrs);
+    //         self.subpath().substitute_ensures(replacement, path_addrs.subrange(1, path_addrs.len() as int));
+
+    //         let subtree_likes = subtree.tree_likes(s_ranking);
+    //         let new_subtree_likes = new_subtree.tree_likes(s_ranking);
+    //         new_subtree.dv.subdisk_implies_ranking_validity(result.dv, s_ranking);
+
+    //         self.valid_ranking_throughout(ranking);
+    //         self.subpath().substitute_likes_ensures(replacement, path_addrs.subrange(1, path_addrs.len() as int), ranking);
+
+    //         let result_likes = result.tree_likes(result.the_ranking());
+    //         assert(result_likes == result.tree_likes(s_ranking));
+
+    //         let old_path_likes = self.addrs_on_path().to_multiset();
+    //         let new_path_likes = path_addrs.to_multiset();
+
+    //         let old_sub_path_likes = self.subpath().addrs_on_path().to_multiset();
+    //         let new_sub_path_likes = path_addrs.subrange(1, path_addrs.len() as int).to_multiset();
+
+    //         assert(old_path_likes =~= self.linked.root_likes().add(old_sub_path_likes)) by {
+    //             self.subpath().addrs_on_path().to_multiset_ensures();
+    //             singleton_ensures(self.linked.root.unwrap());
+    //             assert(seq![self.linked.root.unwrap()] + self.subpath().addrs_on_path() =~= self.addrs_on_path());
+    //             lemma_multiset_commutative(seq![self.linked.root.unwrap()], self.subpath().addrs_on_path());
+    //         }
+
+    //         assert(new_path_likes =~= result.root_likes().add(new_sub_path_likes)) by {
+    //             singleton_ensures(result.root.unwrap());
+    //             assert(seq![result.root.unwrap()] + path_addrs.subrange(1, path_addrs.len() as int) =~= path_addrs);
+    //             lemma_multiset_commutative(seq![result.root.unwrap()], path_addrs.subrange(1, path_addrs.len() as int));
+    //         }
+
+    //         self.substitute_likes_ensures(replacement, path_addrs, ranking);
+
+    //         // buffer GOALs
+    //         assert(result.buffer_likes(new_path_likes) == self.linked.buffer_likes(old_path_likes)) by {
+    //             self.subpath().substitute_buffer_likes_ensures(replacement, path_addrs.subrange(1, path_addrs.len() as int), ranking);
+
+    //             assert(new_subtree.buffer_likes(new_sub_path_likes) == subtree.buffer_likes(old_sub_path_likes));
+    //             assert(new_subtree.valid_ranking(s_ranking)); // trigger
+    //             assert(new_sub_path_likes <= new_subtree_likes);
+    //             new_subtree.tree_likes_domain(s_ranking);
+    
+    //             assert(subtree.valid_ranking(ranking));
+    //             assert(old_sub_path_likes <= subtree.tree_likes(ranking));
+
+    //             subtree.tree_likes_domain(ranking);
+    //             subtree.subdisk_implies_same_buffer_likes(self.linked, old_sub_path_likes);
+    //             new_subtree.subdisk_implies_same_buffer_likes(result, new_sub_path_likes);
+
+    //             assert(result.buffer_likes(new_sub_path_likes) == self.linked.buffer_likes(old_sub_path_likes));
+    //             result.root_buffer_likes_ensures();
+    //             self.linked.root_buffer_likes_ensures();
+    //             assert(result.buffer_likes(result.root_likes()) =~= self.linked.buffer_likes(self.linked.root_likes()));
+    
+    //             result.buffer_likes_additive(result.root_likes(), new_sub_path_likes);
+            //     self.linked.buffer_likes_additive(self.linked.root_likes(), old_sub_path_likes);    
+            // }
+
+            // let replacement_likes = replacement.tree_likes(ranking);
+            // let target_likes = self.target().tree_likes(ranking);
+
+            // assert(result.buffer_likes(result_likes.sub(replacement_likes)) =~= 
+            //     self.linked.buffer_likes(self.linked.tree_likes(ranking).sub(target_likes))) 
+            // by {
+            //     assert(
+            //         self.linked.tree_likes(ranking).sub(old_path_likes).sub(target_likes).add(new_path_likes) == 
+            //         self.linked.tree_likes(ranking).sub(target_likes).sub(old_path_likes).add(new_path_likes)
+            //     );
+
+            //     assert(result_likes.sub(replacement_likes) 
+            //         == self.linked.tree_likes(ranking).sub(target_likes).sub(old_path_likes).add(new_path_likes));
+
+            //     self.linked.tree_likes_domain(ranking);
+            //     assert(self.linked.dv.is_sub_disk(result.dv));
+        //         assert(self.linked.tree_likes(ranking).dom() <= result.dv.entries.dom());
+        //         result.buffer_likes_additive(self.linked.tree_likes(ranking).sub(target_likes).sub(old_path_likes), new_path_likes);
+
+        //         assert(result.buffer_likes(result_likes.sub(replacement_likes)) =~= 
+        //             result.buffer_likes(self.linked.tree_likes(ranking).sub(target_likes).sub(old_path_likes)
+        //             ).add(result.buffer_likes(new_path_likes)));
+
+        //         self.linked.subdisk_implies_same_buffer_likes(result, old_path_likes);
+                
+        //         assert(result.buffer_likes(result_likes.sub(replacement_likes)) =~= 
+        //             result.buffer_likes(self.linked.tree_likes(ranking).sub(target_likes).sub(old_path_likes)
+        //             ).add(result.buffer_likes(old_path_likes)));
+
+        //         result.buffer_likes_additive(self.linked.tree_likes(ranking).sub(target_likes).sub(old_path_likes), old_path_likes);
+
+        //         assert(self.linked.tree_likes(ranking).sub(target_likes) =~= 
+        //             self.linked.tree_likes(ranking).sub(target_likes).sub(old_path_likes).add(old_path_likes));
+
+        //         self.linked.subdisk_implies_same_buffer_likes(result, self.linked.tree_likes(ranking).sub(target_likes));
+        //     }
+        // }
+    // }
 }
 
 } // end of verus!
