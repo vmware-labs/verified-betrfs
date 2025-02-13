@@ -7,11 +7,9 @@ use crate::trusted::KVStoreTokenized_v::KVStoreTokenized;
 use crate::spec::AsyncDisk_t::Disk;
 use crate::spec::MapSpec_t::*;
 use crate::spec::SystemModel_t::*;
-use crate::spec::FloatingSeq_t::FloatingSeq;
 use crate::implementation::ConcreteProgramModel_v::*;
 use crate::implementation::MultisetMapRelation_v::*;
 use crate::implementation::DiskLayout_v::*;
-use crate::implementation::Implementation_v::*;
 
 verus!{
 
@@ -51,9 +49,9 @@ impl RefinementObligation for ConcreteProgramModel {
             }
         } else {
             let sb = spec_unmarshall(model.disk.disk.content[spec_superblock_addr()]);
-            let state = view_store_as_kmmap(sb.store);
+            let state = sb.store;
             CrashTolerantAsyncMap::State{
-                versions: view_store_as_singleton_floating_seq(sb.version_index, sb.store),
+                versions: singleton_floating_seq(sb.version_index, sb.store.appv.kmmap),
                 async_ephemeral: AsyncMap::State::init_ephemeral_state(),
                 sync_requests: Map::empty(),
             }
@@ -390,7 +388,7 @@ impl KVStoreTokenized::State {
 
     pub open spec fn consistent_superblock(self, disk: Disk) -> bool
     {
-        self.atomic_state.client_ready() ==> spec_marshall(self.atomic_state.to_sb()) == disk.content[superblock_addr()]
+        self.atomic_state.client_ready() ==> spec_marshall(self.atomic_state.to_sb()) == disk.content[spec_superblock_addr()]
     }
 }
 

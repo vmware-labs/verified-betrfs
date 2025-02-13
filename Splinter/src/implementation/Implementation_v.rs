@@ -20,7 +20,6 @@ use crate::spec::Messages_t::*;
 use crate::implementation::ConcreteProgramModel_v::*;
 use crate::implementation::AtomicState_v::*;
 use crate::implementation::MultisetMapRelation_v::*;
-use crate::spec::FloatingSeq_t::*;
 
 #[allow(unused_imports)]
 use vstd::multiset::*;
@@ -33,20 +32,6 @@ use crate::spec::ImplDisk_t::*;
 use crate::implementation::DiskLayout_v::*;
 
 verus!{
-
-pub closed spec(checked) fn view_store_as_kmmap(store: HashMapWithView<Key, Value>) -> TotalKMMap
-{
-    TotalKMMap(Map::new(
-            |k: Key| true,
-            |k: Key| if store@.contains_key(k@) { Message::Define{value: store@[k@]} }
-                     else { Message::empty() }))
-}
-
-pub closed spec(checked) fn view_store_as_singleton_floating_seq(at_index: nat, store: HashMapWithView<Key, Value>) -> FloatingSeq<Version>
-{
-    FloatingSeq::new(at_index, at_index+1,
-          |i| Version{ appv: MapSpec::State{ kmmap: view_store_as_kmmap(store) } } )
-}
 
 // This struct supplies KVStoreTrait, which has both the entry point to the implementation and the
 // proof hooks to satisfy the refinement obligation trait.

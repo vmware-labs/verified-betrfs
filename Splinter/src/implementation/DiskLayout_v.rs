@@ -8,8 +8,29 @@ use crate::spec::AsyncDisk_t::*;
 use crate::spec::ImplDisk_t::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
+use crate::spec::TotalKMMap_t::*;
+use crate::spec::FloatingSeq_t::*;
 
 verus! {
+
+pub closed spec(checked) fn singleton_floating_seq(at_index: nat, kmmap: TotalKMMap) -> FloatingSeq<Version>
+{
+    FloatingSeq::new(at_index, at_index+1,
+          |i| Version{ appv: MapSpec::State{ kmmap } } )
+}
+
+pub closed spec(checked) fn view_store_as_kmmap(store: HashMapWithView<Key, Value>) -> TotalKMMap
+{
+    TotalKMMap(Map::new(
+            |k: Key| true,
+            |k: Key| if store@.contains_key(k@) { Message::Define{value: store@[k@]} }
+                     else { Message::empty() }))
+}
+
+pub closed spec(checked) fn view_store_as_singleton_floating_seq(at_index: nat, store: HashMapWithView<Key, Value>) -> FloatingSeq<Version>
+{
+    singleton_floating_seq(at_index, view_store_as_kmmap(store))
+}
 
 pub struct Superblock {
     pub store: PersistentState,
@@ -25,9 +46,12 @@ pub struct ISuperblock {
 
 impl View for ISuperblock {
     type V = Superblock;
-    spec fn view(&self) -> Self::V
+    open spec fn view(&self) -> Self::V
     {
-        Superblock{ store: self.store, version_index: self.version_index }
+        Superblock{
+            store: PersistentState{ appv: MapSpec::State{ kmmap: view_store_as_kmmap(self.store)}},
+            version_index: self.version_index
+        }
     }
 }
 
@@ -44,7 +68,7 @@ pub closed spec fn spec_unmarshall(raw_page: RawPage) -> (out: Superblock)
 // This is gonna be hard because Superblock isn't physical yet :vP
 pub fn unmarshall(raw_page: RawPage) -> (out: ISuperblock)
 ensures
-    out == spec_unmarshall(raw_page)
+    out@ == spec_unmarshall(raw_page)
 {
     assume( false ); // TODO
     unreached()
@@ -65,7 +89,7 @@ pub open spec fn mkfs(disk: Disk) -> bool
     &&& disk.content.contains_key(spec_superblock_addr())
     &&& disk.content[spec_superblock_addr()] ==
         spec_marshall(Superblock{
-            state: PersistentState{ appv: my_init() },
+            store: PersistentState{ appv: my_init() },
             version_index: 0,
         })
 }

@@ -98,7 +98,7 @@ impl AtomicState {
             let superblock = spec_unmarshall(raw_page);
             post == Self{
                 recovery_state: RecoveryState::RecoveryComplete,
-                history: FloatingSeq::new(superblock.version_index, superblock.version_index+1, |i| superblock.state),
+                history: singleton_floating_seq(superblock.version_index, superblock.store.appv.kmmap),
                 in_flight_version: None,
                 persistent_version: superblock.version_index,
             }
@@ -163,8 +163,8 @@ impl AtomicState {
                     assert forall |i| #[trigger] post.history.is_active(i) implies post.history[i].appv.invariant() by {
                         let superblock = spec_unmarshall(raw_page);
                         assert( i == superblock.version_index );
-                        assert( post.history[i] == superblock.state );
-                        assert( superblock.state.appv.invariant() ) by {
+                        assert( post.history[i] == superblock.store );
+                        assert( superblock.store.appv.invariant() ) by {
                             // TODO remember that invariant survives disk
                             assume( false );
                         }
