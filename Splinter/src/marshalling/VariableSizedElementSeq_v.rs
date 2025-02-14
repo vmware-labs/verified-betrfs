@@ -650,7 +650,7 @@ impl <
                 while i < len - 1
                 invariant
                     0 <= i < len,
-                    forall |ip, jp| 0 <= ip <= jp <= i ==> tbl[jp] as int <= tbl[ip] as int
+                    forall |ip, jp| 0 <= ip <= jp <= i ==> #[trigger] tbl[jp] as int <= #[trigger] tbl[ip] as int
                 {
                     assert( tbl[i as int] as int == self.table(idata)[i as int] );  // trigger
                     assert( tbl[i as int + 1] as int == self.table(idata)[i as int +1] );   // trigger
