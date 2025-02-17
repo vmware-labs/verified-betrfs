@@ -334,7 +334,7 @@ impl Implementation {
             let ghost post_state = AtomicState {
                 recovery_state: RecoveryState::RecoveryComplete,
                 history: view_store_as_singleton_floating_seq(superblock.version_index, superblock.store),
-                in_flight_version: None,
+                in_flight: None,
                 persistent_version: superblock.version_index,
             };
 
