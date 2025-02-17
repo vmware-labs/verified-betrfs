@@ -126,12 +126,12 @@ impl AtomicState {
     pub open spec fn execute_sync_end(pre: Self, post: Self, disk_lbl: AsyncDisk::Label, disk_req_id: ID) -> bool
     {
         &&& pre.client_ready()
-        // &&& pre.in_flight is Some // provable
+        &&& pre.in_flight is Some 
+        &&& disk_req_id == pre.in_flight.unwrap().req_id
         &&& disk_lbl == AsyncDisk::Label::DiskOps{
             requests: Map::empty(),
             responses: Map::empty().insert(disk_req_id, DiskResponse::WriteResp{}),
         }
-        // TODO: require inflight unwrap->req_id instead?
         &&& {
             let new_persistent_version = pre.in_flight.unwrap().version;
             &&& post == Self{
