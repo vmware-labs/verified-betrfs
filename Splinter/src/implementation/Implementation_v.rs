@@ -255,7 +255,7 @@ impl Implementation {
         self.inv(),
         self.instance_id() == api.instance_id()
     {
-        {
+        { // braces to scope variables used in this step
             let ghost pre_state: AtomicState = self.i();
             let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
             proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
@@ -278,14 +278,8 @@ impl Implementation {
             let ghost disk_request_tuples = multiset_map_singleton(req_id_perm@, disk_req@);
             proof { multiset_map_singleton_ensures(req_id_perm@, disk_req@); }
 
-//             assert( disk_response_tuples <= empty_disk_responses.multiset() );
-//             assert( empty_disk_responses.instance_id() == self.instance@.id() );
             assert( disk_lbl->responses == multiset_to_map(disk_response_tuples) ); // extn equality
-//             assert( AtomicState::disk_transition(
-//                 atomic_state.value(), post_state, disk_event_lbl, disk_lbl, disk_req_id) );
-            // I needed an awful lot of tedious debugging-in-the-dark to figure out which
-            // VerusSync require clause I'd violated. :v(
-//             assert( disk_lbl->requests == multiset_to_map(disk_request_tuples) );
+                                                                                    //
             let tracked disk_request_tokens = self.instance.borrow().disk_transition(
                 KVStoreTokenized::Label::DiskOp{
                     disk_event_lbl,
@@ -308,7 +302,7 @@ impl Implementation {
         assert( self.state@.value().recovery_state is AwaitingSuperblock );
         ////////////////////////////////////////
 
-        {
+        { // braces to scope variables used in this step
             let ghost pre_state: AtomicState = self.i();
             let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
             proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
@@ -327,6 +321,10 @@ impl Implementation {
             };
 
             let superblock = unmarshall(raw_page);
+            // Record our learnings in the physical state.
+            self.store = superblock.store;
+
+            // Compute the next ghost state and transition our token
             let ghost post_state = AtomicState {
                 recovery_state: RecoveryState::RecoveryComplete,
                 history: view_store_as_singleton_floating_seq(superblock.version_index, superblock.store),
@@ -363,12 +361,6 @@ impl Implementation {
 
             self.state = Tracked(atomic_state);
         }
-
-        assert( self.state@.value().recovery_state is RecoveryComplete );
-
-        assume( false );
-        assert( self.i().mapspec().kmmap == self.view_store_as_kmmap() );
-        assert( self.inv() );
     }
 }
 
