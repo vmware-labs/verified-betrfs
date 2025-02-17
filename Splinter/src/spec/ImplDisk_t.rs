@@ -52,7 +52,7 @@ pub broadcast proof fn au_count_equals_iau_count()
 ;
 
 pub type IDiskRequest = GenericDiskRequest<IAddress>;
-pub type IDiskResponse = GenericDiskResponse<IAddress>;
+pub type IDiskResponse = GenericDiskResponse;
 
 // TODO delete
 // pub enum IDiskRequest {
@@ -77,8 +77,8 @@ impl IDiskRequest {
 impl IDiskResponse {
     pub open spec fn view(self) -> DiskResponse {
         match self {
-            Self::ReadResp{from, data} => DiskResponse::ReadResp{from: from@, data: data},
-            Self::WriteResp{to} => DiskResponse::WriteResp{to: to@}, 
+            Self::ReadResp{data} => DiskResponse::ReadResp{data: data},
+            Self::WriteResp{} => DiskResponse::WriteResp{}, 
         }
     }
 }

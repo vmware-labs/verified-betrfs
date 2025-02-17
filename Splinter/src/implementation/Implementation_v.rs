@@ -315,9 +315,9 @@ impl Implementation {
 
             let disk_resp = IDiskRequest::ReadReq{from: superblock_addr() };
             let (disk_req_id, i_disk_response, disk_response_token) = api.receive_disk_response();
-            let (from,raw_page) = match i_disk_response {
-                IDiskResponse::ReadResp{from, data} => (from,data),
-                IDiskResponse::WriteResp{to} => {
+            let raw_page = match i_disk_response {
+                IDiskResponse::ReadResp{data} => data,
+                IDiskResponse::WriteResp{} => {
                     // TODO This assert-false should be an assumption we pull down from the system:
                     // whenever state is AwaitingSuperblock, the only possible responses in the
                     // disk bus buffer are ReadResps.
@@ -325,10 +325,10 @@ impl Implementation {
                     unreached()
                 }
             };
-            // TODO likewise, by system-level invariant, the from address in the response can only
-            // be the superblock addr. (Although this we should fix by removing addresses from disk
-            // responses.)
-            assume( from@ == spec_superblock_addr() );
+            // // TODO likewise, by system-level invariant, the from address in the response can only
+            // // be the superblock addr. (Although this we should fix by removing addresses from disk
+            // // responses.)
+            // assume( from@ == spec_superblock_addr() );
 
             let superblock = unmarshall(raw_page);
             let ghost post_state = AtomicState {

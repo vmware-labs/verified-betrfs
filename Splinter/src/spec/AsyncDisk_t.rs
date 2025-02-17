@@ -67,14 +67,12 @@ pub enum GenericDiskRequest<A> {
 
 pub type DiskRequest = GenericDiskRequest<Address>;
 
-pub enum GenericDiskResponse<A> {
-    // TODO(jialin): Why are there Addresses here, since the ids of the corresponding requests
-    // determine them?
-    ReadResp{from: A, data: RawPage},
-    WriteResp{to: A},
+pub enum GenericDiskResponse {
+    ReadResp{data: RawPage},
+    WriteResp{},
 }
 
-pub type DiskResponse = GenericDiskResponse<Address>;
+pub type DiskResponse = GenericDiskResponse;
 
 state_machine!{ AsyncDisk {
     fields {
@@ -131,7 +129,6 @@ state_machine!{ AsyncDisk {
         require pre.requests[id]->from.wf();
 
         let read_resp = DiskResponse::ReadResp{
-            from: pre.requests[id]->from, 
             data: pre.disk.content[pre.requests[id]->from],
         };
 
@@ -153,7 +150,6 @@ state_machine!{ AsyncDisk {
         // to a different checksum-correct state (corrupted bits leads to mismatching checksums)
 
         let read_resp = DiskResponse::ReadResp{
-            from: pre.requests[id]->from, 
             data: fake_content,
         };
 
@@ -173,7 +169,7 @@ state_machine!{ AsyncDisk {
         // TODO: require write data matches its checksum
 
         let write_req = pre.requests[id];
-        let write_resp = DiskResponse::WriteResp{to: write_req->to};
+        let write_resp = DiskResponse::WriteResp{};
 
         update requests = pre.requests.remove(id);
         update responses = pre.responses.insert(id, write_resp);

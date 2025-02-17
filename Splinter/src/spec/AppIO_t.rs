@@ -168,7 +168,7 @@ impl<P: ProgramModel> TrustedAPI<P> {
             &&& P::next(pre@@, out.1@@, ProgramLabel::DiskIO{disk_lbl})
         })
     {
-        let vec = vec![(0, IDiskResponse::WriteResp{to: IAddress{au: 0, page: 0}})]; // TODO: get rid of the place holder
+        let vec = vec![(0, IDiskResponse::WriteResp{})]; // TODO: get rid of the place holder
         (vec, Tracked::assume_new())   
     }
 }

@@ -92,7 +92,7 @@ impl AtomicState {
         // &&& pre.recovery_state is AwaitingSuperblock // can prove this by invariant
         &&& disk_lbl == AsyncDisk::Label::DiskOps{
             requests: Map::empty(),
-            responses: Map::empty().insert(disk_req_id, DiskResponse::ReadResp{from: spec_superblock_addr(), data: raw_page }),
+            responses: Map::empty().insert(disk_req_id, DiskResponse::ReadResp{data: raw_page }),
             }
         &&& {
             let superblock = spec_unmarshall(raw_page);
@@ -123,7 +123,7 @@ impl AtomicState {
         // &&& pre.in_flight_version is Some // provable
         &&& disk_lbl == AsyncDisk::Label::DiskOps{
             requests: Map::empty(),
-            responses: Map::empty().insert(disk_req_id, DiskResponse::WriteResp{to: spec_superblock_addr()}),
+            responses: Map::empty().insert(disk_req_id, DiskResponse::WriteResp{}),
         }
         &&& {
             let new_persistent_version = pre.in_flight_version->0;
