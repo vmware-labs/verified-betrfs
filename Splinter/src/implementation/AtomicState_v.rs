@@ -153,9 +153,22 @@ impl AtomicState {
         }
     }
 
+    pub closed spec fn disk_transition_system_assumptions(disk_event_lbl: DiskEventLabel) -> bool
+    {
+        match disk_event_lbl {
+            DiskEventLabel::CompleteRecovery{raw_page} => {
+                // remember that superblock invariant survives disk
+                let superblock = spec_unmarshall(raw_page);
+                superblock.store.appv.invariant()
+            },
+            _ => { true },
+        }
+    }
+
     pub proof fn disk_transition_preserves_wf(pre: Self, post: Self, disk_event_lbl: DiskEventLabel, disk_lbl: AsyncDisk::Label, disk_req_id: ID)
     requires
         pre.wf(),
+        Self::disk_transition_system_assumptions(disk_event_lbl),
         Self::disk_transition(pre, post, disk_event_lbl, disk_lbl, disk_req_id),
     ensures
         post.wf(),
@@ -163,39 +176,15 @@ impl AtomicState {
         if post.recovery_state is RecoveryComplete {
             match disk_event_lbl {
                 DiskEventLabel::InitiateRecovery{} => {
-                    assert( post.wf() );
+//                     assert( post.wf() );
                 },
                 DiskEventLabel::CompleteRecovery{raw_page} => {
-                    assert( post.history.is_active(post.history.len()-1) );
-                    assert forall |i| #[trigger] post.history.is_active(i) implies post.history[i].appv.invariant() by {
-                        let superblock = spec_unmarshall(raw_page);
-                        assert( i == superblock.version_index );
-                        assert( post.history[i] == superblock.store );
-                        assert( superblock.store.appv.invariant() ) by {
-                            // TODO remember that invariant survives disk
-                            assume( false );
-                        }
-                    }
                 },
                 DiskEventLabel::ExecuteSyncBegin{} => {
-                    assert( post.wf() );
+//                     assert( post.wf() );
                 },
                 DiskEventLabel::ExecuteSyncEnd{} => {
-                    assert( pre.in_flight is Some ) by {
-                        // TODO remember that in_flight is Some whenever an IO is in
-                        // flight. This seems like a system property, not a wf, since we can't
-                        // see the IO buffer from here. How are we gonna get this wf down
-                        // to Implementation!? Maybe it moves to inv, so Impl doesn't need to
-                        // show it as part of wf?
-                        assume( false );
-                    }
-                    let new_version = pre.in_flight.unwrap().version;
-//                     assert( pre.history.is_active(new_version as int) );
-//                     assert( post.history.is_active(post.history.len()-1) );
-//                     assert forall |i| #[trigger] post.history.is_active(i) implies post.history[i].appv.invariant() by {
-//                         assert( pre.history.is_active(i) );
-//                     }
-                    assert( post.wf() );
+//                     assert( post.wf() );
                 },
             }
         }

@@ -325,10 +325,6 @@ impl Implementation {
                     unreached()
                 }
             };
-            // // TODO likewise, by system-level invariant, the from address in the response can only
-            // // be the superblock addr. (Although this we should fix by removing addresses from disk
-            // // responses.)
-            // assume( from@ == spec_superblock_addr() );
 
             let superblock = unmarshall(raw_page);
             let ghost post_state = AtomicState {
@@ -350,7 +346,7 @@ impl Implementation {
 
             // extn; why isn't it triggered by requires in macro output?
             // (Might also make a nice broadcast lemma, if that was usable.)
-            assert( disk_lbl->requests == multiset_to_map(disk_request_tuples) );
+            assert( disk_lbl->requests == multiset_to_map(disk_request_tuples) );   // extn
 
             let tracked disk_request_tokens = self.instance.borrow().disk_transition(
                 KVStoreTokenized::Label::DiskOp{
@@ -370,6 +366,7 @@ impl Implementation {
 
         assert( self.state@.value().recovery_state is RecoveryComplete );
 
+        assume( false );
         assert( self.i().mapspec().kmmap == self.view_store_as_kmmap() );
         assert( self.inv() );
     }

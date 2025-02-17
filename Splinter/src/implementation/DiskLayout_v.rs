@@ -13,13 +13,13 @@ use crate::spec::FloatingSeq_t::*;
 
 verus! {
 
-pub closed spec(checked) fn singleton_floating_seq(at_index: nat, kmmap: TotalKMMap) -> FloatingSeq<Version>
+pub open spec(checked) fn singleton_floating_seq(at_index: nat, kmmap: TotalKMMap) -> FloatingSeq<Version>
 {
     FloatingSeq::new(at_index, at_index+1,
           |i| Version{ appv: MapSpec::State{ kmmap } } )
 }
 
-pub closed spec(checked) fn view_store_as_kmmap(store: HashMapWithView<Key, Value>) -> TotalKMMap
+pub open spec(checked) fn view_store_as_kmmap(store: HashMapWithView<Key, Value>) -> TotalKMMap
 {
     TotalKMMap(Map::new(
             |k: Key| true,
@@ -27,7 +27,7 @@ pub closed spec(checked) fn view_store_as_kmmap(store: HashMapWithView<Key, Valu
                      else { Message::empty() }))
 }
 
-pub closed spec(checked) fn view_store_as_singleton_floating_seq(at_index: nat, store: HashMapWithView<Key, Value>) -> FloatingSeq<Version>
+pub open spec(checked) fn view_store_as_singleton_floating_seq(at_index: nat, store: HashMapWithView<Key, Value>) -> FloatingSeq<Version>
 {
     singleton_floating_seq(at_index, view_store_as_kmmap(store))
 }

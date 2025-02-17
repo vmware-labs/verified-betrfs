@@ -7,7 +7,6 @@ use vstd::tokens::InstanceId;
 use crate::spec::MapSpec_t::{Request, Reply, Input, ID};
 use crate::spec::KeyType_t::Key;
 use crate::spec::Messages_t::Value;
-use crate::spec::AsyncDisk_t::*;
 use crate::spec::ImplDisk_t::*;
 
 use crate::implementation::MultisetMapRelation_v::*;    // TODO move to _t, I guess
