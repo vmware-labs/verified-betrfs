@@ -2299,7 +2299,7 @@ impl<T> LinkedBetree<T> {
 }
 
 impl<T: Buffer> LinkedBetree<T>{
-    proof fn compact_new_ranking(self, start: nat, end: nat, compacted_buffer: T, new_addrs: TwoAddrs, ranking: Ranking) -> (new_ranking: Ranking)
+    pub proof fn compact_new_ranking(self, start: nat, end: nat, compacted_buffer: T, new_addrs: TwoAddrs, ranking: Ranking) -> (new_ranking: Ranking)
         requires 
             self.wf(), 
             self.has_root(),
