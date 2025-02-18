@@ -1116,9 +1116,15 @@ state_machine!{ LikesBetree {
         reveal(LinkedBetreeVars::State::next_by);
     }
 
-    #[inductive(internal_flush_memtable)]
-    #[verifier::spinoff_prover]
-    fn internal_flush_memtable_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, new_addrs: TwoAddrs) { 
+    pub proof fn internal_flush_memtable_satisfies_strong_step(pre: Self, post: Self, lbl: Label, 
+        new_betree: LinkedBetreeVars::State<SimpleBuffer>, new_addrs: TwoAddrs) -> (istep: LinkedBetreeVars::Step<SimpleBuffer>)
+        requires 
+            pre.inv(),
+            Self::internal_flush_memtable(pre, post, lbl, new_betree, new_addrs),
+        ensures 
+            pre.betree.strong_step(istep),
+            LinkedBetreeVars::State::next_by(pre.betree, post.betree, lbl->linked_lbl, istep)
+    {
         reveal(LinkedBetreeVars::State::next_by);
 
         let buffer = pre.betree.memtable.buffer;
@@ -1130,7 +1136,6 @@ state_machine!{ LikesBetree {
 
         broadcast use 
             LinkedBetree::reachable_betree_addrs_ignore_ranking, 
-            LinkedBetree::children_likes_ignore_ranking, 
             LinkedBetree::tree_likes_ignore_ranking;
 
         new_betree.linked.dv.subdisk_implies_ranking_validity(pushed.dv, pushed_ranking);
@@ -1143,12 +1148,33 @@ state_machine!{ LikesBetree {
         pre.betree.linked.tree_likes_domain(pushed_ranking);
         pre.betree.linked.buffer_likes_domain(pre.betree_likes);
 
-        let linked_step = LinkedBetreeVars::Step::internal_flush_memtable(buffer, new_betree.linked, new_addrs);
-        LinkedBetreeVars::State::inv_next_by(pre.betree, new_betree, lbl->linked_lbl, linked_step);
-        assert(new_betree.inv());
+        return LinkedBetreeVars::Step::internal_flush_memtable(new_betree.memtable.buffer, new_betree.linked, new_addrs);
+    }
+
+    #[inductive(internal_flush_memtable)]
+    #[verifier::spinoff_prover]
+    fn internal_flush_memtable_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, new_addrs: TwoAddrs) { 
+        let buffer = pre.betree.memtable.buffer;
+        let pushed = pre.betree.linked.push_memtable(buffer, new_addrs);
+
+        assert(new_betree.inv()) by {
+            let linked_step = Self::internal_flush_memtable_satisfies_strong_step(pre, post, lbl, new_betree, new_addrs);
+            LinkedBetreeVars::State::inv_next_by(pre.betree, new_betree, lbl->linked_lbl, linked_step);
+        }
+
+        let ranking = pre.betree.linked.the_ranking();
+        let pushed_ranking = pre.betree.linked.push_memtable_new_ranking(buffer, new_addrs, ranking);
+
+        broadcast use 
+            LinkedBetree::reachable_betree_addrs_ignore_ranking, 
+            LinkedBetree::children_likes_ignore_ranking, 
+            LinkedBetree::tree_likes_ignore_ranking;
 
         pushed.valid_view_implies_same_transitive_likes(post.betree.linked);
         assert(post.betree.linked.transitive_likes() == pushed.transitive_likes());
+        
+        pre.betree.linked.tree_likes_domain(pushed_ranking);
+        pre.betree.linked.buffer_likes_domain(pre.betree_likes);
 
         let (betree_likes, buffer_likes) = post.betree.linked.transitive_likes();
         if pre.betree.linked.has_root() {
@@ -1262,10 +1288,15 @@ state_machine!{ LikesBetree {
         assert(post.buffer_likes == buffer_likes);
     }
 
-    #[inductive(internal_split)]
-    #[verifier::spinoff_prover]
-    fn internal_split_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
-        path: Path<SimpleBuffer>, request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs) {
+    pub proof fn internal_split_satisfies_strong_step(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
+        path: Path<SimpleBuffer>, request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs) -> (istep: LinkedBetreeVars::Step<SimpleBuffer>)
+        requires 
+            pre.inv(),
+            Self::internal_split(pre, post, lbl, new_betree, path, request, new_addrs, path_addrs),
+        ensures 
+            pre.betree.strong_step(istep),
+            LinkedBetreeVars::State::next_by(pre.betree, post.betree, lbl->linked_lbl, istep)
+    {
         reveal(LinkedBetreeVars::State::next_by);
 
         let ranking = pre.betree.linked.the_ranking();
@@ -1280,14 +1311,26 @@ state_machine!{ LikesBetree {
             assert(splitted.reachable_buffer_addrs() <= new_betree.linked.buffer_dv.repr());
         }
 
+        return LinkedBetreeVars::Step::internal_split(new_betree.linked, path, request, new_addrs, path_addrs);
+    }
+
+    #[inductive(internal_split)]
+    #[verifier::spinoff_prover]
+    fn internal_split_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
+        path: Path<SimpleBuffer>, request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs) {
+
         assert(new_betree.inv()) by {
-            let linked_step = LinkedBetreeVars::Step::internal_split(new_betree.linked, path, request, new_addrs, path_addrs);
+            let linked_step = Self::internal_split_satisfies_strong_step(pre, post, lbl, new_betree, path, request, new_addrs, path_addrs);
             LinkedBetreeVars::State::inv_next_by(pre.betree, new_betree, lbl->linked_lbl, linked_step);
         }
+
+        let splitted = LinkedBetreeVars::State::post_split(path, request, new_addrs, path_addrs);
+        pre.betree.post_split_ensures(path, request, new_addrs, path_addrs);
 
         assert(splitted.transitive_likes() == (post.betree_likes, post.buffer_likes)) by {
             let subtree = path.target();            
             let new_subtree = subtree.split_parent(request, new_addrs);
+            let ranking = pre.betree.linked.the_ranking();
 
             path.target_ensures();
             path.valid_ranking_throughout(ranking);
@@ -1337,19 +1380,39 @@ state_machine!{ LikesBetree {
         }
         splitted.valid_view_implies_same_transitive_likes(new_betree.linked);
     }
+
+    pub proof fn internal_flush_satisfies_strong_step(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
+        path: Path<SimpleBuffer>, child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, path_addrs: PathAddrs) -> (istep: LinkedBetreeVars::Step<SimpleBuffer>)
+        requires 
+            pre.inv(),
+            Self::internal_flush(pre, post, lbl, new_betree, path, child_idx, buffer_gc, new_addrs, path_addrs),
+            new_betree.linked.transitive_likes() == (post.betree_likes, post.buffer_likes),
+        ensures 
+            pre.betree.strong_step(istep),
+            LinkedBetreeVars::State::next_by(pre.betree, post.betree, lbl->linked_lbl, istep)
+    {
+        reveal(LinkedBetreeVars::State::next_by);
+        let flushed = LinkedBetreeVars::State::post_flush(path, child_idx, buffer_gc, new_addrs, path_addrs);
+        pre.betree.post_flush_ensures(path, child_idx, buffer_gc, new_addrs, path_addrs);
+
+        flushed.valid_view_implies_same_transitive_likes(new_betree.linked);
+        flushed.tree_likes_domain(flushed.the_ranking());
+        flushed.buffer_likes_domain(post.betree_likes);
+
+        return LinkedBetreeVars::Step::internal_flush(new_betree.linked, path, child_idx, buffer_gc, new_addrs, path_addrs);
+    }
    
     #[inductive(internal_flush)]
     fn internal_flush_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
         path: Path<SimpleBuffer>, child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, path_addrs: PathAddrs) {
-        reveal(LinkedBetreeVars::State::next_by);
 
-        let ranking = pre.betree.linked.the_ranking();
         let flushed = LinkedBetreeVars::State::post_flush(path, child_idx, buffer_gc, new_addrs, path_addrs);
         pre.betree.post_flush_ensures(path, child_idx, buffer_gc, new_addrs, path_addrs);
 
         assert(flushed.transitive_likes() == (post.betree_likes, post.buffer_likes)) by {
             let subtree = path.target();
             let new_subtree = path.target().flush(child_idx, buffer_gc, new_addrs);
+            let ranking = pre.betree.linked.the_ranking();
 
             path.target_ensures();
             path.valid_ranking_throughout(ranking);
@@ -1397,22 +1460,36 @@ state_machine!{ LikesBetree {
         }
 
         flushed.valid_view_implies_same_transitive_likes(new_betree.linked);
-
-        assert(flushed.reachable_buffers_preserved(new_betree.linked)) by {
-            flushed.tree_likes_domain(flushed.the_ranking());
-            flushed.buffer_likes_domain(post.betree_likes);
-        }
-
         assert(new_betree.inv()) by {
-            let linked_step = LinkedBetreeVars::Step::internal_flush(new_betree.linked, path, child_idx, buffer_gc, new_addrs, path_addrs);
+            let linked_step = Self::internal_flush_satisfies_strong_step(pre, post, lbl, new_betree, path, child_idx, buffer_gc, new_addrs, path_addrs);
             LinkedBetreeVars::State::inv_next_by(pre.betree, new_betree, lbl->linked_lbl, linked_step);
         }
     }
-   
+
+    pub proof fn internal_compact_satisfies_strong_step(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
+        path: Path<SimpleBuffer>, start: nat, end: nat, compacted_buffer: SimpleBuffer, new_addrs: TwoAddrs, path_addrs: PathAddrs) -> (istep: LinkedBetreeVars::Step<SimpleBuffer>)
+        requires 
+            pre.inv(),
+            Self::internal_compact(pre, post, lbl, new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs),
+            new_betree.linked.transitive_likes() == (post.betree_likes, post.buffer_likes),
+        ensures 
+            pre.betree.strong_step(istep),
+            LinkedBetreeVars::State::next_by(pre.betree, post.betree, lbl->linked_lbl, istep)
+    {
+        reveal(LinkedBetreeVars::State::next_by);
+        let compacted = LinkedBetreeVars::State::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs);
+        pre.betree.post_compact_ensures(path, start, end, compacted_buffer, new_addrs, path_addrs);
+
+        compacted.valid_view_implies_same_transitive_likes(new_betree.linked);
+        compacted.tree_likes_domain(compacted.the_ranking());
+        compacted.buffer_likes_domain(post.betree_likes);
+
+        return LinkedBetreeVars::Step::internal_compact(new_betree.linked, path, start, end, compacted_buffer, new_addrs, path_addrs);
+    }
+
     #[inductive(internal_compact)]
     fn internal_compact_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
         path: Path<SimpleBuffer>, start: nat, end: nat, compacted_buffer: SimpleBuffer, new_addrs: TwoAddrs, path_addrs: PathAddrs) { 
-        reveal(LinkedBetreeVars::State::next_by);
 
         let ranking = pre.betree.linked.the_ranking();
         let compacted = LinkedBetreeVars::State::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs);
@@ -1452,13 +1529,8 @@ state_machine!{ LikesBetree {
         }
 
         compacted.valid_view_implies_same_transitive_likes(new_betree.linked);
-        assert(compacted.reachable_buffers_preserved(new_betree.linked)) by {
-            compacted.tree_likes_domain(compacted.the_ranking());
-            compacted.buffer_likes_domain(post.betree_likes);
-        }
-
         assert(new_betree.inv()) by {
-            let linked_step = LinkedBetreeVars::Step::internal_compact(new_betree.linked, path, start, end, compacted_buffer, new_addrs, path_addrs);
+            let linked_step = Self::internal_compact_satisfies_strong_step(pre, post, lbl, new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs);
             LinkedBetreeVars::State::inv_next_by(pre.betree, new_betree, lbl->linked_lbl, linked_step);
         } 
     }

@@ -37,43 +37,45 @@ impl LikesBetree::State {
     {
     }
 
-    proof fn next_refines(self, post: Self, lbl: LikesBetree::Label) -> (istep: LinkedBetreeVars::Step<SimpleBuffer>)
+    proof fn next_refines(pre: Self, post: Self, lbl: LikesBetree::Label) -> (istep: LinkedBetreeVars::Step<SimpleBuffer>)
         requires 
-            self.inv(),
+        pre.inv(),
             post.inv(),
-            LikesBetree::State::next(self, post, lbl),
+            LikesBetree::State::next(pre, post, lbl),
         ensures
-            self.i().strong_step(istep),
-            LinkedBetreeVars::State::next_by(self.i(), post.i(), lbl.i(), istep)
+            pre.i().strong_step(istep),
+            LinkedBetreeVars::State::next_by(pre.i(), post.i(), lbl.i(), istep)
     {
-        assume(false);
+        reveal(LikesBetree::State::next);
+        reveal(LikesBetree::State::next_by);
+        reveal(LinkedBetreeVars::State::next);
+        reveal(LinkedBetreeVars::State::next_by);
+
+        match choose |step| LikesBetree::State::next_by(pre, post, lbl, step) {
+            LikesBetree::Step::likes_noop(new_betree) => { 
+                return choose |istep| LinkedBetreeVars::State::next_by(pre.i(), post.i(), lbl.i(), istep);
+            }
+            LikesBetree::Step::internal_flush_memtable(new_betree, new_addrs) => {
+                return Self::internal_flush_memtable_satisfies_strong_step(pre, post, lbl, new_betree, new_addrs);
+            }
+            LikesBetree::Step::internal_grow(new_betree, new_root_addr) => {
+                return LinkedBetreeVars::Step::internal_grow(new_root_addr);
+            }
+            LikesBetree::Step::internal_split(new_betree, path, request, new_addrs, path_addrs) => {
+                return Self::internal_split_satisfies_strong_step(pre, post, lbl, new_betree, path, request, new_addrs, path_addrs);
+            }
+            LikesBetree::Step::internal_flush(new_betree, path, child_idx, buffer_gc, new_addrs, path_addrs) => {
+                return Self::internal_flush_satisfies_strong_step(pre, post, lbl, new_betree, path, child_idx, buffer_gc, new_addrs, path_addrs);
+            }
+            LikesBetree::Step::internal_compact(new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs) => {
+                return Self::internal_compact_satisfies_strong_step(pre, post, lbl, new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs);
+            }
+            LikesBetree::Step::internal_noop() => {
+                return LinkedBetreeVars::Step::internal_noop();
+            }
+            _ => { assert(false); }
+        }
         return arbitrary();
-
-        // reveal(LikesBetree::State::next_by);
-        // reveal(LinkedBetreeVars::State::next);
-
-        // match step
-        // {
-        //     LikesBetree::Step::likes_noop(receipt) => {  } 
-            // LinkedBetreeVars::Step::put() => 
-            //     { self.put_refines(post, lbl); }
-            // LinkedBetreeVars::Step::freeze_as() => 
-            //     { self.freeze_as_refines(post, lbl); }
-            // LinkedBetreeVars::Step::internal_flush_memtable(new_memtable, new_linked, new_addrs) => 
-            //     { self.internal_flush_memtable_refines(post, lbl, new_memtable, new_linked, new_addrs); }
-            // LinkedBetreeVars::Step::internal_grow(new_root_addr) => 
-            //     { self.internal_grow_refines(post, lbl, new_root_addr); }
-            // LinkedBetreeVars::Step::internal_split(new_linked, path, split_request, new_addrs, path_addrs) => 
-            //     { self.internal_split_refines(post, lbl, new_linked, path, split_request, new_addrs, path_addrs); }
-            // LinkedBetreeVars::Step::internal_flush(new_linked, path, child_idx, buffer_gc, new_addrs, path_addrs) => 
-            //     { self.internal_flush_refines(post, lbl, new_linked, path, child_idx, buffer_gc, new_addrs, path_addrs); }
-            // LinkedBetreeVars::Step::internal_compact(new_linked, path, start, end, compacted_buffer, new_addrs, path_addrs) => 
-            //     { self.internal_compact_refines(post, lbl, new_linked, path, start, end, compacted_buffer, new_addrs, path_addrs); }
-            // LinkedBetreeVars::Step::internal_noop() => 
-            //     { self.internal_noop_noop(post, lbl); }
-        //     _ => 
-        //         { assume(false); } 
-        // }
     }
 } // end impl LikesBetree::State
 

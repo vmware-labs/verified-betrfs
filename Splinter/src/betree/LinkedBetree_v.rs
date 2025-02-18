@@ -1511,26 +1511,6 @@ pub proof fn path_addrs_to_set_additive(path_addrs: PathAddrs)
 // proofs used by invariant
 
 impl<T> LinkedBetree<T> {
-
-    // proof fn build_tight_ensures(self)
-    //     requires self.acyclic()
-    //     ensures 
-    //         self.build_tight().acyclic(),
-    //         self.build_tight().reachable_betree_addrs() == self.reachable_betree_addrs(),
-    //         self.build_tight().reachable_buffer_addrs() == self.reachable_buffer_addrs(),
-    // {
-    //     let result = self.build_tight();
-    //     let reachable_dom = self.reachable_betree_addrs();
-
-    //     broadcast use LinkedBetree::reachable_betree_addrs_ignore_ranking, LinkedBetree::reachable_addrs_are_closed;
-    //     lemma_len_subset(result.dv.entries.dom(), self.dv.entries.dom());
-    //     assert(result.valid_ranking(self.the_ranking()));
-    //     assert(result.acyclic());
-    
-    //     self.agreeable_disks_same_reachable_betree_addrs(result, self.the_ranking());
-    //     self.same_reachable_betree_addrs_implies_same_buffer_addrs(result);
-    // }
-
     pub proof fn child_at_idx_acyclic(self, idx: nat)
         requires 
             self.acyclic(), 
