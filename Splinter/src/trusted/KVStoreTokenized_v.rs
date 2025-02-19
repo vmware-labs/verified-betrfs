@@ -28,10 +28,11 @@ tokenized_state_machine!{KVStoreTokenized{
         #[sharding(multiset)]
         pub replies: Multiset<Reply>,
 
-        // Jon tried sharding(map), but: that assumes  ... TODO LEFT OFF TYPING
-        // error: unable to prove inherent safety condition: the given key must be absent from the map before the update
-        // Not sure how to think about this; this isn't an invariant we have at the
-        // KVStoreTokenized level; we only get it higher in the stack.
+        // Jon tried sharding(map), but that's not the right model. To "fill in" a map slot,
+        // you need to have the resource that proves it's presently empty. In this case,
+        // you'd need to somehow know that you're about to receive a SyncReqId that has never
+        // been supplied before. That's a promise the auditor will make, but not at this level.
+        // So the multiset lets us receive a possibly-non-unique token.
 //         #[sharding(map)]
 //         pub sync_requests: Map<SyncReqId, nat>,
         #[sharding(multiset)]
