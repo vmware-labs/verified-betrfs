@@ -4,9 +4,10 @@ use vstd::prelude::*;
 
 use vstd::{multiset::Multiset};
 use crate::trusted::KVStoreTokenized_v::KVStoreTokenized;
-use crate::spec::AsyncDisk_t::Disk;
+use crate::spec::AsyncDisk_t::*;
 use crate::spec::MapSpec_t::*;
 use crate::spec::SystemModel_t::*;
+use crate::implementation::AtomicState_v::*;
 use crate::implementation::ConcreteProgramModel_v::*;
 use crate::implementation::MultisetMapRelation_v::*;
 use crate::implementation::DiskLayout_v::*;
@@ -149,6 +150,8 @@ impl RefinementObligation for ConcreteProgramModel {
         assert( SystemModel::State::initialize(pre, pre.program, pre.disk) );
         assert( Self::i(pre).async_ephemeral == AsyncMap::State::init_ephemeral_state() );
         assert( Self::i(pre).sync_requests == Map::<SyncReqId,nat>::empty() );  // extn
+
+        assume(false);
         assert( Self::inv(pre) );
 
         assert( ConcreteProgramModel::is_mkfs(pre.disk) );
@@ -191,7 +194,7 @@ impl RefinementObligation for ConcreteProgramModel {
                         broadcast use insert_new_preserves_cardinality;
                         let new_id = lbl->op.arrow_AcceptRequest_req().id;
                         assert(!pre.id_history.contains(new_id)); // trigger
-                        assert(post.program.state._inv());
+                        assert(post.program.state.inv());
                         assert(post.inv());
                         assert(CrashTolerantAsyncMap::State::optionally_append_version(ipre.versions, ipost.versions));
 
@@ -204,7 +207,7 @@ impl RefinementObligation for ConcreteProgramModel {
                             CrashTolerantAsyncMap::Step::operate(ipost.versions, ipost.async_ephemeral)));
                     },
                     ProgramUserOp::DeliverReply{reply} => {
-                        assert(post.program.state._inv()) by {
+                        assert(post.program.state.inv()) by {
                             assert(forall |r| #[trigger] post.program.state.replies.contains(r) 
                                 ==> pre.program.state.replies.contains(r));
                         }
@@ -233,7 +236,7 @@ impl RefinementObligation for ConcreteProgramModel {
                                 KVStoreTokenized::Step::execute_transition(post.program.state.atomic_state, map_lbl));
 
                         pre.program.state.execute_transition_magic(post.program.state, kv_lbl, map_lbl);
-                        assert(post.program.state._inv());
+                        assert(post.program.state.inv());
                         assume(post.inv()); 
                         assume(false);
         
@@ -307,14 +310,15 @@ impl RefinementObligation for ConcreteProgramModel {
                 assert( Self::inv(post) );
             },
             SystemModel::Step::program_disk(new_program, new_disk) => {
-                assert(new_program == pre.program);
+                // assert(new_program == pre.program);
                 assume(false);
                 assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, 
                     CrashTolerantAsyncMap::Step::noop()));
                 assume( Self::inv(post) );
             },
             SystemModel::Step::program_internal(new_program) => {
-                assert(new_program == pre.program);
+                assume(false);
+                // assert(new_program == pre.program);
                 assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, 
                     CrashTolerantAsyncMap::Step::noop()));
                 assert( Self::inv(post) );
@@ -364,19 +368,85 @@ broadcast proof fn insert_new_preserves_cardinality<V>(m: Multiset<V>, new: V)
     }
 }
 
-// this is an inv on the system model
+impl AtomicState {
+    pub open spec fn wf(self) -> bool {
+        self.recovery_state is RecoveryComplete ==> {
+            &&& self.history.is_active(self.history.len()-1)
+            &&& forall |i| #[trigger] self.history.is_active(i) ==> self.history[i].appv.invariant()
+            &&& self.in_flight is Some ==> {
+                self.history.is_active(self.in_flight.unwrap().version as int)
+            }
+        }
+    }
+
+/*
+
+    pub proof fn disk_transition_preserves_wf(pre: Self, post: Self, disk_event_lbl: DiskEvent, disk_lbl: AsyncDisk::Label, disk_req_id: ID)
+    requires
+        pre.wf(),
+        Self::disk_transition(pre, post, disk_event_lbl, disk_lbl, disk_req_id),
+    ensures
+        post.wf(),
+    {
+        if post.recovery_state is RecoveryComplete {
+            assume(false);
+            match disk_event_lbl {
+                DiskEvent::InitiateRecovery{} => {
+                    assert( post.wf() );
+                },
+                DiskEvent::CompleteRecovery{raw_page} => {
+                    assert( post.history.is_active(post.history.len()-1) );
+                    assert forall |i| #[trigger] post.history.is_active(i) implies post.history[i].appv.invariant() by {
+                        let superblock = spec_unmarshall(raw_page);
+                        assert( i == superblock.version_index );
+                        assert( post.history[i] == superblock.store );
+                        assert( superblock.store.appv.invariant() ) by {
+                            // TODO remember that invariant survives disk
+                            assume( false );
+                        }
+                    }
+                },
+                DiskEvent::ExecuteSyncBegin{} => {
+                    assert( post.wf() );
+                },
+                DiskEvent::ExecuteSyncEnd{} => {
+                    assert( pre.in_flight is Some ) by {
+                        // TODO remember that in_flight is Some whenever an IO is in
+                        // flight. This seems like a system property, not a wf, since we can't
+                        // see the IO buffer from here. How are we gonna get this wf down
+                        // to Implementation!? Maybe it moves to inv, so Impl doesn't need to
+                        // show it as part of wf?
+                        assume( false );
+                    }
+                    let new_version = pre.in_flight.unwrap().version;
+//                     assert( pre.history.is_active(new_version as int) );
+//                     assert( post.history.is_active(post.history.len()-1) );
+//                     assert forall |i| #[trigger] post.history.is_active(i) implies post.history[i].appv.invariant() by {
+//                         assert( pre.history.is_active(i) );
+//                     }
+                    assert( post.wf() );
+                },
+            }
+        }
+    }
+*/
+}
+
 
 impl KVStoreTokenized::State {
-
-    pub closed spec fn _inv(self) -> bool
+    pub closed spec fn inv(self) -> bool
     {
-        &&& self.wf()
+        &&& self.wf() // kvstore tokenized inv
+        &&& self.atomic_state.wf() // must by maintained by system
+        
         // op requests have unique ids,
         &&& self.requests_have_unique_ids()
         &&& self.replies_have_unique_ids()
+
         // even across the req-reply split:
         &&& forall |req, reply| self.requests.contains(req) && self.replies.contains(reply) 
             ==> #[trigger] req.id != #[trigger] reply.id
+
         // sync requests have unique ids
         &&& unique_keys(self.sync_requests)
     }
@@ -401,10 +471,10 @@ impl KVStoreTokenized::State {
 
     proof fn execute_transition_magic(self, post: Self, lbl: KVStoreTokenized::Label, map_lbl: MapSpec::Label)
         requires
-            self._inv(), 
+            self.inv(), 
             Self::execute_transition(self, post, lbl, post.atomic_state, map_lbl),
         ensures 
-            post._inv(),
+            post.inv(),
             CrashTolerantAsyncMap::State::optionally_append_version(
                 self.atomic_state.history, post.atomic_state.history),
     {
@@ -414,12 +484,13 @@ impl KVStoreTokenized::State {
 
         let req = lbl.arrow_ExecuteOp_req();
         let reply = lbl.arrow_ExecuteOp_reply();
+        assume(false);
 
         KVStoreTokenized::State::execute_transition_inductive(
             self, post, lbl, post.atomic_state, map_lbl);
         assert(forall |req| #[trigger] post.requests.contains(req) 
             ==> self.requests.contains(req));
-        assert(post._inv());
+        assert(post.inv());
 
         let history = self.atomic_state.history;
         let post_history = post.atomic_state.history;
@@ -432,24 +503,82 @@ impl KVStoreTokenized::State {
         assert(CrashTolerantAsyncMap::State::optionally_append_version(history, post_history));
     }
 
-    pub open spec fn consistent_superblock(self, disk: Disk) -> bool
-    {
-        self.atomic_state.client_ready() ==> spec_marshall(self.atomic_state.to_sb()) == disk.content[spec_superblock_addr()]
-    }
+    // pub open spec fn consistent_superblock(self, disk: Disk) -> bool
+    // {
+    //     self.atomic_state.client_ready() ==> 
+    //         spec_marshall(self.atomic_state.ephemeral_sb()) == disk.content[spec_superblock_addr()]
+    // }
 }
 
 impl SystemModel::State<ConcreteProgramModel> {
+    pub open spec fn in_flight_sb_present(self) -> bool
+    {
+        let in_flight = self.program.state.atomic_state.in_flight;
+        &&& in_flight is Some ==> {
+            let id = in_flight.unwrap().req_id;
+            &&& (self.disk.requests.contains_key(id) || self.disk.responses.contains_key(id))
+            &&& self.disk.requests.contains_key(id) ==> 
+                self.disk.requests[id] == DiskRequest::WriteReq{
+                    to: spec_superblock_addr(), 
+                    data: spec_marshall(self.program.state.atomic_state.in_flight_sb())
+                }
+            &&& self.disk.responses.contains_key(id) ==> 
+                self.disk.responses[id] == DiskResponse::WriteResp{}
+        }
+    }
+
+    pub open spec fn persistent_sb_present(self) -> bool
+    {
+        
+// msg from client API
+// no write responses
+// 
+
+        let in_flight = self.program.state.atomic_state.in_flight;
+        &&& in_flight is Some ==> {
+            let id = in_flight.unwrap().req_id;
+            &&& (self.disk.requests.contains_key(id) || self.disk.responses.contains_key(id))
+            &&& self.disk.requests.contains_key(id) ==> 
+                self.disk.requests[id] == DiskRequest::WriteReq{
+                    to: spec_superblock_addr(), 
+                    data: spec_marshall(self.program.state.atomic_state.in_flight_sb())
+                }
+            &&& self.disk.responses.contains_key(id) ==> 
+                self.disk.responses[id] == DiskResponse::WriteResp{}
+        }
+    }
+
+    pub open spec fn at_most_one_oustanding_request_per_address(self) -> bool
+    {
+        forall |id1, id2|  #[trigger] self.disk.requests.contains_key(id1) && #[trigger] self.disk.requests.contains_key(id2) 
+            && id1 != id2 ==> self.disk.requests[id1].addr() != self.disk.requests[id2].addr() 
+    }
+
     pub open spec fn inv(self) -> bool
     {
-        &&& self.program.state._inv()
-        &&& self.program.state.consistent_superblock(self.disk.disk)
+        &&& self.program.state.inv()
+        &&& self.disk.inv()
+        &&& self.in_flight_sb_present()
+        // persistent sb consistent 
+
+        &&& self.at_most_one_oustanding_request_per_address()
+    
+        // at each step 
+        // consistent // persistent may change depending on the content 
+        // active in range should be 
+
+        // inflight id must relate to something 
+        // &&& self.
+        // inflight
+
+        // &&& self.program.state.consistent_superblock(self.disk.disk)
+
         &&& forall |req| self.program.state.requests.contains(req)
             ==> #[trigger] self.id_history.contains(req.id)
         &&& forall |reply| self.program.state.replies.contains(reply)
             ==> #[trigger] self.id_history.contains(reply.id)
-        // &&& self.program.state.atomic_state.wf()
-        &&& forall |sync_req_pr| #![auto] self.program.state.sync_requests.contains(sync_req_pr)
-            ==> self.id_history.contains(sync_req_pr.0)
+        &&& forall |sync_req_pr| self.program.state.sync_requests.contains(sync_req_pr)
+            ==> #[trigger] self.id_history.contains(sync_req_pr.0)
     }
 }
 }

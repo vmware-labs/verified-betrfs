@@ -281,33 +281,32 @@ impl Implementation {
 
             let req_id_perm = Tracked( api.send_disk_request_predict_id() );
 
-            let ghost disk_event_lbl = DiskEventLabel::InitiateRecovery{};
-            let ghost disk_lbl = AsyncDisk::Label::DiskOps{
-                        requests: Map::empty().insert(req_id_perm@, disk_req@),
-                        responses: Map::empty()
-                    };
-            let ghost disk_req_id = req_id_perm@;
+            let ghost disk_event = DiskEvent::InitiateRecovery{req_id: req_id_perm@};
+            // let ghost disk_req_id = req_id_perm@;
             let ghost disk_response_tuples = Multiset::empty();
-
             let ghost disk_request_tuples = multiset_map_singleton(req_id_perm@, disk_req@);
-            proof { multiset_map_singleton_ensures(req_id_perm@, disk_req@); }
+            // proof { multiset_map_singleton_ensures(req_id_perm@, disk_req@); }
 
-            assert( disk_lbl->responses == multiset_to_map(disk_response_tuples) ); // extn equality
-                                                                                    //
-            let tracked disk_request_tokens = self.instance.borrow().disk_transition(
-                KVStoreTokenized::Label::DiskOp{
-                    disk_event_lbl,
-                    disk_request_tuples,
-                    disk_response_tuples,
-                    disk_lbl,
-                    disk_req_id,
-                },
+            let tracked disk_request_tokens = self.instance.borrow().internal_disk_ops(
+                KVStoreTokenized::Label::InternalOp{},
                 post_state,
+                disk_event,
+                disk_request_tuples,
+                disk_response_tuples,
                 &mut atomic_state,
                 empty_disk_responses,
             );
             assert( atomic_state.value() == post_state );
 
+            // this way of composition feels like it can be easily cheated?
+            // if we really want to we can try to 
+            // let ghost disk_lbl = AsyncDisk::Label::DiskOps{
+            //         requests: Map::empty().insert(req_id_perm@, disk_req@),
+            //         responses: Map::empty()
+            // };
+            // assert( disk_lbl->responses == multiset_to_map(disk_response_tuples) ); // extn equality
+
+            // this models external_diskop with the disk label  
             let disk_req_id = api.send_disk_request(disk_req, req_id_perm, Tracked(disk_request_tokens));
             self.state = Tracked(atomic_state);
         }
@@ -315,7 +314,6 @@ impl Implementation {
         ////////////////////////////////////////
         assert( self.state@.value().recovery_state is AwaitingSuperblock );
         ////////////////////////////////////////
-
         { // braces to scope variables used in this step
             let ghost pre_state: AtomicState = self.i();
             let disk_resp = IDiskRequest::ReadReq{from: superblock_addr() };
@@ -344,28 +342,25 @@ impl Implementation {
             };
 
             let ghost disk_response_tuples = multiset_map_singleton(disk_req_id, i_disk_response@);
-            proof { multiset_map_singleton_ensures(disk_req_id, i_disk_response@); }
+            // proof { multiset_map_singleton_ensures(disk_req_id, i_disk_response@); }
 
-            let ghost disk_event_lbl = DiskEventLabel::CompleteRecovery{raw_page};
-            let ghost disk_lbl = AsyncDisk::Label::DiskOps{
-                        requests: Map::empty(),
-                        responses: Map::empty().insert(disk_req_id, i_disk_response@),
-                    };
+            let ghost disk_event = DiskEvent::CompleteRecovery{req_id: disk_req_id, raw_page: raw_page};
+            // let ghost disk_lbl = AsyncDisk::Label::DiskOps{
+            //             requests: Map::empty(),
+            //             responses: Map::empty().insert(disk_req_id, i_disk_response@),
+            //         };
             let ghost disk_request_tuples = Multiset::empty();
 
             // extn; why isn't it triggered by requires in macro output?
             // (Might also make a nice broadcast lemma, if that was usable.)
-            assert( disk_lbl->requests == multiset_to_map(disk_request_tuples) );   // extn
+            // assert( disk_lbl->requests == multiset_to_map(disk_request_tuples) );   // extn
 
-            let tracked disk_request_tokens = self.instance.borrow().disk_transition(
-                KVStoreTokenized::Label::DiskOp{
-                    disk_event_lbl,
-                    disk_request_tuples,
-                    disk_response_tuples,
-                    disk_lbl,
-                    disk_req_id,
-                },
+            let tracked disk_request_tokens = self.instance.borrow().internal_disk_ops(
+                KVStoreTokenized::Label::InternalOp{},
                 post_state,
+                disk_event,
+                disk_request_tuples,
+                disk_response_tuples,
                 &mut atomic_state,
                 disk_response_token.get(),
             );

@@ -20,6 +20,8 @@ tokenized_state_machine!{KVStoreTokenized{
         #[sharding(variable)]
         pub atomic_state: AtomicState,
 
+        // ======== Auditor State =========
+
         #[sharding(multiset)]
         pub requests: Multiset<Request>,
 
@@ -51,11 +53,10 @@ tokenized_state_machine!{KVStoreTokenized{
         ReplySyncOp { sync_req_id: SyncReqId },
 
         DiskOp{
-            disk_event_lbl: DiskEventLabel,
             disk_request_tuples: Multiset<(ID, DiskRequest)>,
             disk_response_tuples: Multiset<(ID, DiskResponse)>,
             disk_lbl: AsyncDisk::Label,
-            disk_req_id: ID },
+        },
     }
 
     init!{ initialize() {
@@ -67,21 +68,48 @@ tokenized_state_machine!{KVStoreTokenized{
         init disk_responses = Multiset::empty();
     }}
 
-    transition!{ disk_transition(lbl: Label, post_atomic_state: AtomicState) {
-        require let Label::DiskOp{ disk_event_lbl, disk_request_tuples, disk_response_tuples, disk_lbl, disk_req_id } = lbl;
+    // transition!{ disk_transition(lbl: Label, post_atomic_state: AtomicState, disk_event_lbl; DiskEvent, ) {
+    //     require lbl is DiskIO;
+    //     require let Label::DiskOp{ disk_event_lbl, disk_request_tuples, disk_response_tuples, disk_lbl, disk_req_id } = lbl;
+    //     remove disk_responses -= (disk_response_tuples);
+    //     require AtomicState::disk_transition(
+    //         pre.atomic_state, post_atomic_state, disk_event_lbl, disk_req_id);
+    //     update atomic_state = post_atomic_state;
+    //     require disk_lbl->requests == multiset_to_map(disk_request_tuples);
+    //     add disk_requests += (disk_request_tuples);
+    // }}
 
-        require disk_lbl is DiskOps;
-        remove disk_responses -= (disk_response_tuples);
-        require disk_lbl->responses == multiset_to_map(disk_response_tuples);
-
-        require AtomicState::disk_transition(
-            pre.atomic_state, post_atomic_state, disk_event_lbl, disk_lbl, disk_req_id);
-        update atomic_state = post_atomic_state;
-
-        require disk_lbl->requests == multiset_to_map(disk_request_tuples);
-        add disk_requests += (disk_request_tuples);
+    transition!{ internal(lbl: Label) {
+        require lbl is InternalOp;
+        require pre.atomic_state.client_ready();
     }}
 
+    // program actions that generate disk requests and consume delivered disk responses
+    transition!{ internal_disk_ops(lbl: Label, post_atomic_state: AtomicState, disk_event: DiskEvent, 
+        disk_request_tuples: Multiset<(ID, DiskRequest)>, disk_response_tuples: Multiset<(ID, DiskResponse)>) {
+        require lbl is InternalOp;
+
+        remove disk_responses -= (disk_response_tuples); // consumes delivered responses
+        require AtomicState::disk_transition(pre.atomic_state, post_atomic_state, disk_event, disk_request_tuples, disk_response_tuples);
+        add disk_requests += (disk_request_tuples); // generates new allowed disk reqs
+
+        update atomic_state = post_atomic_state;
+    }}
+
+    // Auditor only transition, should not be invoked  by client 
+    // transition that passes valid disk requests to disk driver and accepts disk responses
+    transition!{ external_disk_ops(lbl: Label) {
+        require let Label::DiskOp{ disk_request_tuples, disk_response_tuples, disk_lbl } = lbl;
+
+        require disk_lbl is DiskOps;
+        require disk_lbl->requests == multiset_to_map(disk_request_tuples);
+        require disk_lbl->responses == multiset_to_map(disk_response_tuples);
+
+        remove disk_requests -= (disk_request_tuples);
+        add disk_responses += (disk_response_tuples);
+    }}
+
+    // Auditor only transition: should not be invoked by client
     transition!{ request(lbl: Label) {
         require pre.atomic_state.client_ready();
         require let Label::RequestOp{ req } = lbl;
@@ -125,11 +153,6 @@ tokenized_state_machine!{KVStoreTokenized{
         require version <= stable_version;
     }}
 
-    transition!{ internal(lbl: Label) {
-        require pre.atomic_state.client_ready();
-        require lbl is InternalOp;
-    }}
-
 
     #[invariant]
     pub open spec fn wf(&self) -> bool {
@@ -168,9 +191,16 @@ tokenized_state_machine!{KVStoreTokenized{
 //         assert( post.wf() );
     }
 
-    #[inductive(disk_transition)]
-    fn disk_transition_inductive(pre: Self, post: Self, lbl: Label, post_atomic_state: AtomicState) {
-//         assume( false );
+    #[inductive(internal_disk_ops)]
+    fn internal_disk_ops_inductive(pre: Self, post: Self, lbl: Label, post_atomic_state: AtomicState, 
+        disk_event: DiskEvent, disk_request_tuples: Multiset<(ID, DiskRequest)>, disk_response_tuples: Multiset<(ID, DiskResponse)>) {
+        assume( false );
+//         AtomicState::disk_transition_preserves_wf(... pre, post, disk_event_lbl, disk_lbl, disk_req_id),
+    }
+
+    #[inductive(external_disk_ops)]
+    fn external_disk_ops_inductive(pre: Self, post: Self, lbl: Label) {
+        // assume( false );
 //         AtomicState::disk_transition_preserves_wf(... pre, post, disk_event_lbl, disk_lbl, disk_req_id),
     }
 

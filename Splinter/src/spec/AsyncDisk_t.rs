@@ -67,6 +67,16 @@ pub enum GenericDiskRequest<A> {
 
 pub type DiskRequest = GenericDiskRequest<Address>;
 
+impl DiskRequest {
+    pub open spec fn addr(self) -> Address
+    {
+        match self {
+            Self::ReadReq{from} => from,
+            Self::WriteReq{to, data} => to,
+        }   
+    }
+}
+
 pub enum GenericDiskResponse {
     ReadResp{data: RawPage},
     WriteResp{},
