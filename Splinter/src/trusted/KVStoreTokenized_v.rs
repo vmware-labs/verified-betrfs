@@ -26,7 +26,7 @@ tokenized_state_machine!{KVStoreTokenized{
         #[sharding(multiset)]
         pub replies: Multiset<Reply>,
 
-        // Jon tried sharding(map), but:
+        // Jon tried sharding(map), but: that assumes  ... TODO LEFT OFF TYPING
         // error: unable to prove inherent safety condition: the given key must be absent from the map before the update
         // Not sure how to think about this; this isn't an invariant we have at the
         // KVStoreTokenized level; we only get it higher in the stack.

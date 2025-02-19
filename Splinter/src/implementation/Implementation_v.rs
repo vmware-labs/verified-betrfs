@@ -185,6 +185,20 @@ impl Implementation {
         out
     }
 
+    proof fn cannot_receive_write_response_during_recovery(self, disk_req_id: ID, i_disk_response: IDiskResponse, disk_response_token: Tracked<KVStoreTokenized::disk_responses_multiset>)
+    requires
+        self.state@.value().recovery_state is AwaitingSuperblock,
+        disk_response_token@.multiset() == multiset_map_singleton(disk_req_id, i_disk_response@),
+        i_disk_response is WriteResp,
+    ensures
+        false,
+    {
+        // TODO This assert-false should be an assumption we pull down from the system:
+        // whenever state is AwaitingSuperblock, the only possible responses in the
+        // disk bus buffer are ReadResps.
+        assume( false );
+    }
+
     pub exec fn handle_query(&mut self, req: Request, req_shard: Tracked<KVStoreTokenized::requests>)
             -> (out: (Reply, Tracked<KVStoreTokenized::replies>))
     requires
@@ -304,21 +318,18 @@ impl Implementation {
 
         { // braces to scope variables used in this step
             let ghost pre_state: AtomicState = self.i();
-            let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
-            proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
-
             let disk_resp = IDiskRequest::ReadReq{from: superblock_addr() };
             let (disk_req_id, i_disk_response, disk_response_token) = api.receive_disk_response();
             let raw_page = match i_disk_response {
                 IDiskResponse::ReadResp{data} => data,
                 IDiskResponse::WriteResp{} => {
-                    // TODO This assert-false should be an assumption we pull down from the system:
-                    // whenever state is AwaitingSuperblock, the only possible responses in the
-                    // disk bus buffer are ReadResps.
-                    assume(false);
+                    proof { self.cannot_receive_write_response_during_recovery(disk_req_id, i_disk_response, disk_response_token); };
                     unreached()
                 }
             };
+
+            let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
+            proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
 
             let superblock = unmarshall(raw_page);
             // Record our learnings in the physical state.
