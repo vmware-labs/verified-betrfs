@@ -147,5 +147,6 @@ tokenized_state_machine!{KVStoreTokenized{
     #[inductive(deliver_sync_reply)]
     fn deliver_sync_reply_inductive(pre: Self, post: Self, lbl: Label, version: nat) { }
 }}
+
 }
 
