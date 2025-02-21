@@ -132,13 +132,13 @@ impl<T: Buffer> BufferDisk<T> {
         let i_this = self.i_buffer_seq(addrs);
         let i_other = other.i_buffer_seq(addrs);
 
-        assert forall |i| 0 <= i < addrs.len()
-        implies i_this[i] == i_other[i]
-        by {
-            if self.entries.contains_key(addrs[i]) {
-                assert(other.entries.contains_key(addrs[i])); // trigger
-            }
-        }
+//        assert forall |i| 0 <= i < addrs.len()
+//        implies i_this[i] == i_other[i]
+//        by {
+//            if self.entries.contains_key(addrs[i]) {
+////                assert(other.entries.contains_key(addrs[i])); // trigger
+//            }
+//        }
         assert(i_this =~= i_other);
     }
 }

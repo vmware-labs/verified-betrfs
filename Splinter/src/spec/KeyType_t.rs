@@ -135,7 +135,7 @@ impl Key {
             if i < j {
                 assert(Key::lt(run[i], run[j]));
             } else if i > j {
-                assert(Key::lt(run[j], run[i]));
+//                assert(Key::lt(run[j], run[i]));
             }
         }
     }
@@ -200,21 +200,21 @@ impl Key {
         Key::largest_lte_ensures(run, key, out);
         if out < a {
             if run.len() > 0 && run.subrange(a, b).len() > 0 {
-                assert(Key::lt(key, run[a]));
-                assert(run[a] == run.subrange(a, b)[0]);
+//                assert(Key::lt(key, run[a]));
+//                assert(run[a] == run.subrange(a, b)[0]);
             }
             Key::largest_lte_is_lemma(run.subrange(a, b), key, -1);
         } else if a <= out < b {
-            assert(Key::lte(run[out], key));
+//            assert(Key::lte(run[out], key));
             if out + 1 < run.subrange(a, b).len() {
-                assert(Key::lt(key, run[out + 1]));
-                assert(run[out + 1] == run.subrange(a, b)[out + 1 - a]);
+//                assert(Key::lt(key, run[out + 1]));
+//                assert(run[out + 1] == run.subrange(a, b)[out + 1 - a]);
             }
             Key::largest_lte_is_lemma(run.subrange(a, b), key, out - a);
         } else if b <= out {
             if b - a - 1 > -1 {
-                assert(Key::lte(run[b - 1], key));
-                assert(run[b - 1] == run.subrange(a, b)[b - 1 - a]);
+//                assert(Key::lte(run[b - 1], key));
+//                assert(run[b - 1] == run.subrange(a, b)[b - 1 - a]);
                 Key::largest_lte_is_lemma(run.subrange(a, b), key, b - a - 1);
             }
         }
@@ -261,10 +261,10 @@ impl Element {
             forall|a: Element, b: Element, c: Element|
                 Self::lt(a, b) && Self::lt(b, c) ==> Self::lt(a, c),
     {
-        assert forall|a: Element, b: Element, c: Element|
-            Self::lt(a, b) && Self::lt(b, c) implies Self::lt(a, c) by {
-            Self::lt_transitive(a, b, c);
-        }
+//        assert forall|a: Element, b: Element, c: Element|
+//            Self::lt(a, b) && Self::lt(b, c) implies Self::lt(a, c) by {
+//            Self::lt_transitive(a, b, c);
+//        }
     }
 
     pub proof fn lte_transitive(a: Element, b: Element, c: Element)
@@ -281,10 +281,10 @@ impl Element {
             forall|a: Element, b: Element, c: Element|
                 Self::lte(a, b) && Self::lte(b, c) ==> Self::lte(a, c),
     {
-        assert forall|a: Element, b: Element, c: Element|
-            Self::lte(a, b) && Self::lte(b, c) implies Self::lte(a, c) by {
-            Self::lte_transitive(a, b, c);
-        }
+//        assert forall|a: Element, b: Element, c: Element|
+//            Self::lte(a, b) && Self::lte(b, c) implies Self::lte(a, c) by {
+//            Self::lte_transitive(a, b, c);
+//        }
     }
 
     pub open spec(checked) fn min_elem() -> Element {
@@ -346,7 +346,7 @@ impl Element {
         } else if Element::lt(needle, run[0]) {
             if run.contains(needle) {
                 assert(Element::lte(run[0], run[run.index_of(needle)]));
-                assert(false);
+//                assert(false);
             }
         } else {
             let sub_run = run.subrange(1, run.len() as int);
@@ -359,15 +359,15 @@ impl Element {
                 let idx = run.index_of(needle);
                 if idx != 0 {
                     assert(sub_run[idx - 1] == run[idx]);
-                    assert(false);
+//                    assert(false);
                 }
-                assert(idx == 0);
-                assert(run[0] == needle);
+//                assert(idx == 0);
+//                assert(run[0] == needle);
                 if run.len() == 1 {
-                    assert(out == 0);
+//                    assert(out == 0);
                 } else {
-                    assert(Element::lte(run[0], run[1]));  // We want ::lt, but it's ::lte that triggers is_sorted.
-                    assert(sub_run[0] == run[1]);
+//                    assert(Element::lte(run[0], run[1]));  // We want ::lt, but it's ::lte that triggers is_sorted.
+//                    assert(sub_run[0] == run[1]);
                     assert(out == 0);
                 }
             }

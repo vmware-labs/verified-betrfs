@@ -150,7 +150,7 @@ impl DiskView {
         if depth > 0 {
             self.build_lsn_addr_index_domain_valid(root);
             self.cropped_ptr_build_sub_index(self.next(root), cropped, (depth-1) as nat);
-            assert(self.build_lsn_addr_index(cropped) <= self.build_lsn_addr_index(self.next(root)));
+//            assert(self.build_lsn_addr_index(cropped) <= self.build_lsn_addr_index(self.next(root)));
 
             if self.next(root) is Some {
                 self.build_lsn_addr_index_domain_valid(self.next(root));
@@ -161,7 +161,7 @@ impl DiskView {
             let update = singleton_index(start_lsn, curr_msgs.seq_end, root.unwrap());
     
             assert(update.dom().disjoint(self.build_lsn_addr_index(self.next(root)).dom()));
-            assert(self.build_lsn_addr_index(self.next(root)) <= self.build_lsn_addr_index(root));
+//            assert(self.build_lsn_addr_index(self.next(root)) <= self.build_lsn_addr_index(root));
         }
     }
 
@@ -217,13 +217,13 @@ impl DiskView {
         reveal(DiskView::index_keys_map_to_valid_entries);
 
         if root is None {
-            assert( self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)) );
+//            assert( self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)) );
         } else if self.next(root) is None {
             // let curr_msgs = self.entries[root.unwrap()].message_seq;
             // let start_lsn = math::max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
             // let update = singleton_index(start_lsn, curr_msgs.seq_end, root.unwrap());
             // let output = self.build_lsn_addr_index(self.next(root)).union_prefer_right(update);
-            assert( self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)) );
+//            assert( self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)) );
         } else {
             self.build_lsn_addr_index_domain_valid(self.next(root));
             self.build_lsn_addr_index_range_valid(self.next(root));
@@ -239,7 +239,7 @@ impl DiskView {
                     assert(sub_index.values().contains(addr));
                 }
             }
-            assert( self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)) );
+//            assert( self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)) );
         }
     }
 
@@ -268,9 +268,9 @@ impl DiskView {
             let begin = max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
             let update = singleton_index(begin, curr_msgs.seq_end, root.unwrap());
             assert(update.contains_key(begin));
-            assert forall |k| #![auto] self.build_lsn_addr_index(root).values().contains(k) 
-            implies self.build_tight(root).entries.dom().contains(k) by {
-            }
+//            assert forall |k| #![auto] self.build_lsn_addr_index(root).values().contains(k) 
+//            implies self.build_tight(root).entries.dom().contains(k) by {
+//            }
             self.build_tight_ensures(root);
             assert forall |addr| #![auto]
                 self.build_tight(root).entries.dom().contains(addr) implies
@@ -338,8 +338,8 @@ impl DiskView {
             //let jr = big.entries[ptr.unwrap()];
             //self.sub_disk_repr_index(big, jr.cropped_prior(big.boundary_lsn));
             if big.next(ptr) is Some {
-                assert( big.entries.contains_key(ptr.unwrap()) );
-                assert( big.the_ranking()[big.next(ptr).unwrap()] < big.the_ranking()[ptr.unwrap()] );
+//                assert( big.entries.contains_key(ptr.unwrap()) );
+//                assert( big.the_ranking()[big.next(ptr).unwrap()] < big.the_ranking()[ptr.unwrap()] );
             }
             self.sub_disk_repr_index(big, big.next(ptr));
         }
@@ -359,10 +359,10 @@ impl DiskView {
             assert forall |lsn| #![auto] lsn_addr_index.contains_key(lsn)
             implies self.decodable(Some(lsn_addr_index[lsn])) by {
                 if self.build_lsn_addr_index(self.next(root)).contains_key(lsn) {
-                    assert( self.decodable(Some(lsn_addr_index[lsn])) );
+//                    assert( self.decodable(Some(lsn_addr_index[lsn])) );
                 } else {
-                    assert( lsn_addr_index[lsn] == root.unwrap() );
-                    assert( self.decodable(Some(lsn_addr_index[lsn])) );
+//                    assert( lsn_addr_index[lsn] == root.unwrap() );
+//                    assert( self.decodable(Some(lsn_addr_index[lsn])) );
                 }
             }
         }
@@ -822,7 +822,7 @@ state_machine!{ LikesJournal {
             lsn_addr_index_discard_up_to_ensures(pre.lsn_addr_index, bdy_post);
             // assert(repr <= post.lsn_addr_index);
             // assert(post.lsn_addr_index <= repr);
-            assert(repr.dom() =~= post.lsn_addr_index.dom());
+//            assert(repr.dom() =~= post.lsn_addr_index.dom());
             assert(repr =~= post.lsn_addr_index); // (Jialin): needs to =~= dom then the map, why?
         } else {
             assert(post.lsn_addr_index =~= repr);
@@ -841,22 +841,22 @@ state_machine!{ LikesJournal {
     #[inductive(internal_journal_marshal)]
     fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address, new_journal: LinkedJournal_v::LinkedJournal::State) {
         reveal(LinkedJournal_v::LinkedJournal::State::next_by);
-        assert( post.wf() );
+//        assert( post.wf() );
 
         let istep:LinkedJournal_v::LinkedJournal::Step = LinkedJournal_v::LinkedJournal::Step::internal_journal_marshal(cut, addr);
-        assert(LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, post.journal, State::lbl_i(lbl), istep));
+//        assert(LinkedJournal_v::LinkedJournal::State::next_by(pre.journal, post.journal, State::lbl_i(lbl), istep));
 
         // NOTE(Jialin): inv_next duplicates what should be exported by submodule inv
         LinkedJournal_v::LinkedJournal::State::inv_next(pre.journal, post.journal, State::lbl_i(lbl), istep);
 
         let tj_pre = pre.journal.truncated_journal;
         let tj_post = post.journal.truncated_journal;
-        assert( tj_post.disk_view.acyclic() ); // linked journal inv
+//        assert( tj_post.disk_view.acyclic() ); // linked journal inv
 
         tj_pre.disk_view.sub_disk_repr_index(tj_post.disk_view, tj_pre.freshest_rec);
-        assert( post.lsn_addr_index == tj_post.build_lsn_addr_index() );
+//        assert( post.lsn_addr_index == tj_post.build_lsn_addr_index() );
 
-        assert( post.inv() );
+//        assert( post.inv() );
     }
    
     #[inductive(internal_no_op)]

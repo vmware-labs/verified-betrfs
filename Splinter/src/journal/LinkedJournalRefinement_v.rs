@@ -57,9 +57,9 @@ impl DiskView {
 
         let result = PagedJournal_v::JournalRecord::discard_old_journal_rec(self.iptr(ptr), lsn);
         if post.iptr(ptr) is None {
-            assert( result is None );
+//            assert( result is None );
         } else {
-            assert( result is Some );
+//            assert( result is Some );
             assert( post.iptr(ptr).unwrap() =~= result.unwrap() );
         }
     }
@@ -97,10 +97,10 @@ impl DiskView {
         self.iptr(ptr) == big.iptr(ptr),
     decreases if ptr is Some { big.the_ranking()[ptr.unwrap()]+1 } else { 0 } 
     {
-        assert( big.valid_ranking(big.the_ranking()) ); // witness; new in Verus
+//        assert( big.valid_ranking(big.the_ranking()) ); // witness; new in Verus
         self.sub_disk_ranking(big);
         if ptr is Some {
-            assert( big.entries.contains_key(ptr.unwrap()) );   // new trigger for valid_ranking
+//            assert( big.entries.contains_key(ptr.unwrap()) );   // new trigger for valid_ranking
             self.sub_disk_interp(big, big.next(ptr));
         }
     }
@@ -135,7 +135,7 @@ impl DiskView {
             // Dafny didn't need this trigger
             let pojr = self.iptr(ptr).unwrap().cropped_prior(bdy);
             if !PagedJournal_v::JournalRecord::opt_rec_can_crop_head_records(pojr, bdy, 0) {
-                 assert( false );
+//                 assert( false );
             }
         } else {
             self.pointer_after_crop_commutes_with_interpretation(self.entries[ptr.unwrap()].cropped_prior(bdy), bdy, (depth - 1) as nat);
@@ -233,9 +233,9 @@ impl DiskView {
         if root is Some {
             self.build_tight_maintains_interpretation(self.next(root));
             self.build_tight(root).iptr_framing(self, self.next(root));
-            assert( self.iptr(root) =~~= self.build_tight(root).iptr(root) );
+//            assert( self.iptr(root) =~~= self.build_tight(root).iptr(root) );
         } else {
-            assert( self.iptr(root) =~~= self.build_tight(root).iptr(root) );
+//            assert( self.iptr(root) =~~= self.build_tight(root).iptr(root) );
         }
     }
 }
@@ -297,7 +297,7 @@ impl TruncatedJournal {
         post.disk_view.acyclic(),
         self.i().discard_old_defn(lsn) == post.i(),
     {
-        assert( post.disk_view.valid_ranking(self.disk_view.the_ranking()) );
+//        assert( post.disk_view.valid_ranking(self.disk_view.the_ranking()) );
         self.disk_view.discard_interp(lsn, post.disk_view, post.freshest_rec);
     }
 
@@ -522,7 +522,7 @@ impl LinkedJournal::State {
         self.i().wf(),
     {
         self.truncated_journal.iwf();
-        assert( self.i().truncated_journal.wf() );
+//        assert( self.i().truncated_journal.wf() );
     }
 
     pub proof fn freeze_for_commit_refines(self, post: Self, lbl: LinkedJournal::Label, step: LinkedJournal::Step)

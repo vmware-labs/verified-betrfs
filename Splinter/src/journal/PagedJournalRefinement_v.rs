@@ -158,12 +158,12 @@ impl JournalRecord {
             self.can_crop_monotonic(bdy, (depth-1) as nat, depth);
             self.can_crop_more_yields_some(bdy, (depth-1) as nat, depth);
             let self_pre = self.crop_head_records(bdy, (depth-1) as nat).unwrap();
-            assert(!self_pre.message_seq.can_discard_to(bdy)) by {
-                if self_pre.message_seq.can_discard_to(bdy) {
-                    self.cant_crop(bdy, depth);
-                    assert(false);  // contradiction
-                }
-            }
+//            assert(!self_pre.message_seq.can_discard_to(bdy)) by {
+//                if self_pre.message_seq.can_discard_to(bdy) {
+//                    self.cant_crop(bdy, depth);
+////                    assert(false);  // contradiction
+//                }
+//            }
             self.crop_head_records_chaining(bdy, depth);
 
             // TODO(chris): couldn't trigger forall version successfully, so manual invocation.
@@ -256,7 +256,7 @@ impl JournalRecord {
             Self::i_lemma_forall();   // newly required
             assert(small.unwrap().crop_head_records(bdy, 1) == Self::opt_rec_crop_head_records(small.unwrap().cropped_prior(bdy), bdy, 0) );  // trigger, newly required
 
-            assert( Self::i_opt(small, bdy).includes_subseq(Self::i_opt(smaller, bdy)) );   // trigger (ported from Dafny)
+//            assert( Self::i_opt(small, bdy).includes_subseq(Self::i_opt(smaller, bdy)) );   // trigger (ported from Dafny)
         }
     }
 

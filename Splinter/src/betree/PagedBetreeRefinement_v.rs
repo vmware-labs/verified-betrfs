@@ -124,8 +124,8 @@ impl BetreeNode {
             }
         }
 
-        assert(total_keys(child_map.map.dom()));
-        assert(child_map.wf());
+//        assert(total_keys(child_map.map.dom()));
+//        assert(child_map.wf());
     }
     
     proof fn apply_filter_equivalence(self, filter: Set<Key>, key: Key)
@@ -233,7 +233,7 @@ impl Path{
         decreases self.routing.len()
     {
         assert(self.target().i_at(key) == self.target().i()[key]); // trigger
-        assert(self.target().i_at(key) == replacement.i_at(key)); // trigger
+//        assert(self.target().i_at(key) == replacement.i_at(key)); // trigger
 
         if self.routing.len() > 0 {
             if self.routing[0].contains(key) {
@@ -241,7 +241,7 @@ impl Path{
                 self.node.build_query_receipt_valid(key);
                 
                 receipt.drop_first_valid();
-                assert(receipt.drop_first().root == self.subpath().node);
+//                assert(receipt.drop_first().root == self.subpath().node);
 
                 self.subpath().node.build_query_receipt_valid(key);
                 self.subpath().node.build_query_receipt(key).equal_receipts(receipt.drop_first());
@@ -256,7 +256,7 @@ impl Path{
 
                 self.subpath().substitute_receipt_equivalence(replacement, key);
             } else {
-                assert(self.node.i_at(key) == self.substitute(replacement).i_at(key));
+//                assert(self.node.i_at(key) == self.substitute(replacement).i_at(key));
             }
         }
     }
@@ -300,7 +300,7 @@ proof fn composite_single_put(puts1: MsgHistory, puts2: MsgHistory, stamped_map:
 {
     let last_lsn = (puts2.seq_end - 1) as nat;
     assert_maps_equal!(puts1.msgs, puts1.concat(puts2).discard_recent(last_lsn).msgs);
-    assert(puts1 == puts1.concat(puts2).discard_recent(last_lsn));
+//    assert(puts1 == puts1.concat(puts2).discard_recent(last_lsn));
     assert(puts2.discard_recent(last_lsn).apply_to_stamped_map(puts1.apply_to_stamped_map(stamped_map))
         == puts1.apply_to_stamped_map(stamped_map));
 
@@ -356,11 +356,11 @@ impl PagedBetree::State {
         MsgHistory::map_plus_history_lemma(self.i().stamped_map, puts);
 
         let sub_map_b = puts.discard_recent(puts.seq_start).apply_to_stamped_map(self.i().stamped_map).value;
-        assert(map_b == sub_map_b.insert(key, sub_map_b[key].merge(message)));
+//        assert(map_b == sub_map_b.insert(key, sub_map_b[key].merge(message)));
     
         assert(map_a.0 =~= map_b.0);
-        assert(post.i().stamped_map.value == map_a);
-        assert(MsgHistory::map_plus_history(self.i().stamped_map, puts).value == map_b);
+//        assert(post.i().stamped_map.value == map_a);
+//        assert(MsgHistory::map_plus_history(self.i().stamped_map, puts).value == map_b);
     }
 
     proof fn apply_put_is_map_plus_history(self, post: Self, puts: MsgHistory)
@@ -379,11 +379,11 @@ impl PagedBetree::State {
 
             self.apply_put_is_map_plus_history(intermediate_post, short_puts);
             self.memtable.apply_puts_end(short_puts);
-            assert(last_put.can_follow(intermediate_post.memtable.seq_end));
+//            assert(last_put.can_follow(intermediate_post.memtable.seq_end));
 
             self.memtable.apply_puts_additive(short_puts, last_put);
             assert(short_puts.concat(last_put).msgs =~= puts.msgs);
-            assert(post.memtable == intermediate_post.memtable.apply_puts(last_put));
+//            assert(post.memtable == intermediate_post.memtable.apply_puts(last_put));
 
             intermediate_post.apply_single_put_is_map_plus_history(post, last_put);
             composite_single_put(short_puts, last_put, self.i().stamped_map);

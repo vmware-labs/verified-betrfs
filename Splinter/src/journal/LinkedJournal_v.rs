@@ -199,7 +199,7 @@ impl DiskView {
             assert forall|k: Address| #[trigger] a.entries.dom().contains(k) implies
                 #[trigger] c.entries.dom().contains(k) && a.entries[k] == c.entries[k] by {
                 assert( b.entries.dom().contains(k) );
-                assert( c.entries.dom().contains(k) );
+//                assert( c.entries.dom().contains(k) );
             }
         }
     }
@@ -339,7 +339,7 @@ impl DiskView {
 
         assert( self.valid_ranking(big.the_ranking()) ); // witness to acyclic
         if ptr is Some {
-            assert( big.the_rank_of(self.next(ptr)) < big.the_rank_of(ptr) );
+//            assert( big.the_rank_of(self.next(ptr)) < big.the_rank_of(ptr) );
             self.iptr_ignores_extra_blocks(self.next(ptr), big);
         }
     }
@@ -443,7 +443,7 @@ impl DiskView {
         let tight = self.build_tight(None);
 
         //XXX need a callout to build_tight_is_awesome?
-        assert( tight.wf() );
+//        assert( tight.wf() );
 
         assert( tight.valid_ranking(map![]) ); // new witness; not needed in Dafny
         assert forall |other: Self|
@@ -455,8 +455,8 @@ impl DiskView {
         }) implies other =~= tight by {
             //assert( tight.wf() );   // new trigger when we perturb DiskView::can_crop
             //assert( forall |addr| !tight.entries.dom().contains(addr) );    // added to fight the flake
-            assert( tight.entries.dom() =~~= other.entries.dom() );
-            assert( other.entries =~~= tight.entries );  // flaky
+//            assert( tight.entries.dom() =~~= other.entries.dom() );
+//            assert( other.entries =~~= tight.entries );  // flaky
         }
     }
 
@@ -489,7 +489,7 @@ impl DiskView {
                     // any other tighter disk implies an "other_inner" disk tighter than inner, but inner.IsTight(next).
                     let other_inner = DiskView{ entries: other.entries.remove(root.unwrap()), ..other };
 
-                    assert( other_inner.entries_wf() );
+//                    assert( other_inner.entries_wf() );
 
                     Self::sub_disk_transitive_auto();
 
@@ -497,37 +497,37 @@ impl DiskView {
                         implies other_inner.is_nondangling_pointer(other_inner.entries[addr].cropped_prior(other_inner.boundary_lsn)) by {
                         let aprior = self.entries[addr].cropped_prior(self.boundary_lsn);
                         assert( self.entries.contains_key(addr) );
-                        assert( self.is_nondangling_pointer(aprior) );
-                        assert( other.wf() );
+//                        assert( self.is_nondangling_pointer(aprior) );
+//                        assert( other.wf() );
                         if aprior == root {
                             if tight.entries[addr].cropped_prior(tight.boundary_lsn) == root {
                                 assert( tight.entries.contains_key(addr) );  // dayyum
-                                assert( tight.the_ranking()[tight.entries[addr].cropped_prior(tight.boundary_lsn).unwrap()] > tight.the_ranking()[root.unwrap()] ); // from valid_ranking
-                                assert( tight.the_ranking()[tight.entries[addr].cropped_prior(tight.boundary_lsn).unwrap()] < tight.the_ranking()[root.unwrap()] ); // from build_tight_ranks
+//                                assert( tight.the_ranking()[tight.entries[addr].cropped_prior(tight.boundary_lsn).unwrap()] > tight.the_ranking()[root.unwrap()] ); // from valid_ranking
+//                                assert( tight.the_ranking()[tight.entries[addr].cropped_prior(tight.boundary_lsn).unwrap()] < tight.the_ranking()[root.unwrap()] ); // from build_tight_ranks
                             }
-                            assert( tight.entries[addr].cropped_prior(tight.boundary_lsn) != root );
-                            assert( other_inner.is_sub_disk(tight) );
+//                            assert( tight.entries[addr].cropped_prior(tight.boundary_lsn) != root );
+//                            assert( other_inner.is_sub_disk(tight) );
                         }
                         // frustrating, considering this is the just a repitition of the assert-forall-by
                         // conclusion
-                        assert( other_inner.is_nondangling_pointer(aprior) );
+//                        assert( other_inner.is_nondangling_pointer(aprior) );
                     }
                 
-                    assert( other_inner.is_nondangling_pointer(next) );    //new
-                    assert(other_inner.wf());   // wait, we needed this as a trigger?
+//                    assert( other_inner.is_nondangling_pointer(next) );    //new
+//                    assert(other_inner.wf());   // wait, we needed this as a trigger?
                     assert(other_inner.is_sub_disk(inner)); // new
                     // we know by here Dafny knowns other_inner.wf()
                     other_inner.iptr_ignores_extra_blocks(next, inner);
                     // every line below here is both new and necessary
-                    assert( inner.is_tight(next) ); // new trigger holy crap how did we not get this
+//                    assert( inner.is_tight(next) ); // new trigger holy crap how did we not get this
                                                     // calling tight_sub_disk!!!??
-                    assert( forall |a| inner.entries.contains_key(a) ==> #[trigger] other_inner.entries.contains_key(a) && other_inner.entries[a] == inner.entries[a] );
-                    assert( other_inner =~= inner );
-                    assert( other.entries =~= tight.entries );
+//                    assert( forall |a| inner.entries.contains_key(a) ==> #[trigger] other_inner.entries.contains_key(a) && other_inner.entries[a] == inner.entries[a] );
+//                    assert( other_inner =~= inner );
+//                    assert( other.entries =~= tight.entries );
                     assert( other =~= tight );
                 }
-                assert( tight.decodable(root) );
-                assert( tight.acyclic() );  // new trigger
+//                assert( tight.decodable(root) );
+//                assert( tight.acyclic() );  // new trigger
             }
         } else {
             self.tight_empty_disk()

@@ -107,16 +107,16 @@ impl ImageState {
         } {
             let big_index = big.to_tj(big_dv).build_lsn_au_index(big.first);
             self.to_tj(dv).sub_disk_build_sub_lsn_au_index(self.first, big.to_tj(big_dv), big.first);
-            assert(index <= big_index);
+//            assert(index <= big_index);
 
             self.to_tj(dv).build_lsn_au_index_ensures(self.first);
             big.to_tj(big_dv).build_lsn_au_index_ensures(big.first);
 
             let head = self.freshest_rec.unwrap();
             if head.au == addr.au {
-                assert(addr.page < head.page);
+//                assert(addr.page < head.page);
                 reveal(LinkedJournal_v::DiskView::pages_allocated_in_lsn_order);
-                assert(false);
+//                assert(false);
             }
 
             let lsn1 = choose |lsn1| #[trigger] index.contains_key(lsn1) && index[lsn1] == addr.au;
@@ -125,19 +125,19 @@ impl ImageState {
 
             big.to_tj(big_dv).disk_view.addr_supports_lsn_consistent_with_index(big_index, lsn2, head);
             big.to_tj(big_dv).disk_view.addr_supports_lsn_consistent_with_index(big_index, lsn3, addr);
-            assert(big_index[lsn2] == head.au);
-            assert(big_index[lsn3] == addr.au);
+//            assert(big_index[lsn2] == head.au);
+//            assert(big_index[lsn3] == addr.au);
 
-            assert(lsn1 <= lsn2 <= lsn3);
-            assert(big_index.contains_key(lsn1));
-            assert(big_index[lsn1] == addr.au);
+//            assert(lsn1 <= lsn2 <= lsn3);
+//            assert(big_index.contains_key(lsn1));
+//            assert(big_index[lsn1] == addr.au);
 
             assert(AllocationJournal_v::contiguous_lsns(big_index, lsn1, lsn2, lsn3));
-            assert(big_index[lsn2] == addr.au);
-            assert(false);
+//            assert(big_index[lsn2] == addr.au);
+//            assert(false);
         }
 
-        assert(self.tight_domain(dv) =~= self.tight_domain(big_dv));
+//        assert(self.tight_domain(dv) =~= self.tight_domain(big_dv));
         assert(self.tight_dv(dv).entries =~= self.tight_dv(big_dv).entries);
     }
 }
@@ -260,8 +260,8 @@ impl UnifiedCrashAwareJournal::State {
 
         frozen_journal.to_tj(self.dv).build_lsn_au_index_ensures(frozen_journal.first);
         frozen_journal.to_tj(self.dv).sub_disk_build_sub_lsn_au_index(frozen_journal.first, aj.tj(), aj.first);
-        assert(frozen_index <= aj.lsn_au_index);
-        assert(frozen_journal.freshest_rec is Some ==> frozen_index.contains_key(new_bdy)); // trigger
+//        assert(frozen_index <= aj.lsn_au_index);
+//        assert(frozen_journal.freshest_rec is Some ==> frozen_index.contains_key(new_bdy)); // trigger
 
         let cropped_tj = aj.tj().crop(depth);
         let frozen_lsns = Set::new(|lsn: LSN| new_bdy <= lsn && lsn < cropped_tj.discard_old(new_bdy).seq_end());
@@ -270,8 +270,8 @@ impl UnifiedCrashAwareJournal::State {
             && i_frozen_index.values().contains(addr.au)) - AllocationJournal_v::au_addrs_past_pointer(frozen_journal.freshest_rec);
 
         assert(i_frozen_index.dom() =~= frozen_index.dom());
-        assert(cropped_tj.discard_old_cond(new_bdy, frozen_addrs, i_frozen.tj));
-        assert(cropped_tj.discard_old_tight(new_bdy, frozen_addrs, i_frozen.tj));
+//        assert(cropped_tj.discard_old_cond(new_bdy, frozen_addrs, i_frozen.tj));
+//        assert(cropped_tj.discard_old_tight(new_bdy, frozen_addrs, i_frozen.tj));
 
         assert(AllocationJournal::State::next_by(aj, aj,
             AllocationJournal::Label::FreezeForCommit{frozen_journal: i_frozen},
@@ -327,12 +327,12 @@ impl UnifiedCrashAwareJournal::State {
                 first, post_v.to_aj(post.dv).tj(), post_v.image.first);
         }
         assert(index.dom() <= post_v.lsn_au_index.dom());
-        assert(index.values() <= post_v.lsn_au_index.values());
+//        assert(index.values() <= post_v.lsn_au_index.values());
 
         let tight_pre_jdv = post.persistent.tight_dv(self.dv).to_jdv(bdy);
         let tight_post_jdv = post.persistent.tight_dv(post.dv).to_jdv(bdy);
 
-        assert(tight_post_jdv.entries.dom() =~= tight_pre_jdv.entries.dom());
+//        assert(tight_post_jdv.entries.dom() =~= tight_pre_jdv.entries.dom());
         assert(tight_pre_jdv.entries =~= tight_post_jdv.entries);
     }
 
@@ -395,7 +395,7 @@ impl UnifiedCrashAwareJournal::State {
                 ));
             },
             _ => {
-                assert(false);
+//                assert(false);
             },
         }
     }

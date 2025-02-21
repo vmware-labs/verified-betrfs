@@ -192,7 +192,7 @@ impl<T: Buffer> LinkedBetree<T>{
         implies a[i] == b[i]
         by {
             assert(self.root().valid_child_index(i as nat));
-            assert(a[i] == self.child_at_idx(i as nat).i_node(r1));
+//            assert(a[i] == self.child_at_idx(i as nat).i_node(r1));
             self.child_at_idx(i as nat).i_node_ignores_ranking(r1, r2);
         }
         assert(a =~= b);
@@ -291,7 +291,7 @@ impl<T: Buffer> LinkedBetree<T>{
         if self.has_root() {
             self.valid_buffer_dv_throughout();
             other.valid_buffer_dv_throughout();
-            assert(self.i()->buffers =~= other.i()->buffers);
+//            assert(self.i()->buffers =~= other.i()->buffers);
 
             self.i_children_lemma();
             other.i_children_lemma();
@@ -302,7 +302,7 @@ impl<T: Buffer> LinkedBetree<T>{
                 let child = self.child_at_idx(i as nat);
                 let other_child = other.child_at_idx(i as nat);
 
-                assert(self.root().valid_child_index(i as nat));
+//                assert(self.root().valid_child_index(i as nat));
                 assert(other.root().valid_child_index(i as nat));
 
                 self.child_at_idx_reachable_addrs_ensures(i as nat);
@@ -348,7 +348,7 @@ impl<T: Buffer> LinkedBetree<T>{
         if self.has_root() {
             self.valid_buffer_dv_throughout();
 
-            assert(self.i()->buffers =~= big.i()->buffers);
+//            assert(self.i()->buffers =~= big.i()->buffers);
 
             self.i_children_lemma();
             big.i_children_lemma();
@@ -359,7 +359,7 @@ impl<T: Buffer> LinkedBetree<T>{
                 let child = self.child_at_idx(i as nat);
                 let big_child = big.child_at_idx(i as nat);
 
-                assert(self.root().valid_child_index(i as nat));
+//                assert(self.root().valid_child_index(i as nat));
                 assert(big.root().valid_child_index(i as nat));
                 child.subdisk_preserves_i_with_ranking(big_child, ranking, big_ranking);
             }
@@ -436,7 +436,7 @@ impl<T: Buffer> LinkedBetree<T>{
         self.subdisk_preserves_i(child);
 
         assert(result.i()->buffers =~= self.i().grow()->buffers);
-        assert(result.i()->children =~= self.i().grow()->children);
+//        assert(result.i()->children =~= self.i().grow()->children);
     }
 
     #[verifier::spinoff_prover]
@@ -462,8 +462,8 @@ impl<T: Buffer> LinkedBetree<T>{
 
         child.indexiness_commutes_with_i();
         assert(self.i().valid_child_index(child_idx)); // trigger
-        assert(self.i().can_split_parent(request));
-        assert(result.i()->children.len() == self.i().split_parent(request)->children.len());
+//        assert(self.i().can_split_parent(request));
+//        assert(result.i()->children.len() == self.i().split_parent(request)->children.len());
 
         assert forall |i| 0 <= i < result.i()->children.len()
         implies 
@@ -520,16 +520,16 @@ impl<T: Buffer> LinkedBetree<T>{
         self.i_wf();
 
         let result = self.flush(child_idx, buffer_gc, new_addrs);
-        assert(self.i().can_flush(child_idx, buffer_gc));
+//        assert(self.i().can_flush(child_idx, buffer_gc));
         let i_result = self.i().flush(child_idx, buffer_gc);
 
         let _ = self.flush_new_ranking(child_idx, buffer_gc, new_addrs, self.finite_ranking());
-        assert(buffer_gc <= self.root().buffers.len());
+//        assert(buffer_gc <= self.root().buffers.len());
         assert(result.i()->buffers =~= self.i().flush(child_idx, buffer_gc)->buffers);
 
         self.i_children_lemma();
         result.i_children_lemma();
-        assert(result.i()->children.len() =~= i_result->children.len());
+//        assert(result.i()->children.len() =~= i_result->children.len());
 
         self.valid_buffer_dv_throughout();
 
@@ -583,11 +583,11 @@ impl<T: Buffer> LinkedBetree<T>{
         assert(self.buffer_dv.i_buffer_seq(compact_slice) =~= i_compact_slice);
 
         self.valid_buffer_dv_throughout();
-        assert(self.buffer_dv.valid_buffers(self.root().buffers)); 
+//        assert(self.buffer_dv.valid_buffers(self.root().buffers)); 
 
         let compact_ofs_map = self.root().make_offset_map().decrement(start);
         let i_compact_ofs_map = self.i().make_offset_map().decrement(start);
-        assert(compact_ofs_map =~= i_compact_ofs_map);
+//        assert(compact_ofs_map =~= i_compact_ofs_map);
 
         assert forall |k| #[trigger] compacted_buffer.i().map.contains_key(k) 
         implies ({
@@ -608,11 +608,11 @@ impl<T: Buffer> LinkedBetree<T>{
         implies compacted_buffer.i().map.contains_key(k) 
         by {
             let buffer_idx = choose |buffer_idx| i_compact_slice.key_in_buffer_filtered(i_compact_ofs_map, 0, k, buffer_idx);
-            assert(i_compact_ofs_map.offsets[k] == compact_ofs_map.offsets[k]);
-            assert(self.root().buffers[buffer_idx + start] == compact_slice[buffer_idx]);
-            assert(self.buffer_dv.entries.contains_key(compact_slice[buffer_idx]));
+//            assert(i_compact_ofs_map.offsets[k] == compact_ofs_map.offsets[k]);
+//            assert(self.root().buffers[buffer_idx + start] == compact_slice[buffer_idx]);
+//            assert(self.buffer_dv.entries.contains_key(compact_slice[buffer_idx]));
 
-            assert(i_compact_slice.key_in_buffer(0, k, buffer_idx) == self.buffer_dv.key_in_buffer(compact_slice, 0, k, buffer_idx));
+//            assert(i_compact_slice.key_in_buffer(0, k, buffer_idx) == self.buffer_dv.key_in_buffer(compact_slice, 0, k, buffer_idx));
             assert(self.buffer_dv.key_in_buffer_filtered(compact_slice, compact_ofs_map, 0, k, buffer_idx));
             assert(self.buffer_dv.valid_compact_key_domain(self.root(), start, end, k));
         }
@@ -640,7 +640,7 @@ impl<T: Buffer> LinkedBetree<T>{
 
         self.i_children_lemma();
         result.i_children_lemma();
-        assert(result.i()->children.len() == i_result->children.len());
+//        assert(result.i()->children.len() == i_result->children.len());
 
         assert forall |i| 0 <= i < result.i()->children.len()
         implies #[trigger] result.i()->children[i] == i_result->children[i]
@@ -691,7 +691,7 @@ impl<T: Buffer> QueryReceipt<T>{
         let i_receipt = self.i();
         let ranking = self.linked.the_ranking();
 
-        assert(self.all_lines_wf());
+//        assert(self.all_lines_wf());
 
         assert(i_receipt.all_lines_wf()) by {
             assert forall |i| 0 <= i < i_receipt.lines.len()
@@ -721,10 +721,10 @@ impl<T: Buffer> QueryReceipt<T>{
             let node = self.node(i);
             let start = node.flushed_ofs(self.key) as int;
 
-            assert(self.lines[i].linked.has_root());
+//            assert(self.lines[i].linked.has_root());
             assert(node.key_in_domain(self.key));
             assert(self.result_linked_at(i)); // trigger
-            assert(self.linked.buffer_dv.valid_buffers(node.buffers));
+//            assert(self.linked.buffer_dv.valid_buffers(node.buffers));
             self.linked.buffer_dv.query_from_commutes_with_i(node.buffers, self.key, start);
         }
     }
@@ -825,7 +825,7 @@ impl<T: Buffer> Path<T>{
 
             let i_result = self.i().substitute(replacement.i());
             self.target_commutes_with_i();
-            assert(self.i().can_substitute(replacement.i()));
+//            assert(self.i().can_substitute(replacement.i()));
     
             let sub_path_addrs = path_addrs.subrange(1, path_addrs.len() as int);
             let subtree = self.subpath().substitute(replacement, sub_path_addrs);
@@ -844,19 +844,19 @@ impl<T: Buffer> Path<T>{
                 subtree.reachable_betree_addrs_ignore_ranking(subtree.the_ranking(), ranking);
                 result_child.reachable_betree_addrs_ignore_ranking(result_child.the_ranking(), ranking);
                 subtree.same_reachable_betree_addrs_implies_same_buffer_addrs(result_child);
-                assert(subtree.reachable_buffer_addrs() == result.child_at_idx(r as nat).reachable_buffer_addrs());        
+//                assert(subtree.reachable_buffer_addrs() == result.child_at_idx(r as nat).reachable_buffer_addrs());        
                 result.child_at_idx_reachable_addrs_ensures(r as nat);
             }
 
             self.linked.valid_buffer_dv_throughout();
             assert(result.i()->buffers =~= i_result->buffers) by {
-                assert(result.root().buffers == self.linked.root().buffers);
+//                assert(result.root().buffers == self.linked.root().buffers);
                 self.linked.buffer_dv.agrees_implies_same_i(result.buffer_dv, result.root().buffers);
             }
 
             result.i_children_lemma();
             self.linked.i_children_lemma();
-            assert(result.i()->children.len() == i_result->children.len());
+//            assert(result.i()->children.len() == i_result->children.len());
 
             assert forall |i| 0 <= i < result.i()->children.len()
             implies #[trigger] result.i()->children[i] == i_result->children[i]
@@ -870,7 +870,7 @@ impl<T: Buffer> Path<T>{
                     self.linked.child_at_idx_reachable_addrs_ensures(r as nat);
                     self.subpath().substitute_commutes_with_i(replacement, sub_path_addrs);
                     subtree.subdisk_preserves_i(result.child_at_idx(i as nat));
-                    assert(result.i()->children[i] == i_result->children[i]);
+//                    assert(result.i()->children[i] == i_result->children[i]);
                 }
             }
             assert(result.i()->children =~= i_result->children);
@@ -954,15 +954,15 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
     {
         reveal(FilteredBetree::State::next_by);
         self.memtable.buffer.empty_refines();
-        assert(self.i().memtable.is_empty());
+//        assert(self.i().memtable.is_empty());
         self.linked.i_wf();
-        assert(self.i().wf());
+//        assert(self.i().wf());
 
         let ranking = self.linked.the_ranking();
         let stamped_value = lbl->stamped_betree.value;
 
         assert(stamped_value.valid_ranking(ranking));
-        assert(stamped_value.acyclic());
+//        assert(stamped_value.acyclic());
 
         if self.linked.has_root() {
             self.linked.i_bdv_preserves_i(ranking);
@@ -1003,7 +1003,7 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
             assert(result.i()->children =~= self.linked.i().push_memtable(self.memtable)->children);
         } else {
             assert(result.root().valid_child_index(0)); // trigger
-            assert(result.i()->children =~= seq![FilteredBetree_v::BetreeNode::Nil]);
+//            assert(result.i()->children =~= seq![FilteredBetree_v::BetreeNode::Nil]);
         }
         assert(result.i()->buffers =~= self.linked.i().push_memtable(self.memtable)->buffers);
         result.valid_view_preserves_i(post.linked);
@@ -1113,7 +1113,7 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
     {
         reveal(FilteredBetree::State::next_by);
         self.linked.i_wf();
-        assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_noop()));
+//        assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_noop()));
     }
 
     proof fn next_by_refines(self, post: Self, lbl: LinkedBetreeVars::Label, step: LinkedBetreeVars::Step<T>)

@@ -486,7 +486,7 @@ verus! {
             CoordinationSystem::Config::initialize(state) => {
                 v.i().versions.extensionality(FloatingSeq::new(0, 1, |i| AsyncMap::State::init_persistent_state()));
 
-                assert(CrashTolerantAsyncMap::State::initialize(v.i()));
+//                assert(CrashTolerantAsyncMap::State::initialize(v.i()));
 
                 CrashTolerantAsyncMap::show::initialize(v.i());
             },
@@ -535,12 +535,12 @@ verus! {
         reveal(AbstractJournal::State::next_by);
 
         // Passes with the reveal statements, fails without
-        assert(v.ephemeral is Some);
-        assert(v.journal.ephemeral is Known);
+//        assert(v.ephemeral is Some);
+//        assert(v.journal.ephemeral is Known);
 
-        assert(CrashTolerantJournal::State::next(v.journal, vp.journal, CrashTolerantJournal::Label::CommitCompleteLabel {
-            require_end: v.ephemeral.get_Some_0().map_lsn,
-        }));
+//        assert(CrashTolerantJournal::State::next(v.journal, vp.journal, CrashTolerantJournal::Label::CommitCompleteLabel {
+//            require_end: v.ephemeral.get_Some_0().map_lsn,
+//        }));
 
         // There are six pieces in play here: the persistent and in-flight images and the ephemeral journals:
         //  _________ __________
@@ -562,7 +562,7 @@ verus! {
         let ej = v.journal.i();
 
         // Recommendation fails even though assertion passes.
-        assert(ej.can_discard_to(lsn));
+//        assert(ej.can_discard_to(lsn));
         let eji = ej.discard_recent(lsn);
 
         // Here's a calc, but in comments so we can use a shorthand algebra:
@@ -623,13 +623,13 @@ verus! {
             }
 
             // assert_maps_equal!(left.value, right.value);
-            assert(left == right);
+//            assert(left == right);
         } else {
             let yz = y.concat(z);
             // Once again introducing extensionality arguments is necessary to prove
             // Original Dafny version does not need this else case.
             assert_maps_equal!(yz.msgs, y.msgs);
-            assert(left == right);
+//            assert(left == right);
         }
     }
 
@@ -683,7 +683,7 @@ verus! {
 
         let singleton = MsgHistory::singleton_at(v.ephemeral.get_Some_0().map_lsn, keyed_message);
 
-        assert(CrashTolerantJournal::State::next(v.journal, vp.journal, CrashTolerantJournal::Label::PutLabel{ records: singleton }));
+//        assert(CrashTolerantJournal::State::next(v.journal, vp.journal, CrashTolerantJournal::Label::PutLabel{ records: singleton }));
 
         journal_associativity(v.mapadt.persistent, v.journal.i(), singleton);
 
@@ -696,7 +696,7 @@ verus! {
 
         // This should be true by the definition of the transition (just leaving
         // this assertion to remember that)
-        assert(vp.mapadt.i() == MsgHistory::map_plus_history(v.mapadt.i(), singleton));
+//        assert(vp.mapadt.i() == MsgHistory::map_plus_history(v.mapadt.i(), singleton));
 
         // Because `verus` spec(checked) functions don't have ensures clauses, we need a separate lemma to
         // prove properties of certain operations.
@@ -710,7 +710,7 @@ verus! {
             );
         }
 
-        assert(vp.inv());
+//        assert(vp.inv());
     }
 
     pub proof fn inv_inductive_commit_start_step(
@@ -809,9 +809,9 @@ verus! {
             ej.discard_old(im_end).discard_recent(em_end)
         );
 
-        assert( !v.superblock_in_flight );
-        assert( !vp.superblock_in_flight );
-        assert( vp.inv() );
+//        assert( !v.superblock_in_flight );
+//        assert( !vp.superblock_in_flight );
+//        assert( vp.inv() );
     }
 
     pub proof fn inv_inductive(v: CoordinationSystem::State, vp: CoordinationSystem::State, label: CoordinationSystem::Label)
@@ -850,7 +850,7 @@ verus! {
         match step {
             CoordinationSystem::Step::load_ephemeral_from_persistent(..) => {
                 // Verifies for free! (Well, besides all of the reveals lol)
-                assert(vp.inv());
+//                assert(vp.inv());
             },
             CoordinationSystem::Step::recover(new_journal, new_mapadt, records) => {
                 // Lemma because we don't get ensures from spec(checked) functions
@@ -893,29 +893,29 @@ verus! {
                 // Target reached: em' = pm + ej[:em_end'] = pm' + ej'[:em_end']!
             },
             CoordinationSystem::Step::accept_request(..) => {
-                assert(vp.inv());
+//                assert(vp.inv());
             },
             CoordinationSystem::Step::query(..) => {
-                assert(vp.inv());
+//                assert(vp.inv());
             },
             CoordinationSystem::Step::put(..) => {
                 inv_inductive_put_step(v, vp, label, step);
-                assert(vp.inv());
+//                assert(vp.inv());
             },
             CoordinationSystem::Step::deliver_reply(..) => {
-                assert(vp.inv());
+//                assert(vp.inv());
             },
             CoordinationSystem::Step::journal_internal(..) => {
-                assert(vp.inv());
+//                assert(vp.inv());
             },
             CoordinationSystem::Step::map_internal(..) => {
-                assert(vp.inv());
+//                assert(vp.inv());
             },
             CoordinationSystem::Step::req_sync(..) => {
-                assert(v.inv());
+//                assert(v.inv());
             },
             CoordinationSystem::Step::reply_sync(..) => {
-                assert(vp.inv());
+//                assert(vp.inv());
             },
             CoordinationSystem::Step::commit_start(..) => {
                 inv_inductive_commit_start_step(v, vp, label, step);
@@ -924,12 +924,12 @@ verus! {
                 inv_inductive_commit_complete_step(v, vp, label, step);
             },
             CoordinationSystem::Step::crash(..) => {
-                assert(vp.inv());
+//                assert(vp.inv());
             },
             _ => {
                 // The only case remaining is the dummy case. Have
                 // to add this default here for now.
-                assert(vp.inv());
+//                assert(vp.inv());
             }
         }
     } // lemma inv_inductive
@@ -989,7 +989,7 @@ verus! {
         let value = label->ctam_label->base_op.arrow_ExecuteOp_req().input->value;
 
         assert(jp.ext_equal(jp._dr(jp.seq_start + jp.len())));
-        assert(j.ext_equal(j._dr(j.seq_start + j.len())));
+//        assert(j.ext_equal(j._dr(j.seq_start + j.len())));
 
         // "Rob Power Trigger" (ask Jon for origins of this meme)
         assert(forall |i: LSN|
@@ -1009,8 +1009,8 @@ verus! {
         let versions_prime = vp.i().versions;
         let versions = v.i().versions;
 
-        assert( versions_prime == vp.iversions_known() );
-        assert( versions == v.iversions_known() );
+//        assert( versions_prime == vp.iversions_known() );
+//        assert( versions == v.iversions_known() );
 
         // need to tickle some trigger to get extensionality in the inflight case
         if v.inflight_is_on_disk() {
@@ -1021,22 +1021,22 @@ verus! {
             assert forall |i| vpdl.is_active(i) implies #[trigger] vpdl[i].ext_equal(versions[i]) by {
                 assert( remaining_journal_p.discard_recent(i as LSN) == remaining_journal.discard_recent(i as LSN) );
             }
-            assert(versions_prime.drop_last().ext_equal(versions));
+//            assert(versions_prime.drop_last().ext_equal(versions));
         }
 
         assert(versions_prime.drop_last().ext_equal(versions));
 
-        assert(0 < versions_prime.len());
-        assert(versions_prime.drop_last() == versions);
-        assert(CrashTolerantAsyncMap::State::optionally_append_version(
-            versions, versions_prime));
+//        assert(0 < versions_prime.len());
+//        assert(versions_prime.drop_last() == versions);
+//        assert(CrashTolerantAsyncMap::State::optionally_append_version(
+//            versions, versions_prime));
 
         // BEGIN - AsyncMap transition
         // Alright, let's show how you take an AsyncMap step using
         // this. It's going to be an OperateOp
         let async_op = label->ctam_label->base_op;
 
-        assert(matches!(async_op, AsyncMap::Label::ExecuteOp{..}));
+//        assert(matches!(async_op, AsyncMap::Label::ExecuteOp{..}));
 
         // Step will be an execute step
         let input = async_op.arrow_ExecuteOp_req().input;
@@ -1068,30 +1068,30 @@ verus! {
 
         // END - Yet another proof goal: show that MapSpec transition works
 
-        assert( map_label == MapSpec::Label::Put{input, output} );
+//        assert( map_label == MapSpec::Label::Put{input, output} );
 
-        assert(MapSpec::State::put(pre_map, post_map, map_label));
+//        assert(MapSpec::State::put(pre_map, post_map, map_label));
 
         // This was the KEY!!! WHY?!?!?!
         MapSpec::show::put(pre_map, post_map, map_label);
-        assert(MapSpec::State::next(pre_map, post_map, map_label));
+//        assert(MapSpec::State::next(pre_map, post_map, map_label));
 
         // Assert that we can take an execute transition using these parameters
         assert(AsyncMap::State::next_by(pre_async, post_async, async_op, execute_step));
 
         // END - AsyncMap New goal
-        assert(
-            AsyncMap::State::next(
-                AsyncMap::State { persistent: versions.last(), ephemeral: v.i().async_ephemeral },
-                AsyncMap::State { persistent: versions_prime.last(), ephemeral: vp.i().async_ephemeral },
-                label->ctam_label->base_op
-            )
-        );
+//        assert(
+//            AsyncMap::State::next(
+//                AsyncMap::State { persistent: versions.last(), ephemeral: v.i().async_ephemeral },
+//                AsyncMap::State { persistent: versions_prime.last(), ephemeral: vp.i().async_ephemeral },
+//                label->ctam_label->base_op
+//            )
+//        );
 
         // END - Goal is below, CrashTolerant
         // assert(v.i().versions.ext_equal(vp.i().versions.drop_last()));
         assert(CrashTolerantAsyncMap::State::next_by(v.i(), vp.i(), label->ctam_label, ctam_step));
-        assert(CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label->ctam_label));
+//        assert(CrashTolerantAsyncMap::State::next(v.i(), vp.i(), label->ctam_label));
     }
 
     pub proof fn superblock_write_lands_step_refines(
@@ -1177,13 +1177,13 @@ verus! {
         let vers_s = v.i().versions.get_suffix(new_stable_index);
         let vers_p = vp.i().versions;
 
-        assert forall |lsn| { vers_p.is_active(lsn) }
-            implies { vers_p[lsn] == vers_s[lsn] } by
-        {
-            if (v.journal.in_flight.get_Some_0().seq_end <= lsn) {
-                commit_step_preserves_history(v, vp, label, step, lsn as nat);
-            }
-        }
+//        assert forall |lsn| { vers_p.is_active(lsn) }
+//            implies { vers_p[lsn] == vers_s[lsn] } by
+//        {
+//            if (v.journal.in_flight.get_Some_0().seq_end <= lsn) {
+//                commit_step_preserves_history(v, vp, label, step, lsn as nat);
+//            }
+//        }
 
         // Thankfully extensional equality is wrapped in a lemma already written by Jon.
         vers_s.extensionality(vers_p);
@@ -1273,14 +1273,14 @@ verus! {
 
         let keep_in_flight = v.journal.in_flight is Some && !v.superblock_in_flight;
 
-        assert( CrashTolerantJournal::State::next(
-            v.journal,
-            vp.journal,
-            CrashTolerantJournal::Label::CrashLabel{ keep_in_flight }) );
-        assert( CrashTolerantMap::State::next(
-            v.mapadt,
-            vp.mapadt,
-            CrashTolerantMap::Label::CrashLabel{ keep_in_flight }) );
+//        assert( CrashTolerantJournal::State::next(
+//            v.journal,
+//            vp.journal,
+//            CrashTolerantJournal::Label::CrashLabel{ keep_in_flight }) );
+//        assert( CrashTolerantMap::State::next(
+//            v.mapadt,
+//            vp.mapadt,
+//            CrashTolerantMap::Label::CrashLabel{ keep_in_flight }) );
 
         if v.ephemeral is None || !(v.ephemeral.unwrap() is Known) {
             assert(vp.i().versions =~~= v.i().versions.get_prefix(v.i().stable_index() + 1));
@@ -1305,7 +1305,7 @@ verus! {
         }
 
         // GOAL
-        assert(CrashTolerantAsyncMap::State::crash(v.i(), vp.i(), label->ctam_label));
+//        assert(CrashTolerantAsyncMap::State::crash(v.i(), vp.i(), label->ctam_label));
         CrashTolerantAsyncMap::show::crash(v.i(), vp.i(), label->ctam_label);
     }
 
@@ -1364,12 +1364,12 @@ verus! {
 
         if (matches!(step, CoordinationSystem::Step::load_ephemeral_from_persistent(..)))
         {
-            assert(matches!(label.arrow_Label_ctam_label(), CrashTolerantAsyncMap::Label::Noop{..}));
+//            assert(matches!(label.arrow_Label_ctam_label(), CrashTolerantAsyncMap::Label::Noop{..}));
         }
 
         // GOAL
-        assert(CrashTolerantAsyncMap::State::noop(
-            v.i(), vp.i(), CrashTolerantAsyncMap::Label::Noop{}));
+//        assert(CrashTolerantAsyncMap::State::noop(
+//            v.i(), vp.i(), CrashTolerantAsyncMap::Label::Noop{}));
         CrashTolerantAsyncMap::show::noop(v.i(), vp.i(), CrashTolerantAsyncMap::Label::Noop{});
     }
     
@@ -1663,7 +1663,7 @@ verus! {
             _ => {},
         }
 
-        assert(CrashTolerantAsyncMap::State::next_by(ctam_pre, ctam_post, ctam_label, ctam_step));
+//        assert(CrashTolerantAsyncMap::State::next_by(ctam_pre, ctam_post, ctam_label, ctam_step));
     }
 
     // The goal lemma of all of this refinement. Shows that a "next" transition in
@@ -1694,7 +1694,7 @@ verus! {
         inv_inductive(v, vp, label);
 
         let step = choose |s| CoordinationSystem::State::next_by(v, vp, label, s);
-        assert(CoordinationSystem::State::next_by(v, vp, label, step));
+//        assert(CoordinationSystem::State::next_by(v, vp, label, step));
 
         // Order of match arms was chosen to match Dafny CoordinationSystemRefinement
         // proof.

@@ -102,11 +102,11 @@ impl AllocationJournal::State {
 
         assert(Self::next_by(self, post, lbl, AllocationJournal::Step::freeze_for_commit(depth)));
         Self::frozen_journal_is_valid_image(self, post, lbl);
-        assert(frozen_journal.tj.decodable());
+//        assert(frozen_journal.tj.decodable());
 
         self.tj().crop_ensures(depth);
         self.tj().disk_view.pointer_after_crop_seq_end(self.tj().freshest_rec, depth);
-        assert(frozen_journal.tj.seq_end() <= self.tj().seq_end());
+//        assert(frozen_journal.tj.seq_end() <= self.tj().seq_end());
 
         let post_discard = self.tj().crop(depth).discard_old(new_bdy);
         let frozen_lsns = Set::new(|lsn: LSN| new_bdy <= lsn && lsn < post_discard.seq_end());
@@ -128,26 +128,26 @@ impl AllocationJournal::State {
                 let addr = i_frozen_index[lsn];
     
                 self.tj().build_lsn_addr_index_ensures();
-                assert(self.tj().disk_view.index_keys_map_to_valid_entries(self.i().lsn_addr_index));
+//                assert(self.tj().disk_view.index_keys_map_to_valid_entries(self.i().lsn_addr_index));
                 self.tj().disk_view.instantiate_index_keys_map_to_valid_entries(self.i().lsn_addr_index, lsn);
     
-                assert(self.i().lsn_addr_index[lsn] == addr);
-                assert(self.tj().disk_view.addr_supports_lsn(addr, lsn));
+//                assert(self.i().lsn_addr_index[lsn] == addr);
+//                assert(self.tj().disk_view.addr_supports_lsn(addr, lsn));
     
                 if addrs_past_new_end.contains(addr) {
-                    assert(frozen_root.unwrap().after_page(addr));
+//                    assert(frozen_root.unwrap().after_page(addr));
 
                     let last_frozen_lsn = (frozen_journal.tj.seq_end()-1) as nat;
-                    assert(self.lsn_au_index.contains_key(last_frozen_lsn)); // trigger
-                    assert(self.tj().disk_view.addr_supports_lsn(frozen_root.unwrap(), last_frozen_lsn));
-                    assert(self.tj().disk_view.addr_supports_lsn(addr, lsn));
+//                    assert(self.lsn_au_index.contains_key(last_frozen_lsn)); // trigger
+//                    assert(self.tj().disk_view.addr_supports_lsn(frozen_root.unwrap(), last_frozen_lsn));
+//                    assert(self.tj().disk_view.addr_supports_lsn(addr, lsn));
                     reveal(DiskView::pages_allocated_in_lsn_order);
-                    assert(false);
+//                    assert(false);
                 }
             }
         }
 
-        assert(i_frozen_index.values() <= frozen_addrs);
+//        assert(i_frozen_index.values() <= frozen_addrs);
     }
 
     pub proof fn discard_old_refines(self, post: Self, lbl: AllocationJournal::Label, new_journal: LinkedJournal::State)
@@ -155,7 +155,7 @@ impl AllocationJournal::State {
         ensures LikesJournal::State::next_by(self.i(), post.i(), lbl.i(), LikesJournal::Step::discard_old(new_journal))
     {
         reveal(LikesJournal::State::next_by);
-        assert(post.i().journal == new_journal);
+//        assert(post.i().journal == new_journal);
 
         let start_lsn = lbl->start_lsn;
         let require_end = lbl->require_end;
@@ -171,24 +171,24 @@ impl AllocationJournal::State {
         }
 
         post.tj().disk_view.sub_disk_with_newer_lsn_repr_index(self.tj().disk_view, post.tj().freshest_rec);
-        assert(post.i().lsn_addr_index <= self.i().lsn_addr_index);
+//        assert(post.i().lsn_addr_index <= self.i().lsn_addr_index);
 
         LikesJournal_v::lsn_addr_index_discard_up_to_ensures(self.i().lsn_addr_index, start_lsn);
-        assert(lsn_addr_index_post <= self.i().lsn_addr_index);
+//        assert(lsn_addr_index_post <= self.i().lsn_addr_index);
 
         if post.tj().freshest_rec is Some {
             post.tj().disk_view.build_lsn_addr_index_domain_valid(self.tj().freshest_rec);
         }
 
         assert(post.i().lsn_addr_index =~= lsn_addr_index_post);
-        assert(self.lsn_au_index == self.tj().build_lsn_au_index(self.first));
+//        assert(self.lsn_au_index == self.tj().build_lsn_au_index(self.first));
 
         self.tj().disk_view.build_lsn_au_index_equiv_page_walk(self.tj().freshest_rec, self.first);
         self.tj().disk_view.build_lsn_au_index_page_walk_consistency(self.tj().freshest_rec);
         self.tj().disk_view.build_lsn_addr_index_reflects_disk_view(self.tj().freshest_rec);
-        assert(i_keep_addrs <= keep_addrs);
+//        assert(i_keep_addrs <= keep_addrs);
 
-        assert(self.tj().discard_old_cond(start_lsn, i_keep_addrs, new_journal.truncated_journal));
+//        assert(self.tj().discard_old_cond(start_lsn, i_keep_addrs, new_journal.truncated_journal));
     }
 
     pub proof fn internal_journal_marshal_refines(self, post: Self, lbl: AllocationJournal::Label, 

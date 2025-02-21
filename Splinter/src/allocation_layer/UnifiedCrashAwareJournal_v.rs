@@ -96,13 +96,13 @@ impl ImageState {
         let sub_lsns = Set::new(|lsn| self.seq_start() <= lsn < sub_end);
 
         self.to_tj(dv).build_lsn_au_index_ensures(self.first);
-        assert(index.dom() =~= sub_lsns);
+//        assert(index.dom() =~= sub_lsns);
         assert(index.restrict(sub_lsns) =~= index);
 
         let sub_dv = self.to_tj(dv).sub_disk_preserves_pointer_is_upstream(index, self.first, self.seq_start(), self.freshest_rec, self.first);
-        assert(sub_dv.pointer_is_upstream(self.freshest_rec, self.first));
-        assert(sub_dv.entries.dom() =~= self.tight_domain(dv));
-        assert(sub_dv.entries =~= post_dv.entries);
+//        assert(sub_dv.pointer_is_upstream(self.freshest_rec, self.first));
+//        assert(sub_dv.entries.dom() =~= self.tight_domain(dv));
+//        assert(sub_dv.entries =~= post_dv.entries);
 
         self.to_tj(dv).sub_disk_preserves_bounded_inactive_lsns(index, self.first, self.to_tj(self.tight_dv(dv)), self.first);
     }
@@ -402,8 +402,8 @@ state_machine!{UnifiedCrashAwareJournal{
         pre.persistent.tight_dv_preserves_valid_image(pre.dv);
         v.image.to_tj(pre.dv).build_lsn_au_index_ensures(pre.persistent.first);
 
-        assert(v.to_aj(post.dv).inv());
-        assert(post.state_relations());
+//        assert(v.to_aj(post.dv).inv());
+//        assert(post.state_relations());
     }
 
     #[inductive(read_for_recovery)]
@@ -464,7 +464,7 @@ state_machine!{UnifiedCrashAwareJournal{
         tj.disk_view.pointer_after_crop_ensures(tj.freshest_rec, depth);
         tj.build_lsn_au_index_ensures(v.image.first);
         v.to_aj(pre.dv).subrange_preserves_valid_structure(frozen_journal.seq_start(), frozen_journal.freshest_rec, frozen_journal.first);
-        assert(frozen_journal.valid_image(pre.dv));
+//        assert(frozen_journal.valid_image(pre.dv));
     }
 
     #[inductive(commit_complete)]
@@ -481,7 +481,7 @@ state_machine!{UnifiedCrashAwareJournal{
         };
 
         AJ::State::inv_next(pre_aj, post_aj, aj_lbl);
-        assert( post_aj.inv() );
+//        assert( post_aj.inv() );
 
         reveal(AllocationJournal::State::next);
         reveal(AllocationJournal::State::next_by);
@@ -496,13 +496,13 @@ state_machine!{UnifiedCrashAwareJournal{
             pre_aj.tj().disk_view.addr_supports_lsn_consistent_with_index(pre_aj.lsn_au_index, last_lsn, root.unwrap());
             // assert(pre_aj.lsn_au_index[last_lsn] == root.unwrap().au);
             assert(post_aj.lsn_au_index.contains_key(last_lsn));
-            assert(post_aj.lsn_au_index <= pre_aj.lsn_au_index);
-            assert(!deallocs.contains(root.unwrap().au));
+//            assert(post_aj.lsn_au_index <= pre_aj.lsn_au_index);
+//            assert(!deallocs.contains(root.unwrap().au));
             assert(post.dv.entries.contains_key(root.unwrap()));
         }
 
         post_aj.subrange_preserves_valid_structure(post.persistent.seq_start(), post.persistent.freshest_rec, post.persistent.first);
-        assert(post.persistent.valid_image(post.dv));
+//        assert(post.persistent.valid_image(post.dv));
     }
 
     #[inductive(crash)]

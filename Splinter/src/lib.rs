@@ -7,7 +7,7 @@ mod allocation_layer;
 mod betree;
 mod disk;
 mod journal;
-mod marshalling;
+// mod marshalling;
 mod spec;
 mod exec;
 

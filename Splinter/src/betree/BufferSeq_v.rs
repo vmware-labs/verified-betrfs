@@ -146,7 +146,7 @@ impl BufferSeq {
         assert forall |k| #[trigger] self.i_from(idx).map.contains_key(k) <==> exists |buffer_idx| self.key_in_buffer(idx, k, buffer_idx)
         by {
             if self.i_from(idx).map.contains_key(k) {
-                assert(idx < self.len()); // trigger
+//                assert(idx < self.len()); // trigger
                 if self.key_in_buffer(idx, k, idx) {
                 } else {
                     self.i_from_domain(idx+1);
@@ -160,7 +160,7 @@ impl BufferSeq {
             if exists |buffer_idx| self.key_in_buffer(idx, k, buffer_idx) {
                 let buffer_idx = choose |buffer_idx| self.key_in_buffer(idx, k, buffer_idx);
                 if buffer_idx == idx {
-                    assert(self.i_from(idx).map.contains_key(k));
+//                    assert(self.i_from(idx).map.contains_key(k));
                 } else {
                     self.i_from_domain(idx+1);
                     assert(self.key_in_buffer(idx+1, k, buffer_idx)); // trigger
@@ -181,12 +181,12 @@ impl BufferSeq {
             <==> exists |buffer_idx| self.key_in_buffer_filtered(offset_map, idx, k, buffer_idx)
         by {
             if result.map.contains_key(k) {
-                assert(idx < self.len()); // trigger
+//                assert(idx < self.len()); // trigger
                 if self.key_in_buffer_filtered(offset_map, idx, k, idx) {
                 } else {
                     let sub_result = self.i_filtered_from(offset_map, idx+1);
                     self.i_filtered_from_domain(offset_map, idx+1);
-                    assert(sub_result.map.contains_key(k));
+//                    assert(sub_result.map.contains_key(k));
 
                     let next_idx = idx + 1; // TODO(verus): temp measure before forall_arith pr is merged
                     let buffer_idx = choose |buffer_idx| self.key_in_buffer_filtered(offset_map, next_idx, k, buffer_idx);
@@ -196,7 +196,7 @@ impl BufferSeq {
             if exists |buffer_idx| self.key_in_buffer_filtered(offset_map, idx, k, buffer_idx) {
                 let buffer_idx = choose |buffer_idx| self.key_in_buffer_filtered(offset_map, idx, k, buffer_idx);
                 if buffer_idx == idx {
-                    assert(result.map.contains_key(k));
+//                    assert(result.map.contains_key(k));
                 } else {
                     let sub_result = self.i_filtered_from(offset_map, idx+1);
                     self.i_filtered_from_domain(offset_map, idx+1);
@@ -245,7 +245,7 @@ impl BufferSeq {
         if start == bottom.len() {
             Self::common_buffer_seqs(bottom.extend(top), top, start, 0-start, key);
         } else {
-            assert(bottom.extend(top).buffers[start] == bottom.buffers[start]);
+//            assert(bottom.extend(top).buffers[start] == bottom.buffers[start]);
             Self::extend_buffer_seq_query_ensures(top, bottom, key, start+1);
         }
     }

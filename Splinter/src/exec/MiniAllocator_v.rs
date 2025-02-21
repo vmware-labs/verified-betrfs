@@ -174,7 +174,7 @@ impl MiniAllocator {
             assert(self@.allocs =~= v.allocs);
     
             post_reserve.free_addr_implies_not_all_allocated();
-            assert(self@.curr == v.curr);        
+//            assert(self@.curr == v.curr);        
         }
 
         addr

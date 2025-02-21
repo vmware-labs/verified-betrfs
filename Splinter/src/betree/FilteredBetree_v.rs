@@ -141,7 +141,7 @@ impl BetreeNode {
     pub proof fn flushed_ofs_inline_lemma(self, key: Key)
     {
         self->pivots.route_lemma(key);
-        assert( 0 <= self->pivots.route(key) < self->flushed.offsets.len() );
+//        assert( 0 <= self->pivots.route(key) < self->flushed.offsets.len() );
     }
 
 

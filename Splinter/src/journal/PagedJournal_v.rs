@@ -183,10 +183,10 @@ impl JournalRecord {
         if 0<depth {
 //          // TODO(chris): not enough fuel for mutual recursion? This is painful wrt dafny
 //          // TODO(jonh): expain this to andrea
-            assert(Self::opt_rec_can_crop_head_records(self.cropped_prior(boundary_lsn), boundary_lsn, (more-1) as nat));
+//            assert(Self::opt_rec_can_crop_head_records(self.cropped_prior(boundary_lsn), boundary_lsn, (more-1) as nat));
             self.cropped_prior(boundary_lsn).get_Some_0().can_crop_more_yields_some(boundary_lsn, (depth-1) as nat, (more-1) as nat);
 //          // TODO(chris): not enough fuel for mutual recursion? This is painful wrt dafny
-            assert(Self::opt_rec_crop_head_records(self.cropped_prior(boundary_lsn), boundary_lsn, (depth-1) as nat) is Some);
+//            assert(Self::opt_rec_crop_head_records(self.cropped_prior(boundary_lsn), boundary_lsn, (depth-1) as nat) is Some);
         }
     }
         

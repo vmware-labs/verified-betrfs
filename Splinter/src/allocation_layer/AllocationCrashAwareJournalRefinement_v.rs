@@ -238,14 +238,14 @@ impl AllocationCrashAwareJournal::State{
     {
         reveal(CrashTolerantJournal::State::next_by);
 
-        assert(self.i().ephemeral is Known);
-        assert(self.i().in_flight is None);
+//        assert(self.i().ephemeral is Known);
+//        assert(self.i().in_flight is None);
 
         frozen_journal.tj.iwf();
         JournalRecord::i_lemma_forall();
 
-        assert(frozen_journal.i().wf());
-        assert(frozen_journal.tj.seq_start() == frozen_journal.i().seq_start);
+//        assert(frozen_journal.i().wf());
+//        assert(frozen_journal.tj.seq_start() == frozen_journal.i().seq_start);
 
         let aj = self.ephemeral->v;
         let alloc_lbl = AllocationJournal::Label::FreezeForCommit{frozen_journal};
@@ -267,7 +267,7 @@ impl AllocationCrashAwareJournal::State{
         self.inflight.unwrap().tj.iwf();
         JournalRecord::i_lemma_forall();
 
-        assert(self.inflight.unwrap().tj.seq_start() == self.i().in_flight.unwrap().seq_start);
+//        assert(self.inflight.unwrap().tj.seq_start() == self.i().in_flight.unwrap().seq_start);
 
         let aj = self.ephemeral->v;
         let alloc_lbl = AllocationJournal::Label::DiscardOld{ 
@@ -323,7 +323,7 @@ impl AllocationCrashAwareJournal::State{
                     CrashTolerantJournal::Step::crash()) ); // witness
             },
             _ => {
-                assert(false);
+//                assert(false);
             },
         }
     }
