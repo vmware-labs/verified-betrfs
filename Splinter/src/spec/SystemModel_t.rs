@@ -7,11 +7,13 @@ use builtin::*;
 use builtin_macros::*;
 use state_machines_macros::state_machine;
 use vstd::prelude::*;
-use vstd::{map::*, seq::*, bytes::*, set::*};
+use vstd::{map::*, seq::*, bytes::*, set::*, multiset::*};
 
 use crate::spec::AsyncDisk_t::*;
 use crate::spec::MapSpec_t::{ID, SyncReqId, Request, Reply};
 use crate::spec::MapSpec_t::{AsyncMap, CrashTolerantAsyncMap};
+// TODO: move this somewhere else? or we can use disk lbl instead
+use crate::implementation::MultisetMapRelation_v::*; 
 
 verus!{
 
@@ -21,43 +23,32 @@ pub type DiskLabel = AsyncDisk::Label;
 pub enum ProgramUserOp{
     // add sync to request 
     // async operations with application clients
-    AcceptRequest{req: Request},
-    DeliverReply{reply: Reply},
+    // AcceptRequest{req: Request},
+    // DeliverReply{reply: Reply},
 
     // declares the linearization point of each operation
     Execute{req: Request, reply: Reply},
 
+    // to know what sync means we need to give sync a version
     // program handling application client requested sync request
-    AcceptSyncRequest{ sync_req_id: SyncReqId },
-    DeliverSyncReply{ sync_req_id: SyncReqId },
+    AcceptSyncRequest{ sync_req_id: SyncReqId, version: nat },
+    DeliverSyncReply{ sync_req_id: SyncReqId, version: nat },
 }
 
-impl ProgramUserOp {
-    pub open spec fn to_ctam_label(self) -> CrashTolerantAsyncMap::Label 
-    {
-        if let Self::AcceptRequest{req} = self {
-            CrashTolerantAsyncMap::Label::OperateOp{
-                base_op: AsyncMap::Label::RequestOp{req} }
-        } else if let Self::DeliverReply{reply} = self {
-            CrashTolerantAsyncMap::Label::OperateOp{
-                base_op: AsyncMap::Label::ReplyOp{reply} }
-        } else if let Self::Execute{req, reply} = self {
-            CrashTolerantAsyncMap::Label::OperateOp{
-                base_op: AsyncMap::Label::ExecuteOp{req, reply} }
-        } else {
-            arbitrary()
-        }
-    }
+pub struct ProgramDiskInfo{
+    // pub disk_event: DiskEvent, 
+    pub reqs: Multiset<(ID, DiskRequest)>, 
+    pub resps: Multiset<(ID, DiskResponse)>,
 }
 
 // Auditor defines externally visible actions that can be taken by a program model
+// TODO: should we rename UserIO?
 pub enum ProgramLabel{
     UserIO{op: ProgramUserOp},
 
     // captures program's interaction with the disk model,
     // e.g. loading/flushing/evicting cache pages
-    // DiskIO{disk_reqs: Set<DiskRequest>, disk_resps: Set<DiskResponse>},
-    DiskIO{disk_lbl: DiskLabel},
+    DiskIO{info: ProgramDiskInfo},
 
     // program internal operation, no externally visible actions
     Internal{},
@@ -78,24 +69,26 @@ state_machine!{ SystemModel<T: ProgramModel> {
         // trusted disk model
         pub disk: DiskModel,
 
-        // TODO(jonh): we can delete id_history assumption at this layer, now that we
-        // found we have to encode it at the KVStoreTokenized layer.
-        //
-        // history of application requests that have been accepted,
-        // auditor uses this to promise that every request has a unique ID 
-        pub id_history: Set<ID>, 
+        // TODO: keeping these queues as multiset bc it aligns closer to the actual tokenized impl,
+        // is that a sensible decision?
+        pub requests: Multiset<Request>,
+        pub replies: Multiset<Reply>,
+        // TODO: nat driven by program
+        pub sync_requests: Multiset<(SyncReqId, nat)>,
     }
 
     // Crash Tolerance is driven by the program, system model merely serves to orchestrate
     // and restricts interactions between program, application clients, and the disk
     pub enum Label
     {
-        // program model async operate op 
-        // current transitions only support req, repy, execute ops 
+        AcceptRequest{ req: Request },
+        DeliverReply{ reply: Reply },
+
+        // program model for enabling replies to user request
         // expose this to enforce correspondance 
         ProgramUIOp{ op: ProgramUserOp },
         // program driven disk ops
-        ProgramDiskOp{ disk_lbl: DiskLabel },
+        ProgramDiskOp{ info: ProgramDiskInfo },
         // program internal op
         ProgramInternal,
         // disk internal op
@@ -115,36 +108,82 @@ state_machine!{ SystemModel<T: ProgramModel> {
 
         init program = program;
         init disk = disk;
-        init id_history = Set::empty();
+        init requests = Multiset::empty();
+        init replies = Multiset::empty();
+        init sync_requests = Multiset::empty();
     }}
 
-    transition!{ program_ui(lbl: Label, new_program: T) {
+    pub open spec fn fresh_id(self, id: ID) -> bool
+    {
+        &&& forall |req| #[trigger] self.requests.contains(req) ==> req.id != id
+        &&& forall |resp| #[trigger] self.replies.contains(resp) ==> resp.id != id
+        &&& forall |sync_req| #[trigger] self.sync_requests.contains(sync_req) ==> sync_req.0 != id
+    }
+
+    // implemented by auditor's clientapi_t::accept_request
+    transition!{ accept_request(lbl: Label) {
+        require lbl is AcceptRequest;
+        require pre.fresh_id(lbl->req.id); 
+        update requests = pre.requests.insert(lbl->req);
+    }}
+
+    // implemented by auditor's clientapi_t::send_reply
+    transition!{ deliver_reply(lbl: Label) {
+        require lbl is DeliverReply;
+        require pre.replies.contains(lbl->reply);
+        update replies = pre.replies.remove(lbl->reply);
+    }}
+
+    transition!{ program_execute(lbl: Label, new_program: T) {
         require lbl is ProgramUIOp;
+        require lbl->op is Execute;
 
-        let new_id = if lbl->op is AcceptRequest {
-            Set::empty().insert(lbl->op.arrow_AcceptRequest_req().id)
-        } else if lbl->op is AcceptSyncRequest {
-            Set::empty().insert(lbl->op.arrow_AcceptSyncRequest_sync_req_id())
-        } else { Set::empty() };
-
-        // auditor's promise: new request contains unique ID
-        require pre.id_history.disjoint(new_id);
         // new program must be a valid step
+        require pre.requests.contains(lbl->op->req);
         require T::next(pre.program, new_program, ProgramLabel::UserIO{op: lbl->op});
 
         update program = new_program;
-        update id_history = pre.id_history.union(new_id);
+        update replies = pre.replies.insert(lbl->op->reply);
     }}
 
+    // TODO: the timing of accept_sync req affect the response 
+    // the auditor half promises the sync_req_id but version is restricted by the program
+    transition!{ program_accept_sync(lbl: Label, new_program: T) {
+        require lbl is ProgramUIOp;
+        require let ProgramUserOp::AcceptSyncRequest{sync_req_id, version} = lbl->op;
+        require pre.fresh_id(sync_req_id); // promised by accept_request
+
+        require T::next(pre.program, new_program, ProgramLabel::UserIO{op: lbl->op});
+
+        update program = new_program;
+        update sync_requests = pre.sync_requests.insert((sync_req_id, version));
+    }}
+
+    transition!{ program_reply_sync(lbl: Label) {
+        require lbl is ProgramUIOp;
+        require let ProgramUserOp::DeliverSyncReply{sync_req_id, version} = lbl->op;
+        require pre.sync_requests.contains((sync_req_id, version));
+
+        // since there is explicit program step that enables a reply generation
+        // we couple the delivery of sync reply with a program step that checks for 
+        // whether a reply can be delivered
+        require T::next(pre.program, pre.program, ProgramLabel::UserIO{op: lbl->op});
+        update sync_requests = pre.sync_requests.remove((sync_req_id, version));
+    }}
+
+    // generating the label is equivalent to actually sending the disk ops
+    // it doesn't matter if the requests have been submitted to the disk driver yet
     transition!{ program_disk(lbl: Label, new_program: T, new_disk: DiskModel) {
         require lbl is ProgramDiskOp;
-        require lbl->disk_lbl is DiskOps;
 
-        require T::next(pre.program, new_program,
-            ProgramLabel::DiskIO{disk_lbl: lbl->disk_lbl},
-        );
-        require DiskModel::next(pre.disk, new_disk, lbl->disk_lbl);
-        
+        let disk_lbl = DiskLabel::DiskOps{
+            requests: multiset_to_map(lbl->info.reqs),
+            responses: multiset_to_map(lbl->info.resps),
+        };
+
+        require T::next(pre.program, new_program, ProgramLabel::DiskIO{info: lbl->info});
+        require DiskModel::next(pre.disk, new_disk, disk_lbl);
+
         update program = new_program;
         update disk = new_disk;
     }}
@@ -168,7 +207,9 @@ state_machine!{ SystemModel<T: ProgramModel> {
 
         update program = new_program;
         update disk = new_disk;
-        update id_history = Set::empty();
+        update requests = Multiset::empty();
+        update replies = Multiset::empty();
+        update sync_requests = Multiset::empty();
     }}
 
     transition!{ noop(lbl: Label) {
@@ -176,53 +217,48 @@ state_machine!{ SystemModel<T: ProgramModel> {
     }}
 }}
 
+pub open spec fn externally_visible(ctam_lbl: CrashTolerantAsyncMap::Label) -> bool
+{
+    ||| ctam_lbl is OperateOp && (ctam_lbl->base_op is RequestOp || ctam_lbl->base_op is ReplyOp)
+    ||| ctam_lbl is ReqSyncOp
+    ||| ctam_lbl is ReplySyncOp
+}
+// visible ctam op
+
 impl SystemModel::Label {
-    // I think this needed to be looser than what I just wrote.
     pub open spec fn label_correspondence(self, ctam_lbl: CrashTolerantAsyncMap::Label) -> bool
     {
+        // TODO: correspondance only with external communication or 
+        // also on execute, crash? if we hide a crash state refinement to 
+        // something else, are we allowing a system that crashes to somehow
+        // remember its state as non crash?
         match self {
+            Self::AcceptRequest{req} => {
+                ctam_lbl == CrashTolerantAsyncMap::Label::OperateOp{
+                    base_op: AsyncMap::Label::RequestOp{req} }
+            },
+            Self::DeliverReply{reply} => {
+                ctam_lbl == CrashTolerantAsyncMap::Label::OperateOp{
+                    base_op: AsyncMap::Label::ReplyOp{reply} }
+            },
             Self::ProgramUIOp{op} => {
                 match op {
-                    ProgramUserOp::AcceptRequest{req} => {
-                        ctam_lbl == CrashTolerantAsyncMap::Label::OperateOp{
-                            base_op: AsyncMap::Label::RequestOp{req} }
-                    },
-                    ProgramUserOp::DeliverReply{reply} => {
-                        ctam_lbl == CrashTolerantAsyncMap::Label::OperateOp{
-                            base_op: AsyncMap::Label::ReplyOp{reply} }
-                    },
-                    ProgramUserOp::Execute{req, reply} => {
-                        ctam_lbl == CrashTolerantAsyncMap::Label::OperateOp{
-                            base_op: AsyncMap::Label::ExecuteOp{req, reply} }
-                    },
-                    ProgramUserOp::AcceptSyncRequest{sync_req_id} => {
+                    ProgramUserOp::AcceptSyncRequest{sync_req_id, version} => {
                         ctam_lbl == CrashTolerantAsyncMap::Label::ReqSyncOp{sync_req_id}
                     },
-                    ProgramUserOp::DeliverSyncReply{sync_req_id} => {
+                    ProgramUserOp::DeliverSyncReply{sync_req_id, version} => {
                         ctam_lbl == CrashTolerantAsyncMap::Label::ReplySyncOp{sync_req_id}
                     },
+                    _ => { !externally_visible(ctam_lbl) }
                 }
             },
-            Self::ProgramDiskOp{disk_lbl} => {
-                ctam_lbl == CrashTolerantAsyncMap::Label::Noop{}
-            },
-            Self::ProgramInternal => {
-                ctam_lbl == CrashTolerantAsyncMap::Label::Noop{}
-            },
-            Self::DiskInternal => {
-                ctam_lbl == CrashTolerantAsyncMap::Label::Noop{}
-            },
-            Self::Crash => {
-                ctam_lbl == CrashTolerantAsyncMap::Label::CrashOp{}
-            },
-            Self::Noop => {
-                ctam_lbl == CrashTolerantAsyncMap::Label::Noop{}
-            },
+            // Self::Crash => {
+            //     ctam_lbl == CrashTolerantAsyncMap::Label::CrashOp{}
+            // },
+            _ => { !externally_visible(ctam_lbl) },
         }
     }
 }
-
-
 
 pub trait RefinementObligation {
     type Model: ProgramModel;
@@ -231,8 +267,6 @@ pub trait RefinementObligation {
     
     spec fn i(model: SystemModel::State<Self::Model>) -> (ctam: CrashTolerantAsyncMap::State);
 
-    // TODO: need model to determine i_lbl's result, pre and post 
-    // 
     spec fn i_lbl(pre: SystemModel::State<Self::Model>, post: SystemModel::State<Self::Model>, lbl: SystemModel::Label) -> (ctam_lbl: CrashTolerantAsyncMap::Label);
 
     // restrict i_lbl result to ensure app label correspondence 

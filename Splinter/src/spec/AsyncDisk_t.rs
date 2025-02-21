@@ -56,9 +56,11 @@ impl Address {
 pub type RawPage = Seq<u8>;
 
 /// models the actual disk
-pub struct Disk{
-    pub content: Map<Address, RawPage>,
-}
+pub type Disk = Map<Address, RawPage>;
+
+// pub struct Disk{
+//     pub content: Map<Address, RawPage>,
+// }
 
 pub enum GenericDiskRequest<A> {
     ReadReq{from: A},
@@ -91,7 +93,7 @@ state_machine!{ AsyncDisk {
         pub responses: Map<ID, DiskResponse>,
 
         // persistent disk content
-        pub disk: Disk,
+        pub content: Disk,
     }
 
     pub enum Label {
@@ -106,7 +108,7 @@ state_machine!{ AsyncDisk {
     init!{ initialize() {
         init requests = Map::empty();
         init responses = Map::empty();
-        init disk = Disk{ content: Map::empty() };
+        init content = Map::empty();
     }}
 
     // no changes to the disk content
@@ -139,7 +141,7 @@ state_machine!{ AsyncDisk {
         require pre.requests[id]->from.wf();
 
         let read_resp = DiskResponse::ReadResp{
-            data: pre.disk.content[pre.requests[id]->from],
+            data: pre.content[pre.requests[id]->from],
         };
 
         update requests = pre.requests.remove(id);
@@ -155,7 +157,7 @@ state_machine!{ AsyncDisk {
         require pre.requests[id]->from.wf();
         
         // restriction possible fake content
-        require fake_content != pre.disk.content[pre.requests[id]->from];
+        require fake_content != pre.content[pre.requests[id]->from];
         // TODO: assume disk cannot fail from a checksum-correct state
         // to a different checksum-correct state (corrupted bits leads to mismatching checksums)
 
@@ -183,7 +185,7 @@ state_machine!{ AsyncDisk {
 
         update requests = pre.requests.remove(id);
         update responses = pre.responses.insert(id, write_resp);
-        update disk = Disk{content: pre.disk.content.insert(write_req->to, write_req->data) };
+        update content = pre.content.insert(write_req->to, write_req->data);
     }}
 
     // forgets pending requests and replies, no change to disk content

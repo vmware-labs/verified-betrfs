@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 use vstd::{prelude::*};
 use vstd::hash_map::*;
-//use vstd::pervasive::print_u64;
 use crate::spec::MapSpec_t::*;
 use crate::spec::AsyncDisk_t::*;
 use crate::spec::ImplDisk_t::*;
@@ -86,8 +85,8 @@ ensures out@ == spec_superblock_addr()
 
 pub open spec fn mkfs(disk: Disk) -> bool
 {
-    &&& disk.content.contains_key(spec_superblock_addr())
-    &&& disk.content[spec_superblock_addr()] ==
+    &&& disk.contains_key(spec_superblock_addr())
+    &&& disk[spec_superblock_addr()] ==
         spec_marshall(Superblock{
             store: PersistentState{ appv: my_init() },
             version_index: 0,

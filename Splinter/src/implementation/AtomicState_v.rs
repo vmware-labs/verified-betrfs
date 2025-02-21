@@ -45,6 +45,26 @@ pub enum DiskEvent{
     ExecuteSyncEnd{},
 }
 
+pub open spec fn valid_request_reply_pair(req: Request, reply: Reply) -> bool 
+{
+    &&& req.id == reply.id
+    &&& req.input is QueryInput <==> reply.output is QueryOutput
+    &&& req.input is PutInput <==> reply.output is PutOutput
+    &&& req.input is NoopInput <==> reply.output is NoopOutput
+}
+
+pub open spec(checked) fn to_map_label(req: Request, reply: Reply) -> MapSpec::Label 
+    recommends valid_request_reply_pair(req, reply)
+{
+    let input = req.input;
+    let output = reply.output;
+    match req.input {
+        Input::QueryInput{..} => { MapSpec::Label::Query {input, output} },
+        Input::PutInput{..} => { MapSpec::Label::Put {input, output} },
+        Input::NoopInput{} => { MapSpec::Label::Noop {input, output} },
+    }
+}
+
 impl AtomicState {
     // this is process init, which should do filesystem recovery before operation
     pub open spec fn init() -> Self
@@ -57,52 +77,31 @@ impl AtomicState {
         }
     }
 
-    pub open spec fn map_transition(pre: Self, post: Self, map_lbl: MapSpec::Label) -> bool
+    pub open spec fn map_transition(pre: Self, post: Self, req: Request, reply: Reply) -> bool
     {
         &&& pre.client_ready()
         // new thing appends no more than one map
         &&& pre.history.len() <= post.history.len() <= pre.history.len() + 1
         // new thing appends to the history
         &&& post.history.get_prefix(pre.history.len()) == pre.history
-        &&& MapSpec::State::next(pre.history.last().appv, post.history.last().appv, map_lbl)
+
+        &&& valid_request_reply_pair(req, reply)
+        &&& MapSpec::State::next(pre.history.last().appv, post.history.last().appv, to_map_label(req, reply))
         &&& post == Self{ history: post.history, ..pre }
     }
 
-    pub open spec fn client_ready(self) -> bool
+    pub open spec fn valid_sync_request(pre: Self, post: Self, version: nat) -> bool
     {
-        self.recovery_state is RecoveryComplete
+        &&& pre.client_ready()
+        &&& post == pre
+        &&& version == (pre.history.len() - 1) as nat
     }
 
-    pub open spec(checked) fn sb_at(self, v: int) -> Superblock
-    recommends
-        self.client_ready(),
-        self.history.is_active(v),
+    pub open spec fn valid_sync_reply(pre: Self, post: Self, version: nat) -> bool
     {
-        Superblock{version_index: v as nat, store: self.history.get(v)}
-    }
-
-    pub open spec(checked) fn ephemeral_sb(self) -> Superblock
-    recommends
-        self.client_ready(),
-        0 < self.history.len(),
-        self.history.is_active(self.history.len()-1),
-    {
-        self.sb_at(self.history.len()-1)
-    }
-
-    pub open spec(checked) fn in_flight_sb(self) -> Superblock
-    recommends
-        self.client_ready(),
-        self.in_flight is Some,
-    {
-        self.sb_at(self.in_flight.unwrap().version as int)
-    }
-
-    pub open spec(checked) fn persistent_sb(self) -> Superblock
-    recommends
-        self.client_ready(),
-    {
-        self.sb_at(self.persistent_version as int)
+        &&& pre.client_ready()
+        &&& post == pre
+        &&& version <= pre.history.first_active_index()
     }
 
     pub open spec fn initiate_recovery(pre: Self, post: Self, reqs: Multiset<(ID, DiskRequest)>, resps: Multiset<(ID, DiskResponse)>, req_id: ID) -> bool
@@ -187,9 +186,55 @@ impl AtomicState {
         }
     }
 
+    // NOTE: silly internal op for now
+    pub open spec fn internal_transitions(pre: Self, post: Self) -> bool
+    {
+        &&& pre == post 
+        &&& pre.client_ready()
+    }
+
     pub open spec fn mapspec(self) -> MapSpec::State {
         self.history.last().appv
-    }   
+    }
+
+    pub open spec fn client_ready(self) -> bool
+    {
+        self.recovery_state is RecoveryComplete
+    }
+
+    pub open spec(checked) fn sb_at(self, v: int) -> Superblock
+    recommends
+        self.client_ready(),
+        self.history.is_active(v),
+    {
+        Superblock{version_index: v as nat, store: self.history.get(v)}
+    }
+
+    pub open spec(checked) fn ephemeral_sb(self) -> Superblock
+    recommends
+        self.client_ready(),
+        0 < self.history.len(),
+        self.history.is_active(self.history.len()-1),
+    {
+        self.sb_at(self.history.len()-1)
+    }
+
+    pub open spec(checked) fn in_flight_sb(self) -> Superblock
+    recommends
+        self.wf(),
+        self.client_ready(),
+        self.in_flight is Some,
+    {
+        self.sb_at(self.in_flight.unwrap().version as int)
+    }
+
+    pub open spec(checked) fn persistent_sb(self) -> Superblock
+    recommends
+        self.wf(),
+        self.client_ready(),
+    {
+        self.sb_at(self.persistent_version as int)
+    }
 }
 
 }//verus!

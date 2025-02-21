@@ -2,14 +2,16 @@
 use builtin::*;
 use vstd::prelude::*;
 
-use crate::trusted::KVStoreTokenized_v::KVStoreTokenized;
+// use crate::trusted::KVStoreTokenized_v::KVStoreTokenized;
 use crate::spec::SystemModel_t::*;
 use crate::implementation::DiskLayout_v::*;
+use crate::implementation::AtomicState_v::*;
 
 verus!{
 
 pub struct ConcreteProgramModel {
-    pub state: KVStoreTokenized::State,
+    pub state: AtomicState,
+    // pub state: KVStoreTokenized::State,
 }
 
 impl ConcreteProgramModel {
@@ -18,39 +20,40 @@ impl ConcreteProgramModel {
 impl ProgramModel for ConcreteProgramModel {
     open spec fn is_mkfs(disk: DiskModel) -> bool
     {
-        &&& mkfs(disk.disk)
+        &&& mkfs(disk.content)
         &&& disk.requests.is_empty()
         &&& disk.responses.is_empty()
     }
 
     open spec fn init(pre: Self) -> bool
     {
-        &&& KVStoreTokenized::State::initialize(pre.state)
+        &&& pre.state == AtomicState::init()
     }
 
     open spec fn next(pre: Self, post: Self, lbl: ProgramLabel) -> bool
     {
-        KVStoreTokenized::State::next(pre.state, post.state, lbl.to_kv_lbl())
-        // TODO and update history
-    }
-}
-
-// NOTE: KVStoreTokenized should just use program label as its own
-impl ProgramLabel {
-    pub open spec fn to_kv_lbl(self) -> KVStoreTokenized::Label{
-        match self {
+        match lbl {
             ProgramLabel::UserIO{op} => {
                 match op {
-                    ProgramUserOp::AcceptRequest{req} => KVStoreTokenized::Label::RequestOp{req},
-                    ProgramUserOp::DeliverReply{reply} => KVStoreTokenized::Label::ReplyOp{reply},
-                    ProgramUserOp::Execute{req, reply} => KVStoreTokenized::Label::ExecuteOp{req, reply},
-                    ProgramUserOp::AcceptSyncRequest{sync_req_id} => KVStoreTokenized::Label::RequestSyncOp{sync_req_id},
-                    ProgramUserOp::DeliverSyncReply{sync_req_id} => KVStoreTokenized::Label::ReplySyncOp{sync_req_id},
+                    ProgramUserOp::Execute{req, reply} => {
+                        AtomicState::map_transition(pre.state, post.state, req, reply)
+                    },
+                    ProgramUserOp::AcceptSyncRequest{sync_req_id, version} => {
+                        AtomicState::valid_sync_request(pre.state, post.state, version)
+                    },
+                    ProgramUserOp::DeliverSyncReply{sync_req_id, version} => {
+                        AtomicState::valid_sync_reply(pre.state, post.state, version)
+                    },
                 }
-            }
-            _ => KVStoreTokenized::Label::InternalOp,
+            },
+            ProgramLabel::DiskIO{info} => {
+                exists |disk_event| AtomicState::disk_transition(
+                    pre.state, post.state, disk_event, info.reqs, info.resps)
+            },
+            ProgramLabel::Internal{} => { 
+                AtomicState::internal_transitions(pre.state, post.state)
+            }, // no internal op on atomic state yet
         }
     }
 }
-
 }

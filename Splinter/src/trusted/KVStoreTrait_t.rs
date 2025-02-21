@@ -2,10 +2,8 @@ use builtin_macros::*;
 use builtin::*;
 
 use vstd::tokens::InstanceId;
-
 use crate::spec::SystemModel_t::*;
 use crate::trusted::ClientAPI_t::*;
-//use crate::trusted::KVStoreTokenized_v::*;
 
 verus!{
 

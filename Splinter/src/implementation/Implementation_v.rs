@@ -41,6 +41,8 @@ pub struct Implementation {
     instance: Tracked<KVStoreTokenized::Instance>,
 }
 
+// We are left here!
+
 impl Implementation {
     pub closed spec(checked) fn view_store_as_kmmap(self) -> TotalKMMap
     {
@@ -100,20 +102,19 @@ impl Implementation {
                 let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
                 proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
 
-                let ghost map_lbl = MapSpec::Label::Noop{input: req.input, output: reply.output};
                 proof {
+                    let ghost map_lbl = MapSpec::Label::Noop{input: req.input, output: reply.output};
                     reveal(MapSpec::State::next);
                     reveal(MapSpec::State::next_by);
                     assert( MapSpec::State::next_by(post_state.history.last().appv, post_state.history.last().appv,
                             map_lbl, MapSpec::Step::noop())); // witness to step
                     assert( post_state.history.get_prefix(pre_state.history.len()) == pre_state.history );  // extn
-                    assert( AtomicState::map_transition(pre_state, post_state, map_lbl) );
+                    assert( AtomicState::map_transition(pre_state, post_state, req, reply) );
                 }
 
                 let tracked new_reply_token = self.instance.borrow().execute_transition(
                     KVStoreTokenized::Label::ExecuteOp{req, reply},
                     post_state,
-                    map_lbl,
                     &mut atomic_state,
                     req_shard.get()
                 );
@@ -156,21 +157,20 @@ impl Implementation {
             let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
             proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
 
-            let ghost map_lbl = MapSpec::Label::Put{input: req.input, output: reply.output};
             proof {
+                let ghost map_lbl = MapSpec::Label::Put{input: req.input, output: reply.output};
                 reveal(MapSpec::State::next);
                 reveal(MapSpec::State::next_by);
                 assert( MapSpec::State::next_by(pre_state.mapspec(), post_state.mapspec(),
                         map_lbl, MapSpec::Step::put())); // witness to step
                 assert( post_state.history.get_prefix(pre_state.history.len()) == pre_state.history );  // extn
-                assert( AtomicState::map_transition(pre_state, post_state, map_lbl) );
+                assert( AtomicState::map_transition(pre_state, post_state, req, reply) );
             }
 
 //             assert( pre_state == atomic_state.value() );
             let tracked new_reply_token = self.instance.borrow().execute_transition(
                 KVStoreTokenized::Label::ExecuteOp{req, reply},
                 post_state,
-                map_lbl,
                 &mut atomic_state,
                 req_shard.get(),
             );
@@ -223,8 +223,8 @@ impl Implementation {
             let tracked mut atomic_state = KVStoreTokenized::atomic_state::arbitrary();
             proof { tracked_swap(self.state.borrow_mut(), &mut atomic_state); }
 
-            let ghost map_lbl = MapSpec::Label::Query{input: req.input, output: reply.output};
             proof {
+                let ghost map_lbl = MapSpec::Label::Query{input: req.input, output: reply.output};
                 reveal(MapSpec::State::next);
                 reveal(MapSpec::State::next_by);
                 assert( MapSpec::State::next_by(pre_state.mapspec(), post_state.mapspec(),
@@ -232,10 +232,10 @@ impl Implementation {
                 assert( post_state.history.get_prefix(pre_state.history.len()) == pre_state.history );  // extn
 //                 assert( AtomicState::map_transition(pre_state, post_state, map_lbl) );
             }
+
             let tracked new_reply_token = self.instance.borrow().execute_transition(
                 KVStoreTokenized::Label::ExecuteOp{req, reply},
                 post_state,
-                map_lbl,
                 &mut atomic_state,
                 req_shard.get(),
             );
@@ -287,12 +287,13 @@ impl Implementation {
             let ghost disk_request_tuples = multiset_map_singleton(req_id_perm@, disk_req@);
             // proof { multiset_map_singleton_ensures(req_id_perm@, disk_req@); }
 
-            let tracked disk_request_tokens = self.instance.borrow().internal_disk_ops(
-                KVStoreTokenized::Label::InternalOp{},
+            let tracked disk_request_tokens = self.instance.borrow().disk_transitions(
+                KVStoreTokenized::Label::DiskOp{
+                    disk_request_tuples,
+                    disk_response_tuples,
+                },
                 post_state,
                 disk_event,
-                disk_request_tuples,
-                disk_response_tuples,
                 &mut atomic_state,
                 empty_disk_responses,
             );
@@ -355,12 +356,13 @@ impl Implementation {
             // (Might also make a nice broadcast lemma, if that was usable.)
             // assert( disk_lbl->requests == multiset_to_map(disk_request_tuples) );   // extn
 
-            let tracked disk_request_tokens = self.instance.borrow().internal_disk_ops(
-                KVStoreTokenized::Label::InternalOp{},
+            let tracked disk_request_tokens = self.instance.borrow().disk_transitions(
+                KVStoreTokenized::Label::DiskOp{
+                    disk_request_tuples,
+                    disk_response_tuples,
+                },
                 post_state,
                 disk_event,
-                disk_request_tuples,
-                disk_response_tuples,
                 &mut atomic_state,
                 disk_response_token.get(),
             );
@@ -371,7 +373,9 @@ impl Implementation {
 }
 
 impl KVStoreTrait for Implementation {
-    type Proof = ConcreteProgramModel;
+    type Proof = ConcreteProgramModel; 
+    // NOTE: we use atomic state for refinement but here we are relying on tokens from kvstore tokenized
+    // that have no enforced connection with atomic state
 
     closed spec fn wf_init(self) -> bool {
         &&& self.state@.instance_id() == self.instance@.id()
@@ -412,19 +416,19 @@ impl KVStoreTrait for Implementation {
 
     fn kvstore_main(&mut self, mut api: ClientAPI)
     {
-        self.recover(&mut api);
+        // self.recover(&mut api);
 
-        let debug_print = true;
-        loop
-        invariant
-            self.inv(),
-            self.state@.value().recovery_state is RecoveryComplete,
-            self.instance_id() == api.instance_id(),
-        {
-            let (req, req_shard) = api.receive_request(debug_print);
-            let (reply, reply_shard) = self.handle(req, req_shard);
-            api.send_reply(reply, reply_shard, true);
-        }
+        // let debug_print = true;
+        // loop
+        // invariant
+        //     self.inv(),
+        //     self.state@.value().recovery_state is RecoveryComplete,
+        //     self.instance_id() == api.instance_id(),
+        // {
+        //     let (req, req_shard) = api.receive_request(debug_print);
+        //     let (reply, reply_shard) = self.handle(req, req_shard);
+        //     api.send_reply(reply, reply_shard, true);
+        // }
     }
 }
 
