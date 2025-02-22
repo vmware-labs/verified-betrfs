@@ -14,7 +14,7 @@ use crate::spec::Messages_t::*;
 
 use crate::spec::AsyncDisk_t::*;
 use crate::spec::ImplDisk_t::*;
-use crate::spec::SystemModel_t::*;
+use crate::trusted::SystemModel_t::*;
 
 use vstd::string::View;
 

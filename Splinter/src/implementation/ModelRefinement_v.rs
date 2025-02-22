@@ -2,10 +2,12 @@
 use builtin::*;
 use vstd::prelude::*;
 
-use vstd::{multiset::Multiset};
+use vstd::{multiset::Multiset, set_lib::*};
 use crate::spec::AsyncDisk_t::*;
 use crate::spec::MapSpec_t::*;
-use crate::spec::SystemModel_t::*;
+use crate::trusted::SystemModel_t::*;
+use crate::trusted::RefinementObligation_t::*;
+use crate::trusted::ProgramModelTrait_t::*;
 use crate::implementation::AtomicState_v::*;
 use crate::implementation::ConcreteProgramModel_v::*;
 use crate::implementation::MultisetMapRelation_v::*;
@@ -25,16 +27,16 @@ broadcast proof fn unmarshall_marshall(sb: Superblock)
 }
 
 impl AtomicState {
-    pub open spec fn wf(self) -> bool {
-        self.recovery_state is RecoveryComplete ==> {
-            &&& self.history.is_active(self.history.len()-1)
-            &&& forall |i| #[trigger] self.history.is_active(i) ==> self.history[i].appv.invariant()
-            &&& self.in_flight is Some ==> {
-                self.history.is_active(self.in_flight.unwrap().version as int)
-            }
-            &&& self.history.is_active(self.persistent_version as int)
-        }
-    }
+    // pub open spec fn wf(self) -> bool {
+    //     self.recovery_state is RecoveryComplete ==> {
+    //         &&& self.history.is_active(self.history.len()-1)
+    //         &&& forall |i| #[trigger] self.history.is_active(i) ==> self.history[i].appv.invariant()
+    //         &&& self.in_flight is Some ==> {
+    //             self.history.is_active(self.in_flight.unwrap().version as int)
+    //         }
+    //         &&& self.history.is_active(self.persistent_version as int)
+    //     }
+    // }
 
 //     pub proof fn disk_transition_preserves_wf(pre: Self, post: Self, disk_event_lbl: DiskEvent, disk_lbl: AsyncDisk::Label, disk_req_id: ID)
 //     requires
@@ -102,7 +104,9 @@ impl SystemModel::State<ConcreteProgramModel>  {
         &&& self.replies_have_unique_ids()
         &&& self.requests_replies_id_disjoint()
 
-        &&& unique_keys(self.sync_requests)
+        &&& all_elems_single(self.sync_requests)
+        &&& self.program.state.client_ready() ==>   
+            self.sync_requests.dom() == self.program.state.sync_req_map.dom()
     }
 
     pub open spec fn in_flight_sb_disk_relation(self) -> bool
@@ -183,14 +187,14 @@ impl SystemModel::State<ConcreteProgramModel>  {
         self.program.state.wf(),
         self.program.state.client_ready(), 
     {
-        let atomic_state = self.program.state;
+        let model = self.program.state;
         let actual_versions = 
-            if atomic_state.in_flight is Some 
-                && self.disk.responses.contains_key(atomic_state.in_flight.unwrap().req_id) 
+            if model.in_flight is Some 
+                && self.disk.responses.contains_key(model.in_flight.unwrap().req_id) 
             {
-                atomic_state.history.get_suffix(atomic_state.in_flight.unwrap().version as int)
+                model.history.get_suffix(model.in_flight.unwrap().version as int)
             } else { 
-                atomic_state.history
+                model.history
             };
 
         CrashTolerantAsyncMap::State{
@@ -199,7 +203,9 @@ impl SystemModel::State<ConcreteProgramModel>  {
                 requests: self.requests.dom(),
                 replies: self.replies.dom(),
             },
-            sync_requests: multiset_to_map(self.sync_requests),
+            sync_requests: self.program.state.sync_req_map,
+            // requests are ones that have been tracked by 
+            // sync_requests: multiset_to_map(self.sync_requests),
          }
     }
 
@@ -212,16 +218,17 @@ impl SystemModel::State<ConcreteProgramModel>  {
     }
 }
 
-impl RefinementObligation for ConcreteProgramModel {
-    type Model = ConcreteProgramModel;
+pub struct RefinementProof{}
 
-    closed spec fn inv(model: SystemModel::State<Self::Model>) -> bool
+impl RefinementObligation<ConcreteProgramModel> for RefinementProof {
+
+    closed spec fn inv(model: SystemModel::State<ConcreteProgramModel>) -> bool
     {
         model.inv()
     }
 
     // interpretation depends on pre and post 
-    closed spec fn i(model: SystemModel::State<Self::Model>) -> (mapspec: CrashTolerantAsyncMap::State)
+    closed spec fn i(model: SystemModel::State<ConcreteProgramModel>) -> (mapspec: CrashTolerantAsyncMap::State)
     {
         if model.program.state.client_ready() {
             model.i_ephemeral()
@@ -230,7 +237,7 @@ impl RefinementObligation for ConcreteProgramModel {
         }
     }
 
-    closed spec fn i_lbl(pre: SystemModel::State<Self::Model>, post: SystemModel::State<Self::Model>, lbl: SystemModel::Label) -> (ctam_lbl: CrashTolerantAsyncMap::Label)
+    closed spec fn i_lbl(pre: SystemModel::State<ConcreteProgramModel>, post: SystemModel::State<ConcreteProgramModel>, lbl: SystemModel::Label) -> (ctam_lbl: CrashTolerantAsyncMap::Label)
     {
         match lbl {
             SystemModel::Label::AcceptRequest{req} => {
@@ -249,9 +256,9 @@ impl RefinementObligation for ConcreteProgramModel {
                     CrashTolerantAsyncMap::Label::OperateOp{
                         base_op: AsyncMap::Label::ExecuteOp  { req, reply },
                     },
-                ProgramUserOp::AcceptSyncRequest{ sync_req_id, version } =>
+                ProgramUserOp::AcceptSyncRequest{ sync_req_id } =>
                     CrashTolerantAsyncMap::Label::ReqSyncOp{ sync_req_id },
-                ProgramUserOp::DeliverSyncReply{ sync_req_id, version } =>
+                ProgramUserOp::DeliverSyncReply{ sync_req_id } =>
                     CrashTolerantAsyncMap::Label::ReplySyncOp{ sync_req_id },
             }},
             SystemModel::Label::ProgramDiskOp{ info } =>
@@ -272,31 +279,26 @@ impl RefinementObligation for ConcreteProgramModel {
         }
     }
 
-    proof fn i_lbl_valid(pre: SystemModel::State<Self::Model>, post: SystemModel::State<Self::Model>, lbl: SystemModel::Label, ctam_lbl: CrashTolerantAsyncMap::Label)
+    proof fn i_lbl_valid(pre: SystemModel::State<ConcreteProgramModel>, post: SystemModel::State<ConcreteProgramModel>, lbl: SystemModel::Label, ctam_lbl: CrashTolerantAsyncMap::Label)
     {
         assert( ctam_lbl == Self::i_lbl(pre, post, lbl) );
         assert( lbl.label_correspondence(ctam_lbl) );
     }
 
-    proof fn init_refines(pre: SystemModel::State<Self::Model>)
+    proof fn init_refines(pre: SystemModel::State<ConcreteProgramModel>)
     {
-        assume(false);
-        // assert( SystemModel::State::initialize(pre, pre.program, pre.disk) );
-        // assert( Self::i(pre).async_ephemeral == AsyncMap::State::init_ephemeral_state() );
-        // assert( Self::i(pre).sync_requests == Map::<SyncReqId,nat>::empty() );  // extn
+        assert( SystemModel::State::initialize(pre, pre.program, pre.disk) );
+        assert( Self::i(pre).async_ephemeral == AsyncMap::State::init_ephemeral_state() );
+        assert( Self::i(pre).sync_requests == Map::<SyncReqId,nat>::empty() );  // extn
+        assert( Self::inv(pre) );
 
-        // assert( Self::inv(pre) );
-
-        // assert( ConcreteProgramModel::is_mkfs(pre.disk) );
-        // broadcast use unmarshall_marshall;
-        // assume(false);
-        // assert( CrashTolerantAsyncMap::State::initialize(Self::i(pre)) );
+        assert( ConcreteProgramModel::is_mkfs(pre.disk) );
+        broadcast use unmarshall_marshall;
+        assert( CrashTolerantAsyncMap::State::initialize(Self::i(pre)) );
     }
 
-    proof fn next_refines(pre: SystemModel::State<Self::Model>, post: SystemModel::State<Self::Model>, lbl: SystemModel::Label)
+    proof fn next_refines(pre: SystemModel::State<ConcreteProgramModel>, post: SystemModel::State<ConcreteProgramModel>, lbl: SystemModel::Label)
     {
-        assume(false);
-        /*
         reveal(CrashTolerantAsyncMap::State::next);
         reveal(CrashTolerantAsyncMap::State::next_by);
         reveal(AsyncMap::State::next);
@@ -317,26 +319,34 @@ impl RefinementObligation for ConcreteProgramModel {
         let ilbl = Self::i_lbl(pre, post, lbl);
 
         match step {
+            SystemModel::Step::accept_request() => {
+                broadcast use insert_new_preserves_cardinality;
+                let new_id = lbl->op->req.id;
+                // assert(post.program.state.inv());
+                // assert(post.inv());
+
+                assume(false);
+                // assert(CrashTolerantAsyncMap::State::optionally_append_version(ipre.versions, ipost.versions));
+
+                // assert(!ipre.async_ephemeral.requests.contains(req));
+                // assert(ipre.versions == ipost.versions); // true
+                // assert(ipre.async_ephemeral.requests.insert(req) =~= ipost.async_ephemeral.requests);
+
+                // assert(AsyncMap::State::next_by(iasync_pre, iasync_post, ilbl->base_op, AsyncMap::Step::request()));
+                // assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, 
+                //     CrashTolerantAsyncMap::Step::operate(ipost.versions, ipost.async_ephemeral)));
+            }
+
+            _ => { assume(false); }
+                    /*
+
             SystemModel::Step::program_ui(new_program) => {
                 let iasync_pre = AsyncMap::State { persistent: ipre.versions.last(), ephemeral: ipre.async_ephemeral };
                 let iasync_post = AsyncMap::State { persistent: ipost.versions.last(), ephemeral: ipost.async_ephemeral };
 
                 match lbl->op {
                     ProgramUserOp::AcceptRequest{req} => {
-                        broadcast use insert_new_preserves_cardinality;
-                        let new_id = lbl->op.arrow_AcceptRequest_req().id;
-                        assert(!pre.id_history.contains(new_id)); // trigger
-                        assert(post.program.state.inv());
-                        assert(post.inv());
-                        assert(CrashTolerantAsyncMap::State::optionally_append_version(ipre.versions, ipost.versions));
-
-                        assert(!ipre.async_ephemeral.requests.contains(req));
-                        assert(ipre.versions == ipost.versions); // true
-                        assert(ipre.async_ephemeral.requests.insert(req) =~= ipost.async_ephemeral.requests);
-
-                        assert(AsyncMap::State::next_by(iasync_pre, iasync_post, ilbl->base_op, AsyncMap::Step::request()));
-                        assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, 
-                            CrashTolerantAsyncMap::Step::operate(ipost.versions, ipost.async_ephemeral)));
+                       
                     },
                     ProgramUserOp::DeliverReply{reply} => {
                         assert(post.program.state.inv()) by {
@@ -365,7 +375,7 @@ impl RefinementObligation for ConcreteProgramModel {
 
                         let map_lbl = choose |map_lbl| #[trigger] KVStoreTokenized::State::next_by(
                                 pre.program.state, post.program.state, kv_lbl, 
-                                KVStoreTokenized::Step::execute_transition(post.program.state.atomic_state, map_lbl));
+                                KVStoreTokenized::Step::execute_transition(post.program.state.model, map_lbl));
 
                         pre.program.state.execute_transition_magic(post.program.state, kv_lbl, map_lbl);
                         assert(post.program.state.inv());
@@ -391,7 +401,7 @@ impl RefinementObligation for ConcreteProgramModel {
                         // follows from inv that ties KVStoreTokenized sync_requests to self.id_history
                         assert( !ipre.sync_requests.dom().contains(sync_req_id) );
                         let pre_set = ipre.sync_requests.dom();
-                        let cur_version = (pre.program.state.atomic_state.history.len()-1) as nat;
+                        let cur_version = (pre.program.state.model.history.len()-1) as nat;
                         let post_set = ipost.sync_requests.dom();
                         assert( post.program.state.sync_requests == pre.program.state.sync_requests.insert((sync_req_id, cur_version)) );
 //                         }
@@ -481,12 +491,12 @@ impl RefinementObligation for ConcreteProgramModel {
             },
             SystemModel::Step::dummy_to_use_type_params(dummy) => {
             },
+            */
+
         }
         assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
-        */
     }
 }
-/*
 
 broadcast proof fn insert_new_preserves_cardinality<V>(m: Multiset<V>, new: V)
     requires all_elems_single(m), !m.contains(new)
@@ -501,16 +511,17 @@ broadcast proof fn insert_new_preserves_cardinality<V>(m: Multiset<V>, new: V)
         }
     }
 }
+/*
 
 impl KVStoreTokenized::State {
     proof fn execute_transition_magic(self, post: Self, lbl: KVStoreTokenized::Label, map_lbl: MapSpec::Label)
         requires
             self.inv(), 
-            Self::execute_transition(self, post, lbl, post.atomic_state, map_lbl),
+            Self::execute_transition(self, post, lbl, post.model, map_lbl),
         ensures 
             post.inv(),
             CrashTolerantAsyncMap::State::optionally_append_version(
-                self.atomic_state.history, post.atomic_state.history),
+                self.model.history, post.model.history),
     {
         broadcast use insert_new_preserves_cardinality;
         reveal(MapSpec::State::next);
@@ -521,13 +532,13 @@ impl KVStoreTokenized::State {
         assume(false);
 
         KVStoreTokenized::State::execute_transition_inductive(
-            self, post, lbl, post.atomic_state, map_lbl);
+            self, post, lbl, post.model, map_lbl);
         assert(forall |req| #[trigger] post.requests.contains(req) 
             ==> self.requests.contains(req));
         assert(post.inv());
 
-        let history = self.atomic_state.history;
-        let post_history = post.atomic_state.history;
+        let history = self.model.history;
+        let post_history = post.model.history;
 
         if history.len() == post_history.len() {
             assert(post_history.get_prefix(history.len()) == post_history); // trigger

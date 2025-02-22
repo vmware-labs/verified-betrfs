@@ -2,8 +2,9 @@
 use builtin::*;
 use vstd::prelude::*;
 
-// use crate::trusted::KVStoreTokenized_v::KVStoreTokenized;
-use crate::spec::SystemModel_t::*;
+use crate::spec::AsyncDisk_t::*;
+use crate::spec::MapSpec_t::{ID};
+use crate::trusted::ProgramModelTrait_t::*;
 use crate::implementation::DiskLayout_v::*;
 use crate::implementation::AtomicState_v::*;
 
@@ -11,18 +12,23 @@ verus!{
 
 pub struct ConcreteProgramModel {
     pub state: AtomicState,
-    // pub state: KVStoreTokenized::State,
 }
 
 impl ConcreteProgramModel {
+    // TODO: this is stupid, AtomicState::disk_transition by itself does not trigger
+    pub open spec fn valid_disk_transition(pre: Self, post: Self, info: ProgramDiskInfo) -> bool
+    {
+        exists |disk_event| AtomicState::disk_transition(
+            pre.state, post.state, disk_event, info.reqs, info.resps)
+    }
 }
 
-impl ProgramModel for ConcreteProgramModel {
+impl ProgramModelTrait for ConcreteProgramModel {
     open spec fn is_mkfs(disk: DiskModel) -> bool
     {
         &&& mkfs(disk.content)
-        &&& disk.requests.is_empty()
-        &&& disk.responses.is_empty()
+        &&& disk.requests == Map::<ID, DiskRequest>::empty()
+        &&& disk.responses == Map::<ID, DiskResponse>::empty()
     }
 
     open spec fn init(pre: Self) -> bool
@@ -38,17 +44,20 @@ impl ProgramModel for ConcreteProgramModel {
                     ProgramUserOp::Execute{req, reply} => {
                         AtomicState::map_transition(pre.state, post.state, req, reply)
                     },
-                    ProgramUserOp::AcceptSyncRequest{sync_req_id, version} => {
-                        AtomicState::valid_sync_request(pre.state, post.state, version)
+                    ProgramUserOp::AcceptSyncRequest{sync_req_id} => {
+                        AtomicState::accept_sync_request(pre.state, post.state, sync_req_id)
                     },
-                    ProgramUserOp::DeliverSyncReply{sync_req_id, version} => {
-                        AtomicState::valid_sync_reply(pre.state, post.state, version)
+                    ProgramUserOp::DeliverSyncReply{sync_req_id} => {
+                        AtomicState::deliver_sync_reply(pre.state, post.state, sync_req_id)
                     },
                 }
             },
             ProgramLabel::DiskIO{info} => {
-                exists |disk_event| AtomicState::disk_transition(
-                    pre.state, post.state, disk_event, info.reqs, info.resps)
+                ConcreteProgramModel::valid_disk_transition(pre, post, info)
+                // NOTE: I think we want this but this is causing flaky proofs
+                // where we can't show next event though there is a witness for disk_event
+                // exists |disk_event| #[trigger] AtomicState::disk_transition(
+                //     pre.state, post.state, disk_event, info.reqs, info.resps)
             },
             ProgramLabel::Internal{} => { 
                 AtomicState::internal_transitions(pre.state, post.state)

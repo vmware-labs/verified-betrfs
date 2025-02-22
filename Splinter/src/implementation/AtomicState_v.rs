@@ -36,6 +36,9 @@ pub struct AtomicState {
 
     // tells us what we can bump persistent_version when the disk response comes back.
     pub in_flight: Option<InflightInfo>,
+
+    // maps each syncreq id with a version
+    pub sync_req_map: Map<SyncReqId, nat>, 
 }
 
 pub enum DiskEvent{
@@ -66,6 +69,17 @@ pub open spec(checked) fn to_map_label(req: Request, reply: Reply) -> MapSpec::L
 }
 
 impl AtomicState {
+    pub open spec fn wf(self) -> bool {
+        self.recovery_state is RecoveryComplete ==> {
+            &&& self.history.is_active(self.history.len()-1)
+            &&& forall |i| #[trigger] self.history.is_active(i) ==> self.history[i].appv.invariant()
+            &&& self.in_flight is Some ==> {
+                self.history.is_active(self.in_flight.unwrap().version as int)
+            }
+            &&& self.history.is_active(self.persistent_version as int)
+        }
+    }
+
     // this is process init, which should do filesystem recovery before operation
     pub open spec fn init() -> Self
     {
@@ -74,6 +88,7 @@ impl AtomicState {
             history: arbitrary(),
             persistent_version: arbitrary(),  // unknown
             in_flight: arbitrary(),
+            sync_req_map: arbitrary(),
         }
     }
 
@@ -90,18 +105,25 @@ impl AtomicState {
         &&& post == Self{ history: post.history, ..pre }
     }
 
-    pub open spec fn valid_sync_request(pre: Self, post: Self, version: nat) -> bool
+    pub open spec fn accept_sync_request(pre: Self, post: Self, sync_req_id: SyncReqId) -> bool
     {
         &&& pre.client_ready()
-        &&& post == pre
-        &&& version == (pre.history.len() - 1) as nat
+        // &&& !pre.sync_req_map.contains_key(sync_req_id) // true by system invariant
+        &&& post == Self{
+            sync_req_map: pre.sync_req_map.insert(sync_req_id, (pre.history.len() - 1) as nat),
+            ..pre
+        }
     }
 
-    pub open spec fn valid_sync_reply(pre: Self, post: Self, version: nat) -> bool
+    pub open spec fn deliver_sync_reply(pre: Self, post: Self, sync_req_id: SyncReqId) -> bool
     {
         &&& pre.client_ready()
-        &&& post == pre
-        &&& version <= pre.history.first_active_index()
+        &&& pre.sync_req_map.contains_key(sync_req_id) // true by system invariant
+            ==> pre.sync_req_map[sync_req_id] <=  pre.history.first_active_index()
+        &&& post == Self{
+            sync_req_map: pre.sync_req_map.remove(sync_req_id),
+            ..pre
+        }
     }
 
     pub open spec fn initiate_recovery(pre: Self, post: Self, reqs: Multiset<(ID, DiskRequest)>, resps: Multiset<(ID, DiskResponse)>, req_id: ID) -> bool
@@ -126,6 +148,7 @@ impl AtomicState {
                 history: singleton_floating_seq(superblock.version_index, superblock.store.appv.kmmap),
                 in_flight: None,
                 persistent_version: superblock.version_index,
+                sync_req_map: Map::empty(),
             }
         }
     }
@@ -160,6 +183,7 @@ impl AtomicState {
                 history: pre.history.get_suffix(new_persistent_version as int),
                 in_flight: None,
                 persistent_version: new_persistent_version,
+                ..pre
             }
         }
     }

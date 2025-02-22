@@ -3,15 +3,18 @@ use builtin::*;
 use vstd::prelude::arbitrary;
 
 use vstd::tokens::InstanceId;
-use crate::spec::SystemModel_t::*;
+use crate::trusted::ProgramModelTrait_t::*;
+use crate::trusted::RefinementObligation_t::*;
 use crate::trusted::ClientAPI_t::*;
-use crate::trusted::KVStoreTokenized_v::*;
+use crate::trusted::KVStoreTokenized_t::*;
 
 verus!{
 
 // Auditor contracts for the program impl 
 pub trait KVStoreTrait : Sized{
-    type Proof: RefinementObligation;
+
+    type ProgramModel: ProgramModelTrait;
+    type Proof: RefinementObligation<Self::ProgramModel>;
 
     spec fn wf_init(self) -> bool;
 
@@ -22,7 +25,7 @@ pub trait KVStoreTrait : Sized{
         ensures out.wf_init()
     ;
 
-    fn kvstore_main(&mut self, api: ClientAPI)
+    fn kvstore_main(&mut self, api: ClientAPI<Self::ProgramModel>)
         requires 
             old(self).wf_init(),
             old(self).instance_id() == api.instance_id()

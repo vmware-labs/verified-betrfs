@@ -11,8 +11,8 @@ use crate::trusted::ClientAPI_t::*;
 // to the refinement proof that belongs with it.
 
 verus!{
-    pub fn entry<T: KVStoreTrait>() {
-        let mut kvstore = T::new();
+    pub fn entry<KVStore: KVStoreTrait>() {
+        let mut kvstore = KVStore::new();
         let api = ClientAPI::new(Ghost(kvstore.instance_id()));
         kvstore.kvstore_main(api);
     }

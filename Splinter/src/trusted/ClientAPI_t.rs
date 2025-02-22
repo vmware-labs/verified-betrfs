@@ -11,9 +11,8 @@ use crate::spec::ImplDisk_t::*;
 
 use crate::implementation::MultisetMapRelation_v::*;    // TODO move to _t, I guess
 
-// ------- breaks trust boundary -------
-use crate::trusted::KVStoreTokenized_v::*;
-// -------------------------------------
+use crate::trusted::KVStoreTokenized_t::*;
+use crate::trusted::ProgramModelTrait_t::*;
 
 verus! {
 
@@ -24,13 +23,14 @@ verus! {
 
 // external body to prevent unprotected construction
 #[verifier::external_body]
-pub struct ClientAPI{
+#[verifier::reject_recursive_types(ProgramModel)]
+pub struct ClientAPI<ProgramModel: ProgramModelTrait>{
     pub id: AtomicU64,
-
     pub inputs: Vec<Input>,
+    pub _p: std::marker::PhantomData<(ProgramModel,)>,
 }
 
-impl ClientAPI{
+impl<ProgramModel: ProgramModelTrait> ClientAPI<ProgramModel>{
     #[verifier::external_body]
     pub fn new(instance: Ghost<InstanceId>) -> (out: Self)
         ensures out.instance_id() == instance
@@ -45,7 +45,7 @@ impl ClientAPI{
             Input::QueryInput{key: Key(3)},
         ];
 
-        Self{id: AtomicU64::new(0), inputs}
+        Self{id: AtomicU64::new(0), inputs, _p: arbitrary()}
     }
     
     #[verifier::external_body]
@@ -56,7 +56,7 @@ impl ClientAPI{
     // we want (out.1, out.2) == self.instance_id().request(KVStoreTokenized::Label::RequestOp{req})
     // but this ensure is rolling out the result of the ensure
     #[verifier::external_body]
-    pub fn receive_request(&mut self, print: bool) -> (out: (Request, Tracked<KVStoreTokenized::requests>))
+    pub fn receive_request(&mut self, print: bool) -> (out: (Request, Tracked<KVStoreTokenized::requests<ProgramModel>>))
     ensures
         self.instance_id() == old(self).instance_id(),
         out.1@.instance_id() == self.instance_id(),
@@ -76,7 +76,7 @@ impl ClientAPI{
 
     // NOTE: corresponds to a tokenized state machine reply step, consumes the reply shard
     #[verifier::external_body]
-    pub fn send_reply(&self, reply: Reply,  reply_shard: Tracked<KVStoreTokenized::replies>, print: bool)
+    pub fn send_reply(&self, reply: Reply,  reply_shard: Tracked<KVStoreTokenized::replies<ProgramModel>>, print: bool)
         requires 
             reply_shard@.instance_id() == self.instance_id(),
             reply_shard@.element() == reply
@@ -95,7 +95,8 @@ impl ClientAPI{
     }
 
     #[verifier::external_body]
-    pub fn send_disk_request(&mut self, disk_req: IDiskRequest, id_perm: Tracked<ID>, disk_request_tokens: Tracked<KVStoreTokenized::disk_requests_multiset>) -> (out: ID)
+    pub fn send_disk_request(&mut self, disk_req: IDiskRequest, id_perm: Tracked<ID>, 
+        disk_request_tokens: Tracked<KVStoreTokenized::disk_requests_multiset<ProgramModel>>) -> (out: ID)
     requires
         disk_request_tokens@.multiset() == multiset_map_singleton(id_perm@, disk_req@),
     ensures
@@ -110,7 +111,7 @@ impl ClientAPI{
     // response is waiting?
     #[verifier::external_body]
     pub fn receive_disk_response(&mut self)
-        -> (out: (ID, IDiskResponse, Tracked<KVStoreTokenized::disk_responses_multiset>))
+        -> (out: (ID, IDiskResponse, Tracked<KVStoreTokenized::disk_responses_multiset<ProgramModel>>))
     ensures
         self.instance_id() == old(self).instance_id(),
         out.2@.instance_id() == self.instance_id(),
@@ -119,7 +120,6 @@ impl ClientAPI{
         (0, arbitrary(), Tracked::assume_new())
     }
         
-
     // Seems like it should always be okay to brew up a token containing an empty multiset (an empty shard).
     // Yeah, MultisetToken::empty() does that.
 //     #[verifier::external_body]
