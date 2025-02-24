@@ -107,7 +107,7 @@ impl SystemModel::State<ConcreteProgramModel>  {
 
         &&& self.no_writes_till_recovery_complete() // why should a property like this be an inv?
         &&& self.at_most_one_oustanding_request_per_address()
-        &&& self.reads_consistent_with_disk_content()
+        &&& self.reads_consistent_with_disk_content() // write consistent
 
         &&& self.requests_have_unique_ids()
         &&& self.replies_have_unique_ids()
@@ -116,6 +116,7 @@ impl SystemModel::State<ConcreteProgramModel>  {
         &&& self.sync_requests_inv()
     }
 
+    // TODO: writereq restriction should be a generalized inv
     pub open spec fn in_flight_request_present(self) -> bool
     {
         &&& self.program.state.client_ready() ==> {
@@ -160,11 +161,11 @@ impl SystemModel::State<ConcreteProgramModel>  {
     // pre recovery state constraint
     pub open spec fn no_writes_till_recovery_complete(self) -> bool
     {
-        &&& self.program.state.recovery_state is Begin ==>
-            self.disk.requests == Map::<ID, DiskRequest>::empty() && self.disk.responses == Map::<ID, DiskResponse>::empty()
+        &&& (self.program.state.recovery_state is Begin ==>
+            self.disk.requests == Map::<ID, DiskRequest>::empty() && self.disk.responses == Map::<ID, DiskResponse>::empty())
         &&& self.program.state.recovery_state is AwaitingSuperblock ==> {
-            &&& forall |id| #[trigger] self.disk.requests.contains_key(id) ==> !(self.disk.requests[id] is WriteReq)
-            &&& forall |id| #[trigger] self.disk.responses.contains_key(id) ==> !(self.disk.responses[id] is WriteResp)
+            &&& (forall |id| #[trigger] self.disk.requests.contains_key(id) ==> !(self.disk.requests[id] is WriteReq))
+            &&& (forall |id| #[trigger] self.disk.responses.contains_key(id) ==> !(self.disk.responses[id] is WriteResp))
         }
     }
 
@@ -183,6 +184,7 @@ impl SystemModel::State<ConcreteProgramModel>  {
     }
 
     // This restricts the reads we can have 
+    // TODO: write responses must guarantee that the content on disk is the same as 
     pub open spec fn reads_consistent_with_disk_content(self) -> bool 
     {
         forall |id| #[trigger] self.disk.responses.contains_key(id) && self.disk.responses[id] is ReadResp 
@@ -286,7 +288,7 @@ pub struct RefinementProof{}
 
 impl RefinementObligation<ConcreteProgramModel> for RefinementProof {
 
-    closed spec fn inv(model: SystemModel::State<ConcreteProgramModel>) -> bool
+    open spec fn inv(model: SystemModel::State<ConcreteProgramModel>) -> bool
     {
         model.inv()
     }

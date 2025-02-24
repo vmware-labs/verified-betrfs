@@ -203,10 +203,22 @@ impl Implementation {
     ensures
         false,
     {
+        open_system_invariant::<Self>(self.model, disk_response_token);
+        multiset_map_singleton_ensures(disk_req_id, i_disk_response@);
+        assert(disk_response_token@.multiset().contains((disk_req_id, i_disk_response@))); //trigger
+        
+        // assert(full_model.program.state.recovery_state is AwaitingSuperblock);
+        // assert(full_model.inv());
+        // assert(full_model.no_writes_till_recovery_complete());
+        // assert(full_model.disk.responses.contains_key(disk_req_id));
+
+        // assert(!(full_model.disk.responses[disk_req_id] is WriteResp));
+        // forall |id| #[trigger] self.disk.responses.contains_key(id) ==> !(self.disk.responses[id] is WriteResp)
+
         // TODO This assert-false should be an assumption we pull down from the system:
         // whenever model is AwaitingSuperblock, the only possible responses in the
         // disk bus buffer are ReadResps.
-        assume( false );
+        // assume( false );
     }
 
     pub exec fn handle_query(&mut self, req: Request, req_shard: Tracked<RequestShard>)
@@ -398,7 +410,6 @@ impl Implementation {
                 &mut model,
                 disk_response_token.get(),
             );
-
             self.model = Tracked(model);
         }
     }

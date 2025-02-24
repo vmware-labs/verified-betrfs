@@ -30,6 +30,7 @@ state_machine!{ SystemModel<ProgramModel: ProgramModelTrait> {
 
         pub requests: Multiset<Request>,
         pub replies: Multiset<Reply>,
+
         pub sync_requests: Multiset<SyncReqId>,
     }
 
