@@ -129,6 +129,7 @@ state_machine!{ SystemModel<ProgramModel: ProgramModelTrait> {
     transition!{ program_deliver_sync_reply(lbl: Label, new_program: ProgramModel) {
         require lbl is ProgramUIOp;
         require let ProgramUserOp::DeliverSyncReply{sync_req_id} = lbl->op;
+        require pre.sync_requests.contains(sync_req_id);
         require ProgramModel::next(pre.program, new_program, ProgramLabel::UserIO{op: lbl->op});
         update program = new_program;
         update sync_requests = pre.sync_requests.remove(sync_req_id);

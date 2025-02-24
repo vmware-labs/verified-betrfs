@@ -125,7 +125,7 @@ state_machine!{ AsyncDisk {
         require lbl->requests.dom().disjoint(pre.responses.dom());
 
         // responses heard must come from the pending response set
-        require lbl->responses.dom() <= pre.responses.dom();
+        require lbl->responses <= pre.responses;
 
         update requests = pre.requests.union_prefer_right(lbl->requests);
         update responses = pre.responses.remove_keys(lbl->responses.dom());

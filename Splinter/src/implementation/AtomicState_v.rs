@@ -101,7 +101,7 @@ impl AtomicState {
         &&& post.history.get_prefix(pre.history.len()) == pre.history
 
         &&& valid_request_reply_pair(req, reply)
-        &&& MapSpec::State::next(pre.history.last().appv, post.history.last().appv, to_map_label(req, reply))
+        &&& MapSpec::State::next(pre.mapspec(), post.mapspec(), to_map_label(req, reply))
         &&& post == Self{ history: post.history, ..pre }
     }
 
@@ -118,7 +118,7 @@ impl AtomicState {
     pub open spec fn deliver_sync_reply(pre: Self, post: Self, sync_req_id: SyncReqId) -> bool
     {
         &&& pre.client_ready()
-        &&& pre.sync_req_map.contains_key(sync_req_id) // true by system invariant
+        &&& pre.sync_req_map.contains_key(sync_req_id)
             ==> pre.sync_req_map[sync_req_id] <=  pre.history.first_active_index()
         &&& post == Self{
             sync_req_map: pre.sync_req_map.remove(sync_req_id),
@@ -138,7 +138,7 @@ impl AtomicState {
 
     pub open spec fn complete_recovery(pre: Self, post: Self, reqs: Multiset<(ID, DiskRequest)>, resps: Multiset<(ID, DiskResponse)>, req_id: ID, raw_page: RawPage) -> bool
     {
-        // &&& pre.recovery_state is AwaitingSuperblock // can prove this by invariant
+        &&& pre.recovery_state is AwaitingSuperblock // can prove this by invariant
         &&& reqs.is_empty()
         &&& resps == Multiset::empty().insert((req_id, DiskResponse::ReadResp{data: raw_page}))
         &&& {
