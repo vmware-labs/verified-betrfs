@@ -4,13 +4,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use vstd::{prelude::*};
 use vstd::tokens::InstanceId;
 
-use crate::spec::MapSpec_t::{Request, Reply, Input, ID};
+use crate::spec::MapSpec_t::{ID};
 use crate::spec::KeyType_t::Key;
 use crate::spec::Messages_t::Value;
 use crate::spec::ImplDisk_t::*;
 
 use crate::implementation::MultisetMapRelation_v::*;    // TODO move to _t, I guess
 
+use crate::trusted::ReqReply_t::*;
 use crate::trusted::KVStoreTokenized_t::*;
 use crate::trusted::ProgramModelTrait_t::*;
 

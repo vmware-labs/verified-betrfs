@@ -56,7 +56,7 @@ impl Address {
 pub type RawPage = Seq<u8>;
 
 // TODO: compute checksum
-pub closed spec fn valid_checksum(raw_page: RawPage) -> bool
+pub open spec fn valid_checksum(raw_page: RawPage) -> bool
 {
     true
 }

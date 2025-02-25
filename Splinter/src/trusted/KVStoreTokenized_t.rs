@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: BSD-2-Clause
 use vstd::{prelude::*, multiset::*};
 use state_machines_macros::tokenized_state_machine;
-use crate::spec::MapSpec_t::*;
 use crate::spec::AsyncDisk_t::*;
-use crate::implementation::MultisetMapRelation_v::*;
+use crate::spec::MapSpec_t::{ID, SyncReqId};
 use crate::trusted::ProgramModelTrait_t::*;
+use crate::trusted::ReqReply_t::{Input, Output, Request, Reply};
+use crate::implementation::MultisetMapRelation_v::*;
 
 verus! {
 
@@ -25,18 +26,6 @@ tokenized_state_machine!{KVStoreTokenized<ProgramModel: ProgramModelTrait>{
 
         #[sharding(multiset)]
         pub replies: Multiset<Reply>,
-
-        // NOTE: this might be ok to support now, but not changing it cause we don't have to
-        // right now => Jon tried sharding(map), but that's not the right model. 
-        // To "fill in" a map slot, you need to have the resource that proves it's presently empty. 
-        // In this case, you'd need to somehow know that you're about to receive a SyncReqId that has never
-        // been supplied before. That's a promise the auditor will make, but not at this level.
-        // So the multiset lets us receive a possibly-non-unique token.
-        #[sharding(multiset)]
-        pub sync_requests: Multiset<SyncReqId>,
-
-        #[sharding(multiset)]
-        pub sync_replies: Multiset<SyncReqId>,
 
         #[sharding(multiset)]
         pub disk_requests: Multiset<(ID, DiskRequest)>,
@@ -62,8 +51,7 @@ tokenized_state_machine!{KVStoreTokenized<ProgramModel: ProgramModelTrait>{
 
         init requests = Multiset::empty();
         init replies = Multiset::empty();
-        init sync_requests = Multiset::empty();
-        init sync_replies = Multiset::empty();
+
         init disk_requests = Multiset::empty();
         init disk_responses = Multiset::empty();
     }}
@@ -78,10 +66,11 @@ tokenized_state_machine!{KVStoreTokenized<ProgramModel: ProgramModelTrait>{
 
     transition!{ execute_transition(lbl: Label, post_atomic_state: ProgramModel) {
         require let Label::ExecuteOp{ req, reply } = lbl;
+        require !(req.input is  SyncInput);
 
         remove requests -= { req };
         require ProgramModel::next(pre.model, post_atomic_state, 
-            ProgramLabel::UserIO{op: ProgramUserOp::Execute{req, reply}});
+            ProgramLabel::UserIO{op: ProgramUserOp::Execute{req: req.mapspec_req(), reply: reply.mapspec_reply()}});
         add replies += {reply};
 
         update model = post_atomic_state;
@@ -107,8 +96,7 @@ tokenized_state_machine!{KVStoreTokenized<ProgramModel: ProgramModelTrait>{
     transition!{ accept_sync_request(lbl: Label, post_atomic_state: ProgramModel) {
         require let Label::RequestSyncOp{sync_req_id} = lbl;
 
-        // have sync_requests >= { sync_req_id };
-        remove sync_requests -= { sync_req_id };
+        remove requests -= { Request{id: sync_req_id, input: Input::SyncInput} };
         require ProgramModel::next(pre.model, post_atomic_state, 
             ProgramLabel::UserIO{op: ProgramUserOp::AcceptSyncRequest{sync_req_id}});
 
@@ -120,7 +108,7 @@ tokenized_state_machine!{KVStoreTokenized<ProgramModel: ProgramModelTrait>{
 
         require ProgramModel::next(pre.model, post_atomic_state, 
             ProgramLabel::UserIO{op: ProgramUserOp::DeliverSyncReply{sync_req_id}});
-        add sync_replies += { sync_req_id };
+        add replies += { Reply{id: sync_req_id, output: Output::SyncOutput} };
 
         update model = post_atomic_state;
     }}

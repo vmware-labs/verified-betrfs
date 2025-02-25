@@ -11,11 +11,12 @@ use vstd::hash_map::*;
 use vstd::std_specs::hash::*;
 
 use crate::trusted::ClientAPI_t::*;
+use crate::trusted::ReqReply_t::*;
 use crate::trusted::KVStoreTrait_t::*;
 use crate::trusted::KVStoreTokenized_t::*;
 use crate::trusted::ProgramModelTrait_t::*;
 
-use crate::spec::MapSpec_t::*;
+use crate::spec::MapSpec_t::{ID, MapSpec, PersistentState};
 use crate::spec::TotalKMMap_t::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
@@ -110,14 +111,17 @@ impl Implementation {
                 proof { tracked_swap(self.model.borrow_mut(), &mut model); }
 
                 proof {
-                    let ghost map_lbl = MapSpec::Label::Noop{input: req.input, output: reply.output};
+                    let map_req = req.mapspec_req();
+                    let map_reply = reply.mapspec_reply();
+                    let ghost map_lbl = MapSpec::Label::Noop{input: map_req.input, output: map_reply.output};
                     reveal(MapSpec::State::next);
                     reveal(MapSpec::State::next_by);
                     assert( MapSpec::State::next_by(post_state.state.history.last().appv, post_state.state.history.last().appv,
                             map_lbl, MapSpec::Step::noop())); // witness to step
                     assert( post_state.state.history.get_prefix(pre_state.state.history.len()) == pre_state.state.history );  // extn
-                    assert( AtomicState::map_transition(pre_state.state, post_state.state, req, reply) );
-                    assert( ConcreteProgramModel::next(pre_state, post_state, ProgramLabel::UserIO{op: ProgramUserOp::Execute{req, reply}}) );
+                    assert( AtomicState::map_transition(pre_state.state, post_state.state, map_req, map_reply) );
+                    assert( ConcreteProgramModel::next(pre_state, post_state, 
+                        ProgramLabel::UserIO{op: ProgramUserOp::Execute{req: map_req, reply: map_reply}}) );
                 }
 
                 let tracked new_reply_token = self.instance.borrow().execute_transition(
@@ -167,14 +171,17 @@ impl Implementation {
             proof { tracked_swap(self.model.borrow_mut(), &mut model); }
 
             proof {
-                let ghost map_lbl = MapSpec::Label::Put{input: req.input, output: reply.output};
+                let map_req = req.mapspec_req();
+                let map_reply = reply.mapspec_reply();
+                let ghost map_lbl = MapSpec::Label::Put{input: map_req.input, output: map_reply.output};
                 reveal(MapSpec::State::next);
                 reveal(MapSpec::State::next_by);
                 assert( MapSpec::State::next_by(pre_state.state.mapspec(), post_state.state.mapspec(),
                         map_lbl, MapSpec::Step::put())); // witness to step
                 assert( post_state.state.history.get_prefix(pre_state.state.history.len()) == pre_state.state.history );  // extn
-                assert( AtomicState::map_transition(pre_state.state, post_state.state, req, reply) );
-                assert( ConcreteProgramModel::next(pre_state, post_state, ProgramLabel::UserIO{op: ProgramUserOp::Execute{req, reply}}) );
+                assert( AtomicState::map_transition(pre_state.state, post_state.state, map_req, map_reply) );
+                assert( ConcreteProgramModel::next(pre_state, post_state, 
+                    ProgramLabel::UserIO{op: ProgramUserOp::Execute{req: map_req, reply: map_reply}}) );
             }
 
 //             assert( pre_state == model.value() );
@@ -245,14 +252,17 @@ impl Implementation {
             proof { tracked_swap(self.model.borrow_mut(), &mut model); }
 
             proof {
-                let ghost map_lbl = MapSpec::Label::Query{input: req.input, output: reply.output};
+                let map_req = req.mapspec_req();
+                let map_reply = reply.mapspec_reply();
+                let ghost map_lbl = MapSpec::Label::Query{input: map_req.input, output: map_reply.output};
                 reveal(MapSpec::State::next);
                 reveal(MapSpec::State::next_by);
                 assert( MapSpec::State::next_by(pre_state.state.mapspec(), post_state.state.mapspec(),
                         map_lbl, MapSpec::Step::query())); // witness to step
                 assert( post_state.state.history.get_prefix(pre_state.state.history.len()) == pre_state.state.history );  // extn
 //                 assert( AtomicState::map_transition(pre_state, post_state, map_lbl) );
-                assert( ConcreteProgramModel::next(pre_state, post_state, ProgramLabel::UserIO{op: ProgramUserOp::Execute{req, reply}}) );
+                assert( ConcreteProgramModel::next(pre_state, post_state, 
+                    ProgramLabel::UserIO{op: ProgramUserOp::Execute{req: map_req, reply: map_reply}}) );
             }
 
             let tracked new_reply_token = self.instance.borrow().execute_transition(
@@ -272,6 +282,7 @@ impl Implementation {
     pub exec fn handle(&mut self, req: Request, req_shard: Tracked<RequestShard>)
             -> (out: (Reply, Tracked<ReplyShard>))
     requires
+        // !(req.input is SyncInput),
         old(self).good_req(req, req_shard@),
     ensures
         self.good_reply(*old(self), out.0, out.1@),
@@ -280,6 +291,7 @@ impl Implementation {
             Input::NoopInput => self.handle_noop(req, req_shard),
             Input::PutInput{..} => self.handle_put(req, req_shard),
             Input::QueryInput{..} => self.handle_query(req, req_shard),
+            Input::SyncInput{} =>  { loop {} }, // not supported yet 
         }
     }
 
@@ -441,9 +453,7 @@ impl KVStoreTrait for Implementation {
             Tracked(instance),
             Tracked(model),         // non sharded model
             Tracked(requests),      // request perm map (multiset), empty
-            Tracked(replies),       // reply perm map (multiset), empty
-            Tracked(sync_requests), // sync req map (multiset), empty
-            Tracked(sync_replies),  // sync reply map (multiset), empty
+            Tracked(replies),       // reply perm map (multiset), empty\
             Tracked(disk_requests),
             Tracked(disk_responses),
         ) = KVStoreTokenized::Instance::initialize(ConcreteProgramModel{state: AtomicState::init()});
@@ -470,7 +480,7 @@ impl KVStoreTrait for Implementation {
         // loop
         // invariant
         //     self.inv(),
-        //     self.model@.value().recovery_state is RecoveryComplete,
+        //     self.model@.value().state.recovery_state is RecoveryComplete,
         //     self.instance_id() == api.instance_id(),
         // {
         //     let (req, req_shard) = api.receive_request(debug_print);

@@ -3,7 +3,7 @@ use builtin::*;
 use vstd::prelude::*;
 
 use crate::spec::AsyncDisk_t::*;
-use crate::spec::MapSpec_t::{ID};
+use crate::spec::MapSpec_t::*;
 use crate::trusted::ProgramModelTrait_t::*;
 use crate::implementation::DiskLayout_v::*;
 use crate::implementation::AtomicState_v::*;
@@ -42,6 +42,7 @@ impl ProgramModelTrait for ConcreteProgramModel {
             ProgramLabel::UserIO{op} => {
                 match op {
                     ProgramUserOp::Execute{req, reply} => {
+                        // translate it into the other request and reply
                         AtomicState::map_transition(pre.state, post.state, req, reply)
                     },
                     ProgramUserOp::AcceptSyncRequest{sync_req_id} => {

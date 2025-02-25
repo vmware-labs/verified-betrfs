@@ -3,7 +3,6 @@
 use vstd::{prelude::*};
 use vstd::{multiset::*};
 
-//use vstd::pervasive::print_u64;
 use crate::spec::MapSpec_t::*;
 use crate::spec::FloatingSeq_t::*;
 use crate::spec::AsyncDisk_t::*;
