@@ -395,6 +395,11 @@ impl Implementation {
                 };
                 // TODO: this is crazy, I have to use info.reqs otherwise it doesn't match for 
                 // valid disk transition
+                open_system_invariant::<Self>(self.model, disk_response_token);
+                multiset_map_singleton_ensures(disk_req_id, i_disk_response@);
+                assert(disk_response_token@.multiset().contains((disk_req_id, i_disk_response@))); //trigger
+                                                                                           //
+                assert( valid_checksum(raw_page) );
                 assert(AtomicState::disk_transition(
                     pre_state.state, post_state.state, disk_event, info.reqs, info.resps));
                 assert(ConcreteProgramModel::valid_disk_transition(pre_state, post_state, info));
