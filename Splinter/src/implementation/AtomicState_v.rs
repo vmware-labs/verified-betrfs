@@ -76,7 +76,8 @@ impl AtomicState {
             &&& self.in_flight is Some ==> {
                 self.history.is_active(self.in_flight.unwrap().version as int)
             }
-            &&& self.history.is_active(self.persistent_version as int)
+            // &&& self.history.is_active(self.persistent_version as int)
+            &&& self.history.first_active_index() == self.persistent_version
         }
     }
 
@@ -141,6 +142,7 @@ impl AtomicState {
         &&& pre.recovery_state is AwaitingSuperblock // can prove this by invariant
         &&& reqs.is_empty()
         &&& resps == Multiset::empty().insert((req_id, DiskResponse::ReadResp{data: raw_page}))
+        &&& valid_checksum(raw_page)
         &&& {
             let superblock = spec_unmarshall(raw_page);
             post == Self{

@@ -26,76 +26,6 @@ broadcast proof fn unmarshall_marshall(sb: Superblock)
     assume(false);
 }
 
-impl AtomicState {
-    // preserves wf and does nothing?
-    pub proof fn disk_transition_preserves_wf(pre: Self, post: Self, disk_event: DiskEvent, reqs: Multiset<(ID, DiskRequest)>, resps: Multiset<(ID, DiskResponse)>)
-    requires
-        pre.wf(),
-        Self::disk_transition(pre, post, disk_event, reqs, resps),
-    ensures
-        post.wf(),
-    {
-        match disk_event {
-            DiskEvent::InitiateRecovery{req_id} => {
-                assert(Self::initiate_recovery(pre, post, reqs, resps, req_id));
-                assume(false);
-            },
-            DiskEvent::CompleteRecovery{req_id, raw_page} => {
-                assert(Self::complete_recovery(pre, post, reqs, resps, req_id, raw_page));
-                assume(false);
-            },
-            DiskEvent::ExecuteSyncBegin{req_id} => {
-                assert(Self::execute_sync_begin(pre, post, reqs, resps, req_id));
-            },
-            DiskEvent::ExecuteSyncEnd{} => {
-                assert(Self::execute_sync_end(pre, post, reqs, resps));
-                assume(false);
-            }
-        }
-        // is it possible for any 
-//         if post.recovery_state is RecoveryComplete {
-//             assume(false);
-//             match disk_event_lbl {
-//                 DiskEvent::InitiateRecovery{} => {
-//                     assert( post.wf() );
-//                 },
-//                 DiskEvent::CompleteRecovery{raw_page} => {
-//                     assert( post.history.is_active(post.history.len()-1) );
-//                     assert forall |i| #[trigger] post.history.is_active(i) implies post.history[i].appv.invariant() by {
-//                         let superblock = spec_unmarshall(raw_page);
-//                         assert( i == superblock.version_index );
-//                         assert( post.history[i] == superblock.store );
-//                         assert( superblock.store.appv.invariant() ) by {
-//                             // TODO remember that invariant survives disk
-//                             assume( false );
-//                         }
-//                     }
-//                 },
-//                 DiskEvent::ExecuteSyncBegin{} => {
-//                     assert( post.wf() );
-//                 },
-//                 DiskEvent::ExecuteSyncEnd{} => {
-//                     assert( pre.in_flight is Some ) by {
-//                         // TODO remember that in_flight is Some whenever an IO is in
-//                         // flight. This seems like a system property, not a wf, since we can't
-//                         // see the IO buffer from here. How are we gonna get this wf down
-//                         // to Implementation!? Maybe it moves to inv, so Impl doesn't need to
-//                         // show it as part of wf?
-//                         assume( false );
-//                     }
-//                     let new_version = pre.in_flight.unwrap().version;
-// //                     assert( pre.history.is_active(new_version as int) );
-// //                     assert( post.history.is_active(post.history.len()-1) );
-// //                     assert forall |i| #[trigger] post.history.is_active(i) implies post.history[i].appv.invariant() by {
-// //                         assert( pre.history.is_active(i) );
-// //                     }
-//                     assert( post.wf() );
-//                 },
-//             }
-//         }
-    }
-}
-
 impl SystemModel::State<ConcreteProgramModel>  {
     pub open spec fn inv(self) -> bool
     {
@@ -107,7 +37,7 @@ impl SystemModel::State<ConcreteProgramModel>  {
 
         &&& self.no_writes_till_recovery_complete() // why should a property like this be an inv?
         &&& self.at_most_one_oustanding_request_per_address()
-        &&& self.reads_consistent_with_disk_content() // write consistent
+        &&& self.responses_consistent_with_disk()
 
         &&& self.requests_have_unique_ids()
         &&& self.replies_have_unique_ids()
@@ -116,7 +46,6 @@ impl SystemModel::State<ConcreteProgramModel>  {
         &&& self.sync_requests_inv()
     }
 
-    // TODO: writereq restriction should be a generalized inv
     pub open spec fn in_flight_request_present(self) -> bool
     {
         &&& self.program.state.client_ready() ==> {
@@ -133,8 +62,10 @@ impl SystemModel::State<ConcreteProgramModel>  {
                     self.disk.responses[id] == DiskResponse::WriteResp{}
             }
             &&& in_flight is None ==> {
-                &&& forall |req| #[trigger] self.disk.requests.values().contains(req) && req is WriteReq
-                    ==> req->to != spec_superblock_addr()
+                &&& forall |id| #[trigger] self.disk.requests.contains_key(id) //&& self.disk.requests[id] is WriteReq
+                    ==> self.disk.requests[id].addr() != spec_superblock_addr()
+                &&& forall |id| #[trigger] self.disk.responses.contains_key(id) 
+                    ==> self.addr_for_id(id) != spec_superblock_addr()
             }
         }
     }
@@ -185,12 +116,15 @@ impl SystemModel::State<ConcreteProgramModel>  {
 
     // This restricts the reads we can have 
     // TODO: write responses must guarantee that the content on disk is the same as 
-    pub open spec fn reads_consistent_with_disk_content(self) -> bool 
+    pub open spec fn responses_consistent_with_disk(self) -> bool 
     {
-        forall |id| #[trigger] self.disk.responses.contains_key(id) && self.disk.responses[id] is ReadResp 
+        forall |id| #[trigger] self.disk.responses.contains_key(id)
         ==> {
             &&& self.disk.content.contains_key(self.addr_for_id(id))
-            &&& self.disk.responses[id]->data == self.disk.content[self.addr_for_id(id)]
+            &&& self.disk.responses[id] is ReadResp && valid_checksum(self.disk.responses[id]->data) ==>
+                self.disk.responses[id]->data == self.disk.content[self.addr_for_id(id)]
+            &&& self.disk.responses[id] is WriteResp ==>
+                spec_marshall(self.program.state.in_flight_sb()) == self.disk.content[self.addr_for_id(id)]
         }
     }
 
@@ -200,10 +134,20 @@ impl SystemModel::State<ConcreteProgramModel>  {
     pub open spec fn at_most_one_oustanding_request_per_address(self) -> bool
     {
         // TODO: temporary restriction only valid for the simple model
-        &&& forall |id|  #[trigger] self.disk.requests.contains_key(id) ==>
+        &&& forall |id| #[trigger] self.disk.requests.contains_key(id) ==>
                 self.disk.requests[id].addr() == spec_superblock_addr()
-        &&& forall |id1, id2|  #[trigger] self.disk.requests.contains_key(id1) && #[trigger] self.disk.requests.contains_key(id2) 
-            && id1 != id2 ==> self.disk.requests[id1].addr() != self.disk.requests[id2].addr() 
+    
+        // no concurrent requests on the same address
+        &&& forall |id1, id2| #[trigger] self.disk.requests.contains_key(id1) && #[trigger] self.disk.requests.contains_key(id2) 
+            && id1 != id2 ==> self.disk.requests[id1].addr() != self.disk.requests[id2].addr()
+
+        // no concurrent responses on the same address
+        &&& forall |id1, id2| #[trigger] self.disk.responses.contains_key(id1) && #[trigger] self.disk.responses.contains_key(id2) 
+            && id1 != id2 ==> self.addr_for_id(id1) != self.addr_for_id(id2)
+
+        // no concurrent request response on the same address
+        &&& forall |id1, id2| #[trigger] self.disk.requests.contains_key(id1) && #[trigger] self.disk.responses.contains_key(id2) 
+            ==> self.disk.requests[id1].addr() != self.addr_for_id(id2)
     }
 
     pub open spec(checked) fn requests_have_unique_ids(self) -> bool 
@@ -270,14 +214,13 @@ impl SystemModel::State<ConcreteProgramModel>  {
                 replies: self.replies.dom(),
             },
             sync_requests: self.program.state.sync_req_map,
-            // requests are ones that have been tracked by 
-            // sync_requests: multiset_to_map(self.sync_requests),
          }
     }
 
     closed spec fn sb_landed(self: Self, post: Self) -> bool
     {
         let state = self.program.state;
+        &&& state.client_ready()
         &&& state.in_flight is Some
         &&& !self.disk.responses.contains_key(state.in_flight.unwrap().req_id)
         &&& post.disk.responses.contains_key(state.in_flight.unwrap().req_id)
@@ -513,23 +456,20 @@ impl RefinementObligation<ConcreteProgramModel> for RefinementProof {
                     responses: multiset_to_map(resps),
                 };
 
+                assert(disk_lbl->responses <= pre.disk.responses);
+                assert(disk_lbl->requests <= post.disk.requests);
+
                 match disk_event {
                     DiskEvent::InitiateRecovery{req_id} => {
                         assert(AtomicState::initiate_recovery(pre.program.state, post.program.state, reqs, resps, req_id));
                         assert(post.program.state.wf());
-                        assert(post.inv());
-
                         multiset_map_singleton_ensures(req_id, DiskRequest::ReadReq{from: spec_superblock_addr()});
-                        assert(ipre == ipost);
-                        assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, CrashTolerantAsyncMap::Step::noop()));
                     },
                     DiskEvent::CompleteRecovery{req_id, raw_page} => {
                         assert(AtomicState::complete_recovery(pre.program.state, post.program.state, reqs, resps, req_id, raw_page));
-                        
                         assert(AsyncDisk::State::disk_ops(pre.disk, post.disk, disk_lbl));
                         multiset_map_membership(resps, req_id, DiskResponse::ReadResp{data: raw_page});
                         assert(disk_lbl->responses == map!{req_id => DiskResponse::ReadResp{data: raw_page}});
-                        assert(disk_lbl->responses <= pre.disk.responses);
 
                         assert(disk_lbl->responses.contains_key(req_id)); // trigger
                         assert(pre.disk.responses.contains_key(req_id));
@@ -539,67 +479,55 @@ impl RefinementObligation<ConcreteProgramModel> for RefinementProof {
                         assert(superblock.store.appv.invariant());
                         assert(post.program.state.wf());
                         assert(post.sync_requests_inv());
-                        assert(post.inv());
-
-                        assert(ipre == ipost);
-                        assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, CrashTolerantAsyncMap::Step::noop()));
                     },
-                    DiskEvent::ExecuteSyncBegin{req_id} => {
-                        assume(false);
-                        // assert(Self::execute_sync_begin(pre, post, reqs, resps, req_id));
+                    DiskEvent::ExecuteSyncBegin{req_id} => {    
+                        AtomicState::execute_sync_begin(pre.program.state, post.program.state, reqs, resps, req_id);
+                        let sb = pre.program.state.ephemeral_sb();
+                        let write_req = DiskRequest::WriteReq{to: spec_superblock_addr(), data: spec_marshall(sb)};
+                        multiset_map_membership(reqs, req_id, write_req);
                     },
                     DiskEvent::ExecuteSyncEnd{} => {
-                        // assert(Self::execute_sync_end(pre, post, reqs, resps));
-                        assume(false);
+                        AtomicState::execute_sync_end(pre.program.state, post.program.state, reqs, resps);
+                        let info = pre.program.state.in_flight.unwrap();
+                        multiset_map_membership(resps, info.req_id, DiskResponse::WriteResp{});
+
+                        assert(forall |i| #[trigger] post.program.state.history.is_active(i) 
+                            ==> pre.program.state.history.is_active(i)); // trigger
+                        assert(post.program.state.wf());
                     }
                 }
-
-                // disk io
-                // refines to noop
-                // program disk issue
-                // assert(new_program == pre.program);
-                // 
-                //
-            },
-            _ => { assume(false); }
-                    /*
-                
+                assert(post.inv());
+                assert(ipre == ipost);
+                assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, CrashTolerantAsyncMap::Step::noop()));
             },
             SystemModel::Step::program_internal(new_program) => {
-                assume(false);
-                // assert(new_program == pre.program);
-                assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, 
-                    CrashTolerantAsyncMap::Step::noop()));
-                assert( Self::inv(post) );
+                assert(ipre == ipost);
+                assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, CrashTolerantAsyncMap::Step::noop()));
             },
             SystemModel::Step::disk_internal(new_disk) => {
-                assume(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, 
-                    CrashTolerantAsyncMap::Step::noop()));
-                assume( Self::inv(post) );
+                if pre.sb_landed(post) {
+                    assert(post.inv());
+                    let info = pre.program.state.in_flight.unwrap();
+                    assert(ipre.stable_index() <= info.version < ipre.versions.len());
+                    assert(ipost.versions == ipre.versions.get_suffix(info.version as int));
+                    assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, CrashTolerantAsyncMap::Step::sync(info.version as int)));
+                } else {
+                    assert(post.inv());
+                    assert(ipre == ipost);
+                    assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, CrashTolerantAsyncMap::Step::noop()));
+                }
             },
             SystemModel::Step::crash(new_program, new_disk) => {
-                // This Implementation, which doesn't actually use the disk, is only "crash
-                // tolerant" in the sense that it doesn't support sync. Since we never sync,
-                // we maintain the invariant that the first allowed crash Version is the initial
-                // state, which of course is exactly what we get when we "recover" without a disk.
-                assume( false );
-                assert( ipost.versions == ipre.versions.get_prefix(ipre.stable_index() + 1) ); // extn equality
-                assert( ipost.async_ephemeral == AsyncMap::State::init_ephemeral_state() ); // extn equality
-                assert( ipost.sync_requests == Map::<SyncReqId, nat>::empty() );    // extn equality
-                assert( CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl,
-                        CrashTolerantAsyncMap::Step::crash() ) );   // step witness
-                assert( Self::inv(post) );
+                assert(post.inv());
+                assert(ipre.versions.get_prefix(ipre.stable_index()+1) == ipost.versions); 
+                assert(ipost.async_ephemeral == AsyncMap::State::init_ephemeral_state()); // ext_eq
+                assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, CrashTolerantAsyncMap::Step::crash()));
             },
             SystemModel::Step::noop() => {
-                assert( ipre == ipost );
-                assert( CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl,
-                        CrashTolerantAsyncMap::Step::noop() ) );
-                assert( Self::inv(post) );
+                assert(ipre == ipost);
+                assert(CrashTolerantAsyncMap::State::next_by(ipre, ipost, ilbl, CrashTolerantAsyncMap::Step::noop()));
             },
-            SystemModel::Step::dummy_to_use_type_params(dummy) => {
-            },
-            */
-
+            _ => { assert(false); }
         }
         assert( CrashTolerantAsyncMap::State::next(ipre, ipost, ilbl) );
     }
@@ -618,21 +546,4 @@ broadcast proof fn insert_new_preserves_cardinality<V>(m: Multiset<V>, new: V)
         }
     }
 }
-
-// proof fn is_empty_dom<V>(m: Multiset<V>)
-//     requires m.is_empty()
-//     ensures m.dom() =~= Set::empty()
-// {
-//     assert(forall |e| true ==> m.count(e) == 0);
-
-//     // assert(Multiset::empty().count(v) == 0,)
-//     // assert forall |e| #[trigger] m.count
-//     // implies post_m.count(e) == 1
-//     // by {
-//     //     if e != new {
-//     //         assert(m.contains(e)); // trigger
-//     //     }
-//     // }
-// }
-
 }

@@ -55,6 +55,12 @@ impl Address {
 /// models raw disk content
 pub type RawPage = Seq<u8>;
 
+// TODO: compute checksum
+pub closed spec fn valid_checksum(raw_page: RawPage) -> bool
+{
+    true
+}
+
 /// models the actual disk
 pub type Disk = Map<Address, RawPage>;
 
@@ -144,6 +150,8 @@ state_machine!{ AsyncDisk {
             data: pre.content[pre.requests[id]->from],
         };
 
+        require valid_checksum(read_resp->data);
+
         update requests = pre.requests.remove(id);
         update responses = pre.responses.insert(id, read_resp);
     }}
@@ -160,6 +168,7 @@ state_machine!{ AsyncDisk {
         require fake_content != pre.content[pre.requests[id]->from];
         // TODO: assume disk cannot fail from a checksum-correct state
         // to a different checksum-correct state (corrupted bits leads to mismatching checksums)
+        require !valid_checksum(fake_content);
 
         let read_resp = DiskResponse::ReadResp{
             data: fake_content,
