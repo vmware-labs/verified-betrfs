@@ -44,8 +44,6 @@ impl SystemModel::State<ConcreteProgramModel>  {
         &&& self.requests_replies_id_disjoint()
 
         &&& self.sync_requests_inv()
-
-        &&& self.disk_responses_parsable_inv()
     }
 
     pub open spec fn in_flight_request_present(self) -> bool
@@ -110,14 +108,6 @@ impl SystemModel::State<ConcreteProgramModel>  {
         &&& !self.program.state.client_ready() ==> self.sync_requests.is_empty()
     }
 
-    pub open spec fn disk_responses_parsable_inv(self) -> bool
-    {
-        &&& forall |id| #[trigger] self.disk.responses.contains_key(id) && self.disk.responses[id] is ReadResp
-            // TODO(jailin): not sure why we're talking about "valid checksums" rather than
-            // unmarshalability, but we need something like this to take DiskIO steps.
-            ==> valid_checksum(self.disk.responses[id]->data)
-    }
-
     // TODO: update once we have structures to track id -> address
     pub open spec fn addr_for_id(self, id: ID) -> Address
     {
@@ -131,7 +121,7 @@ impl SystemModel::State<ConcreteProgramModel>  {
         forall |id| #[trigger] self.disk.responses.contains_key(id)
         ==> {
             &&& self.disk.content.contains_key(self.addr_for_id(id))
-            &&& self.disk.responses[id] is ReadResp && valid_checksum(self.disk.responses[id]->data) ==>
+            &&& self.disk.responses[id] is ReadResp /* && valid_checksum(self.disk.responses[id]->data)*/ ==>
                 self.disk.responses[id]->data == self.disk.content[self.addr_for_id(id)]
             &&& self.disk.responses[id] is WriteResp ==>
                 spec_marshall(self.program.state.in_flight_sb()) == self.disk.content[self.addr_for_id(id)]

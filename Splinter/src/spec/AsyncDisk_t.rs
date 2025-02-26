@@ -56,10 +56,10 @@ impl Address {
 pub type RawPage = Seq<u8>;
 
 // TODO: compute checksum
-pub open spec fn valid_checksum(raw_page: RawPage) -> bool
-{
-    true
-}
+// pub open spec fn valid_checksum(raw_page: RawPage) -> bool
+// {
+//     true
+// }
 
 /// models the actual disk
 pub type Disk = Map<Address, RawPage>;
@@ -150,33 +150,34 @@ state_machine!{ AsyncDisk {
             data: pre.content[pre.requests[id]->from],
         };
 
-        require valid_checksum(read_resp->data);
+        // require valid_checksum(read_resp->data);
 
         update requests = pre.requests.remove(id);
         update responses = pre.responses.insert(id, read_resp);
     }}
 
-    transition!{ process_read_failure(lbl: Label, id: ID, fake_content: RawPage){
-        require lbl is Internal;
+    // NOTE: we will skip modeling this for now
+    // transition!{ process_read_failure(lbl: Label, id: ID, fake_content: RawPage){
+    //     require lbl is Internal;
 
-        // read processed must have been requested
-        require pre.requests.dom().contains(id);
-        require pre.requests[id] is ReadReq;
-        require pre.requests[id]->from.wf();
+    //     // read processed must have been requested
+    //     require pre.requests.dom().contains(id);
+    //     require pre.requests[id] is ReadReq;
+    //     require pre.requests[id]->from.wf();
         
-        // restriction possible fake content
-        require fake_content != pre.content[pre.requests[id]->from];
-        // TODO: assume disk cannot fail from a checksum-correct state
-        // to a different checksum-correct state (corrupted bits leads to mismatching checksums)
-        require !valid_checksum(fake_content);
+    //     // restriction possible fake content
+    //     require fake_content != pre.content[pre.requests[id]->from];
+    //     // TODO: assume disk cannot fail from a checksum-correct state
+    //     // to a different checksum-correct state (corrupted bits leads to mismatching checksums)
+    //     require !valid_checksum(fake_content);
 
-        let read_resp = DiskResponse::ReadResp{
-            data: fake_content,
-        };
+    //     let read_resp = DiskResponse::ReadResp{
+    //         data: fake_content,
+    //     };
 
-        update requests = pre.requests.remove(id);
-        update responses = pre.responses.insert(id, read_resp);
-    }}
+    //     update requests = pre.requests.remove(id);
+    //     update responses = pre.responses.insert(id, read_resp);
+    // }}
 
     // process writes
     transition!{ process_write(lbl: Label, id: ID){
@@ -219,8 +220,8 @@ state_machine!{ AsyncDisk {
     #[inductive(process_read)]
     fn process_read_inductive(pre: Self, post: Self, lbl: Label, id: ID) { }
    
-    #[inductive(process_read_failure)]
-    fn process_read_failure_inductive(pre: Self, post: Self, lbl: Label, id: ID, fake_content: RawPage) { }
+    // #[inductive(process_read_failure)]
+    // fn process_read_failure_inductive(pre: Self, post: Self, lbl: Label, id: ID, fake_content: RawPage) { }
    
     #[inductive(process_write)]
     fn process_write_inductive(pre: Self, post: Self, lbl: Label, id: ID) { }
