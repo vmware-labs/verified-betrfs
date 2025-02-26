@@ -37,12 +37,12 @@ pub trait KVStoreTrait : Sized{
 // Auditor promise
 // This should only be true for the specific RefinementObligation!
 // Here I'm also narrowly specializing to a particular set of available tokens.
-pub proof fn open_system_invariant<KV: KVStoreTrait>(
-    model_token: Tracked<KVStoreTokenized::model<KV::ProgramModel>>,
-    disk_responses_token: Tracked<KVStoreTokenized::disk_responses_multiset<KV::ProgramModel>>,
-    ) -> (model: SystemModel::State<KV::ProgramModel>)
+pub proof fn open_system_invariant<ProgramModel: ProgramModelTrait, Proof: RefinementObligation<ProgramModel>>(
+    model_token: Tracked<KVStoreTokenized::model<ProgramModel>>,
+    disk_responses_token: Tracked<KVStoreTokenized::disk_responses_multiset<ProgramModel>>,
+    ) -> (model: SystemModel::State<ProgramModel>)
 ensures
-    KV::Proof::inv(model),
+    Proof::inv(model),
     model.program == model_token@.value(),
     forall |id,disk_response| #[trigger] disk_responses_token@.multiset().contains((id, disk_response))
         ==> (model.disk.responses.dom().contains(id) && model.disk.responses[id] == disk_response),

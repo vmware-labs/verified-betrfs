@@ -210,7 +210,7 @@ impl Implementation {
     ensures
         false,
     {
-        open_system_invariant::<Self>(self.model, disk_response_token);
+        open_system_invariant::<ConcreteProgramModel, RefinementProof>(self.model, disk_response_token);
         multiset_map_singleton_ensures(disk_req_id, i_disk_response@);
         assert(disk_response_token@.multiset().contains((disk_req_id, i_disk_response@))); //trigger
         
@@ -407,7 +407,7 @@ impl Implementation {
                 };
                 // TODO: this is crazy, I have to use info.reqs otherwise it doesn't match for 
                 // valid disk transition
-                open_system_invariant::<Self>(self.model, disk_response_token);
+//                 open_system_invariant::<Self>(self.model, disk_response_token);
                 multiset_map_singleton_ensures(disk_req_id, i_disk_response@);
                 assert(disk_response_token@.multiset().contains((disk_req_id, i_disk_response@))); //trigger
                                                                                            //
@@ -474,19 +474,19 @@ impl KVStoreTrait for Implementation {
 
     fn kvstore_main(&mut self, mut api: ClientAPI<Self::ProgramModel>)
     {
-        // self.recover(&mut api);
+        self.recover(&mut api);
 
-        // let debug_print = true;
-        // loop
-        // invariant
-        //     self.inv(),
-        //     self.model@.value().state.recovery_state is RecoveryComplete,
-        //     self.instance_id() == api.instance_id(),
-        // {
-        //     let (req, req_shard) = api.receive_request(debug_print);
-        //     let (reply, reply_shard) = self.handle(req, req_shard);
-        //     api.send_reply(reply, reply_shard, true);
-        // }
+        let debug_print = true;
+        loop
+        invariant
+            self.inv(),
+            self.model@.value().state.recovery_state is RecoveryComplete,
+            self.instance_id() == api.instance_id(),
+        {
+            let (req, req_shard) = api.receive_request(debug_print);
+            let (reply, reply_shard) = self.handle(req, req_shard);
+            api.send_reply(reply, reply_shard, true);
+        }
     }
 }
 
