@@ -1317,17 +1317,25 @@ state_machine!{ LikesBetree {
         pushed.valid_view_implies_same_transitive_likes(post.betree.linked);
         assert(post.betree.linked.transitive_likes() == pushed.transitive_likes());
     }
-   
-    #[inductive(internal_grow)]
-    fn internal_grow_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, new_root_addr: Address) { 
-        reveal(LinkedBetreeVars::State::next_by);
-        assert(new_betree.inv()) by {
-            let linked_step = LinkedBetreeVars::Step::internal_grow(new_root_addr);
-            LinkedBetreeVars::State::inv_next_by(pre.betree, new_betree, lbl->linked_lbl, linked_step);
-        }
 
+    pub proof fn grow_likes_ensures(pre: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, new_root_addr: Address)
+        requires 
+            pre.betree.linked.acyclic(),
+            pre.betree.linked.has_root() ==> pre.betree.linked.root().my_domain() == total_domain(),
+            pre.imperative_matches_transitive_likes(),
+            LinkedBetreeVars::State::internal_grow(pre.betree, new_betree, lbl->linked_lbl, new_root_addr),
+            pre.is_fresh(set!{new_root_addr})
+        ensures ({
+            let (betree_likes, buffer_likes) = new_betree.linked.transitive_likes();
+            &&& new_betree.linked.acyclic()
+            &&& betree_likes == pre.betree_likes.add(new_betree.linked.root_likes())
+            &&& buffer_likes == pre.buffer_likes
+        })
+    {
         let (betree_likes, buffer_likes) = new_betree.linked.transitive_likes();
-        let ranking = new_betree.linked.finite_ranking();
+        let post_betree_likes = pre.betree_likes.add(new_betree.linked.root_likes());
+
+        let ranking = pre.betree.linked.grow_new_ranking(new_root_addr);
         let child = new_betree.linked.child_at_idx(0);
 
         broadcast use LinkedBetree::tree_likes_ignore_ranking;
@@ -1344,7 +1352,7 @@ state_machine!{ LikesBetree {
 
         assert(new_betree.linked.tree_likes(ranking) == betree_likes);
         assert(new_betree.linked.tree_likes(ranking) == pre.betree_likes.insert(new_root_addr));
-        assert(betree_likes =~= post.betree_likes);
+        assert(betree_likes =~= post_betree_likes);
 
         new_betree.linked.tree_likes_domain(ranking);
         pre.betree.linked.tree_likes_domain(ranking);
@@ -1360,7 +1368,17 @@ state_machine!{ LikesBetree {
         new_betree.linked.buffer_likes_additive(pre.betree_likes, Multiset::singleton(new_root_addr));
         assert(buffer_likes =~= new_betree.linked.buffer_likes(pre.betree_likes));
         pre.betree.linked.subdisk_implies_same_buffer_likes(new_betree.linked, pre.betree_likes);
-        assert(post.buffer_likes == buffer_likes);
+        assert(pre.buffer_likes == buffer_likes);
+    }
+   
+    #[inductive(internal_grow)]
+    fn internal_grow_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, new_root_addr: Address) { 
+        reveal(LinkedBetreeVars::State::next_by);
+        assert(new_betree.inv()) by {
+            let linked_step = LinkedBetreeVars::Step::internal_grow(new_root_addr);
+            LinkedBetreeVars::State::inv_next_by(pre.betree, new_betree, lbl->linked_lbl, linked_step);
+        }
+        Self::grow_likes_ensures(pre, lbl, new_betree, new_root_addr);
     }
 
     pub proof fn internal_split_satisfies_strong_step(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
@@ -1389,8 +1407,83 @@ state_machine!{ LikesBetree {
         return LinkedBetreeVars::Step::internal_split(new_betree.linked, path, request, new_addrs, path_addrs);
     }
 
-    #[inductive(internal_split)]
     #[verifier::spinoff_prover]
+    pub proof fn split_likes_ensures(pre: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
+        path: Path<SimpleBuffer>, request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs)
+        requires 
+            pre.betree.linked.acyclic(),
+            pre.imperative_matches_transitive_likes(),
+            LinkedBetreeVars::State::internal_split(pre.betree, new_betree, lbl->linked_lbl, 
+                new_betree.linked, path, request, new_addrs, path_addrs),
+            pre.is_fresh(new_addrs.repr()),
+            pre.is_fresh(path_addrs.to_set()),
+        ensures ({
+            let splitted = LinkedBetreeVars::State::post_split(path, request, new_addrs, path_addrs);
+            let (betree_likes, buffer_likes) = splitted.transitive_likes();
+            &&& splitted.acyclic()
+            &&& split_discard_betree(path, request) <= pre.betree_likes
+            &&& betree_likes == pre.betree_likes.sub(split_discard_betree(path, request)).add(split_add_betree(new_addrs, path_addrs))
+            &&& buffer_likes == pre.buffer_likes.add(split_add_buffers(path, request))
+        })
+    {
+        let splitted = LinkedBetreeVars::State::post_split(path, request, new_addrs, path_addrs);
+        pre.betree.post_split_ensures(path, request, new_addrs, path_addrs);
+
+        let post_betree_likes = pre.betree_likes.sub(split_discard_betree(path, request)).add(split_add_betree(new_addrs, path_addrs));
+        let post_buffer_likes = pre.buffer_likes.add(split_add_buffers(path, request));        
+
+        let subtree = path.target();            
+        let new_subtree = subtree.split_parent(request, new_addrs);
+        let ranking = pre.betree.linked.the_ranking();
+
+        path.target_ensures();
+        path.valid_ranking_throughout(ranking);
+        assert(new_subtree.acyclic());
+
+        let child = subtree.child_at_idx(request.get_child_idx());
+        let removed = subtree.root_likes().add(child.root_likes());
+        let add_buffers = child.buffer_likes(child.root_likes());
+
+        let finite_ranking = pre.betree.linked.finite_ranking();
+        let split_ranking = subtree.split_new_ranking(request, new_addrs, finite_ranking);
+        subtree.split_parent_likes_ensures(request, new_addrs, split_ranking);
+
+        let subtree_likes = subtree.tree_likes(split_ranking);
+        let new_subtree_likes = new_subtree.tree_likes(split_ranking);
+
+        // substitute 
+
+        let splitted_likes = splitted.tree_likes(splitted.the_ranking());
+        let old_path_likes = path.addrs_on_path().to_multiset();
+        let new_path_likes = path_addrs.to_multiset();
+
+        path.substitute_likes_ensures(new_subtree, path_addrs, split_ranking);
+        pre.betree.linked.tree_likes_ignore_ranking(split_ranking, ranking);
+
+        assert(splitted_likes =~= post_betree_likes) by {
+            path_addrs.to_multiset_ensures();
+            assert(removed.is_disjoint_from(new_path_likes));
+            assert(splitted_likes == splitted_likes.sub(new_subtree_likes).add(new_subtree_likes));
+            assert(new_subtree_likes == subtree_likes.sub(removed).add(new_addrs.likes()));
+            assert(splitted_likes == pre.betree_likes.sub(old_path_likes).add(new_path_likes).sub(subtree_likes).add(new_subtree_likes));
+            assert(splitted_likes == pre.betree_likes.sub(old_path_likes).sub(removed).add(new_path_likes).add(new_addrs.likes()));
+        }
+
+        assert(splitted.buffer_likes(splitted_likes) == pre.buffer_likes.add(add_buffers)) by {
+            path.substitute_ensures(new_subtree, path_addrs);
+            assert(subtree_likes <= pre.betree_likes);
+            assert(new_subtree_likes <= splitted_likes);
+            assert(no_likes() <= subtree.buffer_likes(subtree_likes));
+            assert(subtree.buffer_likes(subtree_likes).sub(no_likes()).add(add_buffers) 
+                == subtree.buffer_likes(subtree_likes).add(add_buffers));
+            assert(new_subtree.buffer_likes(new_subtree_likes) == subtree.buffer_likes(subtree_likes).add(add_buffers));
+            pre.betree.linked.subtree_buffer_likes_composition(splitted, subtree, 
+                new_subtree, split_ranking, no_likes(), add_buffers);
+            assert(pre.buffer_likes.sub(no_likes()).add(add_buffers) == pre.buffer_likes.add(add_buffers));
+        }
+    }
+
+    #[inductive(internal_split)]
     fn internal_split_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
         path: Path<SimpleBuffer>, request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs) {
 
@@ -1400,59 +1493,7 @@ state_machine!{ LikesBetree {
         }
 
         let splitted = LinkedBetreeVars::State::post_split(path, request, new_addrs, path_addrs);
-        pre.betree.post_split_ensures(path, request, new_addrs, path_addrs);
-
-        assert(splitted.transitive_likes() == (post.betree_likes, post.buffer_likes)) by {
-            let subtree = path.target();            
-            let new_subtree = subtree.split_parent(request, new_addrs);
-            let ranking = pre.betree.linked.the_ranking();
-
-            path.target_ensures();
-            path.valid_ranking_throughout(ranking);
-            assert(new_subtree.acyclic());
-
-            let child = subtree.child_at_idx(request.get_child_idx());
-            let removed = subtree.root_likes().add(child.root_likes());
-            let add_buffers = child.buffer_likes(child.root_likes());
-
-            let finite_ranking = pre.betree.linked.finite_ranking();
-            let split_ranking = subtree.split_new_ranking(request, new_addrs, finite_ranking);
-            subtree.split_parent_likes_ensures(request, new_addrs, split_ranking);
-
-            let subtree_likes = subtree.tree_likes(split_ranking);
-            let new_subtree_likes = new_subtree.tree_likes(split_ranking);
-
-            // substitute 
-
-            let splitted_likes = splitted.tree_likes(splitted.the_ranking());
-            let old_path_likes = path.addrs_on_path().to_multiset();
-            let new_path_likes = path_addrs.to_multiset();
-
-            path.substitute_likes_ensures(new_subtree, path_addrs, split_ranking);
-            pre.betree.linked.tree_likes_ignore_ranking(split_ranking, ranking);
-
-            assert(splitted_likes =~= post.betree_likes) by {
-                path_addrs.to_multiset_ensures();
-                assert(removed.is_disjoint_from(new_path_likes));
-                assert(splitted_likes == splitted_likes.sub(new_subtree_likes).add(new_subtree_likes));
-                assert(new_subtree_likes == subtree_likes.sub(removed).add(new_addrs.likes()));
-                assert(splitted_likes == pre.betree_likes.sub(old_path_likes).add(new_path_likes).sub(subtree_likes).add(new_subtree_likes));
-                assert(splitted_likes == pre.betree_likes.sub(old_path_likes).sub(removed).add(new_path_likes).add(new_addrs.likes()));
-            }
-
-            assert(splitted.buffer_likes(splitted_likes) == pre.buffer_likes.add(add_buffers)) by {
-                path.substitute_ensures(new_subtree, path_addrs);
-                assert(subtree_likes <= pre.betree_likes);
-                assert(new_subtree_likes <= splitted_likes);
-                assert(no_likes() <= subtree.buffer_likes(subtree_likes));
-                assert(subtree.buffer_likes(subtree_likes).sub(no_likes()).add(add_buffers) 
-                    == subtree.buffer_likes(subtree_likes).add(add_buffers));
-                assert(new_subtree.buffer_likes(new_subtree_likes) == subtree.buffer_likes(subtree_likes).add(add_buffers));
-                pre.betree.linked.subtree_buffer_likes_composition(splitted, subtree, 
-                    new_subtree, split_ranking, no_likes(), add_buffers);
-                assert(pre.buffer_likes.sub(no_likes()).add(add_buffers) == pre.buffer_likes.add(add_buffers));
-            }
-        }
+        Self::split_likes_ensures(pre, lbl, new_betree, path, request, new_addrs, path_addrs);
         splitted.valid_view_implies_same_transitive_likes(new_betree.linked);
     }
 

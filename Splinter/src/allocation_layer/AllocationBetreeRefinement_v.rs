@@ -57,39 +57,39 @@ impl AllocationBetree::State {
     {
     }
 
-    proof fn au_likes_noop_inv_refines(pre: Self, post: Self, lbl: AllocationBetree::Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>)
-    requires 
-        pre.inv(),
-        AllocationBetree::State::au_likes_noop(pre, post, lbl, new_betree),
-    ensures
-        post.inv(),
-        LikesBetree::State::next_by(pre.i(), post.i(), lbl.i(), LikesBetree::Step::likes_noop(new_betree))
-    {
-        reveal(LinkedBetreeVars::State::next);
-        reveal(LinkedBetreeVars::State::next_by);
-        reveal(LikesBetree::State::next_by);
-    }
+    // proof fn au_likes_noop_inv_refines(pre: Self, post: Self, lbl: AllocationBetree::Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>)
+    // requires 
+    //     pre.inv(),
+    //     AllocationBetree::State::au_likes_noop(pre, post, lbl, new_betree),
+    // ensures
+    //     post.inv(),
+    //     LikesBetree::State::next_by(pre.i(), post.i(), lbl.i(), LikesBetree::Step::likes_noop(new_betree))
+    // {
+    //     reveal(LinkedBetreeVars::State::next);
+    //     reveal(LinkedBetreeVars::State::next_by);
+    //     reveal(LikesBetree::State::next_by);
+    // }
 
-    proof fn internal_flush_memtable_inv_refines(pre: Self, post: Self, lbl: AllocationBetree::Label, 
-        new_betree: LinkedBetreeVars::State<SimpleBuffer>, new_addrs: TwoAddrs)
-    requires 
-        pre.inv(),
-        AllocationBetree::State::internal_flush_memtable(pre, post, lbl, new_betree, new_addrs),
-    ensures
-        post.inv(),
-        LikesBetree::State::next_by(pre.i(), post.i(), lbl.i(), 
-            LikesBetree::Step::internal_flush_memtable(new_betree, new_addrs))
-    {
-        let pushed = pre.betree.linked.push_memtable(new_betree.memtable.buffer, new_addrs);
+    // proof fn internal_flush_memtable_inv_refines(pre: Self, post: Self, lbl: AllocationBetree::Label, 
+    //     new_betree: LinkedBetreeVars::State<SimpleBuffer>, new_addrs: TwoAddrs)
+    // requires 
+    //     pre.inv(),
+    //     AllocationBetree::State::internal_flush_memtable(pre, post, lbl, new_betree, new_addrs),
+    // ensures
+    //     post.inv(),
+    //     LikesBetree::State::next_by(pre.i(), post.i(), lbl.i(), 
+    //         LikesBetree::Step::internal_flush_memtable(new_betree, new_addrs))
+    // {
+    //     let pushed = pre.betree.linked.push_memtable(new_betree.memtable.buffer, new_addrs);
 
-        reveal(LikesBetree::State::next_by);
+    //     reveal(LikesBetree::State::next_by);
 
-        assume(post.i().betree_likes.dom() <= restrict_domain_au(pushed.dv.entries, post.betree_aus.dom()));
-        assume(post.i().buffer_likes.dom() <= restrict_domain_au(pushed.buffer_dv.entries, post.buffer_aus.dom()));
+    //     assume(post.i().betree_likes.dom() <= restrict_domain_au(pushed.dv.entries, post.betree_aus.dom()));
+    //     assume(post.i().buffer_likes.dom() <= restrict_domain_au(pushed.buffer_dv.entries, post.buffer_aus.dom()));
 
-        assert(LikesBetree::State::next_by(pre.i(), post.i(), lbl.i(), 
-            LikesBetree::Step::internal_flush_memtable(new_betree, new_addrs)));
-    }
+    //     assert(LikesBetree::State::next_by(pre.i(), post.i(), lbl.i(), 
+    //         LikesBetree::Step::internal_flush_memtable(new_betree, new_addrs)));
+    // }
 
 //     proof fn next_refines(pre: Self, post: Self, lbl: AllocationBetree::Label) 
 //         requires 

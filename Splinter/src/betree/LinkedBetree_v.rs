@@ -1271,19 +1271,11 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
         ensures 
             post.inv()
     {
-        let old_ranking = pre.linked.finite_ranking();
-        pre.linked.finite_ranking_ensures();
-
-        let new_rank = 
-            if pre.linked.has_root() { old_ranking[pre.linked.root.unwrap()]+1 } 
-            else if old_ranking =~= map![] { 1 }
-            else { get_max_rank(old_ranking) + 1 };
-
-        let new_ranking = old_ranking.insert(new_root_addr, new_rank);
-        assert(post.linked.valid_ranking(new_ranking));
-
+        let new_ranking = pre.linked.grow_new_ranking(new_root_addr);
         let post_child = post.linked.child_at_idx(0);
+
         assert(post_child.reachable_buffer_addrs() == pre.linked.reachable_buffer_addrs()) by {
+            assert(post.linked.root().valid_child_index(0)); // trigger
             assert(post_child.valid_ranking(new_ranking)); // trigger?
             post_child.agreeable_disks_same_reachable_betree_addrs(pre.linked, new_ranking);
             broadcast use LinkedBetree::reachable_betree_addrs_ignore_ranking;
@@ -1303,7 +1295,7 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
     pub proof fn post_split_ensures(self, path: Path<T>, request: SplitRequest, 
         new_addrs: SplitAddrs, path_addrs: PathAddrs) 
         requires 
-            self.inv(),
+            self.linked.acyclic(),
             self.linked.is_fresh(new_addrs.repr()),
             self.linked.is_fresh(path_addrs.to_set()),
             path.target().can_split_parent(request),
@@ -1315,7 +1307,6 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
 
             &&& split_parent.acyclic()
             &&& result.acyclic()
-            &&& result.valid_buffer_dv()
             &&& result.reachable_buffer_addrs() <= self.linked.reachable_buffer_addrs()
         })
     {
@@ -1334,11 +1325,8 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
             path.substitute_ensures(new_subtree, path_addrs);
             let _ = path.ranking_after_substitution(new_subtree, path_addrs, new_ranking);
         }
-
         path.target().split_parent_same_reachable_buffers(request, new_addrs, new_ranking);
         path.substitute_reachable_buffers_ensures(new_subtree, path_addrs, new_ranking);
-        assert(splitted.no_dangling_buffer_ptr());
-        assert(splitted.valid_buffer_dv()) ;
     }
 
     proof fn internal_split_inductive(pre: Self, post: Self, lbl: Label, new_linked: LinkedBetree<T>, path: Path<T>, 
@@ -1888,6 +1876,30 @@ impl<T> LinkedBetree<T> {
         }
         assert(self.no_dangling_buffer_ptr());
         assert(pushed.reachable_buffer_addrs() =~= self.reachable_buffer_addrs() + set![new_addrs.addr2]);
+    }
+
+    pub proof fn grow_new_ranking(self, new_root_addr: Address) -> (new_ranking: Ranking)
+    requires
+        self.acyclic(),
+        self.has_root() ==> self.root().my_domain() == total_domain(),
+        self.dv.is_fresh(set![new_root_addr]),
+    ensures 
+        self.valid_ranking(new_ranking),
+        self.grow(new_root_addr).valid_ranking(new_ranking),
+    {
+        let old_ranking = self.finite_ranking();
+        self.finite_ranking_ensures();
+
+        let new_rank = 
+            if self.has_root() { old_ranking[self.root.unwrap()]+1 } 
+            else if old_ranking =~= map![] { 1 }
+            else { get_max_rank(old_ranking) + 1 };
+
+        let new_ranking = old_ranking.insert(new_root_addr, new_rank);
+        let result = self.grow(new_root_addr);
+        assert(result.valid_ranking(new_ranking));
+
+        new_ranking
     }
 
     pub proof fn split_new_ranking(self, request: SplitRequest, new_addrs: SplitAddrs, ranking: Ranking) -> (new_ranking: Ranking)
