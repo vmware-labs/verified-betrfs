@@ -37,18 +37,50 @@ use crate::implementation::DiskLayout_v::*;
 
 verus!{
 
-// pub struct InFlight {
-//     // requests that can be satisfied when this superblock lands
-//     satisfied_reqs: Vec<(Request, Tracked<RequestShard>),
-//     deferred_reqs: Vec<(Request, Tracked<RequestShard>),
-// }
-// 
-// impl InFlight {
-//     closed spec fn inv(self) -> bool
-//     {
-//         forall |r| satisfied_reqs@.contains(r) ==> r.0
-//     }
-// }
+pub closed spec fn good_req(instance_id: InstanceId, req: Request, req_shard: RequestShard) -> bool
+{
+    &&& req_shard.instance_id() == instance_id
+    &&& req_shard.element() == req
+}
+
+// requests that can be satisfied when this superblock lands
+struct InFlightSyncs {
+    satisfied_reqs: Vec<(Request, Tracked<RequestShard>)>,
+    deferred_reqs: Vec<(Request, Tracked<RequestShard>)>,
+}
+
+impl InFlightSyncs {
+    closed spec fn wf(self, instance_id: InstanceId) -> bool
+    {
+        &&& forall |r| #![auto] self.satisfied_reqs@.contains(r) ==> {
+            &&& good_req(instance_id, r.0, r.1@)
+            &&& r.0.input is SyncInput
+        }
+        &&& forall |r| #![auto] self.deferred_reqs@.contains(r) ==> {
+            &&& good_req(instance_id, r.0, r.1@)
+            &&& r.0.input is SyncInput
+        }
+    }
+
+    fn new_empty() -> (out: Self)
+    ensures
+        out.is_empty(),
+    {
+        InFlightSyncs{ satisfied_reqs: vec![], deferred_reqs: vec![] }
+    }
+
+    closed spec fn is_empty(self) -> bool {
+        &&& self.satisfied_reqs.len() == 0
+        &&& self.deferred_reqs.len() == 0
+    }
+
+    fn exec_is_empty(&self) -> (out: bool)
+    ensures self.is_empty() == out
+    {
+        &&& self.satisfied_reqs.len() == 0
+        &&& self.deferred_reqs.len() == 0
+    }
+}
 
 // This struct supplies KVStoreTrait, which has both the entry point to the implementation and the
 // proof hooks to satisfy the refinement obligation trait.
@@ -57,8 +89,7 @@ pub struct Implementation {
     model: Tracked<KVStoreTokenized::model<ConcreteProgramModel>>,
     instance: Tracked<KVStoreTokenized::Instance<ConcreteProgramModel>>,
 
-    // invariant that these are only present if model.state.in_flight is Some
-//     in_flight_syncs: Option<InFlight>,
+    in_flight_syncs: InFlightSyncs,
 }
 
 pub type RequestShard = KVStoreTokenized::requests<ConcreteProgramModel>;
@@ -93,12 +124,14 @@ impl Implementation {
         &&& self.model@.instance_id() == self.instance@.id()
         &&& self.model@.value().state.recovery_state is RecoveryComplete
         &&& self.i().mapspec().kmmap == self.view_store_as_kmmap()
+        &&& (self.model@.value().state.in_flight is Some
+            <==> !self.in_flight_syncs.is_empty())
+        &&& self.in_flight_syncs.wf(self.instance@.id())
     }
 
     pub closed spec fn good_req(self, req: Request, req_shard: RequestShard) -> bool
     {
-        &&& req_shard.instance_id() == self.instance_id()
-        &&& req_shard.element() == req
+        good_req(self.instance_id(), req, req_shard)
     }
 
     // `api` should really just be part of the state, and this property maintained in inv, except
@@ -301,6 +334,14 @@ impl Implementation {
         }
     }
 
+    pub exec fn send_superblock(&mut self, api: &mut ClientAPI<ConcreteProgramModel>)
+    requires
+        old(self).inv_api(old(api)),
+    ensures
+        self.inv_api(api),
+    {
+    }
+
     pub exec fn handle_sync_request(&mut self, req: Request, req_shard: Tracked<RequestShard>, api: &mut ClientAPI<ConcreteProgramModel>)
     requires
         old(self).inv_api(old(api)),
@@ -309,11 +350,13 @@ impl Implementation {
     ensures
         self.inv_api(api),
     {
-        let reply = Reply{output: Output::SyncOutput, id: req.id};
-        // There's not anything we can do yet, because we can't ever handle
-        // a sync!
-        // First we need to be able to actually write a superblock to the disk.
-        //api.send_reply(reply, Tracked(new_reply_token), true);
+        if self.in_flight_syncs.exec_is_empty() {
+            self.send_superblock(api);
+        } else {
+            self.in_flight_syncs.deferred_reqs.push((req, req_shard));
+            // TODO left off need some triggering to preserve old wfiness
+            assume( self.in_flight_syncs.wf(self.instance_id()) );
+        }
     }
 
     pub exec fn handle_user_request(&mut self, req: Request, req_shard: Tracked<RequestShard>, api: &mut ClientAPI<ConcreteProgramModel>)
@@ -331,6 +374,48 @@ impl Implementation {
         }
     }
 
+    pub exec fn send_sync_response(&mut self, req: Request, req_shard: Tracked<RequestShard>, api: &mut ClientAPI<ConcreteProgramModel>)
+    requires
+        old(self).inv_api(old(api)),
+        old(self).good_req(req, req_shard@),
+        req.input is SyncInput,
+    ensures
+        self.inv_api(api),
+    {
+        let ghost pre_state = self.model@.value();
+        let ghost post_state = pre_state;
+
+        let reply = Reply{output: Output::SyncOutput, id: req.id};
+
+        let tracked mut model = KVStoreTokenized::model::arbitrary();
+        proof { tracked_swap(self.model.borrow_mut(), &mut model); }
+
+        proof {
+            let sync_req_id = req.id;
+//             let map_req = req.mapspec_req();
+//             let map_reply = reply.mapspec_reply();
+//             let ghost map_lbl = MapSpec::Label::Query{input: map_req.input, output: map_reply.output};
+//             reveal(MapSpec::State::next);
+//             reveal(MapSpec::State::next_by);
+//             assert( MapSpec::State::next_by(pre_state.state.mapspec(), post_state.state.mapspec(),
+//                     map_lbl, MapSpec::Step::query())); // witness to step
+            assert( post_state.state.history.get_prefix(pre_state.state.history.len()) == pre_state.state.history );  // extn
+            assume( false );    // LEFT OFF HERE satisfying model transition
+            assert( ConcreteProgramModel::next(pre_state, post_state,
+                ProgramLabel::UserIO{op: ProgramUserOp::DeliverSyncReply{sync_req_id}}) );
+        }
+
+        let tracked new_reply_token = self.instance.borrow().execute_transition(
+            KVStoreTokenized::Label::ExecuteOp{req, reply},
+            post_state,
+            &mut model,
+            req_shard.get(),
+        );
+        self.model = Tracked(model);
+
+        api.send_reply(reply, Tracked(new_reply_token), true);
+    }
+
     pub exec fn handle_disk_response(&mut self, id: ID, disk_response: IDiskResponse, response_shard: Tracked<DiskRespShard>,
         api: &mut ClientAPI<ConcreteProgramModel>)
     requires
@@ -342,6 +427,35 @@ impl Implementation {
         // For this silly version of the system, we know that receiving a disk response at
         // non-recovery time implies that the request was a superblock write, so now
         // any pre-superblock write sync can be completed.
+        assert( !self.in_flight_syncs.is_empty() ) by {
+            assume( false );    // LEFT OFF HERE open_system_invariant
+        }
+
+        // oh geez how to iterate
+        loop
+        invariant self.inv_api(api),
+        {
+            assert( self.in_flight_syncs.wf(self.instance_id()) );
+            match self.in_flight_syncs.satisfied_reqs.pop()
+            {
+                Some((req, req_shard)) => {
+                    // TODO LEFT OFF pop isn't preserving the values
+                    assume( req.input is SyncInput );
+                    assume( self.inv_api(api) );
+                    assume( good_req(self.instance_id(), req, req_shard@) );
+                    self.send_sync_response(req, req_shard, api)
+                },
+                None => break,
+            }
+        }
+
+        if self.in_flight_syncs.deferred_reqs.len() > 0
+        {
+            // TODO LEFT OFF hmm, any easy way to flip these vecs around?
+            // Or maybe just use a loop for now
+//             swap( self.in_flight_syncs.satisfied_reqs, self.in_flight_syncs.deferred_reqs );
+            self.send_superblock(api);
+        }
     }
 
     fn recover(&mut self, api: &mut ClientAPI<ConcreteProgramModel>)
@@ -488,6 +602,7 @@ impl KVStoreTrait for Implementation {
     closed spec fn wf_init(self) -> bool {
         &&& self.model@.instance_id() == self.instance@.id()
         &&& self.model@.value().state.recovery_state is Begin
+        &&& self.in_flight_syncs.is_empty()
     }
 
     closed spec fn instance_id(self) -> InstanceId
@@ -513,11 +628,11 @@ impl KVStoreTrait for Implementation {
         let selff = Implementation{
             store: HashMapWithView::new(),
             model: Tracked(model),
-            instance: Tracked(instance)
+            instance: Tracked(instance),
+            in_flight_syncs: InFlightSyncs::new_empty(),
         };
 //         assert( selff.i() == selff.model@.value() );   // trigger extn equality
 //         assert( selff.i().mapspec().kmmap == selff.view_store_as_kmmap() ); // trigger extn equality
-//         assert( selff.wf() );
         selff
     }
 

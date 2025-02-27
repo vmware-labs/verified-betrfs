@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 use vstd::{prelude::*};
 use builtin::*;
-use builtin_macros::*;
 
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;

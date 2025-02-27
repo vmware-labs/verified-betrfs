@@ -2,7 +2,7 @@
 use builtin::*;
 use vstd::prelude::*;
 
-use vstd::{multiset::Multiset, set_lib::*};
+use vstd::{multiset::Multiset};
 use crate::spec::AsyncDisk_t::*;
 use crate::spec::MapSpec_t::*;
 use crate::trusted::SystemModel_t::*;
