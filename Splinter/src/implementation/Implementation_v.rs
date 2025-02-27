@@ -81,24 +81,26 @@ impl Implementation {
 
     pub closed spec fn good_req(self, req: Request, req_shard: RequestShard) -> bool
     {
-        &&& self.inv()
         &&& req_shard.instance_id() == self.instance_id()
         &&& req_shard.element() == req
     }
 
-    pub closed spec fn good_reply(self, pre: Self, reply: Reply, reply_shard: ReplyShard) -> bool
+    // `api` should really just be part of the state, and this property maintained in inv, except
+    // that we have a construction order mess between constructing the instancea and model and then
+    // getting an api from the trusted main. Probably should expose a builder pattern.
+    pub closed spec fn inv_api(self, api: &ClientAPI<ConcreteProgramModel>) -> bool
     {
         &&& self.inv()
-        &&& self.instance_id() == pre.instance_id()
-        &&& reply_shard.instance_id() == self.instance_id()
-        &&& reply_shard.element() == reply
+        &&& api.instance_id() == self.instance_id()
     }
 
-    pub exec fn handle_noop(&mut self, req: Request, req_shard: Tracked<RequestShard>)
-            -> (out: (Reply, Tracked<ReplyShard>))
-    requires old(self).good_req(req, req_shard@),
+    pub exec fn handle_noop(&mut self, req: Request, req_shard: Tracked<RequestShard>, api: &mut ClientAPI<ConcreteProgramModel>)
+    requires
+        old(self).inv_api(old(api)),
+        old(self).good_req(req, req_shard@),
         req.input is NoopInput,
-    ensures self.good_reply(*old(self), out.0, out.1@),
+    ensures
+        self.inv_api(api),
     {
         match req.input {
             Input::NoopInput => {
@@ -132,19 +134,19 @@ impl Implementation {
                 );
                 self.model = Tracked(model);
 
-                (reply, Tracked(new_reply_token))
+                api.send_reply(reply, Tracked(new_reply_token), true);
             },
             _ => unreached(),
         }
     }
 
-    pub exec fn handle_put(&mut self, req: Request, req_shard: Tracked<RequestShard>)
-            -> (out: (Reply, Tracked<ReplyShard>))
+    pub exec fn handle_put(&mut self, req: Request, req_shard: Tracked<RequestShard>, api: &mut ClientAPI<ConcreteProgramModel>)
     requires
+        old(self).inv_api(old(api)),
         old(self).good_req(req, req_shard@),
         req.input is PutInput,
     ensures
-        self.good_reply(*old(self), out.0, out.1@),
+        self.inv_api(api),
     {
         let out = match req.input {
         Input::PutInput{key, value} => {
@@ -193,13 +195,11 @@ impl Implementation {
             );
             self.model = Tracked(model);
 
-            (reply, Tracked(new_reply_token))
+            assert( self.i().mapspec().kmmap == self.view_store_as_kmmap() ); // trigger extn equality
+            api.send_reply(reply, Tracked(new_reply_token), true);
         },
             _ => unreached(),
         };
-        assert( self.i().mapspec().kmmap == self.view_store_as_kmmap() ); // trigger extn equality
-//         assert( self.wf() );
-        out
     }
 
     proof fn cannot_receive_write_response_during_recovery(self, disk_req_id: ID, i_disk_response: IDiskResponse, disk_response_token: Tracked<DiskRespShard>)
@@ -228,13 +228,13 @@ impl Implementation {
         // assume( false );
     }
 
-    pub exec fn handle_query(&mut self, req: Request, req_shard: Tracked<RequestShard>)
-            -> (out: (Reply, Tracked<ReplyShard>))
+    pub exec fn handle_query(&mut self, req: Request, req_shard: Tracked<RequestShard>, api: &mut ClientAPI<ConcreteProgramModel>)
     requires
+        old(self).inv_api(old(api)),
         old(self).good_req(req, req_shard@),
         req.input is QueryInput,
     ensures
-        self.good_reply(*old(self), out.0, out.1@),
+        self.inv_api(api),
     {
         match req.input {
         Input::QueryInput{key} => {
@@ -273,25 +273,39 @@ impl Implementation {
             );
             self.model = Tracked(model);
 
-            (reply, Tracked(new_reply_token))
+            api.send_reply(reply, Tracked(new_reply_token), true);
         },
             _ => unreached(),
         }
     }
 
-    pub exec fn handle(&mut self, req: Request, req_shard: Tracked<RequestShard>)
-            -> (out: (Reply, Tracked<ReplyShard>))
+    pub exec fn handle_sync_request(&mut self, req: Request, req_shard: Tracked<RequestShard>, api: &mut ClientAPI<ConcreteProgramModel>)
     requires
-        // !(req.input is SyncInput),
+        old(self).inv_api(old(api)),
+        old(self).good_req(req, req_shard@),
+        req.input is SyncInput,
+    ensures
+        self.inv_api(api),
+    {
+        let reply = Reply{output: Output::SyncOutput, id: req.id};
+        // There's not anything we can do yet, because we can't ever handle
+        // a sync!
+        // First we need to be able to actually write a superblock to the disk.
+        //api.send_reply(reply, Tracked(new_reply_token), true);
+    }
+
+    pub exec fn handle(&mut self, req: Request, req_shard: Tracked<RequestShard>, api: &mut ClientAPI<ConcreteProgramModel>)
+    requires
+        old(self).inv_api(old(api)),
         old(self).good_req(req, req_shard@),
     ensures
-        self.good_reply(*old(self), out.0, out.1@),
+        self.inv_api(api),
     {
         match req.input {
-            Input::NoopInput => self.handle_noop(req, req_shard),
-            Input::PutInput{..} => self.handle_put(req, req_shard),
-            Input::QueryInput{..} => self.handle_query(req, req_shard),
-            Input::SyncInput{} =>  { loop {} }, // not supported yet 
+            Input::NoopInput => self.handle_noop(req, req_shard, api),
+            Input::PutInput{..} => self.handle_put(req, req_shard, api),
+            Input::QueryInput{..} => self.handle_query(req, req_shard, api),
+            Input::SyncInput{} =>  self.handle_sync_request(req, req_shard, api),
         }
     }
 
@@ -479,13 +493,11 @@ impl KVStoreTrait for Implementation {
         let debug_print = true;
         loop
         invariant
-            self.inv(),
+            self.inv_api(&api),
             self.model@.value().state.recovery_state is RecoveryComplete,
-            self.instance_id() == api.instance_id(),
         {
             let (req, req_shard) = api.receive_request(debug_print);
-            let (reply, reply_shard) = self.handle(req, req_shard);
-            api.send_reply(reply, reply_shard, true);
+            self.handle(req, req_shard, &mut api);
         }
     }
 }
