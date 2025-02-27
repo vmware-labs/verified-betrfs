@@ -37,12 +37,28 @@ use crate::implementation::DiskLayout_v::*;
 
 verus!{
 
+// pub struct InFlight {
+//     // requests that can be satisfied when this superblock lands
+//     satisfied_reqs: Vec<(Request, Tracked<RequestShard>),
+//     deferred_reqs: Vec<(Request, Tracked<RequestShard>),
+// }
+// 
+// impl InFlight {
+//     closed spec fn inv(self) -> bool
+//     {
+//         forall |r| satisfied_reqs@.contains(r) ==> r.0
+//     }
+// }
+
 // This struct supplies KVStoreTrait, which has both the entry point to the implementation and the
 // proof hooks to satisfy the refinement obligation trait.
 pub struct Implementation {
     store: HashMapWithView<Key, Value>,
     model: Tracked<KVStoreTokenized::model<ConcreteProgramModel>>,
     instance: Tracked<KVStoreTokenized::Instance<ConcreteProgramModel>>,
+
+    // invariant that these are only present if model.state.in_flight is Some
+//     in_flight_syncs: Option<InFlight>,
 }
 
 pub type RequestShard = KVStoreTokenized::requests<ConcreteProgramModel>;
@@ -323,6 +339,9 @@ impl Implementation {
     ensures
         self.inv_api(api),
     {
+        // For this silly version of the system, we know that receiving a disk response at
+        // non-recovery time implies that the request was a superblock write, so now
+        // any pre-superblock write sync can be completed.
     }
 
     fn recover(&mut self, api: &mut ClientAPI<ConcreteProgramModel>)
