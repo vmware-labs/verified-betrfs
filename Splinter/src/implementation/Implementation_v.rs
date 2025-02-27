@@ -294,7 +294,7 @@ impl Implementation {
         //api.send_reply(reply, Tracked(new_reply_token), true);
     }
 
-    pub exec fn handle(&mut self, req: Request, req_shard: Tracked<RequestShard>, api: &mut ClientAPI<ConcreteProgramModel>)
+    pub exec fn handle_user_request(&mut self, req: Request, req_shard: Tracked<RequestShard>, api: &mut ClientAPI<ConcreteProgramModel>)
     requires
         old(self).inv_api(old(api)),
         old(self).good_req(req, req_shard@),
@@ -496,8 +496,15 @@ impl KVStoreTrait for Implementation {
             self.inv_api(&api),
             self.model@.value().state.recovery_state is RecoveryComplete,
         {
-            let (req, req_shard) = api.receive_request(debug_print);
-            self.handle(req, req_shard, &mut api);
+            let poll_result = api.poll();
+            if poll_result.disk_response_ready {
+                let (id, disk_response, response_shard) = api.receive_disk_response();
+//                 self.handle_disk_reponse(id, disk_response, response_shard, &mut api);
+            }
+            if poll_result.user_input_ready {
+                let (req, req_shard) = api.receive_request(debug_print);
+                self.handle_user_request(req, req_shard, &mut api);
+            }
         }
     }
 }

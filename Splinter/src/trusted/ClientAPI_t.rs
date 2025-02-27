@@ -31,6 +31,11 @@ pub struct ClientAPI<ProgramModel: ProgramModelTrait>{
     pub _p: std::marker::PhantomData<(ProgramModel,)>,
 }
 
+pub struct PollResult {
+    pub user_input_ready: bool,
+    pub disk_response_ready: bool,
+}
+
 impl<ProgramModel: ProgramModelTrait> ClientAPI<ProgramModel>{
     #[verifier::external_body]
     pub fn new(instance: Ghost<InstanceId>) -> (out: Self)
@@ -119,6 +124,18 @@ impl<ProgramModel: ProgramModelTrait> ClientAPI<ProgramModel>{
         out.2@.multiset() == multiset_map_singleton(out.0, out.1@),
     {
         (0, arbitrary(), Tracked::assume_new())
+    }
+
+    // TODO(jonh): none of this stuff is gonna work until we, you know, implement it.
+    // Returns a hint as to which receive_* method may be called without blocking. If neither
+    // is ready, this method blocks until one is.
+    #[verifier::external_body]
+    pub fn poll(&self) -> (out: PollResult)
+    {
+        PollResult{
+            user_input_ready: true,
+            disk_response_ready: true,
+        }
     }
         
     // Seems like it should always be okay to brew up a token containing an empty multiset (an empty shard).
