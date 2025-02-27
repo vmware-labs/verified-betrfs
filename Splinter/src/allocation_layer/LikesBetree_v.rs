@@ -943,6 +943,69 @@ impl <T: Buffer> LinkedBetree<T> {
     }
 }
 
+// utility function for operation on likes
+
+pub open spec(checked) fn split_discard_betree<T>(path: Path<T>, request: SplitRequest) -> Likes
+{
+    let old_child = path.target().child_at_idx(request.get_child_idx());
+    path.addrs_on_path().to_multiset().add(path.target().root_likes()).add(old_child.root_likes())
+}
+
+pub open spec(checked) fn split_add_betree(new_addrs: SplitAddrs, path_addrs: PathAddrs) -> Likes
+{
+    new_addrs.likes().add(path_addrs.to_multiset())
+}
+
+pub open spec(checked) fn split_add_buffers<T>(path: Path<T>, request: SplitRequest) -> Likes
+{
+    let old_child = path.target().child_at_idx(request.get_child_idx());
+    old_child.buffer_likes(old_child.root_likes())
+}
+
+pub open spec(checked) fn flush_discard_betree<T>(path: Path<T>, child_idx: nat) -> Likes
+{
+    let old_parent = path.target();
+    let old_child = old_parent.child_at_idx(child_idx);
+    path.addrs_on_path().to_multiset().add(old_parent.root_likes()).add(old_child.root_likes())
+}
+
+pub open spec(checked) fn flush_add_betree(new_addrs: TwoAddrs, path_addrs: PathAddrs) -> Likes
+{
+    path_addrs.to_multiset().add(new_addrs.likes())
+}
+
+pub open spec(checked) fn flush_discard_buffers<T>(path: Path<T>, buffer_gc: nat) -> Likes
+{
+    let old_parent = path.target();
+    old_parent.root().buffers.slice(0, buffer_gc as int).addrs.to_multiset()
+}
+
+pub open spec(checked) fn flush_add_buffers<T>(path: Path<T>, child_idx: nat, buffer_gc: nat) -> Likes
+{
+    let old_parent = path.target();
+    old_parent.flush_buffers(child_idx, buffer_gc).addrs.to_multiset()
+}
+
+pub open spec(checked) fn compact_discard_betree<T>(path: Path<T>) -> Likes
+{
+    path.addrs_on_path().to_multiset().add(path.target().root_likes())
+}
+
+pub open spec(checked) fn compact_add_betree(new_addrs: TwoAddrs, path_addrs: PathAddrs) -> Likes
+{
+    path_addrs.to_multiset().insert(new_addrs.addr1)
+}
+
+pub open spec(checked) fn compact_discard_buffers<T>(path: Path<T>, start: nat, end: nat) -> Likes
+{
+    path.target().root().buffers.slice(start as int, end as int).addrs.to_multiset()
+}
+
+pub open spec(checked) fn compact_add_buffers(new_addrs: TwoAddrs) -> Likes
+{
+    Multiset::singleton(new_addrs.addr2)
+}
+
 state_machine!{ LikesBetree {
     fields {
         pub betree: LinkedBetreeVars::State<SimpleBuffer>,
@@ -1023,13 +1086,8 @@ state_machine!{ LikesBetree {
             new_betree.linked, path, request, new_addrs, path_addrs);
         require pre.is_fresh(new_addrs.repr().union(path_addrs.to_set()));
 
-        let old_child = path.target().child_at_idx(request.get_child_idx());
-        let discard_betree = path.addrs_on_path().to_multiset().add(path.target().root_likes()).add(old_child.root_likes());
-        let add_betree = path_addrs.to_multiset().add(new_addrs.likes());
-        let new_betree_likes = pre.betree_likes.sub(discard_betree).add(add_betree);
-
-        let add_buffers = old_child.buffer_likes(old_child.root_likes());
-        let new_buffer_likes = pre.buffer_likes.add(add_buffers);
+        let new_betree_likes = pre.betree_likes.sub(split_discard_betree(path, request)).add(split_add_betree(new_addrs, path_addrs));
+        let new_buffer_likes = pre.buffer_likes.add(split_add_buffers(path, request));
 
         // likes level requirement that new betree must contain all live betree addresses
         require new_betree_likes.dom() <= new_betree.linked.dv.entries.dom();
@@ -1046,15 +1104,8 @@ state_machine!{ LikesBetree {
             new_betree.linked, path, child_idx, buffer_gc, new_addrs, path_addrs);
         require pre.is_fresh(new_addrs.repr() + path_addrs.to_set());
 
-        let old_parent = path.target();
-        let old_child = old_parent.child_at_idx(child_idx);
-        let discard_betree = path.addrs_on_path().to_multiset().add(old_parent.root_likes()).add(old_child.root_likes());
-        let add_betree = path_addrs.to_multiset().add(new_addrs.likes());
-        let new_betree_likes = pre.betree_likes.sub(discard_betree).add(add_betree);
-
-        let discard_buffers = old_parent.root().buffers.slice(0, buffer_gc as int).addrs.to_multiset(); // gced buffers
-        let add_buffers = old_parent.flush_buffers(child_idx, buffer_gc).addrs.to_multiset();  // newly flushed to child
-        let new_buffer_likes = pre.buffer_likes.sub(discard_buffers).add(add_buffers);
+        let new_betree_likes = pre.betree_likes.sub(flush_discard_betree(path, child_idx)).add(flush_add_betree(new_addrs, path_addrs));
+        let new_buffer_likes = pre.buffer_likes.sub(flush_discard_buffers(path, buffer_gc)).add(flush_add_buffers(path, child_idx, buffer_gc));
 
         // likes level requirement that new betree must contain all live betree addresses
         require new_betree_likes.dom() <= new_betree.linked.dv.entries.dom();
@@ -1071,13 +1122,8 @@ state_machine!{ LikesBetree {
             new_betree.linked, path, start, end, compacted_buffer, new_addrs, path_addrs);
         require pre.is_fresh(new_addrs.repr().union(path_addrs.to_set()));
 
-        let discard_betree = path.addrs_on_path().to_multiset().add(path.target().root_likes());
-        let add_betree = path_addrs.to_multiset().insert(new_addrs.addr1);
-        let new_betree_likes = pre.betree_likes.sub(discard_betree).add(add_betree);
-
-        let discard_buffers = path.target().root().buffers.slice(start as int, end as int).addrs.to_multiset();
-        let add_buffers = Multiset::singleton(new_addrs.addr2);
-        let new_buffer_likes = pre.buffer_likes.sub(discard_buffers).add(add_buffers);
+        let new_betree_likes = pre.betree_likes.sub(compact_discard_betree(path)).add(compact_add_betree(new_addrs, path_addrs));
+        let new_buffer_likes = pre.buffer_likes.sub(compact_discard_buffers(path, start, end)).add(compact_add_buffers(new_addrs));
 
         // likes level requirement that new betree must contain all live betree addresses
         require new_betree_likes.dom() <= new_betree.linked.dv.entries.dom();

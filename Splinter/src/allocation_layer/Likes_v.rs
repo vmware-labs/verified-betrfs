@@ -22,6 +22,24 @@ verus!{
         forall |e| #[trigger] m.contains(e) ==> m.count(e) == 1
     }
 
+    pub closed spec(checked) fn to_au_likes(likes: Likes) -> AULikes
+        decreases likes.len()
+    {
+        if likes.is_empty() {
+            Multiset::empty()
+        } else {
+            let e = likes.choose();
+            Multiset::singleton(e.au).add(to_au_likes(likes.remove(e)))
+        }
+    }
+
+    // to au likes says that they are identical
+    // can ensure their len is the same
+    // how do we ensure that the cardinality is the same when adding all aus together
+
+
+    // have proof regarding the membership
+
     // pub proof fn single_elems_add<V>(a: Multiset<V>, b: Multiset<V>)
     // requires 
     //     all_elems_single(a),
