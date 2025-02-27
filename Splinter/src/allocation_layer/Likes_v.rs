@@ -33,6 +33,20 @@ verus!{
         }
     }
 
+    // sub is the same and then do an add
+    pub proof fn to_au_likes_commutative_over_sub(likes: Likes, delta: Likes)
+        requires delta <= likes
+        ensures to_au_likes(likes.sub(delta)) == to_au_likes(likes).sub(to_au_likes(delta))
+    {
+        assume(false);
+    }
+
+    pub proof fn to_au_likes_commutative_over_add(likes: Likes, delta: Likes)
+        ensures to_au_likes(likes.add(delta)) == to_au_likes(likes).add(to_au_likes(delta))
+    {
+        assume(false);
+    }
+
     // to au likes says that they are identical
     // can ensure their len is the same
     // how do we ensure that the cardinality is the same when adding all aus together

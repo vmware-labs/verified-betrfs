@@ -5,6 +5,7 @@ pub mod AllocationCrashAwareJournal_v;
 pub mod AllocationJournalRefinement_v;
 pub mod AllocationJournal_v;
 pub mod AllocationBetree_v;
+pub mod AllocationBetreeRefinement_v;
 pub mod Likes_v;
 pub mod LikesBetree_v;
 pub mod LikesBetreeRefinement_v;
