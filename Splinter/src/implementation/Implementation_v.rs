@@ -94,6 +94,12 @@ impl Implementation {
         &&& api.instance_id() == self.instance_id()
     }
 
+    pub closed spec fn good_disk_response(self, id: ID, disk_response: IDiskResponse, response_shard: DiskRespShard) -> bool
+    {
+        &&& response_shard.instance_id() == self.instance_id()
+        &&& response_shard.multiset() == multiset_map_singleton(id, disk_response)
+    }
+
     pub exec fn handle_noop(&mut self, req: Request, req_shard: Tracked<RequestShard>, api: &mut ClientAPI<ConcreteProgramModel>)
     requires
         old(self).inv_api(old(api)),
@@ -309,6 +315,16 @@ impl Implementation {
         }
     }
 
+    pub exec fn handle_disk_response(&mut self, id: ID, disk_response: IDiskResponse, response_shard: Tracked<DiskRespShard>,
+        api: &mut ClientAPI<ConcreteProgramModel>)
+    requires
+        old(self).inv_api(old(api)),
+        old(self).good_disk_response(id, disk_response, response_shard@),
+    ensures
+        self.inv_api(api),
+    {
+    }
+
     fn recover(&mut self, api: &mut ClientAPI<ConcreteProgramModel>)
     requires
         old(self).wf_init(),
@@ -499,7 +515,7 @@ impl KVStoreTrait for Implementation {
             let poll_result = api.poll();
             if poll_result.disk_response_ready {
                 let (id, disk_response, response_shard) = api.receive_disk_response();
-//                 self.handle_disk_reponse(id, disk_response, response_shard, &mut api);
+                self.handle_disk_response(id, disk_response, response_shard, &mut api);
             }
             if poll_result.user_input_ready {
                 let (req, req_shard) = api.receive_request(debug_print);
