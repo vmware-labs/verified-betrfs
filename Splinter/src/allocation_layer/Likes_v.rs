@@ -29,30 +29,62 @@ verus!{
             Multiset::empty()
         } else {
             let e = likes.choose();
-            Multiset::singleton(e.au).add(to_au_likes(likes.remove(e)))
+            to_au_likes(likes.remove(e)).insert(e.au)
         }
     }
 
-    // sub is the same and then do an add
-    pub proof fn to_au_likes_commutative_over_sub(likes: Likes, delta: Likes)
-        requires delta <= likes
-        ensures to_au_likes(likes.sub(delta)) == to_au_likes(likes).sub(to_au_likes(delta))
+    pub proof fn to_au_likes_singleton(addr: Address) 
+        ensures to_au_likes(Multiset::singleton(addr)) == Multiset::singleton(addr.au)
     {
-        assume(false);
+        assert(Multiset::singleton(addr).choose() == addr);
+        assert(Multiset::singleton(addr).remove(addr) =~= Multiset::empty());
+        assert(to_au_likes(Multiset::empty()) == Multiset::<AU>::empty());
+        // TODO: seems like we need to assert this rather than relying on the ensures?
+        assert(to_au_likes(Multiset::singleton(addr)) == Multiset::singleton(addr.au));
     }
 
+    // NOTE: same proof as buffer_likes_additive, would be better if we can 
+    // generalize this
     pub proof fn to_au_likes_commutative_over_add(likes: Likes, delta: Likes)
-        ensures to_au_likes(likes.add(delta)) == to_au_likes(likes).add(to_au_likes(delta))
+        ensures to_au_likes(likes.add(delta)) =~= to_au_likes(likes).add(to_au_likes(delta))
+        decreases likes.len() + delta.len()
     {
-        assume(false);
+        let total = likes.add(delta);
+
+        if likes.len() == 0 {
+            assert(total =~= delta);
+        } else if delta.len() == 0 {
+            assert(total =~= likes);
+        } else {
+            assert(total.len() > 0);
+            let e = total.choose();
+            let sub_au_likes = to_au_likes(total.remove(e));
+
+            to_au_likes_singleton(e);
+            if likes.contains(e) {
+                to_au_likes_commutative_over_add(likes.remove(e), delta);
+                assert(total.remove(e) == likes.remove(e).add(delta));
+                to_au_likes_commutative_over_add(likes.remove(e), Multiset::singleton(e));
+                assert(likes.remove(e).add(Multiset::singleton(e)) == likes);
+            } else {
+                assert(delta.contains(e));
+                to_au_likes_commutative_over_add(likes, delta.remove(e));
+                assert(total.remove(e) == likes.add(delta.remove(e))); // trigger
+                to_au_likes_commutative_over_add(delta.remove(e), Multiset::singleton(e));
+                assert(delta.remove(e).add(Multiset::singleton(e)) == delta);
+            }
+        }
     }
 
-    // to au likes says that they are identical
-    // can ensure their len is the same
-    // how do we ensure that the cardinality is the same when adding all aus together
+    pub proof fn to_au_likes_commutative_over_sub(likes: Likes, delta: Likes)
+    requires delta <= likes
+    ensures to_au_likes(likes.sub(delta)) == to_au_likes(likes).sub(to_au_likes(delta))
+    {
+        to_au_likes_commutative_over_add(likes.sub(delta), delta);
+        assert(likes.sub(delta).add(delta) == likes); // trigger
+        assert(to_au_likes(likes.sub(delta)) == to_au_likes(likes).sub(to_au_likes(delta)));
+    }
 
-
-    // have proof regarding the membership
 
     // pub proof fn single_elems_add<V>(a: Multiset<V>, b: Multiset<V>)
     // requires 

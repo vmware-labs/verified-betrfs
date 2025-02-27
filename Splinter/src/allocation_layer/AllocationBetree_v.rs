@@ -282,7 +282,7 @@ state_machine!{ AllocationBetree {
         assert(to_au_likes(pushed_betree_likes) == to_au_likes(betree_likes).sub(to_au_likes(discard_betree)).add(to_au_likes(add_betree)));
         
         to_au_likes_commutative_over_add(buffer_likes, Multiset::singleton(new_addrs.addr2));
-        assume(to_au_likes(Multiset::singleton(new_addrs.addr2)) == Multiset::singleton(new_addrs.addr2.au));
+        to_au_likes_singleton(new_addrs.addr2);
         assert(to_au_likes(pushed_buffer_likes) == to_au_likes(buffer_likes).insert(new_addrs.addr2.au));
 
         assert(post.betree_aus == to_au_likes(pushed_betree_likes));
