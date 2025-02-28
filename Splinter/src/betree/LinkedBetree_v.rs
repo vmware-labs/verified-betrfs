@@ -1308,6 +1308,7 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
             &&& split_parent.acyclic()
             &&& result.acyclic()
             &&& result.reachable_buffer_addrs() <= self.linked.reachable_buffer_addrs()
+            &&& self.linked.valid_buffer_dv() ==> result.valid_buffer_dv()
         })
     {
         let ranking = path.linked.finite_ranking();
@@ -1354,6 +1355,7 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
         ensures 
             path.target().flush(child_idx, buffer_gc, new_addrs).acyclic(),
             Self::post_flush(path, child_idx, buffer_gc, new_addrs, path_addrs).acyclic(),
+            self.linked.valid_buffer_dv() ==> Self::post_flush(path, child_idx, buffer_gc, new_addrs, path_addrs).valid_buffer_dv(),
     {
         let ranking = self.linked.finite_ranking();
         path.target_ensures();
@@ -1398,6 +1400,7 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
         ensures 
             path.target().compact(start, end, compacted_buffer, new_addrs).acyclic(),
             Self::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs).acyclic(),
+            self.linked.valid_buffer_dv() ==> Self::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs).valid_buffer_dv(),
     {
         let ranking = self.linked.finite_ranking();
         path.target_ensures();

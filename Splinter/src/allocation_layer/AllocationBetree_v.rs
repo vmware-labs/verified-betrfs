@@ -64,9 +64,6 @@ pub open spec fn restrict_domain_au<V>(m: Map<Address, V>, aus: Set<AU>) -> Set<
 /// Introduces aulikes to track the life time of disk data structures in terms of Allocation Unit.
 /// Incorporates read only reference tracking for determining GC
 
-// Branch : branch root => full set
-// Compactors: mini alloctor
-
 state_machine!{ AllocationBetree {
     fields {
         pub betree: LinkedBetreeVars::State<SimpleBuffer>,
@@ -207,6 +204,13 @@ state_machine!{ AllocationBetree {
         update compactors = pre.compactors.push(input);
     }}
 
+    // can abort a compaction for any reason
+    transition!{ internal_compact_abort(lbl: Label, input_idx: int) {
+        require LinkedBetreeVars::State::internal_noop(pre.betree, pre.betree, lbl->linked_lbl);
+        require 0 <= input_idx < pre.compactors.len();
+        update compactors = pre.compactors.remove(input_idx);
+    }}
+
     transition!{ internal_compact_complete(lbl: Label, input_idx: int, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
         path: Path<SimpleBuffer>, start: nat, end: nat, compacted_buffer: SimpleBuffer, new_addrs: TwoAddrs, path_addrs: PathAddrs) {
         require 0 <= input_idx < pre.compactors.len();
@@ -345,7 +349,10 @@ state_machine!{ AllocationBetree {
     
     #[inductive(internal_compact_begin)]
     fn internal_compact_begin_inductive(pre: Self, post: Self, lbl: Label, path: Path<SimpleBuffer>, 
-        start: nat, end: nat, input: CompactorInput) {}
+        start: nat, end: nat, input: CompactorInput) { }
+
+    #[inductive(internal_compact_abort)]
+    fn internal_compact_abort_inductive(pre: Self, post: Self, lbl: Label, input_idx: int) { }
     
     #[inductive(internal_compact_complete)]
     fn internal_compact_complete_inductive(pre: Self, post: Self, lbl: Label, input_idx: int, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
@@ -366,7 +373,7 @@ state_machine!{ AllocationBetree {
     }
     
     #[inductive(internal_noop)]
-    fn internal_noop_inductive(pre: Self, post: Self, lbl: Label) {}
+    fn internal_noop_inductive(pre: Self, post: Self, lbl: Label) { }
 }} // end of AllocationBetree state machine
 
 } // end of verus!
