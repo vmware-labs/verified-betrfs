@@ -61,6 +61,23 @@ pub open spec fn restrict_domain_au<V>(m: Map<Address, V>, aus: Set<AU>) -> Set<
     m.dom().filter(|addr: Address| aus.contains(addr.au))
 }
 
+pub proof fn restrict_domain_au_ensures<V>(likes: Likes, m: Map<Address, V>)
+    requires likes.dom() <= m.dom()
+    ensures likes.dom() <= restrict_domain_au(m, to_au_likes(likes).dom()) 
+{
+    let aus = to_au_likes(likes);
+    let kept_addrs = restrict_domain_au(m, aus.dom());
+
+    to_au_likes_domain(likes);
+
+    assert forall |addr| #[trigger] likes.dom().contains(addr)
+    implies kept_addrs.contains(addr) 
+    by {
+        assert(m.contains_key(addr));
+        assert(likes.contains(addr)); // trigger
+    }
+}
+
 /// Introduces aulikes to track the life time of disk data structures in terms of Allocation Unit.
 /// Incorporates read only reference tracking for determining GC
 
@@ -244,136 +261,6 @@ state_machine!{ AllocationBetree {
     transition!{ internal_noop(lbl: Label) {
         require LinkedBetreeVars::State::internal_noop(pre.betree, pre.betree, lbl->linked_lbl);
     }}
-
-    #[invariant]
-    pub open spec(checked) fn inv(self) -> bool {
-        let (betree_likes, buffer_likes) = self.betree.linked.transitive_likes();
-
-        &&& self.betree.linked.acyclic() 
-        &&& self.betree.linked.has_root() ==> self.betree.linked.root().my_domain() == total_domain()
-        &&& self.betree_aus == to_au_likes(betree_likes)
-        &&& self.buffer_aus == to_au_likes(buffer_likes)
-    }
-
-    #[inductive(initialize)]
-    fn initialize_inductive(post: Self, betree: LinkedBetreeVars::State<SimpleBuffer>) {}
-    
-    #[inductive(au_likes_noop)]
-    fn au_likes_noop_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>) {
-        reveal(LinkedBetreeVars::State::next);
-        reveal(LinkedBetreeVars::State::next_by);
-        reveal(LikesBetree::State::next_by);
-    }
-
-    #[inductive(internal_flush_memtable)]
-    fn internal_flush_memtable_inductive(pre: Self, post: Self, lbl: Label, 
-        new_betree: LinkedBetreeVars::State<SimpleBuffer>, new_addrs: TwoAddrs) 
-    {
-        let (betree_likes, buffer_likes) = pre.betree.linked.transitive_likes();
-        let pushed = pre.betree.linked.push_memtable(new_betree.memtable.buffer, new_addrs);
-
-        assert( pushed.acyclic() && new_betree.linked.acyclic() ) by {
-            let _ = pre.betree.linked.push_memtable_new_ranking(new_betree.memtable.buffer, new_addrs, pre.betree.linked.the_ranking());
-            pushed.valid_view_ensures(new_betree.linked);
-        }
-
-        let (pushed_betree_likes, pushed_buffer_likes) = pushed.transitive_likes();
-        let discard_betree = pre.betree.linked.root_likes();
-        let add_betree = new_betree.linked.root_likes();
-
-        LikesBetree::State::push_memtable_likes_ensures(pre.i(), lbl.i(), new_betree, new_addrs);
-        assert(pushed_betree_likes == betree_likes.sub(discard_betree).add(add_betree));
-        assert(pushed_buffer_likes == buffer_likes.insert(new_addrs.addr2));
-
-        to_au_likes_commutative_over_sub(betree_likes, discard_betree);
-        to_au_likes_commutative_over_add(betree_likes.sub(discard_betree), add_betree);
-        assert(to_au_likes(pushed_betree_likes) == to_au_likes(betree_likes).sub(to_au_likes(discard_betree)).add(to_au_likes(add_betree)));
-        
-        to_au_likes_commutative_over_add(buffer_likes, Multiset::singleton(new_addrs.addr2));
-        to_au_likes_singleton(new_addrs.addr2);
-        assert(to_au_likes(pushed_buffer_likes) == to_au_likes(buffer_likes).insert(new_addrs.addr2.au));
-
-        assert(post.betree_aus == to_au_likes(pushed_betree_likes));
-        assert(post.buffer_aus == to_au_likes(pushed_buffer_likes));
-
-        pushed.valid_view_implies_same_transitive_likes(post.betree.linked);
-    }
-    
-    #[inductive(internal_grow)]
-    fn internal_grow_inductive(pre: Self, post: Self, lbl: Label, 
-        new_betree: LinkedBetreeVars::State<SimpleBuffer>, new_root_addr: Address) 
-    { 
-        let (betree_likes, buffer_likes) = pre.betree.linked.transitive_likes();
-        let (post_betree_likes, post_buffer_likes) = new_betree.linked.transitive_likes();
-
-        LikesBetree::State::grow_likes_ensures(pre.i(), lbl.i(), new_betree, new_root_addr);
-        assert(post_betree_likes == betree_likes.insert(new_root_addr));
-        to_au_likes_singleton(new_root_addr);
-        to_au_likes_commutative_over_add(betree_likes, Multiset::singleton(new_root_addr));
-    }
-
-    #[inductive(internal_split)]
-    fn internal_split_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
-        path: Path<SimpleBuffer>, request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs) 
-    {
-        let (betree_likes, buffer_likes) = pre.betree.linked.transitive_likes();
-        let splitted = LinkedBetreeVars::State::post_split(path, request, new_addrs, path_addrs);
-        LikesBetree::State::post_split_likes_ensures(pre.i(), lbl.i(), new_betree, path, request, new_addrs, path_addrs);
-
-        let (splitted_betree_likes, splitted_buffer_likes) = splitted.transitive_likes();
-        to_au_likes_commutative_over_sub(betree_likes, split_discard_betree(path, request));
-        to_au_likes_commutative_over_add(betree_likes.sub(split_discard_betree(path, request)), split_add_betree(new_addrs, path_addrs));
-        to_au_likes_commutative_over_add(buffer_likes, split_add_buffers(path, request));
-
-        splitted.valid_view_ensures(new_betree.linked);
-        splitted.valid_view_implies_same_transitive_likes(post.betree.linked);
-    }
-
-    #[inductive(internal_flush)]
-    fn internal_flush_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
-        path: Path<SimpleBuffer>, child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, path_addrs: PathAddrs) 
-    {
-        let (betree_likes, buffer_likes) = pre.betree.linked.transitive_likes();
-        let flushed = LinkedBetreeVars::State::post_flush(path, child_idx, buffer_gc, new_addrs, path_addrs);
-        LikesBetree::State::post_flush_likes_ensures(pre.i(), lbl.i(), new_betree, path, child_idx, buffer_gc, new_addrs, path_addrs);
-
-        let (flushed_betree_likes, flushed_buffer_likes) = flushed.transitive_likes();
-        to_au_likes_commutative_over_sub(betree_likes, flush_discard_betree(path, child_idx));
-        to_au_likes_commutative_over_add(betree_likes.sub(flush_discard_betree(path, child_idx)), flush_add_betree(new_addrs, path_addrs));
-        to_au_likes_commutative_over_sub(buffer_likes, flush_discard_buffers(path, buffer_gc));
-        to_au_likes_commutative_over_add(buffer_likes.sub(flush_discard_buffers(path, buffer_gc)), flush_add_buffers(path, child_idx, buffer_gc));
-
-        flushed.valid_view_ensures(new_betree.linked);
-        flushed.valid_view_implies_same_transitive_likes(post.betree.linked);
-    }
-    
-    #[inductive(internal_compact_begin)]
-    fn internal_compact_begin_inductive(pre: Self, post: Self, lbl: Label, path: Path<SimpleBuffer>, 
-        start: nat, end: nat, input: CompactorInput) { }
-
-    #[inductive(internal_compact_abort)]
-    fn internal_compact_abort_inductive(pre: Self, post: Self, lbl: Label, input_idx: int) { }
-    
-    #[inductive(internal_compact_complete)]
-    fn internal_compact_complete_inductive(pre: Self, post: Self, lbl: Label, input_idx: int, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
-        path: Path<SimpleBuffer>, start: nat, end: nat, compacted_buffer: SimpleBuffer, new_addrs: TwoAddrs, path_addrs: PathAddrs) 
-    { 
-        let (betree_likes, buffer_likes) = pre.betree.linked.transitive_likes();
-        let compacted = LinkedBetreeVars::State::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs);
-        LikesBetree::State::post_compact_likes_ensures(pre.i(), lbl.i(), new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs);
-
-        let (compacted_betree_likes, compacted_buffer_likes) = compacted.transitive_likes();
-        to_au_likes_commutative_over_sub(betree_likes, compact_discard_betree(path));
-        to_au_likes_commutative_over_add(betree_likes.sub(compact_discard_betree(path)), compact_add_betree(new_addrs, path_addrs));
-        to_au_likes_commutative_over_sub(buffer_likes, compact_discard_buffers(path, start, end));
-        to_au_likes_commutative_over_add(buffer_likes.sub(compact_discard_buffers(path, start, end)), compact_add_buffers(new_addrs));
-
-        compacted.valid_view_ensures(new_betree.linked);
-        compacted.valid_view_implies_same_transitive_likes(post.betree.linked);
-    }
-    
-    #[inductive(internal_noop)]
-    fn internal_noop_inductive(pre: Self, post: Self, lbl: Label) { }
 }} // end of AllocationBetree state machine
 
 } // end of verus!

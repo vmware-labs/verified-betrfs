@@ -161,7 +161,7 @@ impl<T> LinkedBetree<T> {
         }
     }
 
-    broadcast proof fn tree_likes_domain(self, ranking: Ranking)
+    pub broadcast proof fn tree_likes_domain(self, ranking: Ranking)
         requires 
             self.valid_ranking(ranking)
         ensures 
@@ -385,7 +385,7 @@ impl<T> LinkedBetree<T> {
         else { self.tree_buffers_are_closed(betree_likes.remove(random), addr); }
     }
 
-    proof fn buffer_likes_domain(self, betree_likes: Likes)
+    pub proof fn buffer_likes_domain(self, betree_likes: Likes)
         requires 
             self.acyclic(),
             betree_likes.dom() == self.reachable_betree_addrs(),

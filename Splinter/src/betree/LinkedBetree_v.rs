@@ -1263,7 +1263,7 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
         pushed.valid_view_ensures(new_linked);
     }
 
-    proof fn internal_grow_inductive(pre: Self, post: Self, lbl: Label, new_root_addr: Address) 
+    pub proof fn internal_grow_inductive(pre: Self, post: Self, lbl: Label, new_root_addr: Address) 
         requires 
             pre.inv(), 
             pre.linked.is_fresh(set![new_root_addr]),

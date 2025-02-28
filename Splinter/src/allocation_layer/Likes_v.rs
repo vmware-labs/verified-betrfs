@@ -33,6 +33,26 @@ verus!{
         }
     }
 
+    pub proof fn to_au_likes_domain(likes: Likes) 
+        ensures forall |addr| #[trigger] likes.contains(addr) ==> to_au_likes(likes).contains(addr.au)
+        decreases likes.len()
+    {
+        if likes.len() > 0 {
+            let e = likes.choose();
+            to_au_likes_domain(likes.remove(e));
+
+            assert forall |addr| #[trigger] likes.contains(addr)
+            implies to_au_likes(likes).contains(addr.au)
+            by {
+                if addr != e {
+                    assert(likes.remove(e).contains(addr)); // trigger
+                    assert(to_au_likes(likes.remove(e)).contains(addr.au));
+                    assert(to_au_likes(likes.remove(e)) <= to_au_likes(likes));
+                }
+            }
+        }
+    }
+
     pub proof fn to_au_likes_singleton(addr: Address) 
         ensures to_au_likes(Multiset::singleton(addr)) == Multiset::singleton(addr.au)
     {
