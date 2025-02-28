@@ -1452,7 +1452,6 @@ state_machine!{ LikesBetree {
         let new_subtree_likes = new_subtree.tree_likes(split_ranking);
 
         // substitute 
-
         let splitted_likes = splitted.tree_likes(splitted.the_ranking());
         let old_path_likes = path.addrs_on_path().to_multiset();
         let new_path_likes = path_addrs.to_multiset();
@@ -1517,65 +1516,96 @@ state_machine!{ LikesBetree {
 
         return LinkedBetreeVars::Step::internal_flush(new_betree.linked, path, child_idx, buffer_gc, new_addrs, path_addrs);
     }
+
+    pub proof fn flush_likes_ensures(pre: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
+            path: Path<SimpleBuffer>, child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, path_addrs: PathAddrs)
+        requires 
+            pre.betree.linked.acyclic(),
+            pre.imperative_matches_transitive_likes(),
+            LinkedBetreeVars::State::internal_flush(pre.betree, new_betree, lbl->linked_lbl, 
+                new_betree.linked, path, child_idx, buffer_gc, new_addrs, path_addrs),
+            pre.is_fresh(new_addrs.repr() + path_addrs.to_set()),
+        ensures ({
+            let flushed = LinkedBetreeVars::State::post_flush(path, child_idx, buffer_gc, new_addrs, path_addrs);
+            let (betree_likes, buffer_likes) = flushed.transitive_likes();
+            &&& flushed.acyclic()
+            &&& flush_discard_betree(path, child_idx) <= pre.betree_likes
+            &&& flush_discard_buffers(path, buffer_gc) <= pre.buffer_likes
+            &&& betree_likes == pre.betree_likes.sub(flush_discard_betree(path, child_idx)).add(flush_add_betree(new_addrs, path_addrs))
+            &&& buffer_likes == pre.buffer_likes.sub(flush_discard_buffers(path, buffer_gc)).add(flush_add_buffers(path, child_idx, buffer_gc))
+        })
+    {
+        let flushed = LinkedBetreeVars::State::post_flush(path, child_idx, buffer_gc, new_addrs, path_addrs);
+        pre.betree.post_flush_ensures(path, child_idx, buffer_gc, new_addrs, path_addrs);
+
+        let post_betree_likes = pre.betree_likes.sub(flush_discard_betree(path, child_idx)).add(flush_add_betree(new_addrs, path_addrs));
+        let post_buffer_likes = pre.buffer_likes.sub(flush_discard_buffers(path, buffer_gc)).add(flush_add_buffers(path, child_idx, buffer_gc));
+
+        let subtree = path.target();
+        let new_subtree = path.target().flush(child_idx, buffer_gc, new_addrs);
+        let ranking = pre.betree.linked.the_ranking();
+
+        path.target_ensures();
+        path.valid_ranking_throughout(ranking);
+        assert(new_subtree.acyclic());
+
+        let child = subtree.child_at_idx(child_idx);
+        let removed = subtree.root_likes().add(child.root_likes());
+
+        let finite_ranking = pre.betree.linked.finite_ranking();
+        let flush_ranking = subtree.flush_new_ranking(child_idx, buffer_gc, new_addrs, finite_ranking);
+        subtree.flush_parent_likes_ensures(child_idx, buffer_gc, new_addrs, flush_ranking);
+    
+        let subtree_likes = subtree.tree_likes(flush_ranking);
+        let new_subtree_likes = new_subtree.tree_likes(flush_ranking);
+
+        let discard_buffers = subtree.root().buffers.slice(0, buffer_gc as int).addrs.to_multiset(); // gced buffers
+        let add_buffers = subtree.flush_buffers(child_idx, buffer_gc).addrs.to_multiset();  // newly flushed to child
+    
+        assert(new_subtree_likes == subtree_likes.sub(removed).add(new_addrs.likes()));
+        assert(new_subtree.buffer_likes(new_subtree_likes) 
+            == subtree.buffer_likes(subtree_likes).sub(discard_buffers).add(add_buffers));
+        
+        // substitute 
+
+        let flushed_likes = flushed.tree_likes(flushed.the_ranking());
+        let old_path_likes = path.addrs_on_path().to_multiset();
+        let new_path_likes = path_addrs.to_multiset();
+
+        path.substitute_likes_ensures(new_subtree, path_addrs, flush_ranking);
+        pre.betree.linked.tree_likes_ignore_ranking(flush_ranking, ranking);
+
+        assert(flushed_likes =~= post_betree_likes) by {
+            assert(flushed_likes == flushed_likes.sub(new_subtree_likes).add(new_subtree_likes));
+            assert(flushed_likes == pre.betree_likes.sub(old_path_likes).add(new_path_likes).sub(subtree_likes).add(new_subtree_likes));
+            assert(flushed_likes == pre.betree_likes.sub(old_path_likes).sub(removed).add(new_path_likes).add(new_addrs.likes()));
+        }
+
+        assert(flushed.buffer_likes(flushed_likes) == post_buffer_likes) by {
+            path.substitute_ensures(new_subtree, path_addrs);
+            assert(subtree_likes <= pre.betree_likes);
+            assert(new_subtree_likes <= flushed_likes);
+            pre.betree.linked.subtree_buffer_likes_composition(flushed, subtree, new_subtree, flush_ranking, discard_buffers, add_buffers);
+        }
+
+        assert(discard_buffers <= pre.buffer_likes) by {
+            // assert(discard_buffers <= subtree.buffer_likes(subtree_likes));
+            subtree.tree_likes_domain(flush_ranking);
+            subtree.subdisk_implies_same_buffer_likes(pre.betree.linked, subtree_likes);
+            // assert(discard_buffers <= pre.betree.linked.buffer_likes(subtree_likes));
+            pre.betree.linked.tree_likes_domain(ranking);
+            pre.betree.linked.buffer_likes_additive(pre.betree_likes.sub(subtree_likes), subtree_likes);
+            assert(pre.betree_likes.sub(subtree_likes).add(subtree_likes) == pre.betree_likes); // trigger
+        }
+    }
    
     #[inductive(internal_flush)]
     fn internal_flush_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
         path: Path<SimpleBuffer>, child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, path_addrs: PathAddrs) {
-
         let flushed = LinkedBetreeVars::State::post_flush(path, child_idx, buffer_gc, new_addrs, path_addrs);
-        pre.betree.post_flush_ensures(path, child_idx, buffer_gc, new_addrs, path_addrs);
-
-        assert(flushed.transitive_likes() == (post.betree_likes, post.buffer_likes)) by {
-            let subtree = path.target();
-            let new_subtree = path.target().flush(child_idx, buffer_gc, new_addrs);
-            let ranking = pre.betree.linked.the_ranking();
-
-            path.target_ensures();
-            path.valid_ranking_throughout(ranking);
-            assert(new_subtree.acyclic());
-
-            let child = subtree.child_at_idx(child_idx);
-            let removed = subtree.root_likes().add(child.root_likes());
-
-            let finite_ranking = pre.betree.linked.finite_ranking();
-            let flush_ranking = subtree.flush_new_ranking(child_idx, buffer_gc, new_addrs, finite_ranking);
-
-            subtree.flush_parent_likes_ensures(child_idx, buffer_gc, new_addrs, flush_ranking);
-
-            let subtree_likes = subtree.tree_likes(flush_ranking);
-            let new_subtree_likes = new_subtree.tree_likes(flush_ranking);
-
-            let discard_buffers = subtree.root().buffers.slice(0, buffer_gc as int).addrs.to_multiset(); // gced buffers
-            let add_buffers = subtree.flush_buffers(child_idx, buffer_gc).addrs.to_multiset();  // newly flushed to child
-        
-            assert(new_subtree_likes == subtree_likes.sub(removed).add(new_addrs.likes()));
-            assert(new_subtree.buffer_likes(new_subtree_likes) 
-                == subtree.buffer_likes(subtree_likes).sub(discard_buffers).add(add_buffers));
-
-            // substitute 
-
-            let flushed_likes = flushed.tree_likes(flushed.the_ranking());
-            let old_path_likes = path.addrs_on_path().to_multiset();
-            let new_path_likes = path_addrs.to_multiset();
-
-            path.substitute_likes_ensures(new_subtree, path_addrs, flush_ranking);
-            pre.betree.linked.tree_likes_ignore_ranking(flush_ranking, ranking);
-
-            assert(flushed_likes =~= post.betree_likes) by {
-                assert(flushed_likes == flushed_likes.sub(new_subtree_likes).add(new_subtree_likes));
-                assert(flushed_likes == pre.betree_likes.sub(old_path_likes).add(new_path_likes).sub(subtree_likes).add(new_subtree_likes));
-                assert(flushed_likes == pre.betree_likes.sub(old_path_likes).sub(removed).add(new_path_likes).add(new_addrs.likes()));
-            }
-
-            assert(flushed.buffer_likes(flushed_likes) == post.buffer_likes) by {
-                path.substitute_ensures(new_subtree, path_addrs);
-                assert(subtree_likes <= pre.betree_likes);
-                assert(new_subtree_likes <= flushed_likes);
-                pre.betree.linked.subtree_buffer_likes_composition(flushed, subtree, new_subtree, flush_ranking, discard_buffers, add_buffers);
-            }
-        }
-
+        Self::flush_likes_ensures(pre, lbl, new_betree, path, child_idx, buffer_gc, new_addrs, path_addrs);
         flushed.valid_view_implies_same_transitive_likes(new_betree.linked);
+
         assert(new_betree.inv()) by {
             let linked_step = Self::internal_flush_satisfies_strong_step(pre, post, lbl, new_betree, path, child_idx, buffer_gc, new_addrs, path_addrs);
             LinkedBetreeVars::State::inv_next_by(pre.betree, new_betree, lbl->linked_lbl, linked_step);

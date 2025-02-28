@@ -1346,7 +1346,7 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
     pub proof fn post_flush_ensures(self, path: Path<T>, child_idx: nat, buffer_gc: nat,
         new_addrs: TwoAddrs, path_addrs: PathAddrs) 
         requires 
-            self.inv(),
+            self.linked.acyclic(),
             self.linked.is_fresh(new_addrs.repr()),
             self.linked.is_fresh(path_addrs.to_set()),
             path.target().can_flush(child_idx, buffer_gc),
@@ -1354,7 +1354,6 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
         ensures 
             path.target().flush(child_idx, buffer_gc, new_addrs).acyclic(),
             Self::post_flush(path, child_idx, buffer_gc, new_addrs, path_addrs).acyclic(),
-            Self::post_flush(path, child_idx, buffer_gc, new_addrs, path_addrs).valid_buffer_dv(),
     {
         let ranking = self.linked.finite_ranking();
         path.target_ensures();
@@ -1371,7 +1370,6 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
 
         path.target().flush_keeps_subset_reachable_buffers(child_idx, buffer_gc, new_addrs, new_ranking);
         path.substitute_reachable_buffers_ensures(new_subtree, path_addrs, new_ranking);
-        assert(flushed.valid_buffer_dv());
     }
 
     proof fn internal_flush_inductive(pre: Self, post: Self, lbl: Label, new_linked: LinkedBetree<T>, path: Path<T>, 
