@@ -1390,7 +1390,7 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
     pub proof fn post_compact_ensures(self, path: Path<T>, start: nat, end: nat, compacted_buffer: T,
         new_addrs: TwoAddrs, path_addrs: PathAddrs) 
         requires 
-            self.inv(),
+            self.linked.acyclic(),
             self.linked.is_fresh(new_addrs.repr()),
             self.linked.is_fresh(path_addrs.to_set()),
             path.target().can_compact(start, end, compacted_buffer),
@@ -1398,7 +1398,6 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
         ensures 
             path.target().compact(start, end, compacted_buffer, new_addrs).acyclic(),
             Self::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs).acyclic(),
-            Self::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs).valid_buffer_dv(),
     {
         let ranking = self.linked.finite_ranking();
         path.target_ensures();
@@ -1414,7 +1413,6 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
 
         path.target().compact_reachable_buffers_in_scope(start, end, compacted_buffer, new_addrs, new_ranking);
         path.substitute_reachable_buffers_ensures(new_subtree, path_addrs, new_ranking);
-        assert(compacted.valid_buffer_dv());
     }
 
     proof fn internal_compact_inductive(pre: Self, post: Self, lbl: Label, new_linked: LinkedBetree<T>, path: Path<T>, 
@@ -2503,25 +2501,23 @@ impl<T: Buffer> Path<T>{
         }
     }
 
-    // any newly added buffer address must not be present in the old reachable buffer set
-    pub open spec(checked) fn new_reachable_buffers_are_fresh(self, replacement: LinkedBetree<T>) -> bool
-        recommends
-            self.valid(),
-            replacement.acyclic(),
-    {
-        let reachable_buffers = self.linked.reachable_buffer_addrs();
-        let replacement_buffers = replacement.reachable_buffer_addrs();
-
-        &&& self.target().acyclic()
-        &&& reachable_buffers.disjoint(replacement_buffers.difference(self.target().reachable_buffer_addrs()))
-    }
+    // // any newly added buffer address must not be present in the old reachable buffer set
+    // pub open spec(checked) fn new_reachable_buffers_are_fresh(self, replacement: LinkedBetree<T>) -> bool
+    //     recommends
+    //         self.valid(),
+    //         replacement.acyclic(),
+    // {
+    //     let reachable_buffers = self.linked.reachable_buffer_addrs();
+    //     let replacement_buffers = replacement.reachable_buffer_addrs();
+    //     &&& self.target().acyclic()
+    //     &&& reachable_buffers.disjoint(replacement_buffers.difference(self.target().reachable_buffer_addrs()))
+    // }
 
     proof fn substitute_reachable_buffers_ensures(self, replacement: LinkedBetree<T>, path_addrs: PathAddrs, ranking: Ranking)
         requires
             self.linked.valid_ranking(ranking),
             self.can_substitute(replacement, path_addrs), 
             self.ranking_for_substitution(replacement, path_addrs, ranking),
-            self.new_reachable_buffers_are_fresh(replacement),
             path_addrs.no_duplicates(),
             replacement.is_fresh(path_addrs.to_set()),
             self.linked.dv.is_fresh(set![replacement.root.unwrap()])
