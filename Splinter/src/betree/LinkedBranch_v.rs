@@ -18,50 +18,16 @@ pub mod Refinement_v;
 // LinkedBranch refines to PivotBranch.
 verus! {
 
-pub enum SplitArg {
-    SplitIndex{pivot: Key, pivot_index: int},
-    SplitLeaf{pivot: Key}
-}
-
-impl SplitArg {
-    pub open spec(checked) fn wf(self, split_branch: LinkedBranch) -> bool
-        recommends split_branch.has_root()
-    {
-        let root = split_branch.root();
-        match self {
-            Self::SplitLeaf{pivot} => {
-                &&& root is Leaf
-                &&& root->keys.len() == root->msgs.len()
-                &&& 0 < Key::largest_lt(root->keys, pivot) + 1 < root->keys.len()
-            }
-            Self::SplitIndex{pivot, pivot_index} => {
-                &&& root is Index
-                &&& root->children.len() == root->pivots.len() + 1
-                &&& 0 <= pivot_index < root->pivots.len()
-                &&& root->pivots[pivot_index] == pivot
-            }
-        }
-    }
-
-    pub open spec(checked) fn get_pivot(self) -> Key
-    {
-        if self is SplitLeaf {
-            self.arrow_SplitLeaf_pivot()
-        } else {
-            self.arrow_SplitIndex_pivot()
-        }
-    }
-}
-
 /// A LinkedBranch node. See PivotBranch_v::Node for more details.
 /// A LinkedBranch node stores addresses of child nodes rather than recursively storing the child
 /// nodes themselves as PivotBranch does.
-pub enum Node {
+pub enum Node<T> {
     Leaf{keys: Seq<Key>, msgs: Seq<Message>},
-    Index{pivots: Seq<Key>, children: Seq<Address>},
+    Index{pivots: Seq<Key>, children: Seq<Address>, aux_ptr: Pointer}, // all but root node ignores this aux_ptr
+    Auxiliary(T), // allows root to point to an auxiliary node that stores custom info
 }
 
-impl Node {
+impl<T> Node<T> {
     pub open spec(checked) fn wf(self) -> bool
     {
         match self {
@@ -69,9 +35,10 @@ impl Node {
                 &&& keys.len() > 0
                 &&& keys.len() == msgs.len()
             }
-            Self::Index{pivots, children} => {
+            Self::Index{pivots, children, ..} => {
                 &&& pivots.len() == children.len() - 1
             }
+            _ => true
         }
     }
 
@@ -102,11 +69,11 @@ impl Node {
 /// A DiskView is, well, a view of the disk. We view the disk as a mapping from Addresses to LinkedBranch
 /// nodes. For LinkedBranch we assume all addresses map to LinkedBranch nodes.
 #[verifier::ext_equal]
-pub struct DiskView {
-    pub entries: Map<Address, Node>
+pub struct DiskView<T> {
+    pub entries: Map<Address, Node<T>>
 }
 
-impl DiskView {
+impl<T> DiskView<T> {
     /// Ensures that all LinkedBranch nodes in the disk are well formed, and that
     /// all Addresses pointed to by all nodes are themselves valid addresses.
     pub open spec(checked) fn wf(self) -> bool
@@ -126,10 +93,12 @@ impl DiskView {
         self.entries.contains_key(addr)
     }
 
-    pub open spec(checked) fn node_has_valid_child_address(self, node: Node) -> bool
+    // children should not be of type auxiliary node
+    pub open spec(checked) fn node_has_valid_child_address(self, node: Node<T>) -> bool
     {
         node is Index ==>
-            forall |idx| 0 <= idx < node->children.len() ==> self.valid_address(#[trigger] node->children[idx])
+            forall |idx| 0 <= idx < node->children.len() ==> 
+                self.valid_address(#[trigger] node->children[idx]) && !(self.entries[node->children[idx]] is Auxiliary)
     }
 
     // disk is closed wrt to all the address in the nodes on disk
@@ -138,7 +107,7 @@ impl DiskView {
         forall |addr| #[trigger] self.entries.contains_key(addr) ==> self.node_has_valid_child_address(self.entries[addr])
     }
 
-    pub open spec(checked) fn get(self, addr: Address) -> Node
+    pub open spec(checked) fn get(self, addr: Address) -> Node<T>
         recommends self.valid_address(addr)
     {
         self.entries[addr]
@@ -160,12 +129,12 @@ impl DiskView {
         self.entries.dom()
     }
 
-    pub open spec(checked) fn agrees_with_disk(self, other: DiskView) -> bool
+    pub open spec(checked) fn agrees_with_disk(self, other: Self) -> bool
     {
         self.entries.agrees(other.entries)
     }
 
-    pub open spec(checked) fn is_subset_of(self, other: DiskView) -> bool
+    pub open spec(checked) fn is_subset_of(self, other: Self) -> bool
     {
         self.entries <= other.entries
     }
@@ -197,37 +166,72 @@ impl DiskView {
         addrs.disjoint(self.entries.dom())
     }
 
-    pub closed spec(checked) fn merge_disk(self, other: DiskView) -> DiskView
+    pub closed spec(checked) fn merge_disk(self, other: Self) -> Self
     {
         DiskView{entries: self.entries.union_prefer_right(other.entries)}
     }
 
-    pub closed spec(checked) fn remove_disk(self, other: DiskView) -> DiskView
+    pub closed spec(checked) fn remove_disk(self, other: Self) -> Self
     {
         DiskView{entries: self.entries.remove_keys(other.entries.dom())}
     }
 
-    pub open spec(checked) fn modify_disk(self, addr: Address, item: Node) -> DiskView
+    pub open spec(checked) fn modify_disk(self, addr: Address, item: Node<T>) -> Self
     {
         DiskView{entries: self.entries.insert(addr, item)}
     }
 
-    pub open spec(checked) fn same_except(self, other: DiskView, except: Set<Address>) -> bool
+    pub open spec(checked) fn same_except(self, other: Self, except: Set<Address>) -> bool
     {
         self.entries.remove_keys(except) == other.entries.remove_keys(except)
     }
 }
 
-pub open spec(checked) fn empty_disk() -> DiskView
+pub open spec(checked) fn empty_disk<T>() -> DiskView<T>
 {
     DiskView{entries: map!{}}
 }
 
+pub enum SplitArg {
+    SplitIndex{pivot: Key, pivot_index: int},
+    SplitLeaf{pivot: Key}
+}
+
+impl SplitArg {
+    pub open spec(checked) fn wf<T>(self, split_branch: LinkedBranch<T>) -> bool
+        recommends split_branch.has_root()
+    {
+        let root = split_branch.root();
+        match self {
+            Self::SplitLeaf{pivot} => {
+                &&& root is Leaf
+                &&& root->keys.len() == root->msgs.len()
+                &&& 0 < Key::largest_lt(root->keys, pivot) + 1 < root->keys.len()
+            }
+            Self::SplitIndex{pivot, pivot_index} => {
+                &&& root is Index
+                &&& root->children.len() == root->pivots.len() + 1
+                &&& 0 <= pivot_index < root->pivots.len()
+                &&& root->pivots[pivot_index] == pivot
+            }
+        }
+    }
+
+    pub open spec(checked) fn get_pivot(self) -> Key
+    {
+        if self is SplitLeaf {
+            self.arrow_SplitLeaf_pivot()
+        } else {
+            self.arrow_SplitIndex_pivot()
+        }
+    }
+}
+
 // A B+ tree represented by a disk that maps addresses to nodes and the address of its root node.
 #[verifier::ext_equal]
-pub struct LinkedBranch {
+pub struct LinkedBranch<T> {
     pub root: Address,
-    pub disk_view: DiskView
+    pub disk_view: DiskView<T>
 }
 
 // The "public" facing interface of LinkedBranch is meant to be just limited to
@@ -237,7 +241,7 @@ pub struct LinkedBranch {
 // can't keep just these functions public, and instead need to make all LinkedBranch
 // methods public so that the refinement proof module is able to access and reason about
 // all spec fn's listed here.
-impl LinkedBranch {
+impl<T> LinkedBranch<T> {
     // ====================
     // Public Transition Function (BEGIN)
     // ====================
@@ -253,7 +257,7 @@ impl LinkedBranch {
         }
     }
 
-    pub open spec/*XXX (checked)*/ fn insert(self, key: Key, msg: Message, path: Path) -> LinkedBranch
+    pub open spec/*XXX (checked)*/ fn insert(self, key: Key, msg: Message, path: Path<T>) -> LinkedBranch<T>
         recommends
             path.valid(),
             path.branch == self,
@@ -264,17 +268,17 @@ impl LinkedBranch {
         path.substitute(path.target().insert_leaf(key, msg))
     }
 
-    pub open spec(checked) fn grow(self, addr: Address) -> LinkedBranch
+    pub open spec(checked) fn grow(self, addr: Address) -> LinkedBranch<T>
         recommends
             self.wf(),
             self.disk_view.is_fresh(set!{addr})
     {
-        let new_root = Node::Index{pivots: seq![], children: seq![self.root]};
+        let new_root = Node::Index{pivots: seq![], children: seq![self.root], aux_ptr: None};
         let new_disk_view = self.disk_view.modify_disk(addr, new_root);
         LinkedBranch{root: addr, disk_view: new_disk_view}
     }
 
-    pub open spec/*XXX (checked)*/ fn append(self, keys: Seq<Key>, msgs: Seq<Message>, path: Path) -> LinkedBranch
+    pub open spec/*XXX (checked)*/ fn append(self, keys: Seq<Key>, msgs: Seq<Message>, path: Path<T>) -> LinkedBranch<T>
         recommends
             path.valid(),
             path.branch == self,
@@ -290,7 +294,7 @@ impl LinkedBranch {
         path.substitute(path.target().append_leaf(keys, msgs))
     }
 
-    pub open spec(checked) fn split(self, addr: Address, path: Path, split_arg: SplitArg) -> LinkedBranch
+    pub open spec(checked) fn split(self, addr: Address, path: Path<T>, split_arg: SplitArg) -> LinkedBranch<T>
         recommends
             path.valid(),
             path.branch == self,
@@ -313,10 +317,10 @@ impl LinkedBranch {
 
     pub open spec(checked) fn has_root(self) -> bool
     {
-        self.disk_view.valid_address(self.root)
+        self.disk_view.valid_address(self.root) && !(self.disk_view.get(self.root) is Auxiliary)
     }
 
-    pub open spec(checked) fn root(self) -> Node
+    pub open spec(checked) fn root(self) -> Node<T>
         recommends self.has_root()
     {
         self.disk_view.get(self.root)
@@ -431,16 +435,6 @@ impl LinkedBranch {
             let index_keys = self.children_keys(ranking);
             pivot_keys + index_keys
         }
-        // match self.root() {
-        //     Node::Leaf{keys, msgs} => {
-        //         keys.to_set()
-        //     }
-        //     Node::Index{pivots, children} => {
-        //         let pivot_keys = pivots.to_set();
-        //         let index_keys = self.children_keys(ranking);
-        //         pivot_keys + index_keys
-        //     }
-        // }
     }
 
     pub open spec/*XXX (checked)*/ fn all_keys_below_bound(self, i: int, ranking: Ranking) -> bool
@@ -452,7 +446,7 @@ impl LinkedBranch {
         decreases self.get_rank(ranking)
     {
         // Need valid ranking implies child has valid ranking to restore checked
-        forall |key| self.child_at_idx(i).all_keys(ranking).contains(key) ==> Key::lt(key, self.root()->pivots[i])
+        forall |key| self.child_at_idx(i).all_keys(ranking).contains(key) ==> #[trigger] Key::lt(key, self.root()->pivots[i])
     }
 
     pub open spec/*XXX (checked)*/ fn all_keys_above_bound(self, i: int, ranking: Ranking) -> bool
@@ -467,7 +461,7 @@ impl LinkedBranch {
         forall |key| self.child_at_idx(i).all_keys(ranking).contains(key) ==> #[trigger] Key::lte(self.root()->pivots[i-1], key)
     }
 
-    pub open spec(checked) fn child_at_idx(self, i: int) -> LinkedBranch
+    pub open spec(checked) fn child_at_idx(self, i: int) -> LinkedBranch<T>
         recommends
             self.has_root(),
             self.root().valid_child_index(i)
@@ -551,12 +545,14 @@ impl LinkedBranch {
             } else {
                 Message::Update{delta: nop_delta()}
             }
-        } else {
+        } else if node is Index {
             self.child_at_idx(r+1).query_internal(key, ranking)
+        } else {
+            arbitrary() // should not be defined!
         }
     }
 
-    pub open spec/*XXX (checked)*/ fn insert_leaf(self, key: Key, msg: Message) -> LinkedBranch
+    pub open spec/*XXX (checked)*/ fn insert_leaf(self, key: Key, msg: Message) -> LinkedBranch<T>
         recommends
             self.wf(),
             self.root() is Leaf,
@@ -573,7 +569,7 @@ impl LinkedBranch {
         LinkedBranch{root: self.root, disk_view: self.disk_view.modify_disk(self.root, new_node)}
     }
 
-    pub open spec(checked) fn append_leaf(self, new_keys: Seq<Key>, new_msgs: Seq<Message>) -> LinkedBranch
+    pub open spec(checked) fn append_leaf(self, new_keys: Seq<Key>, new_msgs: Seq<Message>) -> LinkedBranch<T>
         recommends
             self.wf(),
             self.root() is Leaf,
@@ -587,7 +583,7 @@ impl LinkedBranch {
         LinkedBranch{root: self.root, disk_view: new_disk_view}
     }
 
-    pub open spec(checked) fn split_leaf(self, split_arg: SplitArg, right_root_addr: Address) -> (LinkedBranch, LinkedBranch)
+    pub open spec(checked) fn split_leaf(self, split_arg: SplitArg, right_root_addr: Address) -> (LinkedBranch<T>, LinkedBranch<T>)
         recommends
             self.has_root(),
             split_arg.wf(self),
@@ -611,7 +607,7 @@ impl LinkedBranch {
         (left_leaf, right_leaf)
     }
 
-    pub open spec(checked) fn sub_index(self, from: int, to: int) -> Node
+    pub open spec(checked) fn sub_index(self, from: int, to: int) -> Node<T>
         recommends
             self.has_root(),
             self.root() is Index,
@@ -620,11 +616,12 @@ impl LinkedBranch {
     {
         Node::Index{
             pivots: self.root()->pivots.subrange(from, to-1),
-            children: self.root()->children.subrange(from, to)
+            children: self.root()->children.subrange(from, to),
+            aux_ptr: None,
         }
     }
 
-    pub open spec/*XXX (checked)*/ fn split_index(self, split_arg: SplitArg, right_root_addr: Address) -> (LinkedBranch, LinkedBranch)
+    pub open spec/*XXX (checked)*/ fn split_index(self, split_arg: SplitArg, right_root_addr: Address) -> (LinkedBranch<T>, LinkedBranch<T>)
         recommends
             self.has_root(),
             split_arg.wf(self),
@@ -642,7 +639,7 @@ impl LinkedBranch {
         (left_index, right_index)
     }
 
-    pub open spec(checked) fn split_node(self, split_arg: SplitArg, right_root_addr: Address) -> (LinkedBranch, LinkedBranch)
+    pub open spec(checked) fn split_node(self, split_arg: SplitArg, right_root_addr: Address) -> (LinkedBranch<T>, LinkedBranch<T>)
         recommends
             self.has_root(),
             split_arg.wf(self),
@@ -669,7 +666,7 @@ impl LinkedBranch {
             }
     }
 
-    pub open spec/*XXX (checked)*/ fn split_child_of_index(self, split_arg: SplitArg, new_child_addr: Address) -> LinkedBranch
+    pub open spec/*XXX (checked)*/ fn split_child_of_index(self, split_arg: SplitArg, new_child_addr: Address) -> LinkedBranch<T>
         recommends self.can_split_child_of_index(split_arg, new_child_addr)
     {
         // Need route ensures to restore checked
@@ -678,7 +675,8 @@ impl LinkedBranch {
         let (left_branch, right_branch) = self.child_at_idx(child_idx).split_node(split_arg, new_child_addr);
         let new_root = Node::Index{
             pivots: self.root()->pivots.insert(child_idx, pivot),
-            children: self.root()->children.insert(child_idx + 1, new_child_addr)
+            children: self.root()->children.insert(child_idx + 1, new_child_addr),
+            aux_ptr: None,
         };
         let new_disk_view = self.disk_view
             .merge_disk(left_branch.disk_view)
@@ -687,20 +685,20 @@ impl LinkedBranch {
     }
 }
 
-pub open spec(checked) fn empty_linked_branch(root: Address) -> LinkedBranch
+pub open spec(checked) fn empty_linked_branch<T>(root: Address) -> LinkedBranch<T>
 {
     LinkedBranch{root: root, disk_view: empty_disk().modify_disk(root, Node::Leaf{keys: seq![], msgs: seq![]})}
 }
 
 #[verifier::ext_equal]
-pub struct Path {
-    pub branch: LinkedBranch,
+pub struct Path<T> {
+    pub branch: LinkedBranch<T>,
     pub key: Key,
     pub depth: nat
 }
 
-impl Path {
-    pub open spec/*XXX (checked)*/ fn subpath(self) -> Path
+impl<T> Path<T> {
+    pub open spec/*XXX (checked)*/ fn subpath(self) -> Path<T>
         recommends
             0 < self.depth,
             self.branch.wf(),
@@ -719,7 +717,7 @@ impl Path {
         &&& 0 < self.depth ==> self.subpath().valid()
     }
 
-    pub open spec(checked) fn target(self) -> LinkedBranch
+    pub open spec(checked) fn target(self) -> LinkedBranch<T>
         recommends self.valid()
         decreases self.depth
     {
@@ -730,7 +728,7 @@ impl Path {
         }
     }
 
-    pub open spec(checked) fn substitute(self, replacement: LinkedBranch) -> LinkedBranch
+    pub open spec(checked) fn substitute(self, replacement: LinkedBranch<T>) -> LinkedBranch<T>
         recommends self.valid()
     {
         LinkedBranch{root: self.branch.root, disk_view: replacement.disk_view}
@@ -744,5 +742,4 @@ impl Path {
         &&& 0 < self.depth ==> self.subpath().path_equiv(other_key)
     }
 }
-
 }
