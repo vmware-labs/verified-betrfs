@@ -44,6 +44,10 @@ pub closed spec fn good_req(instance_id: InstanceId, req: Request, req_shard: Re
 }
 
 // requests that can be satisfied when this superblock lands
+// TODO(jonh): in sync_request: need to consume request shard to get
+// atomic state; then just store atomic state ids here.
+// That also suggests we will have version numbers handy, which will
+// further simplify this data structure.
 struct InFlightSyncs {
     satisfied_reqs: Vec<(Request, Tracked<RequestShard>)>,
     deferred_reqs: Vec<(Request, Tracked<RequestShard>)>,
