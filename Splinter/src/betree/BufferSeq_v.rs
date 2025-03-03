@@ -53,7 +53,7 @@ impl BufferSeq {
             Message::Update{delta: nop_delta()}
         } else {
             // merge message from old buffer to new result
-            self.buffers[start].query(key).merge(self.query_from(key, start+1))
+            self.buffers[start].query_internal(key).merge(self.query_from(key, start+1))
         }
     }
 
@@ -214,9 +214,9 @@ impl BufferSeq {
         ensures ({
             let start = offset_map.offsets[k] as int;
             &&& start <= buffer_idx ==> 
-                self.i_filtered_from(offset_map, buffer_idx).query(k) == self.query_from(k, buffer_idx)
+                self.i_filtered_from(offset_map, buffer_idx).query_internal(k) == self.query_from(k, buffer_idx)
             &&& start > buffer_idx ==> 
-                self.i_filtered_from(offset_map, buffer_idx).query(k) == self.query_from(k, start)
+                self.i_filtered_from(offset_map, buffer_idx).query_internal(k) == self.query_from(k, start)
         })
         decreases self.len() - buffer_idx
     {

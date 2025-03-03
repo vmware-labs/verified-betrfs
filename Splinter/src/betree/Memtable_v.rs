@@ -34,17 +34,17 @@ impl Memtable {
         Self::empty_memtable(self.seq_end)
     }
 
-    pub open spec(checked) fn query(&self, key: Key) -> Message
+    pub open spec(checked) fn query(self, key: Key) -> Message
     {
         self.buffer.query(key)
     }
 
-    pub open spec(checked) fn contains(&self, key: Key) -> bool
+    pub open spec(checked) fn contains(self, key: Key) -> bool
     {
         self.buffer.contains(key)
     }
 
-    pub open spec(checked) fn is_empty(&self) -> bool
+    pub open spec(checked) fn is_empty(self) -> bool
     {
         self.buffer.is_empty()
     }
@@ -52,7 +52,7 @@ impl Memtable {
     pub open spec(checked) fn apply_put(self, km: KeyedMessage) -> Memtable {
         let msg = self.query(km.key).merge(km.message);
         Memtable{
-            buffer: *self.buffer.insert_ref(km.key, msg),
+            buffer: self.buffer.insert(km.key, msg),
             seq_end: self.seq_end + 1
         }
     }

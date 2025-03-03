@@ -867,8 +867,10 @@ impl<T> LinkedBetree<T> {
 impl <T: Buffer> LinkedBetree<T> {
     proof fn compact_likes_ensures(self, start: nat, end: nat, compacted_buffer: T, new_addrs: TwoAddrs, ranking: Ranking) 
     requires 
-        self.can_compact(start, end, compacted_buffer),
+        self.wf(),
+        self.has_root(),
         self.valid_ranking(ranking),
+        start < end <= self.root().buffers.len(),
         self.compact(start, end, compacted_buffer, new_addrs).valid_ranking(ranking),
         self.dv.is_fresh(new_addrs.repr()),
         new_addrs.no_duplicates(),
@@ -1517,6 +1519,7 @@ state_machine!{ LikesBetree {
         return LinkedBetreeVars::Step::internal_flush(new_betree.linked, path, child_idx, buffer_gc, new_addrs, path_addrs);
     }
 
+    #[verifier::spinoff_prover]
     pub proof fn post_flush_likes_ensures(pre: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
             path: Path<SimpleBuffer>, child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, path_addrs: PathAddrs)
         requires 

@@ -20,15 +20,9 @@ pub struct BufferDisk<T> {
 }
 
 impl<T> BufferDisk<T> {
-    pub open spec fn repr(&self) -> Set<Address> 
+    pub open spec fn repr(self) -> Set<Address> 
     {
         self.entries.dom()
-    }
-
-    pub open spec(checked) fn valid_buffers(&self, buffers: LinkedSeq) -> bool
-    {
-        buffers.addrs.to_set() <= self.repr()
-        // forall |i| 0 <= i < buffers.len() ==> self.repr().contains(#[trigger] buffers.addrs[i])
     }
 
     pub open spec(checked) fn is_fresh(self, addrs: Set<Address>) -> bool 
@@ -63,9 +57,9 @@ impl<T> BufferDisk<T> {
 } // end of BufferDisk<T> impl
 
 impl<T: Buffer> BufferDisk<T> {
-    pub open spec fn query(&self, addr: Address, k: Key) -> Message
+    pub open spec fn query(self, addr: Address, k: Key) -> Message
     {
-        self.entries[addr].query(k)
+        self.entries[addr].linked_query(self, k)
     }
 
     pub open spec(checked) fn query_from(self, buffers: LinkedSeq, k: Key, start: int) -> Message 
@@ -80,10 +74,10 @@ impl<T: Buffer> BufferDisk<T> {
     }
 
     // true if address is present and key is present within the queryable structure
-    pub open spec fn queryable_contains(&self, addr: Address, k: Key) -> bool
+    pub open spec fn queryable_contains(self, addr: Address, k: Key) -> bool
     {
         &&& self.entries.contains_key(addr)
-        &&& self.entries[addr].contains(k)
+        &&& self.entries[addr].linked_contains(self, k)
     }
 
     pub open spec(checked) fn key_in_buffer(self, buffers: LinkedSeq, from_idx: int, k: Key, idx: int) -> bool
@@ -103,7 +97,7 @@ impl<T: Buffer> BufferDisk<T> {
     pub open spec(checked) fn i_buffer_seq(self, addrs: LinkedSeq) -> BufferSeq_v::BufferSeq
         recommends self.valid_buffers(addrs)
     {
-        let buffers = Seq::new(addrs.len(), |i| self.entries[addrs[i]].i());    
+        let buffers = Seq::new(addrs.len(), |i| self.entries[addrs[i]].i(self));    
         BufferSeq_v::BufferSeq{ buffers: buffers }
     }
 
@@ -115,28 +109,41 @@ impl<T: Buffer> BufferDisk<T> {
             self.query_from(addrs, k, start) == self.i_buffer_seq(addrs).query_from(k, start)
         decreases addrs.len() - start
     {
-        broadcast use Buffer::query_refines;
+        broadcast use Buffer::linked_query_refines;
         if start < addrs.len() {
             self.query_from_commutes_with_i(addrs, k, start+1);
         }
     }
 
-    pub broadcast proof fn agrees_implies_same_i(self, other: Self, addrs: LinkedSeq)
+    pub open spec(checked) fn valid_buffers(self, buffers: LinkedSeq) -> bool
+    {
+        let addrs = buffers.addrs;
+        &&& addrs.to_set() <= self.repr()
+        &&& forall |i| 0 <= i < addrs.len() ==> #[trigger] self.entries[addrs[i]].linked_wf(self)
+    }
+
+    pub open spec fn all_entries_valid(self) -> bool
+    {
+        forall |addr| self.entries.contains_key(addr) ==> #[trigger] self.entries[addr].linked_wf(self)
+    }
+
+    pub broadcast proof fn agrees_implies_same_i(self, other: Self, buffers: LinkedSeq)
         requires
-            self.valid_buffers(addrs),
-            other.valid_buffers(addrs),
+            self.valid_buffers(buffers),
+            other.valid_buffers(buffers),
             self.agrees_with(other),
         ensures 
-            self.i_buffer_seq(addrs) == other.i_buffer_seq(addrs)
+            self.i_buffer_seq(buffers) == other.i_buffer_seq(buffers)
     {
-        let i_this = self.i_buffer_seq(addrs);
-        let i_other = other.i_buffer_seq(addrs);
+        let i_this = self.i_buffer_seq(buffers);
+        let i_other = other.i_buffer_seq(buffers);
 
-        assert forall |i| 0 <= i < addrs.len()
+        assert forall |i| 0 <= i < buffers.len()
         implies i_this[i] == i_other[i]
         by {
-            if self.entries.contains_key(addrs[i]) {
-                assert(other.entries.contains_key(addrs[i])); // trigger
+            if self.entries.contains_key(buffers[i]) {
+                assert(other.entries.contains_key(buffers[i])); // trigger
+                self.entries[buffers[i]].wf_agreeable_ensures(self, other);
             }
         }
         assert(i_this =~= i_other);

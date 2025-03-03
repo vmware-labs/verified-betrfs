@@ -4,89 +4,101 @@ use builtin_macros::*;
 use vstd::{map::*,set::*};
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
+use crate::betree::BufferDisk_v::*;
 
 verus! {
 
-pub trait Buffer {
-    // NOTE: & shouldn't really exist in spec land
+pub trait Buffer : Sized {
+    spec fn linked_wf(self, dv: BufferDisk<Self>) -> bool;
 
-    spec fn contains(&self, key: Key) -> bool;
+    spec fn linked_contains(self, dv: BufferDisk<Self>, key: Key) -> bool;
 
-    spec fn query(&self, key: Key) -> Message;
+    spec fn is_empty(self) -> bool;
 
-    spec fn insert_ref(&self, key: Key, msg: Message) -> &Self;
-
-    spec fn is_empty(&self) -> bool;
-
-    spec fn i(&self) -> SimpleBuffer;
-
-    broadcast proof fn contains_refines(&self, key: Key) 
-        ensures #[trigger] self.contains(key) == self.i().map.contains_key(key)
+    spec(checked) fn linked_query(self, dv: BufferDisk<Self>, key: Key) -> Message
+        recommends self.linked_wf(dv)
     ;
 
-    broadcast proof fn query_refines(&self, key: Key)
-        ensures  #[trigger] self.query(key) == self.i().query_internal(key)
+    spec fn i(self, dv: BufferDisk<Self>) -> SimpleBuffer
+        recommends self.linked_wf(dv)
     ;
 
-    broadcast proof fn insert_refines(&self, key: Key, msg: Message) 
-        ensures self.insert_ref(key, msg).i() == self.i().insert(key, msg)
+    broadcast proof fn linked_contains_refines(self, dv: BufferDisk<Self>, key: Key) 
+        ensures #[trigger] self.linked_contains(dv, key) == self.i(dv).map.contains_key(key)
     ;
 
-    proof fn empty_refines(&self) 
-        ensures  #[trigger] self.is_empty() ==> self.i() == SimpleBuffer::empty()
+    broadcast proof fn linked_query_refines(self, dv: BufferDisk<Self>, key: Key)
+        ensures  #[trigger] self.linked_query(dv, key) == self.i(dv).query(key)
+    ;
+
+    proof fn linked_empty_refines(self, dv: BufferDisk<Self>)
+        ensures  #[trigger] self.is_empty() ==> self.i(dv) == SimpleBuffer::empty()
+    ;
+
+    broadcast proof fn wf_agreeable_ensures(self, dv: BufferDisk<Self>, other_dv: BufferDisk<Self>) 
+        requires self.linked_wf(dv), self.linked_wf(other_dv), dv.agrees_with(other_dv),
+        ensures 
+            self.i(dv) == self.i(other_dv),
+            forall |k: Key| true ==> {
+                &&& self.linked_query(dv, k) == self.linked_query(other_dv, k)
+                &&& self.linked_contains(dv, k) == self.linked_contains(other_dv, k)
+            }
     ;
 }
 
 // rename to Simple SimpleBuffer
 #[verifier::ext_equal]
-pub struct SimpleBuffer { 
+pub struct SimpleBuffer {
     pub map: Map<Key, Message>
 }
 
 impl Buffer for SimpleBuffer {
-    open spec(checked) fn contains(&self, key: Key) -> bool {
+    open spec fn linked_wf(self, dv: BufferDisk<SimpleBuffer>) -> bool
+    {
+        true
+    }
+
+    open spec(checked) fn linked_contains(self, dv: BufferDisk<Self>, key: Key) -> bool {
         self.map.contains_key(key)
     }
 
-    open spec(checked) fn query(&self, key: Key) -> Message {
-        self.query_internal(key)
-    }
-    
-    // 'a = any life time provided
-    // open spec fn meow() -> &'static Self {
-    //     &SimpleBuffer::empty()
-    // }
-
-    // &self for traits in spec land doesn't make sense
-    open spec(checked) fn insert_ref(&self, key: Key, msg: Message) -> &Self {
-        &self.insert(key, msg)
+    open spec(checked) fn linked_query(self, dv: BufferDisk<Self>, key: Key) -> Message {
+        self.query(key)
     }
 
-    open spec(checked) fn is_empty(&self) -> bool {
-        *self == SimpleBuffer::empty()
+    open spec(checked) fn is_empty(self) -> bool {
+        self == SimpleBuffer::empty()
     }
 
-    open spec(checked) fn i(&self) -> SimpleBuffer {
-        *self
+    open spec(checked) fn i(self, dv: BufferDisk<Self>) -> SimpleBuffer {
+        self
     }
 
-    proof fn contains_refines(&self, key: Key) {}
+    proof fn linked_contains_refines(self, dv: BufferDisk<Self>, key: Key) {}
 
-    proof fn query_refines(&self, key: Key) {}
+    proof fn linked_query_refines(self, dv: BufferDisk<Self>, key: Key) {}
 
-    proof fn insert_refines(&self, key: Key, msg: Message) {}
+    proof fn linked_empty_refines(self, dv: BufferDisk<Self>) {}
 
-    proof fn empty_refines(&self) {}
+    proof fn wf_agreeable_ensures(self, dv: BufferDisk<Self>, other_dv: BufferDisk<Self>) {}
 }
 
 // A SimpleBuffer is a map from keys to messages.
 impl SimpleBuffer {
-    pub open spec(checked) fn query_internal(&self, key: Key) -> Message {
+    pub open spec(checked) fn query(self, key: Key) -> Message {
+        self.query_internal(key)
+    }
+
+    pub open spec(checked) fn query_internal(self, key: Key) -> Message {
         if self.map.contains_key(key) {
             self.map[key]
         } else {
             Message::Update{ delta: nop_delta() }
         }
+    }
+
+    pub open spec(checked) fn contains(self, key: Key) -> bool {
+        self.map.contains_key(key)
     }
 
     pub open spec(checked) fn apply_filter(self, accept: Set<Key>) -> SimpleBuffer {

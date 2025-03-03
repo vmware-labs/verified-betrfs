@@ -397,7 +397,7 @@ impl Addrs for SplitAddrs {
 impl<T: Buffer> BufferDisk<T> {
     pub open spec(checked) fn i(self) -> BufferDisk<SimpleBuffer>
     {
-        let entries = Map::new(|k| self.entries.contains_key(k), |k| self.entries[k].i() );
+        let entries = Map::new(|k| self.entries.contains_key(k), |k| self.entries[k].i(self) );
         BufferDisk{entries}
     }
 
@@ -418,6 +418,18 @@ impl<T: Buffer> BufferDisk<T> {
         self.query_from(node.buffers.slice(start as int, end as int), k, from)
     }
 } // end impl<T: Buffer> BetreeNode
+
+
+// Option 1: T: LinkedBranch
+// DiskView <Node,DiskView> => 
+//      - maintain entry[addr].diskview is subdisk_of bufferdiskview
+// BufferDv + BetreeNode disk
+// Projection Node (summary node) 
+// 
+// Option 2: 
+// linked wf is true for all buffer_dv pages
+// fix DiskView<Node>
+// 
 
 pub struct LinkedBetree<T> {
     pub root: Pointer,
@@ -486,19 +498,6 @@ impl<T> LinkedBetree<T> {
             self.root().valid_child_index(idx),
     {
         LinkedBetree{ root: self.root().children[idx as int], dv: self.dv, buffer_dv: self.buffer_dv }
-    }
-
-    pub open spec(checked) fn child_at_idx_tight(self, idx: nat) -> LinkedBetree<T>
-        recommends 
-            self.wf(), 
-            self.has_root(), 
-            self.root().valid_child_index(idx),
-    {
-        let child = self.child_at_idx(idx);
-        if child.acyclic() {
-            let tight_dv = DiskView{entries: child.dv.entries.restrict(child.reachable_betree_addrs()) };
-            LinkedBetree{ dv: tight_dv, ..child }
-        } else { child }
     }
 
     pub open spec(checked) fn child_for_key(self, k: Key) -> LinkedBetree<T>
@@ -733,13 +732,6 @@ impl<T> LinkedBetree<T> {
         self.reachable_buffer_addrs() <= self.buffer_dv.repr()
     }
 
-    pub open spec(checked) fn valid_buffer_dv(self) -> bool
-        recommends self.acyclic()
-    {
-        // &&& self.dv.is_fresh(self.buffer_dv.repr())
-        &&& self.no_dangling_buffer_ptr()
-    }
-
     pub open spec(checked) fn is_fresh(self, addrs: Set<Address>) -> bool
     {
         // &&& self.reachable_betree_addrs().disjoint(addrs)
@@ -816,6 +808,12 @@ impl<T> LinkedBetree<T> {
 
 
 impl<T: Buffer> LinkedBetree<T> {
+    pub open spec(checked) fn valid_buffer_dv(self) -> bool
+        recommends self.acyclic()
+    {
+        &&& self.no_dangling_buffer_ptr()
+    }
+
     pub open spec(checked) fn i_bdv(self) -> LinkedBetree<SimpleBuffer>
     {
         LinkedBetree{
@@ -825,43 +823,43 @@ impl<T: Buffer> LinkedBetree<T> {
         }
     }
 
-    pub open spec(checked) fn compact_buffer_valid_domain(self, start: nat, end: nat, compacted_buffer: T) -> bool
+    pub open spec(checked) fn compact_buffer_valid_domain(self, start: nat, end: nat, compacted_buffer: T, compacted_buffer_dv: BufferDisk<T>) -> bool
         recommends 
             self.wf(),
             self.has_root(),
             start < end <= self.root().buffers.len(),
     {
-        forall |k| compacted_buffer.contains(k) <==> 
+        forall |k| compacted_buffer.linked_contains(compacted_buffer_dv, k) <==> 
             #[trigger] self.buffer_dv.valid_compact_key_domain(self.root(), start, end, k)
     }
 
     // #[verifier::opaque]
-    pub open spec(checked) fn compact_buffer_valid_range(self, start: nat, end: nat, compacted_buffer: T) -> bool
+    pub open spec(checked) fn compact_buffer_valid_range(self, start: nat, end: nat, compacted_buffer: T, compacted_buffer_dv: BufferDisk<T>) -> bool
         recommends 
             self.wf(),
             self.has_root(),
             start < end <= self.root().buffers.len(),
-            self.compact_buffer_valid_domain(start, end, compacted_buffer),
+            self.compact_buffer_valid_domain(start, end, compacted_buffer, compacted_buffer_dv),
     {
-        forall |k| compacted_buffer.contains(k) ==>
-            #[trigger]  compacted_buffer.query(k) == self.buffer_dv.compact_key_value(self.root(), start, end, k)
+        forall |k| compacted_buffer.linked_contains(compacted_buffer_dv, k) ==>
+            #[trigger]  compacted_buffer.linked_query(compacted_buffer_dv, k) == self.buffer_dv.compact_key_value(self.root(), start, end, k)
     }
 
-    pub open spec(checked) fn can_compact(self, start: nat, end: nat, compacted_buffer: T) -> bool 
+    pub open spec(checked) fn can_compact(self, start: nat, end: nat, compacted_buffer: T, compacted_buffer_dv: BufferDisk<T>) -> bool 
     {
         &&& self.wf()
         &&& self.has_root()
         &&& start < end <= self.root().buffers.len()
         // &&& !compacted_buffer.map.is_empty() // do not want to compact nothing?
-        &&& self.compact_buffer_valid_domain(start, end, compacted_buffer)
-        &&& self.compact_buffer_valid_range(start, end, compacted_buffer)
+        &&& self.compact_buffer_valid_domain(start, end, compacted_buffer, compacted_buffer_dv)
+        &&& self.compact_buffer_valid_range(start, end, compacted_buffer, compacted_buffer_dv)
     }
 
     pub open spec /*(checked)*/ fn compact(self, start: nat, end: nat, compacted_buffer: T, new_addrs: TwoAddrs) -> LinkedBetree<T>
-        recommends 
-            new_addrs.no_duplicates(), 
-            self.is_fresh(new_addrs.repr()),
-            self.can_compact(start, end, compacted_buffer),
+        // recommends 
+        //     new_addrs.no_duplicates(), 
+        //     self.is_fresh(new_addrs.repr()),
+        //     self.can_compact(start, end, compacted_buffer),
     {
         let new_root = BetreeNode{
             buffers: self.root().buffers.update_subrange(start as int, end as int, new_addrs.addr2),
@@ -1093,7 +1091,7 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
     transition!{ internal_flush_memtable(lbl: Label, sealed_memtable: T, new_linked: LinkedBetree<T>, new_addrs: TwoAddrs) {
         require lbl is Internal;
         require new_addrs.no_duplicates();
-        require sealed_memtable.i() == pre.memtable.buffer;
+        require sealed_memtable.i(pre.linked.buffer_dv) == pre.memtable.buffer;
 
         let pushed = pre.linked.push_memtable(sealed_memtable, new_addrs);
         require pushed.valid_view(new_linked);
@@ -1162,7 +1160,7 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
     transition!{ internal_compact(lbl: Label, new_linked: LinkedBetree<T>, path: Path<T>, 
             start: nat, end: nat, compacted_buffer: T, new_addrs: TwoAddrs, path_addrs: PathAddrs) {
         require lbl is Internal;
-        require path.target().can_compact(start, end, compacted_buffer);
+        require path.target().can_compact(start, end, compacted_buffer, new_linked.buffer_dv);
         require pre.linked.valid_path_replacement(path, new_addrs, path_addrs);
 
         let compacted = Self::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs);
@@ -1352,10 +1350,14 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
             self.linked.is_fresh(path_addrs.to_set()),
             path.target().can_flush(child_idx, buffer_gc),
             self.linked.valid_path_replacement(path, new_addrs, path_addrs),
-        ensures 
-            path.target().flush(child_idx, buffer_gc, new_addrs).acyclic(),
-            Self::post_flush(path, child_idx, buffer_gc, new_addrs, path_addrs).acyclic(),
-            self.linked.valid_buffer_dv() ==> Self::post_flush(path, child_idx, buffer_gc, new_addrs, path_addrs).valid_buffer_dv(),
+        ensures ({
+            let flush_parent = path.target().flush(child_idx, buffer_gc, new_addrs);
+            let result = Self::post_flush(path, child_idx, buffer_gc, new_addrs, path_addrs);
+            
+            &&& flush_parent.acyclic()
+            &&& result.acyclic()
+            &&& self.linked.valid_buffer_dv() ==> result.valid_buffer_dv()
+        })
     {
         let ranking = self.linked.finite_ranking();
         path.target_ensures();
@@ -1395,7 +1397,9 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
             self.linked.acyclic(),
             self.linked.is_fresh(new_addrs.repr()),
             self.linked.is_fresh(path_addrs.to_set()),
-            path.target().can_compact(start, end, compacted_buffer),
+            path.target().wf(),
+            path.target().has_root(),
+            start < end <= path.target().root().buffers.len(),
             self.linked.valid_path_replacement(path, new_addrs, path_addrs),
         ensures 
             path.target().compact(start, end, compacted_buffer, new_addrs).acyclic(),
@@ -1815,68 +1819,6 @@ impl<T> LinkedBetree<T> {
         child.same_reachable_betree_addrs_implies_same_buffer_addrs(otheresult_child);
     }
 
-    pub proof fn push_memtable_ensures(self, memtable: T, new_addrs: TwoAddrs)
-        requires 
-            self.acyclic(),
-            self.valid_buffer_dv(),
-            self.is_fresh(new_addrs.repr()),
-            new_addrs.no_duplicates(),
-        ensures ({
-            let result = self.push_memtable(memtable, new_addrs);
-            let discard = if self.has_root() {set![self.root.unwrap()]} else {set![]};
-            &&& result.acyclic()
-            &&& result.valid_buffer_dv()
-            &&& result.reachable_buffer_addrs() == self.reachable_buffer_addrs() + set![new_addrs.addr2]
-        })
-    {
-        let ranking = self.the_ranking();
-        let pushed = self.push_memtable(memtable, new_addrs);
-        let pushed_ranking = self.push_memtable_new_ranking(memtable, new_addrs, ranking);
-
-        let buffer_addrs = self.reachable_buffer_addrs();
-        let post_buffer_addrs = pushed.reachable_buffer_addrs();
-
-        broadcast use LinkedBetree::reachable_betree_addrs_ignore_ranking;
-        self.reachable_betree_addrs_using_ranking_closed(ranking);
-        pushed.reachable_betree_addrs_using_ranking_closed(pushed_ranking);
-
-        assert(post_buffer_addrs.contains(new_addrs.addr2)) by {
-            assert(pushed.root().buffers[pushed.root().buffers.len() - 1] == new_addrs.addr2);
-            assert(pushed.reachable_buffer(new_addrs.addr1, new_addrs.addr2));
-        }
-
-        assert forall |buffer| post_buffer_addrs.contains(buffer) && buffer != new_addrs.addr2 
-            <==> #[trigger] buffer_addrs.contains(buffer)
-        by {
-            if post_buffer_addrs.contains(buffer) && buffer != new_addrs.addr2 {
-                if pushed.root().buffers.contains(buffer) {
-                    assert(self.has_root());
-                    assert(self.reachable_buffer(self.root.unwrap(), buffer));
-                    assert(buffer_addrs.contains(buffer));
-                } else {
-                    let tree_addr = choose |tree_addr| pushed.reachable_buffer(tree_addr, buffer);
-                    let i = pushed.non_root_buffers_belongs_to_child(tree_addr, buffer);
-                    self.same_child_same_reachable_buffers(pushed, i, i, pushed_ranking);
-                }
-            }
-
-            if buffer_addrs.contains(buffer) {
-                assert(self.has_root());
-                if self.root().buffers.contains(buffer) {
-                    let i = choose |i| 0 <= i < self.root().buffers.len() && self.root().buffers[i] == buffer;
-                    assert(pushed.root().buffers[i] == buffer);
-                    assert(pushed.reachable_buffer(pushed.root.unwrap(), buffer));
-                } else {
-                    let tree_addr = choose |tree_addr| self.reachable_buffer(tree_addr, buffer);
-                    let i = self.non_root_buffers_belongs_to_child(tree_addr, buffer);
-                    self.same_child_same_reachable_buffers(pushed, i, i, pushed_ranking);
-                }
-            }
-        }
-        assert(self.no_dangling_buffer_ptr());
-        assert(pushed.reachable_buffer_addrs() =~= self.reachable_buffer_addrs() + set![new_addrs.addr2]);
-    }
-
     pub proof fn grow_new_ranking(self, new_root_addr: Address) -> (new_ranking: Ranking)
     requires
         self.acyclic(),
@@ -2290,12 +2232,75 @@ impl<T> LinkedBetree<T> {
 }
 
 impl<T: Buffer> LinkedBetree<T>{
+    pub proof fn push_memtable_ensures(self, memtable: T, new_addrs: TwoAddrs)
+        requires 
+            self.acyclic(),
+            self.valid_buffer_dv(),
+            self.is_fresh(new_addrs.repr()),
+            new_addrs.no_duplicates(),
+        ensures ({
+            let result = self.push_memtable(memtable, new_addrs);
+            let discard = if self.has_root() {set![self.root.unwrap()]} else {set![]};
+            &&& result.acyclic()
+            &&& result.no_dangling_buffer_ptr() // can no longer ensure this 
+            &&& result.reachable_buffer_addrs() == self.reachable_buffer_addrs() + set![new_addrs.addr2]
+        })
+    {
+        let ranking = self.the_ranking();
+        let pushed = self.push_memtable(memtable, new_addrs);
+        let pushed_ranking = self.push_memtable_new_ranking(memtable, new_addrs, ranking);
+
+        let buffer_addrs = self.reachable_buffer_addrs();
+        let post_buffer_addrs = pushed.reachable_buffer_addrs();
+
+        broadcast use LinkedBetree::reachable_betree_addrs_ignore_ranking;
+        self.reachable_betree_addrs_using_ranking_closed(ranking);
+        pushed.reachable_betree_addrs_using_ranking_closed(pushed_ranking);
+
+        assert(post_buffer_addrs.contains(new_addrs.addr2)) by {
+            assert(pushed.root().buffers[pushed.root().buffers.len() - 1] == new_addrs.addr2);
+            assert(pushed.reachable_buffer(new_addrs.addr1, new_addrs.addr2));
+        }
+
+        assert forall |buffer| post_buffer_addrs.contains(buffer) && buffer != new_addrs.addr2 
+            <==> #[trigger] buffer_addrs.contains(buffer)
+        by {
+            if post_buffer_addrs.contains(buffer) && buffer != new_addrs.addr2 {
+                if pushed.root().buffers.contains(buffer) {
+                    assert(self.has_root());
+                    assert(self.reachable_buffer(self.root.unwrap(), buffer));
+                    assert(buffer_addrs.contains(buffer));
+                } else {
+                    let tree_addr = choose |tree_addr| pushed.reachable_buffer(tree_addr, buffer);
+                    let i = pushed.non_root_buffers_belongs_to_child(tree_addr, buffer);
+                    self.same_child_same_reachable_buffers(pushed, i, i, pushed_ranking);
+                }
+            }
+
+            if buffer_addrs.contains(buffer) {
+                assert(self.has_root());
+                if self.root().buffers.contains(buffer) {
+                    let i = choose |i| 0 <= i < self.root().buffers.len() && self.root().buffers[i] == buffer;
+                    assert(pushed.root().buffers[i] == buffer);
+                    assert(pushed.reachable_buffer(pushed.root.unwrap(), buffer));
+                } else {
+                    let tree_addr = choose |tree_addr| self.reachable_buffer(tree_addr, buffer);
+                    let i = self.non_root_buffers_belongs_to_child(tree_addr, buffer);
+                    self.same_child_same_reachable_buffers(pushed, i, i, pushed_ranking);
+                }
+            }
+        }
+        assert(self.no_dangling_buffer_ptr());
+        assert(pushed.reachable_buffer_addrs() =~= self.reachable_buffer_addrs() + set![new_addrs.addr2]);
+    }
+    
     pub proof fn compact_new_ranking(self, start: nat, end: nat, compacted_buffer: T, new_addrs: TwoAddrs, ranking: Ranking) -> (new_ranking: Ranking)
         requires 
             self.wf(), 
             self.has_root(),
             self.valid_ranking(ranking),
-            self.can_compact(start, end, compacted_buffer),
+            start < end <= self.root().buffers.len(),
+            // self.can_compact(start, end, compacted_buffer),
             new_addrs.no_duplicates(),
             self.is_fresh(new_addrs.repr()),
         ensures 
@@ -2319,7 +2324,8 @@ impl<T: Buffer> LinkedBetree<T>{
 
     proof fn compact_reachable_buffers_in_scope(self, start: nat, end: nat, compacted_buffer: T, new_addrs: TwoAddrs, ranking: Ranking)
         requires 
-            self.can_compact(start, end, compacted_buffer),
+            self.has_root(),
+            start < end <= self.root().buffers.len(),
             self.is_fresh(new_addrs.repr()),
             new_addrs.no_duplicates(),
             self.valid_ranking(ranking),

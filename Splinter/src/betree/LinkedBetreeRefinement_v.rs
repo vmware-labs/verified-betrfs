@@ -26,9 +26,9 @@ use crate::betree::SplitRequest_v::*;
 
 verus! {
 
-broadcast use PivotTable::route_lemma, Buffer::contains_refines, Buffer::query_refines;
+broadcast use PivotTable::route_lemma;// Buffer::linked_query_refines, Buffer::linked_contains_refines;
 
-impl<T: Buffer> LinkedBetree<T>{
+impl LinkedBetree<SimpleBuffer>{
     pub open spec/*XXX(checked)*/ fn i_children_seq(self, ranking: Ranking, start: nat) -> Seq<FilteredBetree_v::BetreeNode>
         recommends 
             self.has_root(),
@@ -347,7 +347,6 @@ impl<T: Buffer> LinkedBetree<T>{
         broadcast use BufferDisk::agrees_implies_same_i;
         if self.has_root() {
             self.valid_buffer_dv_throughout();
-
             assert(self.i()->buffers =~= big.i()->buffers);
 
             self.i_children_lemma();
@@ -432,7 +431,6 @@ impl<T: Buffer> LinkedBetree<T>{
 
         result.i_children_lemma();
         assert(result.root().valid_child_index(0)); // trigger
-
         self.subdisk_preserves_i(child);
 
         assert(result.i()->buffers =~= self.i().grow()->buffers);
@@ -565,16 +563,18 @@ impl<T: Buffer> LinkedBetree<T>{
         assert(result.i()->children =~= i_result->children);
     }
 
-    proof fn can_compact_commutes_with_i(self, start: nat, end: nat, compacted_buffer: T, new_addrs: TwoAddrs)
+    proof fn can_compact_commutes_with_i(self, start: nat, end: nat, compacted_buffer: SimpleBuffer, new_addrs: TwoAddrs, compacted_buffer_dv: BufferDisk<SimpleBuffer>)
         requires 
             self.acyclic(),
-            self.can_compact(start, end, compacted_buffer),
+            self.can_compact(start, end, compacted_buffer, compacted_buffer_dv), // NOTE: this is safe because SimpleBuffer is self contained
             self.valid_buffer_dv(),
             new_addrs.no_duplicates(),
             self.is_fresh(new_addrs.repr()),
         ensures 
-            self.i().can_compact(start, end, compacted_buffer.i())
+            self.i().can_compact(start, end, compacted_buffer)
     {
+        assert(compacted_buffer.i(compacted_buffer_dv) == compacted_buffer);
+
         self.i_wf();
         reveal(FilteredBetree_v::BetreeNode::valid_compact_key_domain);
 
@@ -589,10 +589,10 @@ impl<T: Buffer> LinkedBetree<T>{
         let i_compact_ofs_map = self.i().make_offset_map().decrement(start);
         assert(compact_ofs_map =~= i_compact_ofs_map);
 
-        assert forall |k| #[trigger] compacted_buffer.i().map.contains_key(k) 
+        assert forall |k| #[trigger] compacted_buffer.map.contains_key(k) 
         implies ({
             let from = if self.i().flushed_ofs(k) <= start { 0 } else { self.i().flushed_ofs(k)-start };
-            &&& compacted_buffer.query(k) == self.i()->buffers.slice(start as int, end as int).query_from(k, from)
+            &&& compacted_buffer.linked_query(compacted_buffer_dv, k) == self.i()->buffers.slice(start as int, end as int).query_from(k, from)
             &&& self.i().valid_compact_key_domain(start, end, k)
         }) by {
             assert(self.buffer_dv.valid_compact_key_domain(self.root(), start, end, k));
@@ -605,7 +605,7 @@ impl<T: Buffer> LinkedBetree<T>{
         }
 
         assert forall |k| #[trigger] self.i().valid_compact_key_domain(start, end, k)
-        implies compacted_buffer.i().map.contains_key(k) 
+        implies compacted_buffer.map.contains_key(k) 
         by {
             let buffer_idx = choose |buffer_idx| i_compact_slice.key_in_buffer_filtered(i_compact_ofs_map, 0, k, buffer_idx);
             assert(i_compact_ofs_map.offsets[k] == compact_ofs_map.offsets[k]);
@@ -618,24 +618,27 @@ impl<T: Buffer> LinkedBetree<T>{
         }
     }
 
-    proof fn compact_commutes_with_i(self, start: nat, end: nat, compacted_buffer: T, new_addrs: TwoAddrs)
+    proof fn compact_commutes_with_i(self, start: nat, end: nat, compacted_buffer: SimpleBuffer, new_addrs: TwoAddrs, compacted_buffer_dv: BufferDisk<SimpleBuffer>)
         requires 
             self.acyclic(), 
-            self.can_compact(start, end, compacted_buffer),
-            self.compact(start, end, compacted_buffer, new_addrs).acyclic(),
             self.valid_buffer_dv(),
+            self.can_compact(start, end, compacted_buffer, compacted_buffer_dv),
+            self.compact(start, end, compacted_buffer, new_addrs).acyclic(),
             new_addrs.no_duplicates(),
             self.is_fresh(new_addrs.repr()),
-        ensures 
-            self.i().can_compact(start, end, compacted_buffer.i()),
-            self.compact(start, end, compacted_buffer, new_addrs).i() == self.i().compact(start, end, compacted_buffer.i())
+        ensures ({
+            let result = self.compact(start, end, compacted_buffer, new_addrs);
+            &&& self.i().can_compact(start, end, compacted_buffer)
+            &&& result.i() == self.i().compact(start, end, compacted_buffer)
+        })
     {
         let result = self.compact(start, end, compacted_buffer, new_addrs);
-        self.can_compact_commutes_with_i(start, end, compacted_buffer, new_addrs);
-        let i_result = self.i().compact(start, end, compacted_buffer.i());
+        self.can_compact_commutes_with_i(start, end, compacted_buffer, new_addrs, compacted_buffer_dv);
+        let i_result = self.i().compact(start, end, compacted_buffer);
 
         self.valid_buffer_dv_throughout();
         self.buffer_dv.agrees_implies_same_i(result.buffer_dv, self.root().buffers);
+
         assert(result.i()->buffers =~= i_result->buffers);
 
         self.i_children_lemma();
@@ -651,16 +654,16 @@ impl<T: Buffer> LinkedBetree<T>{
         }
         assert(result.i()->children =~= i_result->children);
     }
+} // end impl LinkedBetree<SimpleBuffer>
 
-} // end impl LinkedBetree<T>
 
-pub open spec(checked) fn i_stamped_betree<T: Buffer>(v: LinkedBetreeVars::State<T>) -> FilteredBetree_v::StampedBetree
+pub open spec(checked) fn i_stamped_betree(v: LinkedBetreeVars::State<SimpleBuffer>) -> FilteredBetree_v::StampedBetree
     recommends v.linked.acyclic()
 {
     Stamped{value: v.linked.i(), seq_end: v.memtable.seq_end}
 }
 
-impl<T: Buffer> QueryReceiptLine<T>{
+impl QueryReceiptLine<SimpleBuffer>{
     pub open spec(checked) fn i(self) -> FilteredBetree_v::QueryReceiptLine
         recommends self.linked.acyclic()
     {
@@ -671,7 +674,7 @@ impl<T: Buffer> QueryReceiptLine<T>{
     }
 }
 
-impl<T: Buffer> QueryReceipt<T>{
+impl QueryReceipt<SimpleBuffer>{
     pub open spec(checked) fn i(self) -> FilteredBetree_v::QueryReceipt
         recommends self.valid()
     {
@@ -730,7 +733,7 @@ impl<T: Buffer> QueryReceipt<T>{
     }
 }
 
-impl<T: Buffer> Path<T>{
+impl Path<SimpleBuffer>{
     pub open spec(checked) fn i(self) -> FilteredBetree_v::Path
         recommends self.valid()
     {
@@ -800,7 +803,7 @@ impl<T: Buffer> Path<T>{
         }
     }
 
-    proof fn substitute_commutes_with_i(self, replacement: LinkedBetree<T>, path_addrs: PathAddrs)
+    proof fn substitute_commutes_with_i(self, replacement: LinkedBetree<SimpleBuffer>, path_addrs: PathAddrs)
         requires 
             self.linked.acyclic(),
             replacement.acyclic(),
@@ -858,6 +861,8 @@ impl<T: Buffer> Path<T>{
             self.linked.i_children_lemma();
             assert(result.i()->children.len() == i_result->children.len());
 
+            assert(self.linked.dv.is_sub_disk(result.dv)); // trigger
+
             assert forall |i| 0 <= i < result.i()->children.len()
             implies #[trigger] result.i()->children[i] == i_result->children[i]
             by {
@@ -867,7 +872,6 @@ impl<T: Buffer> Path<T>{
                 if i != r {
                     self.linked.child_at_idx(i as nat).subdisk_preserves_i(result.child_at_idx(i as nat));
                 } else {
-                    self.linked.child_at_idx_reachable_addrs_ensures(r as nat);
                     self.subpath().substitute_commutes_with_i(replacement, sub_path_addrs);
                     subtree.subdisk_preserves_i(result.child_at_idx(i as nat));
                     assert(result.i()->children[i] == i_result->children[i]);
@@ -900,7 +904,8 @@ impl LinkedBetreeVars::Label {
     }
 } // end impl LinkedBetreeVars::Label
 
-impl<T: Buffer> LinkedBetreeVars::State<T> {
+// refinement just needs to be over simple buffer
+impl LinkedBetreeVars::State<SimpleBuffer> {
     pub open spec(checked) fn i(self) -> FilteredBetree::State
         recommends 
             self.inv(),
@@ -914,11 +919,10 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
         ensures
             FilteredBetree::State::initialize(self.i(), i_stamped_betree(v))
     {
-        v.memtable.buffer.empty_refines();
         self.linked.i_wf();
     }
 
-    proof fn query_refines(self, post: Self, lbl: LinkedBetreeVars::Label, receipt: QueryReceipt<T>)
+    proof fn query_refines(self, post: Self, lbl: LinkedBetreeVars::Label, receipt: QueryReceipt<SimpleBuffer>)
         requires 
             self.inv(), 
             post.inv(), 
@@ -941,9 +945,6 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
         reveal(FilteredBetree::State::next_by);
     }
 
-    // stamped betree proof
-
-
     proof fn freeze_as_refines(self, post: Self, lbl: LinkedBetreeVars::Label)
         requires 
             self.inv(),
@@ -953,7 +954,6 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
             FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::freeze_as())
     {
         reveal(FilteredBetree::State::next_by);
-        self.memtable.buffer.empty_refines();
         assert(self.i().memtable.is_empty());
         self.linked.i_wf();
         assert(self.i().wf());
@@ -970,7 +970,7 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
     }
 
     proof fn internal_flush_memtable_refines(self, post: Self, lbl: LinkedBetreeVars::Label, 
-        sealed_memtable: T, new_linked: LinkedBetree<T>, new_addrs: TwoAddrs)
+        sealed_memtable: SimpleBuffer, new_linked: LinkedBetree<SimpleBuffer>, new_addrs: TwoAddrs)
         requires 
             self.inv(),
             post.inv(), 
@@ -1005,6 +1005,8 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
             assert(result.root().valid_child_index(0)); // trigger
             assert(result.i()->children =~= seq![FilteredBetree_v::BetreeNode::Nil]);
         }
+
+        // TODO: meow?
         assert(result.i()->buffers =~= self.linked.i().push_memtable(self.memtable)->buffers);
         result.valid_view_preserves_i(post.linked);
     }
@@ -1024,8 +1026,8 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
         post.linked.i_wf();
     }
 
-    proof fn internal_split_refines(self, post: Self, lbl: LinkedBetreeVars::Label, new_linked: LinkedBetree<T>,
-            path: Path<T>, request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs)
+    proof fn internal_split_refines(self, post: Self, lbl: LinkedBetreeVars::Label, new_linked: LinkedBetree<SimpleBuffer>,
+            path: Path<SimpleBuffer>, request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs)
         requires 
             self.inv(), 
             post.inv(),
@@ -1051,8 +1053,8 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
         splitted.valid_view_preserves_i(post.linked);
     }
 
-    proof fn internal_flush_refines(self, post: Self, lbl: LinkedBetreeVars::Label, new_linked: LinkedBetree<T>, 
-        path: Path<T>, child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, path_addrs: PathAddrs)
+    proof fn internal_flush_refines(self, post: Self, lbl: LinkedBetreeVars::Label, new_linked: LinkedBetree<SimpleBuffer>, 
+        path: Path<SimpleBuffer>, child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, path_addrs: PathAddrs)
         requires 
             self.inv(), 
             post.inv(), 
@@ -1078,8 +1080,8 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
         flushed.valid_view_preserves_i(post.linked);
     }
 
-    proof fn internal_compact_refines(self, post: Self, lbl: LinkedBetreeVars::Label, new_linked: LinkedBetree<T>,
-            path: Path<T>, start: nat, end: nat, compacted_buffer: T, new_addrs: TwoAddrs, path_addrs: PathAddrs)
+    proof fn internal_compact_refines(self, post: Self, lbl: LinkedBetreeVars::Label, new_linked: LinkedBetree<SimpleBuffer>,
+            path: Path<SimpleBuffer>, start: nat, end: nat, compacted_buffer: SimpleBuffer, new_addrs: TwoAddrs, path_addrs: PathAddrs)
         requires 
             self.inv(), 
             post.inv(), 
@@ -1090,7 +1092,7 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
                 path, start, end, compacted_buffer, new_addrs, path_addrs)
         ensures 
             FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), 
-                FilteredBetree::Step::internal_compact(path.i(), start, end, compacted_buffer.i()))
+                FilteredBetree::Step::internal_compact(path.i(), start, end, compacted_buffer.i(self.linked.buffer_dv)))
     {
         reveal(FilteredBetree::State::next_by);
 
@@ -1102,7 +1104,7 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
         let compacted = path.substitute(new_subtree, path_addrs);
 
         self.post_compact_ensures(path, start, end, compacted_buffer, new_addrs, path_addrs);
-        path.target().compact_commutes_with_i(start, end, compacted_buffer, new_addrs);
+        path.target().compact_commutes_with_i(start, end, compacted_buffer, new_addrs, new_linked.buffer_dv);
         path.substitute_commutes_with_i(new_subtree, path_addrs);
         compacted.valid_view_preserves_i(post.linked);
     }
@@ -1116,7 +1118,7 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
         assert(FilteredBetree::State::next_by(self.i(), post.i(), lbl.i(), FilteredBetree::Step::internal_noop()));
     }
 
-    proof fn next_by_refines(self, post: Self, lbl: LinkedBetreeVars::Label, step: LinkedBetreeVars::Step<T>)
+    proof fn next_by_refines(self, post: Self, lbl: LinkedBetreeVars::Label, step: LinkedBetreeVars::Step<SimpleBuffer>)
         requires 
             self.inv(), 
             post.inv(), 
@@ -1153,5 +1155,4 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
         }
     }
 } // end impl LinkedBetreeVars::State
-
 }//verus
