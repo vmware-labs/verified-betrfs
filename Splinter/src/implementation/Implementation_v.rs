@@ -520,31 +520,15 @@ impl Implementation {
         proof { tracked_swap(self.model.borrow_mut(), &mut model); }
 
         proof {
-//             let map_req = req.mapspec_req();
-//             let map_reply = reply.mapspec_reply();
-//             let ghost map_lbl = MapSpec::Label::Noop{input: map_req.input, output: map_reply.output};
-//             reveal(MapSpec::State::next);
-//             reveal(MapSpec::State::next_by);
-//             assert( MapSpec::State::next_by(post_state.state.history.last().appv, post_state.state.history.last().appv,
-//                     map_lbl, MapSpec::Step::noop())); // witness to step
-//             assert( post_state.state.history.get_prefix(pre_state.state.history.len()) == pre_state.state.history );  // extn
-
+            let info = ProgramDiskInfo{ reqs: Multiset::empty(), resps: response_shard@.multiset() };
             let disk_event = DiskEvent::ExecuteSyncEnd{};
 
             assert( response_shard@.multiset() == Multiset::singleton((pre_state.state.in_flight.get_Some_0().req_id, DiskResponse::WriteResp{})) );    // extn
-            assert( AtomicState::disk_transition(pre_state.state, post_state.state,
-                    disk_event, Multiset::empty(), response_shard@.multiset()) );
 
-            let info = ProgramDiskInfo{
-                            reqs: Multiset::empty(),
-                            resps: response_shard@.multiset(),
-                        };
-            let disk_event = DiskEvent::ExecuteSyncEnd{};
             assert( AtomicState::disk_transition(
                 pre_state.state, post_state.state, disk_event, info.reqs, info.resps) );    // witness
-//             assert( ConcreteProgramModel::valid_disk_transition(pre_state, post_state, info) );
-            assert( ConcreteProgramModel::next(pre_state, post_state, 
-                    ProgramLabel::DiskIO{ info }) );
+//             assert( ConcreteProgramModel::next(pre_state, post_state, 
+//                     ProgramLabel::DiskIO{ info }) );
         }
 
         let tracked empty_disk_requests:KVStoreTokenized::disk_requests_multiset<ConcreteProgramModel>
@@ -559,27 +543,6 @@ impl Implementation {
         );
         self.model = Tracked(model);
 
-        // !in_flight
-        proof {
-//             assume( old(self).i().history.is_active(new_persistent_version as int) );   // inv
-//             assert( self.view_store_as_kmmap() == old(self).view_store_as_kmmap() );
-//             old(self).i().history.get_suffix_ensures(new_persistent_version as int);
-//             let ghost old_ephemeral_version = old(self).i().history.len() - 1;
-//             let ghost new_ephemeral_version = self.i().history.len() - 1;
-//             assert( 0 <= new_persistent_version as int );
-//             assert( (new_persistent_version as int) <= old_ephemeral_version );
-//             assert( old(self).i().history.get_suffix(new_persistent_version as int).len() == old(self).i().history.len() );
-//             assert( old_ephemeral_version == new_ephemeral_version );
-//             assert( self.i().history == old(self).i().history.get_suffix(new_persistent_version as int) );
-//             assert( old(self).i().history.last() == old(self).i().history[old_ephemeral_version] );
-//             assert( old(self).i().history.len() == self.i().history.len() );
-//             assert( self.i().history.last() == old(self).i().history[old_ephemeral_version] );
-//             assert( self.i().history.last()
-//                 == old(self).i().history.last() );
-//             assert( self.i().mapspec() == old(self).i().mapspec() );
-//             assert( self.i().mapspec().kmmap == self.view_store_as_kmmap() );
-//             assert( self.inv_api(old(api)) );
-        }
         self.deliver_inflight_replies(&mut ready_reqs, api);
 
         // maybe launch another superblock
