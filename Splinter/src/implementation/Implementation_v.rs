@@ -368,12 +368,21 @@ impl Implementation {
         self.sync_requests.deferred_reqs.push(req);
 
         // trigger prior inv, element by element
-        assert forall |r| #![auto] self.sync_requests.deferred_reqs@.contains(r)
-            implies r.input is SyncInput by {
+        assert forall |r| #![auto] self.sync_requests.deferred_reqs@.contains(r) implies r.input is SyncInput by {
             if r != req { assert( old(self).sync_requests.deferred_reqs@.contains(r) ); }
         }
 
-        assume( self.inv_api(api) );
+        // We didn't change the satisfied requests!
+        assert( self.sync_reqs_in_version(self.sync_requests.satisfied_reqs@, self.state().in_flight.get_Some_0().version as int) ) by {
+            let reqs = self.sync_requests.satisfied_reqs@;
+            let version_num = self.state().in_flight.get_Some_0().version as int;
+            assert forall |i| #![auto] 0<=i<reqs.len() implies self.sync_req_in_version(reqs[i].id, version_num) by {
+                assert( reqs[i].id != req.id ) by {
+                    assume( false );    // apply auditor promise about unique ids and maybe a system invariant?
+                }
+            }
+        }
+
         self.maybe_launch_superblock(api);
     }
 
@@ -596,7 +605,6 @@ impl Implementation {
         );
         self.model = Tracked(model);
 
-        assume( self.sync_reqs_in_version(ready_reqs@, self.state().history.first_active_index()) );
         self.deliver_inflight_replies(&mut ready_reqs, api);
 
         // maybe launch another superblock
