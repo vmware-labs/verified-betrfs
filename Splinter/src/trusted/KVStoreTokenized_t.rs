@@ -6,7 +6,7 @@ use crate::spec::AsyncDisk_t::*;
 use crate::spec::MapSpec_t::{ID, SyncReqId};
 use crate::trusted::ProgramModelTrait_t::*;
 use crate::trusted::ReqReply_t::{Input, Output, Request, Reply};
-use crate::implementation::MultisetMapRelation_v::*;
+// use crate::implementation::MultisetMapRelation_v::*;
 
 verus! {
 

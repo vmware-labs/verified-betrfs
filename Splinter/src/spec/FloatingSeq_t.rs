@@ -88,17 +88,23 @@ impl<T> FloatingSeq<T> {
     }
 
     /// Return a FloatingSeq containing the elements of this FloatingSeq in the range
-    /// [newStart, self.len()).
+    /// [new_start, self.len()).
     
-    pub open spec(checked) fn get_suffix(self, newStart: int) -> FloatingSeq<T>
-        recommends self.is_active(newStart) || newStart == self.len()
+    pub open spec(checked) fn get_suffix(self, new_start: int) -> FloatingSeq<T>
+        recommends self.is_active(new_start) || new_start == self.len()
     {
         // This datatype doesn't have a "RightSlice" operator because the intent is
         // that object indices don't move; the origin stays put. The closest analog
         // is this GetSuffix operation, which forgets some of the `entries`,
         // remembering only how many there used to be (in `start`), so that the
         // offsets of the surviving entries don't change.
-        FloatingSeq{start: newStart as nat, entries: self.entries.subrange(newStart - self.start, self.entries.len() as int)}
+        FloatingSeq{start: new_start as nat, entries: self.entries.subrange(new_start - self.start, self.entries.len() as int)}
+    }
+
+    pub proof fn get_suffix_ensures(self, new_start: int)
+        requires self.is_active(new_start) || new_start == self.len()
+        ensures self.get_suffix(new_start).len() == self.len()
+    {
     }
 
     pub open spec(checked) fn append(self, elts: Seq<T>) -> FloatingSeq<T>

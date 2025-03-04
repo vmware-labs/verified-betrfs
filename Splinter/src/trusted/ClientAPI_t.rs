@@ -70,7 +70,7 @@ impl<ProgramModel: ProgramModelTrait> ClientAPI<ProgramModel>{
     {
         let id = self.id.fetch_add(1, Ordering::SeqCst);
         let input = if 0 < self.inputs.len() { self.inputs.remove(0) }
-            else { Input::NoopInput{} };
+            else { Input::NoopInput{} };    // TODO: block instead
 
         let request = Request {input, id};
         if print {
@@ -79,6 +79,21 @@ impl<ProgramModel: ProgramModelTrait> ClientAPI<ProgramModel>{
 
         (request, Tracked::assume_new())
     }
+
+    #[verifier::external_body]
+    pub fn receive_noop_request(&mut self) -> (out: (Request, Tracked<KVStoreTokenized::requests<ProgramModel>>))
+    ensures
+        self.instance_id() == old(self).instance_id(),
+        out.1@.instance_id() == self.instance_id(),
+        out.1@.element() == out.0,
+        (out.0.input == Input::NoopInput{}),
+    {
+        let id = self.id.fetch_add(1, Ordering::SeqCst);
+        let input = Input::NoopInput{};
+        let request = Request {input, id};
+        (request, Tracked::assume_new())
+    }
+
 
     // NOTE: corresponds to a tokenized state machine reply step, consumes the reply shard
     #[verifier::external_body]

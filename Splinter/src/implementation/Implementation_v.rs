@@ -48,41 +48,38 @@ pub closed spec fn good_req(instance_id: InstanceId, req: Request, req_shard: Re
 // atomic state; then just store atomic state ids here.
 // That also suggests we will have version numbers handy, which will
 // further simplify this data structure.
-struct InFlightSyncs {
-    satisfied_reqs: Vec<(Request, Tracked<RequestShard>)>,
-    deferred_reqs: Vec<(Request, Tracked<RequestShard>)>,
+struct SyncRequestBuffer {
+    satisfied_reqs: Vec<Request>,
+    deferred_reqs: Vec<Request>,
 }
 
-impl InFlightSyncs {
+impl SyncRequestBuffer {
     closed spec fn wf(self, instance_id: InstanceId) -> bool
     {
         &&& forall |r| #![auto] self.satisfied_reqs@.contains(r) ==> {
-            &&& good_req(instance_id, r.0, r.1@)
-            &&& r.0.input is SyncInput
+            &&& r.input is SyncInput
         }
         &&& forall |r| #![auto] self.deferred_reqs@.contains(r) ==> {
-            &&& good_req(instance_id, r.0, r.1@)
-            &&& r.0.input is SyncInput
+            &&& r.input is SyncInput
         }
     }
 
     fn new_empty() -> (out: Self)
     ensures
-        out.is_empty(),
+        !out.in_flight(),
+        out.deferred_reqs@.len() == 0,
     {
-        InFlightSyncs{ satisfied_reqs: vec![], deferred_reqs: vec![] }
+        SyncRequestBuffer{ satisfied_reqs: vec![], deferred_reqs: vec![] }
     }
 
-    closed spec fn is_empty(self) -> bool {
-        &&& self.satisfied_reqs.len() == 0
-        &&& self.deferred_reqs.len() == 0
+    closed spec fn in_flight(self) -> bool {
+        &&& self.satisfied_reqs.len() > 0
     }
 
-    fn exec_is_empty(&self) -> (out: bool)
-    ensures self.is_empty() == out
+    fn exec_in_flight(&self) -> (out: bool)
+    ensures self.in_flight() == out
     {
-        &&& self.satisfied_reqs.len() == 0
-        &&& self.deferred_reqs.len() == 0
+        &&& self.satisfied_reqs.len() > 0
     }
 }
 
@@ -93,14 +90,14 @@ pub struct Implementation {
     model: Tracked<KVStoreTokenized::model<ConcreteProgramModel>>,
     instance: Tracked<KVStoreTokenized::Instance<ConcreteProgramModel>>,
 
-    in_flight_syncs: InFlightSyncs,
+    sync_requests: SyncRequestBuffer,
 }
 
 pub type RequestShard = KVStoreTokenized::requests<ConcreteProgramModel>;
-pub type ReplyShard =  KVStoreTokenized::replies<ConcreteProgramModel>;
+pub type ReplyShard = KVStoreTokenized::replies<ConcreteProgramModel>;
 
 pub type DiskRespShard = KVStoreTokenized::disk_responses_multiset<ConcreteProgramModel>;
-pub type DiskReqShard =  KVStoreTokenized::disk_requests_multiset<ConcreteProgramModel>;
+pub type DiskReqShard = KVStoreTokenized::disk_requests_multiset<ConcreteProgramModel>;
 
 impl Implementation {
     pub closed spec(checked) fn view_store_as_kmmap(self) -> TotalKMMap
@@ -125,12 +122,18 @@ impl Implementation {
     }
 
     closed spec fn inv(self) -> bool {
+        let state = self.model@.value().state;
+
         &&& self.model@.instance_id() == self.instance@.id()
-        &&& self.model@.value().state.recovery_state is RecoveryComplete
+        &&& state.recovery_state is RecoveryComplete
         &&& self.i().mapspec().kmmap == self.view_store_as_kmmap()
-        &&& (self.model@.value().state.in_flight is Some
-            <==> !self.in_flight_syncs.is_empty())
-        &&& self.in_flight_syncs.wf(self.instance@.id())
+        &&& (state.in_flight is Some
+            <==> self.sync_requests.in_flight())
+        &&& self.sync_requests.wf(self.instance@.id())
+
+        &&& (state.in_flight is Some ==> {
+            &&& state.history.is_active(state.in_flight.get_Some_0().version as int)
+        })
     }
 
     pub closed spec fn good_req(self, req: Request, req_shard: RequestShard) -> bool
@@ -261,7 +264,7 @@ impl Implementation {
         };
     }
 
-    proof fn cannot_receive_write_response_during_recovery(self, disk_req_id: ID, i_disk_response: IDiskResponse, disk_response_token: Tracked<DiskRespShard>)
+    proof fn system_inv_cannot_receive_write_response_during_recovery(self, disk_req_id: ID, i_disk_response: IDiskResponse, disk_response_token: Tracked<DiskRespShard>)
     requires
         self.i().recovery_state is AwaitingSuperblock,
         disk_response_token@.multiset() == multiset_map_singleton(disk_req_id, i_disk_response@),
@@ -272,19 +275,6 @@ impl Implementation {
         open_system_invariant::<ConcreteProgramModel, RefinementProof>(self.model, disk_response_token);
         multiset_map_singleton_ensures(disk_req_id, i_disk_response@);
         assert(disk_response_token@.multiset().contains((disk_req_id, i_disk_response@))); //trigger
-        
-        // assert(full_model.program.state.recovery_state is AwaitingSuperblock);
-        // assert(full_model.inv());
-        // assert(full_model.no_writes_till_recovery_complete());
-        // assert(full_model.disk.responses.contains_key(disk_req_id));
-
-        // assert(!(full_model.disk.responses[disk_req_id] is WriteResp));
-        // forall |id| #[trigger] self.disk.responses.contains_key(id) ==> !(self.disk.responses[id] is WriteResp)
-
-        // TODO This assert-false should be an assumption we pull down from the system:
-        // whenever model is AwaitingSuperblock, the only possible responses in the
-        // disk bus buffer are ReadResps.
-        // assume( false );
     }
 
     pub exec fn handle_query(&mut self, req: Request, req_shard: Tracked<RequestShard>, api: &mut ClientAPI<ConcreteProgramModel>)
@@ -338,14 +328,6 @@ impl Implementation {
         }
     }
 
-    pub exec fn send_superblock(&mut self, api: &mut ClientAPI<ConcreteProgramModel>)
-    requires
-        old(self).inv_api(old(api)),
-    ensures
-        self.inv_api(api),
-    {
-    }
-
     pub exec fn handle_sync_request(&mut self, req: Request, req_shard: Tracked<RequestShard>, api: &mut ClientAPI<ConcreteProgramModel>)
     requires
         old(self).inv_api(old(api)),
@@ -354,12 +336,82 @@ impl Implementation {
     ensures
         self.inv_api(api),
     {
-        if self.in_flight_syncs.exec_is_empty() {
+        // Consume the shard to convert into model state
+        let ghost pre_state = self.model@.value();
+        let ghost version = (pre_state.state.history.len()-1) as nat;
+        let ghost post_state = ConcreteProgramModel {
+            state: AtomicState{
+                sync_req_map: pre_state.state.sync_req_map.insert(req.id, version),
+                ..pre_state.state}
+        };
+
+        let tracked mut model = KVStoreTokenized::model::arbitrary();
+        proof { tracked_swap(self.model.borrow_mut(), &mut model); }
+
+        let tracked new_reply_token = self.instance.borrow().accept_sync_request(
+            KVStoreTokenized::Label::RequestSyncOp{sync_req_id: req.id},
+            post_state,
+            &mut model,
+            req_shard.get(),
+        );
+        self.model = Tracked(model);
+
+        self.sync_requests.deferred_reqs.push(req);
+
+        // trigger prior inv, element by element
+        assert forall |r| #![auto] self.sync_requests.deferred_reqs@.contains(r)
+            implies r.input is SyncInput by {
+            if r != req { assert( old(self).sync_requests.deferred_reqs@.contains(r) ); }
+        }
+
+        self.maybe_launch_superblock(api);
+    }
+
+    pub exec fn maybe_launch_superblock(&mut self, api: &mut ClientAPI<ConcreteProgramModel>)
+    requires
+        old(self).inv_api(old(api)),
+    ensures
+        self.inv_api(api),
+    {
+        if self.sync_requests.satisfied_reqs.len() == 0 {
             self.send_superblock(api);
         } else {
-            self.in_flight_syncs.deferred_reqs.push((req, req_shard));
+            // a superblock is already in-flight; we'll consider this again
+            // when the disk response lands back here.
+
             // TODO left off need some triggering to preserve old wfiness
-            assume( self.in_flight_syncs.wf(self.instance_id()) );
+            assume( self.sync_requests.wf(self.instance_id()) );
+        }
+    }
+
+    pub exec fn send_superblock(&mut self, api: &mut ClientAPI<ConcreteProgramModel>)
+    requires
+        old(self).inv_api(old(api)),
+    ensures
+        self.inv_api(api),
+    {
+    }
+
+    pub exec fn deliver_inflight_replies(&mut self, ready_reqs: &mut Vec<Request> ,api: &mut ClientAPI<ConcreteProgramModel>)
+    requires
+        old(self).inv_api(old(api)),
+    ensures
+        self.inv_api(api),
+    {
+
+        // oh geez how to iterate
+        loop
+        invariant self.inv_api(api),
+        {
+            match ready_reqs.pop()
+            {
+                Some(req) => {
+                    // TODO LEFT OFF pop isn't preserving the values
+                    assume( req.input is SyncInput );
+                    self.send_sync_response(req, api)
+                },
+                None => break,
+            }
         }
     }
 
@@ -378,46 +430,54 @@ impl Implementation {
         }
     }
 
-    pub exec fn send_sync_response(&mut self, req: Request, req_shard: Tracked<RequestShard>, api: &mut ClientAPI<ConcreteProgramModel>)
+    pub exec fn send_sync_response(&mut self, req: Request, api: &mut ClientAPI<ConcreteProgramModel>)
     requires
         old(self).inv_api(old(api)),
-        old(self).good_req(req, req_shard@),
         req.input is SyncInput,
     ensures
         self.inv_api(api),
     {
+        // Convert the model state back into a shard
         let ghost pre_state = self.model@.value();
-        let ghost post_state = pre_state;
-
-        let reply = Reply{output: Output::SyncOutput, id: req.id};
+        let ghost post_state = ConcreteProgramModel {
+            state: AtomicState{
+                sync_req_map: pre_state.state.sync_req_map.remove(req.id),
+                ..pre_state.state}
+        };
 
         let tracked mut model = KVStoreTokenized::model::arbitrary();
         proof { tracked_swap(self.model.borrow_mut(), &mut model); }
 
         proof {
-            let sync_req_id = req.id;
-//             let map_req = req.mapspec_req();
-//             let map_reply = reply.mapspec_reply();
-//             let ghost map_lbl = MapSpec::Label::Query{input: map_req.input, output: map_reply.output};
-//             reveal(MapSpec::State::next);
-//             reveal(MapSpec::State::next_by);
-//             assert( MapSpec::State::next_by(pre_state.state.mapspec(), post_state.state.mapspec(),
-//                     map_lbl, MapSpec::Step::query())); // witness to step
-            assert( post_state.state.history.get_prefix(pre_state.state.history.len()) == pre_state.state.history );  // extn
-            assume( false );    // LEFT OFF HERE satisfying model transition
-            assert( ConcreteProgramModel::next(pre_state, post_state,
-                ProgramLabel::UserIO{op: ProgramUserOp::DeliverSyncReply{sync_req_id}}) );
+            assume( pre_state.state.sync_req_map[req.id] <= pre_state.state.history.first_active_index() );
+//             assert( ConcreteProgramModel::next(pre_state, post_state, 
+//                 ProgramLabel::UserIO{op: ProgramUserOp::DeliverSyncReply{sync_req_id: req.id}}) );
         }
 
-        let tracked new_reply_token = self.instance.borrow().execute_transition(
-            KVStoreTokenized::Label::ExecuteOp{req, reply},
+        let tracked reply_shard = self.instance.borrow().deliver_sync_reply(
+            KVStoreTokenized::Label::ReplySyncOp{sync_req_id: req.id},
             post_state,
             &mut model,
-            req_shard.get(),
         );
         self.model = Tracked(model);
 
-        api.send_reply(reply, Tracked(new_reply_token), true);
+        let reply = Reply{output: Output::SyncOutput, id: req.id};
+
+        api.send_reply(reply, Tracked(reply_shard), true);
+    }
+
+    proof fn system_inv_response_implies_in_flight(self, disk_req_id: ID, i_disk_response: IDiskResponse, disk_response_token: Tracked<DiskRespShard>)
+    requires
+        self.i().recovery_state is RecoveryComplete,
+        disk_response_token@.multiset() == multiset_map_singleton(disk_req_id, i_disk_response@),
+    ensures
+        i_disk_response is WriteResp,   // when RecoveryComplete, we never read again
+        self.i().in_flight is Some,
+        self.i().in_flight->0.req_id == disk_req_id,
+    {
+        open_system_invariant::<ConcreteProgramModel, RefinementProof>(self.model, disk_response_token);
+        multiset_map_singleton_ensures(disk_req_id, i_disk_response@);
+        assert(disk_response_token@.multiset().contains((disk_req_id, i_disk_response@))); //trigger
     }
 
     pub exec fn handle_disk_response(&mut self, id: ID, disk_response: IDiskResponse, response_shard: Tracked<DiskRespShard>,
@@ -425,41 +485,105 @@ impl Implementation {
     requires
         old(self).inv_api(old(api)),
         old(self).good_disk_response(id, disk_response, response_shard@),
+        response_shard@.multiset() == multiset_map_singleton(id, disk_response@),
     ensures
         self.inv_api(api),
     {
-        // For this silly version of the system, we know that receiving a disk response at
-        // non-recovery time implies that the request was a superblock write, so now
-        // any pre-superblock write sync can be completed.
-        assert( !self.in_flight_syncs.is_empty() ) by {
-            assume( false );    // LEFT OFF HERE open_system_invariant
+        let mut ready_reqs = vec![];
+        std::mem::swap(&mut self.sync_requests.satisfied_reqs, &mut ready_reqs);
+//         (ready_reqs,self.sync_requests.satisfied_reqs) = (self.sync_requests.satisfied_reqs,ready_reqs);
+
+        // take a tokenized transition to mark disk response receipt
+
+        // we just took out all the in-flights; need to simultaneously change model.value().state to
+        // restore self.inv
+        // TODO(jialin): why do these Noop requests have ids? :v/
+        let ghost req = Request{input: Input::NoopInput, id: 0};
+        let reply = Reply{output: Output::NoopOutput, id: 0};
+
+        let ghost pre_state = self.model@.value();
+        let ghost new_persistent_version = pre_state.state.in_flight.get_Some_0().version;
+        let ghost post_state = ConcreteProgramModel{ state: AtomicState{
+            in_flight: None,
+            history: pre_state.state.history.get_suffix(new_persistent_version as int),
+            persistent_version: new_persistent_version,
+            ..pre_state.state
+        }};
+
+        proof {
+            // Learn this before we yoink model out of self
+            assert( self.i().recovery_state is RecoveryComplete );
+            self.system_inv_response_implies_in_flight(id, disk_response, response_shard);
         }
 
-        // oh geez how to iterate
-        loop
-        invariant self.inv_api(api),
-        {
-            assert( self.in_flight_syncs.wf(self.instance_id()) );
-            match self.in_flight_syncs.satisfied_reqs.pop()
-            {
-                Some((req, req_shard)) => {
-                    // TODO LEFT OFF pop isn't preserving the values
-                    assume( req.input is SyncInput );
-                    assume( self.inv_api(api) );
-                    assume( good_req(self.instance_id(), req, req_shard@) );
-                    self.send_sync_response(req, req_shard, api)
-                },
-                None => break,
-            }
+        let tracked mut model = KVStoreTokenized::model::arbitrary();
+        proof { tracked_swap(self.model.borrow_mut(), &mut model); }
+
+        proof {
+//             let map_req = req.mapspec_req();
+//             let map_reply = reply.mapspec_reply();
+//             let ghost map_lbl = MapSpec::Label::Noop{input: map_req.input, output: map_reply.output};
+//             reveal(MapSpec::State::next);
+//             reveal(MapSpec::State::next_by);
+//             assert( MapSpec::State::next_by(post_state.state.history.last().appv, post_state.state.history.last().appv,
+//                     map_lbl, MapSpec::Step::noop())); // witness to step
+//             assert( post_state.state.history.get_prefix(pre_state.state.history.len()) == pre_state.state.history );  // extn
+
+            let disk_event = DiskEvent::ExecuteSyncEnd{};
+
+            assert( response_shard@.multiset() == Multiset::singleton((pre_state.state.in_flight.get_Some_0().req_id, DiskResponse::WriteResp{})) );    // extn
+            assert( AtomicState::disk_transition(pre_state.state, post_state.state,
+                    disk_event, Multiset::empty(), response_shard@.multiset()) );
+
+            let info = ProgramDiskInfo{
+                            reqs: Multiset::empty(),
+                            resps: response_shard@.multiset(),
+                        };
+            let disk_event = DiskEvent::ExecuteSyncEnd{};
+            assert( AtomicState::disk_transition(
+                pre_state.state, post_state.state, disk_event, info.reqs, info.resps) );    // witness
+//             assert( ConcreteProgramModel::valid_disk_transition(pre_state, post_state, info) );
+            assert( ConcreteProgramModel::next(pre_state, post_state, 
+                    ProgramLabel::DiskIO{ info }) );
         }
 
-        if self.in_flight_syncs.deferred_reqs.len() > 0
-        {
-            // TODO LEFT OFF hmm, any easy way to flip these vecs around?
-            // Or maybe just use a loop for now
-//             swap( self.in_flight_syncs.satisfied_reqs, self.in_flight_syncs.deferred_reqs );
-            self.send_superblock(api);
+        let tracked empty_disk_requests:KVStoreTokenized::disk_requests_multiset<ConcreteProgramModel>
+            = KVStoreTokenized::disk_requests_multiset::empty(self.instance_id());
+        let tracked new_reply_token = self.instance.borrow().disk_transitions(
+            KVStoreTokenized::Label::DiskOp{
+                disk_request_tuples: empty_disk_requests.multiset(),
+                disk_response_tuples: response_shard@.multiset()},
+            post_state,
+            &mut model,
+            response_shard.get(),
+        );
+        self.model = Tracked(model);
+
+        // !in_flight
+        proof {
+//             assume( old(self).i().history.is_active(new_persistent_version as int) );   // inv
+//             assert( self.view_store_as_kmmap() == old(self).view_store_as_kmmap() );
+//             old(self).i().history.get_suffix_ensures(new_persistent_version as int);
+//             let ghost old_ephemeral_version = old(self).i().history.len() - 1;
+//             let ghost new_ephemeral_version = self.i().history.len() - 1;
+//             assert( 0 <= new_persistent_version as int );
+//             assert( (new_persistent_version as int) <= old_ephemeral_version );
+//             assert( old(self).i().history.get_suffix(new_persistent_version as int).len() == old(self).i().history.len() );
+//             assert( old_ephemeral_version == new_ephemeral_version );
+//             assert( self.i().history == old(self).i().history.get_suffix(new_persistent_version as int) );
+//             assert( old(self).i().history.last() == old(self).i().history[old_ephemeral_version] );
+//             assert( old(self).i().history.len() == self.i().history.len() );
+//             assert( self.i().history.last() == old(self).i().history[old_ephemeral_version] );
+//             assert( self.i().history.last()
+//                 == old(self).i().history.last() );
+//             assert( self.i().mapspec() == old(self).i().mapspec() );
+//             assert( self.i().mapspec().kmmap == self.view_store_as_kmmap() );
+//             assert( self.inv_api(old(api)) );
         }
+        self.deliver_inflight_replies(&mut ready_reqs, api);
+
+        // maybe launch another superblock
+        self.maybe_launch_superblock(api);
     }
 
     fn recover(&mut self, api: &mut ClientAPI<ConcreteProgramModel>)
@@ -533,7 +657,7 @@ impl Implementation {
             let raw_page = match i_disk_response {
                 IDiskResponse::ReadResp{data} => data,
                 IDiskResponse::WriteResp{} => {
-                    proof { self.cannot_receive_write_response_during_recovery(disk_req_id, i_disk_response, disk_response_token); };
+                    proof { self.system_inv_cannot_receive_write_response_during_recovery(disk_req_id, i_disk_response, disk_response_token); };
                     unreached()
                 }
             };
@@ -606,7 +730,8 @@ impl KVStoreTrait for Implementation {
     closed spec fn wf_init(self) -> bool {
         &&& self.model@.instance_id() == self.instance@.id()
         &&& self.model@.value().state.recovery_state is Begin
-        &&& self.in_flight_syncs.is_empty()
+        &&& !self.sync_requests.in_flight()
+        &&& self.sync_requests.deferred_reqs@.len() == 0
     }
 
     closed spec fn instance_id(self) -> InstanceId
@@ -633,7 +758,7 @@ impl KVStoreTrait for Implementation {
             store: HashMapWithView::new(),
             model: Tracked(model),
             instance: Tracked(instance),
-            in_flight_syncs: InFlightSyncs::new_empty(),
+            sync_requests: SyncRequestBuffer::new_empty(),
         };
 //         assert( selff.i() == selff.model@.value() );   // trigger extn equality
 //         assert( selff.i().mapspec().kmmap == selff.view_store_as_kmmap() ); // trigger extn equality
