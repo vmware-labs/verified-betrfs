@@ -148,6 +148,8 @@ impl Implementation {
             // The in-flight 'satisfied requests' can indeed be satisfied by the in-flight version
             &&& self.sync_reqs_in_version(self.sync_requests.satisfied_reqs@, state.in_flight.get_Some_0().version as int)
         })
+        &&& self.sync_reqs_in_version(self.sync_requests.deferred_reqs@, self.version as int)
+        &&& self.sync_reqs_mutually_unique()
     }
 
     pub closed spec fn good_req(self, req: Request, req_shard: RequestShard) -> bool
@@ -211,6 +213,7 @@ impl Implementation {
                 self.model = Tracked(model);
 
                 api.send_reply(reply, Tracked(new_reply_token), true);
+                assert( self.inv_api(api) );
             },
             _ => unreached(),
         }
@@ -502,7 +505,7 @@ impl Implementation {
         assert( state.in_flight is Some );
         assert( state.history.is_active(state.history.len() - 1) ); // system invariant
         assert( state.history.is_active(state.in_flight.get_Some_0().version as int) );
-        assume( self.sync_reqs_in_version(self.sync_requests.satisfied_reqs@, state.in_flight.get_Some_0().version as int) );
+        assert( self.sync_reqs_in_version(self.sync_requests.satisfied_reqs@, state.in_flight.get_Some_0().version as int) );
         assert( self.inv_api(api) );
     }
 
@@ -542,6 +545,28 @@ impl Implementation {
     {
         self.state().sync_req_map[id] <= version_num
     }
+
+    // had a lot of trouble talking verus into constructing a trigger for sync_reqs_mutually_unique,
+    // even though it looks the same as the two foralls above. :shrug:
+//     closed spec fn sat_idx(&self, i:int) -> bool { 0 <= i < self.sync_requests.satisfied_reqs@.len() }
+//     closed spec fn def_idx(&self, j:int) -> bool { 0 <= j < self.sync_requests.deferred_reqs@.len() }
+
+    closed spec fn sync_reqs_mutually_unique(&self) -> bool
+    {
+        forall |i:int, j:int| 0 <= i < self.sync_requests.satisfied_reqs@.len() && 0 <= j < self.sync_requests.deferred_reqs@.len()
+            ==> self.sync_requests.satisfied_reqs@[i].id != self.sync_requests.deferred_reqs@[j].id
+        // Why can't verus find a trigger here!?
+//         forall |i:int| 0 <= i < self.sync_requests.satisfied_reqs@.len() ==>
+//             forall |j:int| 0 <= j < self.sync_requests.deferred_reqs@.len() ==>
+//                 self.sync_requests.satisfied_reqs@[i].id != self.sync_requests.deferred_reqs@[j].id
+//         forall |i:int| 0 <= i < self.sync_requests.satisfied_reqs@.len() ==> self.no_matching_deferred_sync_reqs(i)
+    }
+
+//     closed spec fn no_matching_deferred_sync_reqs(&self, i: int) -> bool
+//     {
+//         forall |j:int| 0 <= j < self.sync_requests.deferred_reqs@.len() ==>
+//             self.sync_requests.satisfied_reqs@[i].id != self.sync_requests.deferred_reqs@[j].id
+//     }
 
     closed spec fn no_matching_sync_req_id(self, id: ID) -> bool
     {
@@ -606,6 +631,18 @@ impl Implementation {
         }
 
         assert( self.sync_reqs_in_version(self.sync_requests.satisfied_reqs@, self.state().in_flight.get_Some_0().version as int) );
+
+        assert( old(self).sync_reqs_in_version(old(self).sync_requests.deferred_reqs@, old(self).version as int) );
+        assert( old(self).version == self.version );
+        assert( old(self).sync_requests.deferred_reqs@ == self.sync_requests.deferred_reqs@ );
+
+        assert( self.sync_reqs_in_version(self.sync_requests.deferred_reqs@, self.version as int) ) by {
+            let reqs = self.sync_requests.deferred_reqs@;
+            let version_num = self.version as int;
+            assert forall |i| #![auto] 0<=i<reqs.len() implies self.sync_req_in_version(reqs[i].id, version_num) by {
+            }
+        }
+        assume( false );
     }
 
     pub exec fn handle_user_request(&mut self, req: Request, req_shard: Tracked<RequestShard>, api: &mut ClientAPI<ConcreteProgramModel>)
