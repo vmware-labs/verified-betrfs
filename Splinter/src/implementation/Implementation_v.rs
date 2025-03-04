@@ -87,6 +87,8 @@ impl SyncRequestBuffer {
 // proof hooks to satisfy the refinement obligation trait.
 pub struct Implementation {
     store: HashMapWithView<Key, Value>,
+    version: u64,
+
     model: Tracked<KVStoreTokenized::model<ConcreteProgramModel>>,
     instance: Tracked<KVStoreTokenized::Instance<ConcreteProgramModel>>,
 
@@ -135,6 +137,9 @@ impl Implementation {
         &&& (state.in_flight is Some
             <==> self.sync_requests.in_flight())
         &&& self.sync_requests.wf(self.instance@.id())
+
+        // physical version num tracks ghost model versions
+        &&& self.version == self.state().history.len()-1
 
         &&& (state.in_flight is Some ==> {
             // The in-flight version stays active so get_suffix doesn't choke on it when it's time
@@ -265,6 +270,8 @@ impl Implementation {
                 req_shard.get(),
             );
             self.model = Tracked(model);
+            assume(self.version + 1 < u64::MAX);     // panic?
+            self.version = self.version + 1;
 
             assert( self.i().mapspec().kmmap == self.view_store_as_kmmap() ); // trigger extn equality
             api.send_reply(reply, Tracked(new_reply_token), true);
@@ -402,23 +409,24 @@ impl Implementation {
         }
     }
 
-    pub exec fn send_superblock(&mut self, api: &mut ClientAPI<ConcreteProgramModel>)
+    exec fn send_superblock(&mut self, api: &mut ClientAPI<ConcreteProgramModel>)
     requires
         old(self).inv_api(old(api)),
+        old(self).sync_requests.satisfied_reqs.len() == 0,
+        old(self).sync_requests.deferred_reqs.len() > 0,
     ensures
         self.inv_api(api),
     {
-        assume( self.state().in_flight is None ); // probably need a precondition to get this.
-
-        let version_index = 7;  // TODO need state and an invariant
-        assume( version_index == self.state().history.len()-1 );
+//         assert( self.state().in_flight is None ); // probably need a precondition to get this.
+        proof { self.system_inv_implies_atomic_state_wf(); }
+//         assert( self.state().history.is_active(self.state().history.len() - 1) ); // system invariant
 
         // Yoink the store out of self just long enough to marshall it as part of the superblock.
         let mut tmp_store = new_empty_hash_map();
         std::mem::swap(&mut self.store, &mut tmp_store);
         let sb = ISuperblock{
             store: tmp_store,
-            version_index,
+            version_index: self.version,
         };
         let ghost ghost_sb = sb;
         let raw_page = marshall(&sb);
@@ -450,7 +458,6 @@ impl Implementation {
         };
 
 
-
         let tracked empty_disk_responses:KVStoreTokenized::disk_responses_multiset<ConcreteProgramModel>
             = KVStoreTokenized::disk_responses_multiset::empty(self.instance_id());
 
@@ -463,9 +470,6 @@ impl Implementation {
                 resps: lbl->disk_response_tuples, 
             };
 
-//         assert( old(self).state().client_ready() );
-//         assert( self.state().client_ready() );
-//         assert( self.state().in_flight is None );
         proof {
             let pre_sb = self.state().ephemeral_sb();
             assert( disk_event.arrow_ExecuteSyncBegin_req_id() == disk_req_id );
@@ -489,12 +493,17 @@ impl Implementation {
             empty_disk_responses,
         );
         self.model = Tracked(model);
+        std::mem::swap(&mut self.sync_requests.satisfied_reqs, &mut self.sync_requests.deferred_reqs);
 
         assert( new_reply_token.multiset() == multiset_map_singleton(req_id_perm@, disk_request@) );    // extn
-        let id = api.send_disk_request(disk_request, req_id_perm, Tracked(new_reply_token));
-        // uh, shoot, how are we gonna record the id?
+        api.send_disk_request(disk_request, req_id_perm, Tracked(new_reply_token));
 
-        assume( self.inv_api(api) );
+        let ghost state = self.state();
+        assert( state.in_flight is Some );
+        assert( state.history.is_active(state.history.len() - 1) ); // system invariant
+        assert( state.history.is_active(state.in_flight.get_Some_0().version as int) );
+        assume( self.sync_reqs_in_version(self.sync_requests.satisfied_reqs@, state.in_flight.get_Some_0().version as int) );
+        assert( self.inv_api(api) );
     }
 
     exec fn deliver_inflight_replies(&mut self, ready_reqs: &mut Vec<Request>, api: &mut ClientAPI<ConcreteProgramModel>)
@@ -626,6 +635,15 @@ impl Implementation {
         open_system_invariant::<ConcreteProgramModel, RefinementProof>(self.model, disk_response_token);
         multiset_map_singleton_ensures(disk_req_id, i_disk_response@);
         assert(disk_response_token@.multiset().contains((disk_req_id, i_disk_response@))); //trigger
+    }
+
+    proof fn system_inv_implies_atomic_state_wf(self)
+    ensures
+        self.state().wf()
+    {
+        let tracked empty_disk_responses:Tracked<KVStoreTokenized::disk_responses_multiset<ConcreteProgramModel>>
+            = Tracked(KVStoreTokenized::disk_responses_multiset::empty(self.instance_id()));
+        open_system_invariant::<ConcreteProgramModel, RefinementProof>(self.model, empty_disk_responses);
     }
 
     pub exec fn handle_disk_response(&mut self, id: ID, disk_response: IDiskResponse, response_shard: Tracked<DiskRespShard>,
@@ -830,6 +848,7 @@ impl Implementation {
                 disk_response_token.get(),
             );
             self.model = Tracked(model);
+            self.version = superblock.version_index;
         }
     }
 }
@@ -867,6 +886,7 @@ impl KVStoreTrait for Implementation {
 
         let selff = Implementation{
             store: new_empty_hash_map(),
+            version: 0,
             model: Tracked(model),
             instance: Tracked(instance),
             sync_requests: SyncRequestBuffer::new_empty(),
