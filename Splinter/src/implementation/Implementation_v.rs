@@ -121,8 +121,13 @@ impl Implementation {
         self.model@.value().state
     }
 
+    closed spec fn state(&self) -> AtomicState
+    {
+        self.model@.value().state
+    }
+
     closed spec fn inv(self) -> bool {
-        let state = self.model@.value().state;
+        let state = self.state();
 
         &&& self.model@.instance_id() == self.instance@.id()
         &&& state.recovery_state is RecoveryComplete
@@ -132,7 +137,11 @@ impl Implementation {
         &&& self.sync_requests.wf(self.instance@.id())
 
         &&& (state.in_flight is Some ==> {
+            // The in-flight version stays active so get_suffix doesn't choke on it when it's time
+            // to handle the disk response
             &&& state.history.is_active(state.in_flight.get_Some_0().version as int)
+            // The in-flight 'satisfied requests' can indeed be satisfied by the in-flight version
+            &&& self.sync_reqs_in_version(self.sync_requests.satisfied_reqs@, state.in_flight.get_Some_0().version as int)
         })
     }
 
@@ -364,6 +373,7 @@ impl Implementation {
             if r != req { assert( old(self).sync_requests.deferred_reqs@.contains(r) ); }
         }
 
+        assume( self.inv_api(api) );
         self.maybe_launch_superblock(api);
     }
 
@@ -373,14 +383,13 @@ impl Implementation {
     ensures
         self.inv_api(api),
     {
-        if self.sync_requests.satisfied_reqs.len() == 0 {
+        if self.sync_requests.deferred_reqs.len() == 0 {
+            // nobody is waiting for a superblock send.
+        } else if self.sync_requests.satisfied_reqs.len() == 0 {
             self.send_superblock(api);
         } else {
-            // a superblock is already in-flight; we'll consider this again
-            // when the disk response lands back here.
-
-            // TODO left off need some triggering to preserve old wfiness
-            assume( self.sync_requests.wf(self.instance_id()) );
+            // Someone is waiting to start a sync, but a superblock is already in-flight; we'll
+            // consider this again when the disk response lands back here.
         }
     }
 
@@ -390,29 +399,109 @@ impl Implementation {
     ensures
         self.inv_api(api),
     {
+        assume(false);  // TODO missing code here
     }
 
-    pub exec fn deliver_inflight_replies(&mut self, ready_reqs: &mut Vec<Request> ,api: &mut ClientAPI<ConcreteProgramModel>)
+    exec fn deliver_inflight_replies(&mut self, ready_reqs: &mut Vec<Request>, api: &mut ClientAPI<ConcreteProgramModel>)
     requires
         old(self).inv_api(old(api)),
+        old(self).sync_reqs_in_version(old(ready_reqs)@, old(self).state().history.first_active_index()),
+        // can't break in-flight inv because there aren't any satisfied_reqs during this call
+        old(self).sync_requests.satisfied_reqs@.len()==0,
     ensures
         self.inv_api(api),
     {
-
-        // oh geez how to iterate
         loop
-        invariant self.inv_api(api),
+        invariant
+            self.inv_api(api),
+            self.sync_reqs_in_version(ready_reqs@, self.state().history.first_active_index()),
+            self.sync_requests.satisfied_reqs@.len()==0,
         {
             match ready_reqs.pop()
             {
-                Some(req) => {
-                    // TODO LEFT OFF pop isn't preserving the values
-                    assume( req.input is SyncInput );
-                    self.send_sync_response(req, api)
-                },
+                Some(req) => { self.send_sync_response(req, api) },
                 None => break,
             }
         }
+    }
+
+    closed spec fn sync_reqs_in_version(&self, reqs: Seq<Request>, version_num: int) -> bool
+    {
+        &&& forall |i| #![auto] 0<=i<reqs.len() ==> {
+            &&& reqs[i].input is SyncInput
+            &&& self.sync_req_in_version(reqs[i].id, version_num)
+        }
+        &&& forall |i,j| #![auto] 0 <= i < reqs.len() && 0 <= j < reqs.len() && i!=j ==> reqs[i].id != reqs[j].id
+    }
+
+    closed spec fn sync_req_in_version(&self, id: ID, version_num: int) -> bool
+    {
+        self.state().sync_req_map[id] <= version_num
+    }
+
+    closed spec fn no_matching_sync_req_id(self, id: ID) -> bool
+    {
+        forall |j| #![auto] 0<=j<self.sync_requests.satisfied_reqs@.len() ==> self.sync_requests.satisfied_reqs@[j].id!=id
+    }
+
+    exec fn send_sync_response(&mut self, req: Request, api: &mut ClientAPI<ConcreteProgramModel>)
+    requires
+        old(self).inv_api(old(api)),
+        req.input is SyncInput,
+        old(self).sync_req_in_version(req.id, old(self).state().history.first_active_index()),
+        old(self).no_matching_sync_req_id(req.id),
+    ensures
+        self.inv_api(api),
+//         self.store == old(self).store,
+//         self.sync_requests == old(self).sync_requests,
+        (self.state() == AtomicState{
+            sync_req_map: old(self).state().sync_req_map.remove(req.id),
+            ..old(self).state()
+        }),
+    {
+        // Convert the model state back into a shard
+        let ghost pre_state = self.model@.value();
+
+//         proof {
+// //             assert( pre_state.state.sync_req_map[req.id] <= pre_state.state.history.first_active_index() );
+//         }
+
+        let ghost post_state = ConcreteProgramModel {
+            state: AtomicState{
+                sync_req_map: pre_state.state.sync_req_map.remove(req.id),
+                ..pre_state.state}
+        };
+
+        let tracked mut model = KVStoreTokenized::model::arbitrary();
+        proof { tracked_swap(self.model.borrow_mut(), &mut model); }
+
+        let tracked reply_shard = self.instance.borrow().deliver_sync_reply(
+            KVStoreTokenized::Label::ReplySyncOp{sync_req_id: req.id},
+            post_state,
+            &mut model,
+        );
+        self.model = Tracked(model);
+
+        let reply = Reply{output: Output::SyncOutput, id: req.id};
+
+        api.send_reply(reply, Tracked(reply_shard), true);
+
+        proof {
+            let reqs = self.sync_requests.satisfied_reqs@;
+            let version_num = self.state().in_flight.get_Some_0().version as int;
+
+            assert forall |i| #![auto] 0<=i<reqs.len() implies {
+                &&& self.sync_req_in_version(reqs[i].id, version_num)
+            } by {
+                if reqs[i].id == req.id {
+                    assert( self.sync_req_in_version(reqs[i].id, version_num) );
+                } else {
+                    assert( self.sync_req_in_version(reqs[i].id, version_num) );
+                }
+            }
+        }
+
+        assert( self.sync_reqs_in_version(self.sync_requests.satisfied_reqs@, self.state().in_flight.get_Some_0().version as int) );
     }
 
     pub exec fn handle_user_request(&mut self, req: Request, req_shard: Tracked<RequestShard>, api: &mut ClientAPI<ConcreteProgramModel>)
@@ -428,42 +517,6 @@ impl Implementation {
             Input::QueryInput{..} => self.handle_query(req, req_shard, api),
             Input::SyncInput{} =>  self.handle_sync_request(req, req_shard, api),
         }
-    }
-
-    pub exec fn send_sync_response(&mut self, req: Request, api: &mut ClientAPI<ConcreteProgramModel>)
-    requires
-        old(self).inv_api(old(api)),
-        req.input is SyncInput,
-    ensures
-        self.inv_api(api),
-    {
-        // Convert the model state back into a shard
-        let ghost pre_state = self.model@.value();
-        let ghost post_state = ConcreteProgramModel {
-            state: AtomicState{
-                sync_req_map: pre_state.state.sync_req_map.remove(req.id),
-                ..pre_state.state}
-        };
-
-        let tracked mut model = KVStoreTokenized::model::arbitrary();
-        proof { tracked_swap(self.model.borrow_mut(), &mut model); }
-
-        proof {
-            assume( pre_state.state.sync_req_map[req.id] <= pre_state.state.history.first_active_index() );
-//             assert( ConcreteProgramModel::next(pre_state, post_state, 
-//                 ProgramLabel::UserIO{op: ProgramUserOp::DeliverSyncReply{sync_req_id: req.id}}) );
-        }
-
-        let tracked reply_shard = self.instance.borrow().deliver_sync_reply(
-            KVStoreTokenized::Label::ReplySyncOp{sync_req_id: req.id},
-            post_state,
-            &mut model,
-        );
-        self.model = Tracked(model);
-
-        let reply = Reply{output: Output::SyncOutput, id: req.id};
-
-        api.send_reply(reply, Tracked(reply_shard), true);
     }
 
     proof fn system_inv_response_implies_in_flight(self, disk_req_id: ID, i_disk_response: IDiskResponse, disk_response_token: Tracked<DiskRespShard>)
@@ -543,6 +596,7 @@ impl Implementation {
         );
         self.model = Tracked(model);
 
+        assume( self.sync_reqs_in_version(ready_reqs@, self.state().history.first_active_index()) );
         self.deliver_inflight_replies(&mut ready_reqs, api);
 
         // maybe launch another superblock
@@ -714,7 +768,7 @@ impl KVStoreTrait for Implementation {
             Tracked(disk_responses),
         ) = KVStoreTokenized::Instance::initialize(ConcreteProgramModel{state: AtomicState::init()});
 
-        // verus/source/vstd/std_specs/hash.rs says the best we can do right now is assume this.
+        // verus/source/vstd/std_specs/hash.rs says this is the best we can do right now
         assume( obeys_key_model::<Key>() );
 
         let selff = Implementation{
