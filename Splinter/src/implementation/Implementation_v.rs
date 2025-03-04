@@ -149,7 +149,7 @@ impl Implementation {
             &&& self.sync_reqs_in_version(self.sync_requests.satisfied_reqs@, state.in_flight.get_Some_0().version as int)
         })
         &&& self.sync_reqs_in_version(self.sync_requests.deferred_reqs@, self.version as int)
-        &&& self.sync_reqs_mutually_unique()
+        &&& Self::sync_req_lists_mutually_unique(self.sync_requests.satisfied_reqs@, self.sync_requests.deferred_reqs@)
     }
 
     pub closed spec fn good_req(self, req: Request, req_shard: RequestShard) -> bool
@@ -393,6 +393,7 @@ impl Implementation {
             }
         }
 
+        assume( false );// left off
         self.maybe_launch_superblock(api);
     }
 
@@ -515,18 +516,37 @@ impl Implementation {
         old(self).sync_reqs_in_version(old(ready_reqs)@, old(self).state().history.first_active_index()),
         // can't break in-flight inv because there aren't any satisfied_reqs during this call
         old(self).sync_requests.satisfied_reqs@.len()==0,
+        Self::sync_req_lists_mutually_unique(old(ready_reqs)@, old(self).sync_requests.deferred_reqs@),
     ensures
         self.inv_api(api),
     {
+        assert( ready_reqs@.take(ready_reqs@.len() as int) == ready_reqs@ ); // extn
         loop
         invariant
             self.inv_api(api),
             self.sync_reqs_in_version(ready_reqs@, self.state().history.first_active_index()),
             self.sync_requests.satisfied_reqs@.len()==0,
+            ready_reqs@.len() <= old(ready_reqs)@.len(),
+            old(self).sync_requests.deferred_reqs@ == self.sync_requests.deferred_reqs@,
+            Self::sync_req_lists_mutually_unique(old(ready_reqs)@, old(self).sync_requests.deferred_reqs@),   // mutter mutter
+            ready_reqs@ == old(ready_reqs)@.take(ready_reqs@.len() as int),
         {
+//             let ghost before_pop = ready_reqs@;
             match ready_reqs.pop()
             {
-                Some(req) => { self.send_sync_response(req, api) },
+                Some(req) => {
+//                     assume( req == ready_reqs@[ready_reqs@.len() - 1] );    // pop should promise this
+//                     assert forall |j:int| 0<=j<self.sync_requests.deferred_reqs@.len() implies self.sync_requests.deferred_reqs@[j].id != req.id by {
+//                         let i = ready_reqs@.len() as int;
+//                         assert( 0 <= i < old(ready_reqs)@.len() );
+//                         assert( 0 <= j < old(self).sync_requests.deferred_reqs@.len() );
+//                         assert( old(ready_reqs)@[i].id != old(self).sync_requests.deferred_reqs@[j].id );
+//                         assert( old(ready_reqs)@[i] == req );
+//                     }
+//                     assert( ready_reqs@ == before_pop.take(ready_reqs@.len() as int) ); // extn
+                    assert( ready_reqs@ == old(ready_reqs)@.take(ready_reqs@.len() as int) );   // extn
+                    self.send_sync_response(req, api)
+                },
                 None => break,
             }
         }
@@ -546,31 +566,15 @@ impl Implementation {
         self.state().sync_req_map[id] <= version_num
     }
 
-    // had a lot of trouble talking verus into constructing a trigger for sync_reqs_mutually_unique,
-    // even though it looks the same as the two foralls above. :shrug:
-//     closed spec fn sat_idx(&self, i:int) -> bool { 0 <= i < self.sync_requests.satisfied_reqs@.len() }
-//     closed spec fn def_idx(&self, j:int) -> bool { 0 <= j < self.sync_requests.deferred_reqs@.len() }
-
-    closed spec fn sync_reqs_mutually_unique(&self) -> bool
+    closed spec fn sync_req_lists_mutually_unique(listi: Seq<Request>, listj: Seq<Request>) -> bool
     {
-        forall |i:int, j:int| 0 <= i < self.sync_requests.satisfied_reqs@.len() && 0 <= j < self.sync_requests.deferred_reqs@.len()
-            ==> self.sync_requests.satisfied_reqs@[i].id != self.sync_requests.deferred_reqs@[j].id
-        // Why can't verus find a trigger here!?
-//         forall |i:int| 0 <= i < self.sync_requests.satisfied_reqs@.len() ==>
-//             forall |j:int| 0 <= j < self.sync_requests.deferred_reqs@.len() ==>
-//                 self.sync_requests.satisfied_reqs@[i].id != self.sync_requests.deferred_reqs@[j].id
-//         forall |i:int| 0 <= i < self.sync_requests.satisfied_reqs@.len() ==> self.no_matching_deferred_sync_reqs(i)
+        forall |i:int, j:int| #![auto] 0 <= i < listi.len() && 0 <= j < listj.len() ==> listi[i].id != listj[j].id
     }
-
-//     closed spec fn no_matching_deferred_sync_reqs(&self, i: int) -> bool
-//     {
-//         forall |j:int| 0 <= j < self.sync_requests.deferred_reqs@.len() ==>
-//             self.sync_requests.satisfied_reqs@[i].id != self.sync_requests.deferred_reqs@[j].id
-//     }
 
     closed spec fn no_matching_sync_req_id(self, id: ID) -> bool
     {
-        forall |j| #![auto] 0<=j<self.sync_requests.satisfied_reqs@.len() ==> self.sync_requests.satisfied_reqs@[j].id!=id
+        &&& (forall |j| #![auto] 0<=j<self.sync_requests.satisfied_reqs@.len() ==> self.sync_requests.satisfied_reqs@[j].id!=id)
+        &&& (forall |j| #![auto] 0<=j<self.sync_requests.deferred_reqs@.len() ==> self.sync_requests.deferred_reqs@[j].id!=id)
     }
 
     exec fn send_sync_response(&mut self, req: Request, api: &mut ClientAPI<ConcreteProgramModel>)
@@ -587,6 +591,7 @@ impl Implementation {
             sync_req_map: old(self).state().sync_req_map.remove(req.id),
             ..old(self).state()
         }),
+        old(self).sync_requests.deferred_reqs@ == self.sync_requests.deferred_reqs@,
     {
         // Convert the model state back into a shard
         let ghost pre_state = self.model@.value();
@@ -640,6 +645,10 @@ impl Implementation {
             let reqs = self.sync_requests.deferred_reqs@;
             let version_num = self.version as int;
             assert forall |i| #![auto] 0<=i<reqs.len() implies self.sync_req_in_version(reqs[i].id, version_num) by {
+//                 assert( 0 <= req.id < self.sync_requests.satisfied_reqs@.len() );
+//                 assert( 0 <= i < self.sync_requests.deferred_reqs@.len() );
+                assert( reqs[i].id != req.id );
+                assert( old(self).state().sync_req_map[reqs[i].id] == self.state().sync_req_map[reqs[i].id] );
             }
         }
         assume( false );
