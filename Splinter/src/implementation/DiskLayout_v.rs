@@ -40,7 +40,7 @@ pub struct Superblock {
 pub struct ISuperblock {
     pub store: HashMapWithView<Key, Value>,
     // need version so recovery knows the shape of the (mostly-empty) history to reconstruct (the LSN)
-    pub version_index: nat,
+    pub version_index: u64,
 }
 
 impl View for ISuperblock {
@@ -49,7 +49,7 @@ impl View for ISuperblock {
     {
         Superblock{
             store: PersistentState{ appv: MapSpec::State{ kmmap: view_store_as_kmmap(self.store)}},
-            version_index: self.version_index
+            version_index: self.version_index as nat
         }
     }
 }
@@ -64,10 +64,17 @@ pub closed spec fn spec_unmarshall(raw_page: RawPage) -> (out: Superblock)
     arbitrary()
 }
 
-// This is gonna be hard because Superblock isn't physical yet :vP
-pub fn unmarshall(raw_page: RawPage) -> (out: ISuperblock)
+pub fn marshall(sb: &ISuperblock) -> (out: RawPage)
 ensures
-    out@ == spec_unmarshall(raw_page)
+    out == spec_marshall(sb@)
+{
+    assume( false ); // TODO
+    unreached()
+}
+
+pub fn unmarshall(raw_page: &RawPage) -> (out: ISuperblock)
+ensures
+    out@ == spec_unmarshall(*raw_page)
 {
     assume( false ); // TODO
     unreached()

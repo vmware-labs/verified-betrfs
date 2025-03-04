@@ -408,7 +408,93 @@ impl Implementation {
     ensures
         self.inv_api(api),
     {
-        assume(false);  // TODO missing code here
+        assume( self.state().in_flight is None ); // probably need a precondition to get this.
+
+        let version_index = 7;  // TODO need state and an invariant
+        assume( version_index == self.state().history.len()-1 );
+
+        // Yoink the store out of self just long enough to marshall it as part of the superblock.
+        let mut tmp_store = new_empty_hash_map();
+        std::mem::swap(&mut self.store, &mut tmp_store);
+        let sb = ISuperblock{
+            store: tmp_store,
+            version_index,
+        };
+        let ghost ghost_sb = sb;
+        let raw_page = marshall(&sb);
+
+        assert( self.state().ephemeral_sb() == ghost_sb@ );
+        assert( raw_page == spec_marshall(self.state().ephemeral_sb()) );
+
+        let ISuperblock{store: mut tmp_store, ..} = sb;
+        std::mem::swap(&mut self.store, &mut tmp_store);
+
+        let req_id_perm = Tracked( api.send_disk_request_predict_id() );
+        let ghost disk_req_id = req_id_perm@;
+
+        let ghost disk_event = DiskEvent::ExecuteSyncBegin{req_id: disk_req_id};
+
+        let disk_request = IDiskRequest::WriteReq{to: superblock_addr(), data: raw_page};
+
+//         let ghost disk_reqs = Multiset::singleton((disk_req_id, disk_request@));
+        let ghost disk_reqs = multiset_map_singleton(disk_req_id, disk_request@);
+        proof { multiset_map_singleton_ensures(disk_req_id, disk_request@); }
+
+        let ghost info = ProgramDiskInfo{ reqs: disk_reqs, resps: Multiset::empty() };
+
+        let ghost inflight_info = InflightInfo{version: sb.version_index as nat, req_id: disk_req_id};
+        let ghost post_state = ConcreteProgramModel {
+            state: AtomicState{
+                in_flight: Some(inflight_info),
+                ..old(self).state()}
+        };
+
+
+
+        let tracked empty_disk_responses:KVStoreTokenized::disk_responses_multiset<ConcreteProgramModel>
+            = KVStoreTokenized::disk_responses_multiset::empty(self.instance_id());
+
+        let ghost lbl = KVStoreTokenized::Label::DiskOp{
+                disk_request_tuples: disk_reqs,
+                disk_response_tuples: empty_disk_responses.multiset(),
+            };
+        let ghost info = ProgramDiskInfo{
+                reqs: lbl->disk_request_tuples, 
+                resps: lbl->disk_response_tuples, 
+            };
+
+//         assert( old(self).state().client_ready() );
+//         assert( self.state().client_ready() );
+//         assert( self.state().in_flight is None );
+        proof {
+            let pre_sb = self.state().ephemeral_sb();
+            assert( disk_event.arrow_ExecuteSyncBegin_req_id() == disk_req_id );
+            assert( spec_superblock_addr() == disk_request@->to );
+            assert( spec_marshall(pre_sb) == disk_request@->data );
+            assert( DiskRequest::WriteReq{to: spec_superblock_addr(), data: spec_marshall(pre_sb)} == disk_request@ );
+            assert( disk_reqs == Multiset::singleton((disk_event.arrow_ExecuteSyncBegin_req_id(), DiskRequest::WriteReq{to: spec_superblock_addr(), data: spec_marshall(pre_sb)})) );
+            assert( info.reqs == Multiset::singleton((disk_event.arrow_ExecuteSyncBegin_req_id(), DiskRequest::WriteReq{to: spec_superblock_addr(), data: spec_marshall(pre_sb)})) );
+            assert( AtomicState::execute_sync_begin(self.state(), post_state.state, info.reqs, info.resps, disk_req_id) );
+            assert( AtomicState::disk_transition(self.state(), post_state.state, disk_event, info.reqs, info.resps) );
+            assert( ConcreteProgramModel::next(self.model@.value(), post_state, ProgramLabel::DiskIO{info}) );
+        }
+
+        // take the transition, get the token
+        let tracked mut model = KVStoreTokenized::model::arbitrary();
+        proof { tracked_swap(self.model.borrow_mut(), &mut model); }
+        let tracked new_reply_token = self.instance.borrow().disk_transitions(
+            lbl,
+            post_state,
+            &mut model,
+            empty_disk_responses,
+        );
+        self.model = Tracked(model);
+
+        assert( new_reply_token.multiset() == multiset_map_singleton(req_id_perm@, disk_request@) );    // extn
+        let id = api.send_disk_request(disk_request, req_id_perm, Tracked(new_reply_token));
+        // uh, shoot, how are we gonna record the id?
+
+        assume( self.inv_api(api) );
     }
 
     exec fn deliver_inflight_replies(&mut self, ready_reqs: &mut Vec<Request>, api: &mut ClientAPI<ConcreteProgramModel>)
@@ -690,16 +776,16 @@ impl Implementation {
             let tracked mut model = KVStoreTokenized::model::arbitrary();
             proof { tracked_swap(self.model.borrow_mut(), &mut model); }
 
-            let superblock = unmarshall(raw_page);
+            let superblock = unmarshall(&raw_page);
             // Record our learnings in the physical model.
             self.store = superblock.store;
 
             // Compute the next ghost model and transition our token
             let ghost post_state = ConcreteProgramModel{state: AtomicState {
                 recovery_state: RecoveryState::RecoveryComplete,
-                history: view_store_as_singleton_floating_seq(superblock.version_index, superblock.store),
+                history: view_store_as_singleton_floating_seq(superblock.version_index as nat, superblock.store),
                 in_flight: None,
-                persistent_version: superblock.version_index,
+                persistent_version: superblock.version_index as nat,
                 sync_req_map: Map::empty(),
             }};
 
@@ -780,7 +866,7 @@ impl KVStoreTrait for Implementation {
         assume( obeys_key_model::<Key>() );
 
         let selff = Implementation{
-            store: HashMapWithView::new(),
+            store: new_empty_hash_map(),
             model: Tracked(model),
             instance: Tracked(instance),
             sync_requests: SyncRequestBuffer::new_empty(),
@@ -811,6 +897,13 @@ impl KVStoreTrait for Implementation {
             }
         }
     }
+}
+
+pub fn new_empty_hash_map() -> (out: HashMapWithView<Key,Value>)
+ensures out@.is_empty()
+{
+    assume( obeys_key_model::<Key>() );
+    HashMapWithView::new()
 }
 
 }
