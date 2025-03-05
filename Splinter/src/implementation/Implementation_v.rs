@@ -355,6 +355,15 @@ impl Implementation {
     ensures
         self.inv_api(api),
     {
+        let ghost old_satisfied_reqs = old(self).sync_requests.satisfied_reqs@;
+        let ghost old_deferred_reqs = old(self).sync_requests.deferred_reqs@;
+        assert({
+            &&& forall |i| #![auto] 0 <= i < old_satisfied_reqs.len() ==> old_satisfied_reqs[i].id != req.id
+            &&& forall |i| #![auto] 0 <= i < old_deferred_reqs.len() ==> old_deferred_reqs[i].id != req.id
+        }) by {
+            assume( false ); // apply promise from auditor
+        }
+
         // Consume the shard to convert into model state
         let ghost pre_state = self.model@.value();
         let ghost version = (pre_state.state.history.len()-1) as nat;
@@ -382,18 +391,6 @@ impl Implementation {
             if r != req { assert( old(self).sync_requests.deferred_reqs@.contains(r) ); }
         }
 
-        // We didn't change the satisfied requests!
-        assert( self.sync_reqs_in_version(self.sync_requests.satisfied_reqs@, self.state().in_flight.get_Some_0().version as int) ) by {
-            let reqs = self.sync_requests.satisfied_reqs@;
-            let version_num = self.state().in_flight.get_Some_0().version as int;
-            assert forall |i| #![auto] 0<=i<reqs.len() implies self.sync_req_in_version(reqs[i].id, version_num) by {
-                assert( reqs[i].id != req.id ) by {
-                    assume( false );    // apply auditor promise about unique ids and maybe a system invariant?
-                }
-            }
-        }
-
-        assume( false );// left off
         self.maybe_launch_superblock(api);
     }
 
@@ -531,19 +528,9 @@ impl Implementation {
             Self::sync_req_lists_mutually_unique(old(ready_reqs)@, old(self).sync_requests.deferred_reqs@),   // mutter mutter
             ready_reqs@ == old(ready_reqs)@.take(ready_reqs@.len() as int),
         {
-//             let ghost before_pop = ready_reqs@;
             match ready_reqs.pop()
             {
                 Some(req) => {
-//                     assume( req == ready_reqs@[ready_reqs@.len() - 1] );    // pop should promise this
-//                     assert forall |j:int| 0<=j<self.sync_requests.deferred_reqs@.len() implies self.sync_requests.deferred_reqs@[j].id != req.id by {
-//                         let i = ready_reqs@.len() as int;
-//                         assert( 0 <= i < old(ready_reqs)@.len() );
-//                         assert( 0 <= j < old(self).sync_requests.deferred_reqs@.len() );
-//                         assert( old(ready_reqs)@[i].id != old(self).sync_requests.deferred_reqs@[j].id );
-//                         assert( old(ready_reqs)@[i] == req );
-//                     }
-//                     assert( ready_reqs@ == before_pop.take(ready_reqs@.len() as int) ); // extn
                     assert( ready_reqs@ == old(ready_reqs)@.take(ready_reqs@.len() as int) );   // extn
                     self.send_sync_response(req, api)
                 },
@@ -927,9 +914,6 @@ impl KVStoreTrait for Implementation {
             Tracked(disk_responses),
         ) = KVStoreTokenized::Instance::initialize(ConcreteProgramModel{state: AtomicState::init()});
 
-        // verus/source/vstd/std_specs/hash.rs says this is the best we can do right now
-        assume( obeys_key_model::<Key>() );
-
         let selff = Implementation{
             store: new_empty_hash_map(),
             version: 0,
@@ -937,8 +921,6 @@ impl KVStoreTrait for Implementation {
             instance: Tracked(instance),
             sync_requests: SyncRequestBuffer::new_empty(),
         };
-//         assert( selff.i() == selff.model@.value() );   // trigger extn equality
-//         assert( selff.i().mapspec().kmmap == selff.view_store_as_kmmap() ); // trigger extn equality
         selff
     }
 
@@ -968,6 +950,7 @@ impl KVStoreTrait for Implementation {
 pub fn new_empty_hash_map() -> (out: HashMapWithView<Key,Value>)
 ensures out@.is_empty()
 {
+    // verus/source/vstd/std_specs/hash.rs says this is the best we can do right now
     assume( obeys_key_model::<Key>() );
     HashMapWithView::new()
 }
