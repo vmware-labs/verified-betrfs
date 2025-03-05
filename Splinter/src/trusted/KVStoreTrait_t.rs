@@ -2,6 +2,7 @@ use builtin_macros::*;
 use builtin::*;
 use vstd::prelude::arbitrary;
 use vstd::prelude::ValueToken;
+use vstd::prelude::ElementToken;
 
 use vstd::tokens::InstanceId;
 use crate::trusted::ProgramModelTrait_t::*;
@@ -37,7 +38,7 @@ pub trait KVStoreTrait : Sized{
 // Auditor promise
 // This should only be true for the specific RefinementObligation!
 // Here I'm also narrowly specializing to a particular set of available tokens.
-pub proof fn open_system_invariant<ProgramModel: ProgramModelTrait, Proof: RefinementObligation<ProgramModel>>(
+pub proof fn open_system_invariant_disk_response<ProgramModel: ProgramModelTrait, Proof: RefinementObligation<ProgramModel>>(
     model_token: Tracked<KVStoreTokenized::model<ProgramModel>>,
     disk_responses_token: Tracked<KVStoreTokenized::disk_responses_multiset<ProgramModel>>,
     ) -> (model: SystemModel::State<ProgramModel>)
@@ -46,6 +47,19 @@ ensures
     model.program == model_token@.value(),
     forall |id,disk_response| #[trigger] disk_responses_token@.multiset().contains((id, disk_response))
         ==> (model.disk.responses.dom().contains(id) && model.disk.responses[id] == disk_response),
+{
+    assume(false);
+    arbitrary()
+}
+
+pub proof fn open_system_invariant_user_request<ProgramModel: ProgramModelTrait, Proof: RefinementObligation<ProgramModel>>(
+    model_token: Tracked<KVStoreTokenized::model<ProgramModel>>,
+    user_request_token: Tracked<KVStoreTokenized::requests<ProgramModel>>,
+    ) -> (model: SystemModel::State<ProgramModel>)
+ensures
+    Proof::inv(model),
+    model.program == model_token@.value(),
+    model.sync_requests.dom().contains(user_request_token@.element().id),
 {
     assume(false);
     arbitrary()

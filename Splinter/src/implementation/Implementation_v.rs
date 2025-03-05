@@ -290,7 +290,7 @@ impl Implementation {
     ensures
         false,
     {
-        open_system_invariant::<ConcreteProgramModel, RefinementProof>(self.model, disk_response_token);
+        open_system_invariant_disk_response::<ConcreteProgramModel, RefinementProof>(self.model, disk_response_token);
         multiset_map_singleton_ensures(disk_req_id, i_disk_response@);
         assert(disk_response_token@.multiset().contains((disk_req_id, i_disk_response@))); //trigger
     }
@@ -359,7 +359,8 @@ impl Implementation {
             &&& forall |i| #![auto] 0 <= i < old_satisfied_reqs.len() ==> old_satisfied_reqs[i].id != req.id
             &&& forall |i| #![auto] 0 <= i < old_deferred_reqs.len() ==> old_deferred_reqs[i].id != req.id
         }) by {
-            assume( false ); // apply promise from auditor
+            self.system_inv_sync_request_fresh_id(req, req_shard);
+            assume( false );
         }
 
         // Consume the shard to convert into model state
@@ -586,7 +587,7 @@ impl Implementation {
             Input::NoopInput => self.handle_noop(req, req_shard, api),
             Input::PutInput{..} => self.handle_put(req, req_shard, api),
             Input::QueryInput{..} => self.handle_query(req, req_shard, api),
-            Input::SyncInput{} =>  self.handle_sync_request(req, req_shard, api),
+            Input::SyncInput{} => self.handle_sync_request(req, req_shard, api),
         }
     }
 
@@ -599,7 +600,7 @@ impl Implementation {
         self.i().in_flight is Some,
         self.i().in_flight->0.req_id == disk_req_id,
     {
-        open_system_invariant::<ConcreteProgramModel, RefinementProof>(self.model, disk_response_token);
+        open_system_invariant_disk_response::<ConcreteProgramModel, RefinementProof>(self.model, disk_response_token);
         multiset_map_singleton_ensures(disk_req_id, i_disk_response@);
         assert(disk_response_token@.multiset().contains((disk_req_id, i_disk_response@))); //trigger
     }
@@ -610,7 +611,25 @@ impl Implementation {
     {
         let tracked empty_disk_responses:Tracked<KVStoreTokenized::disk_responses_multiset<ConcreteProgramModel>>
             = Tracked(KVStoreTokenized::disk_responses_multiset::empty(self.instance_id()));
-        open_system_invariant::<ConcreteProgramModel, RefinementProof>(self.model, empty_disk_responses);
+        open_system_invariant_disk_response::<ConcreteProgramModel, RefinementProof>(self.model, empty_disk_responses);
+    }
+
+    proof fn system_inv_sync_request_fresh_id(self, req: Request, req_shard: Tracked<RequestShard>)
+    requires
+        self.i().recovery_state is RecoveryComplete,
+        // TODO req ~~ req_shard?
+    ensures
+        !self.state().sync_req_map.dom().contains(req.id)
+    {
+        let system_model = open_system_invariant_user_request::<ConcreteProgramModel, RefinementProof>(self.model, req_shard);
+        if self.state().sync_req_map.dom().contains(req.id) {
+            // by fresh_id
+            // we can only learn this during an accept_request transition
+//             assert( !system_model.state().sync_requests.contains(req.id) );
+        }
+//         multiset_map_singleton_ensures(disk_req_id, i_disk_response@);
+//         assert(disk_response_token@.multiset().contains((disk_req_id, i_disk_response@))); //trigger
+        assume( false );
     }
 
     pub exec fn handle_disk_response(&mut self, id: ID, disk_response: IDiskResponse, response_shard: Tracked<DiskRespShard>,
@@ -794,7 +813,6 @@ impl Implementation {
                 };
                 // TODO: this is crazy, I have to use info.reqs otherwise it doesn't match for 
                 // valid disk transition
-//                 open_system_invariant::<Self>(self.model, disk_response_token);
                 multiset_map_singleton_ensures(disk_req_id, i_disk_response@);
                 assert(disk_response_token@.multiset().contains((disk_req_id, i_disk_response@))); //trigger
                                                                                            //
