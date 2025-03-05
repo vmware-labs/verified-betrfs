@@ -31,7 +31,12 @@ state_machine!{ SystemModel<ProgramModel: ProgramModelTrait> {
         pub requests: Multiset<Request>,
         pub replies: Multiset<Reply>,
 
+        // atomic state sync req map
         pub sync_requests: Multiset<SyncReqId>,
+        pub sync_replies: Multiset<SyncReqId>,
+
+        // id_history of all ids in the past
+        pub id_history: Multiset<ID>,
     }
 
     // Crash Tolerance is driven by the program, system model merely serves to orchestrate
@@ -41,8 +46,8 @@ state_machine!{ SystemModel<ProgramModel: ProgramModelTrait> {
         AcceptRequest{ req: Request },
         DeliverReply{ reply: Reply },
 
-        // AcceptRequest{ sync_rec_id: SyncReqId },
-        // DeliverSyncReply{ sync_rec_id: SyncReqId },
+        AcceptSyncRequest{ sync_req_id: SyncReqId },
+        DeliverSyncReply{ sync_req_id: SyncReqId },
 
         // program model for enabling replies to user request
         // expose this to enforce correspondance 
@@ -71,13 +76,16 @@ state_machine!{ SystemModel<ProgramModel: ProgramModelTrait> {
         init requests = Multiset::empty();
         init replies = Multiset::empty();
         init sync_requests = Multiset::empty();
+        init sync_replies = Multiset::empty();
+        init id_history = Multiset::empty();
     }}
 
     pub open spec fn fresh_id(self, id: ID) -> bool
     {
-        &&& forall |req| #[trigger] self.requests.contains(req) ==> req.id != id
-        &&& forall |resp| #[trigger] self.replies.contains(resp) ==> resp.id != id
-        &&& !self.sync_requests.contains(id)
+        !self.id_history.contains(id)
+        // &&& forall |req| #[trigger] self.requests.contains(req) ==> req.id != id
+        // &&& forall |resp| #[trigger] self.replies.contains(resp) ==> resp.id != id
+        // &&& !self.sync_requests.contains(id)
     }
 
     // implemented by auditor's clientapi_t::accept_request
@@ -85,6 +93,7 @@ state_machine!{ SystemModel<ProgramModel: ProgramModelTrait> {
         require lbl is AcceptRequest;
         require pre.fresh_id(lbl->req.id); 
         update requests = pre.requests.insert(lbl->req);
+        update id_history = pre.id_history.insert(lbl->req.id);
     }}
 
     // implemented by auditor's clientapi_t::send_reply
@@ -112,37 +121,37 @@ state_machine!{ SystemModel<ProgramModel: ProgramModelTrait> {
     // as these are noops
 
     // implemented by auditor
-    // transition!{ accept_sync_request(lbl: Label) {
-    //     require lbl is AcceptSyncRequest;
-    //     require pre.fresh_id(lbl->sync_req_id);
-    //     update sync_requests = pre.sync_requests.insert(sync_req_id);
-    // }}
+    transition!{ accept_sync_request(lbl: Label) {
+        require let Label::AcceptSyncRequest{sync_req_id} = lbl;
+        require pre.fresh_id(sync_req_id);
+        update sync_requests = pre.sync_requests.insert(sync_req_id);
+        update id_history = pre.id_history.insert(sync_req_id);
+    }}
 
     transition!{ program_accept_sync_request(lbl: Label, new_program: ProgramModel) {
         require lbl is ProgramUIOp;
         require let ProgramUserOp::AcceptSyncRequest{sync_req_id} = lbl->op;
-        require pre.fresh_id(sync_req_id);
+
         require ProgramModel::next(pre.program, new_program, ProgramLabel::UserIO{op: lbl->op});
         update program = new_program;
-        update sync_requests = pre.sync_requests.insert(sync_req_id);
+        update sync_requests = pre.sync_requests.remove(sync_req_id);
     }}
 
     transition!{ program_deliver_sync_reply(lbl: Label, new_program: ProgramModel) {
         require lbl is ProgramUIOp;
         require let ProgramUserOp::DeliverSyncReply{sync_req_id} = lbl->op;
-        require pre.sync_requests.contains(sync_req_id);
+
         require ProgramModel::next(pre.program, new_program, ProgramLabel::UserIO{op: lbl->op});
         update program = new_program;
-        update sync_requests = pre.sync_requests.remove(sync_req_id);
-        // update sync_replies = pre.sync_replies.insert(sync_req_id);
+        update sync_replies = pre.sync_replies.insert(sync_req_id);
     }}
 
     // implemented by auditor
-    // transition!{ deliver_sync_reply(lbl: Label) {
-    //     require lbl is DeliverSyncReply;
-    //     require pre.sync_replies.contains(sync_req_id);
-    //     update sync_replies = pre.sync_replies.remove(sync_req_id);
-    // }}
+    transition!{ deliver_sync_reply(lbl: Label) {
+        require let Label::DeliverSyncReply{sync_req_id} = lbl;
+        require pre.sync_replies.contains(sync_req_id);
+        update sync_replies = pre.sync_replies.remove(sync_req_id);
+    }}
 
     transition!{ program_disk(lbl: Label, new_program: ProgramModel, new_disk: DiskModel) {
         require lbl is ProgramDiskOp;
