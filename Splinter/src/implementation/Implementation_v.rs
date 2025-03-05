@@ -555,7 +555,6 @@ impl Implementation {
     {
         // Convert the model state back into a shard
         let ghost pre_state = self.model@.value();
-
         let ghost post_state = ConcreteProgramModel {
             state: AtomicState{
                 sync_req_map: pre_state.state.sync_req_map.remove(req.id),
@@ -575,39 +574,6 @@ impl Implementation {
         let reply = Reply{output: Output::SyncOutput, id: req.id};
 
         api.send_reply(reply, Tracked(reply_shard), true);
-
-        proof {
-            let reqs = self.sync_requests.satisfied_reqs@;
-            let version_num = self.state().in_flight.get_Some_0().version as int;
-
-            assert forall |i| #![auto] 0<=i<reqs.len() implies {
-                &&& self.sync_req_in_version(reqs[i].id, version_num)
-            } by {
-                if reqs[i].id == req.id {
-                    assert( self.sync_req_in_version(reqs[i].id, version_num) );
-                } else {
-                    assert( self.sync_req_in_version(reqs[i].id, version_num) );
-                }
-            }
-        }
-
-        assert( self.sync_reqs_in_version(self.sync_requests.satisfied_reqs@, self.state().in_flight.get_Some_0().version as int) );
-
-        assert( old(self).sync_reqs_in_version(old(self).sync_requests.deferred_reqs@, old(self).version as int) );
-        assert( old(self).version == self.version );
-        assert( old(self).sync_requests.deferred_reqs@ == self.sync_requests.deferred_reqs@ );
-
-        assert( self.sync_reqs_in_version(self.sync_requests.deferred_reqs@, self.version as int) ) by {
-            let reqs = self.sync_requests.deferred_reqs@;
-            let version_num = self.version as int;
-            assert forall |i| #![auto] 0<=i<reqs.len() implies self.sync_req_in_version(reqs[i].id, version_num) by {
-//                 assert( 0 <= req.id < self.sync_requests.satisfied_reqs@.len() );
-//                 assert( 0 <= i < self.sync_requests.deferred_reqs@.len() );
-                assert( reqs[i].id != req.id );
-                assert( old(self).state().sync_req_map[reqs[i].id] == self.state().sync_req_map[reqs[i].id] );
-            }
-        }
-        assume( false );
     }
 
     pub exec fn handle_user_request(&mut self, req: Request, req_shard: Tracked<RequestShard>, api: &mut ClientAPI<ConcreteProgramModel>)
