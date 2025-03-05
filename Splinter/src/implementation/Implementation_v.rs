@@ -273,8 +273,7 @@ impl Implementation {
                 req_shard.get(),
             );
             self.model = Tracked(model);
-            assume(self.version + 1 < u64::MAX);     // panic?
-            self.version = self.version + 1;
+            self.version = increment(self.version);
 
             assert( self.i().mapspec().kmmap == self.view_store_as_kmmap() ); // trigger extn equality
             api.send_reply(reply, Tracked(new_reply_token), true);
@@ -888,6 +887,14 @@ ensures out@.is_empty()
     // verus/source/vstd/std_specs/hash.rs says this is the best we can do right now
     assume( obeys_key_model::<Key>() );
     HashMapWithView::new()
+}
+
+// Convert overflow into a liveness failure
+pub fn increment(x: u64) -> (y: u64)
+ensures y == x + 1
+{
+    if x == u64::MAX { loop {} }
+    x + 1
 }
 
 }
