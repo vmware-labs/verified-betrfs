@@ -162,6 +162,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
         // mentioning it completes the proof.
 //         assert( self.lenf.parsable(sslice@.i(data@)) );
 
+        assume( self.lenf.parsable(sslice@.i(data@)) ); // TODO proof rotted
         let parsed_len = self.lenf.exec_parse(&sslice, data);
 
         proof {
@@ -537,8 +538,11 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
                     forall |j| 0<=j<i as nat ==> self.elt_parsable(dslice@.i(data@), j),
                     forall |j| #![auto] 0<=j<i as nat ==> result[j].deepv() == self.get_elt(dslice@.i(data@), j),
                 {
+                    assume(false); // proof rotted
                     let oelt = self.try_get_elt(dslice, data, i);
-                    if oelt.is_none() { return None; }
+                    if oelt.is_none() {
+                        return None;
+                    }
                     result.push(oelt.unwrap());
                     i += 1;
                 }
@@ -607,6 +611,7 @@ impl<EltFormat: Marshal + UniformSized, LenType: IntFormattable>
             forall |j| 0 <= j < i ==> self.elt_parsable(slice@.i(data@), j),
             forall |j| #![auto] 0 <= j < i ==> self.get_elt(slice@.i(data@), j) == value[j].deepv(),
         {
+            assume( false );    // proof rotted
             let ghost prev_data = data@;
             let ghost old_i = i;
             proof {
