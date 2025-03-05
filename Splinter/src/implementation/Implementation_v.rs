@@ -328,7 +328,6 @@ impl Implementation {
                 assert( MapSpec::State::next_by(pre_state.state.mapspec(), post_state.state.mapspec(),
                         map_lbl, MapSpec::Step::query())); // witness to step
                 assert( post_state.state.history.get_prefix(pre_state.state.history.len()) == pre_state.state.history );  // extn
-//                 assert( AtomicState::map_transition(pre_state, post_state, map_lbl) );
                 assert( ConcreteProgramModel::next(pre_state, post_state, 
                     ProgramLabel::UserIO{op: ProgramUserOp::Execute{req: map_req, reply: map_reply}}) );
             }
@@ -418,9 +417,7 @@ impl Implementation {
     ensures
         self.inv_api(api),
     {
-//         assert( self.state().in_flight is None ); // probably need a precondition to get this.
         proof { self.system_inv_implies_atomic_state_wf(); }
-//         assert( self.state().history.is_active(self.state().history.len() - 1) ); // system invariant
 
         // Yoink the store out of self just long enough to marshall it as part of the superblock.
         let mut tmp_store = new_empty_hash_map();
@@ -429,26 +426,15 @@ impl Implementation {
             store: tmp_store,
             version_index: self.version,
         };
-        let ghost ghost_sb = sb;
         let raw_page = marshall(&sb);
-
-        assert( self.state().ephemeral_sb() == ghost_sb@ );
-        assert( raw_page == spec_marshall(self.state().ephemeral_sb()) );
-
         let ISuperblock{store: mut tmp_store, ..} = sb;
-        std::mem::swap(&mut self.store, &mut tmp_store);
+        std::mem::swap(&mut self.store, &mut tmp_store);    // un-yoink
 
         let req_id_perm = Tracked( api.send_disk_request_predict_id() );
         let ghost disk_req_id = req_id_perm@;
-
         let ghost disk_event = DiskEvent::ExecuteSyncBegin{req_id: disk_req_id};
-
         let disk_request = IDiskRequest::WriteReq{to: superblock_addr(), data: raw_page};
-
-//         let ghost disk_reqs = Multiset::singleton((disk_req_id, disk_request@));
         let ghost disk_reqs = multiset_map_singleton(disk_req_id, disk_request@);
-        proof { multiset_map_singleton_ensures(disk_req_id, disk_request@); }
-
         let ghost info = ProgramDiskInfo{ reqs: disk_reqs, resps: Multiset::empty() };
 
         let ghost inflight_info = InflightInfo{version: sb.version_index as nat, req_id: disk_req_id};
@@ -457,7 +443,6 @@ impl Implementation {
                 in_flight: Some(inflight_info),
                 ..old(self).state()}
         };
-
 
         let tracked empty_disk_responses:KVStoreTokenized::disk_responses_multiset<ConcreteProgramModel>
             = KVStoreTokenized::disk_responses_multiset::empty(self.instance_id());
@@ -473,15 +458,8 @@ impl Implementation {
 
         proof {
             let pre_sb = self.state().ephemeral_sb();
-            assert( disk_event.arrow_ExecuteSyncBegin_req_id() == disk_req_id );
-            assert( spec_superblock_addr() == disk_request@->to );
-            assert( spec_marshall(pre_sb) == disk_request@->data );
-            assert( DiskRequest::WriteReq{to: spec_superblock_addr(), data: spec_marshall(pre_sb)} == disk_request@ );
-            assert( disk_reqs == Multiset::singleton((disk_event.arrow_ExecuteSyncBegin_req_id(), DiskRequest::WriteReq{to: spec_superblock_addr(), data: spec_marshall(pre_sb)})) );
-            assert( info.reqs == Multiset::singleton((disk_event.arrow_ExecuteSyncBegin_req_id(), DiskRequest::WriteReq{to: spec_superblock_addr(), data: spec_marshall(pre_sb)})) );
-            assert( AtomicState::execute_sync_begin(self.state(), post_state.state, info.reqs, info.resps, disk_req_id) );
-            assert( AtomicState::disk_transition(self.state(), post_state.state, disk_event, info.reqs, info.resps) );
-            assert( ConcreteProgramModel::next(self.model@.value(), post_state, ProgramLabel::DiskIO{info}) );
+            assert( disk_reqs == Multiset::singleton((disk_event.arrow_ExecuteSyncBegin_req_id(), DiskRequest::WriteReq{to: spec_superblock_addr(), data: spec_marshall(pre_sb)})) );   // extn
+            assert( AtomicState::disk_transition(self.state(), post_state.state, disk_event, info.reqs, info.resps) );  // witness
         }
 
         // take the transition, get the token
@@ -500,11 +478,6 @@ impl Implementation {
         api.send_disk_request(disk_request, req_id_perm, Tracked(new_reply_token));
 
         let ghost state = self.state();
-        assert( state.in_flight is Some );
-        assert( state.history.is_active(state.history.len() - 1) ); // system invariant
-        assert( state.history.is_active(state.in_flight.get_Some_0().version as int) );
-        assert( self.sync_reqs_in_version(self.sync_requests.satisfied_reqs@, state.in_flight.get_Some_0().version as int) );
-        assert( self.inv_api(api) );
     }
 
     exec fn deliver_inflight_replies(&mut self, ready_reqs: &mut Vec<Request>, api: &mut ClientAPI<ConcreteProgramModel>)
@@ -582,10 +555,6 @@ impl Implementation {
     {
         // Convert the model state back into a shard
         let ghost pre_state = self.model@.value();
-
-//         proof {
-// //             assert( pre_state.state.sync_req_map[req.id] <= pre_state.state.history.first_active_index() );
-//         }
 
         let ghost post_state = ConcreteProgramModel {
             state: AtomicState{
