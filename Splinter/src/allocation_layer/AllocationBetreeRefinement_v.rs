@@ -269,6 +269,19 @@ impl AllocationBetree::State {
             AllocationBetree::Step::internal_compact_complete(input_idx, new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs) => {
                 Self::internal_compact_complete_inv_refines(pre, post, lbl, input_idx, new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs);
             }
+            AllocationBetree::Step::internal_buffer_noop(new_betree) => {
+                pre.betree.linked.valid_view_ensures(new_betree.linked);
+                pre.betree.linked.valid_view_implies_same_transitive_likes(new_betree.linked);
+
+                let (betree_likes, buffer_likes) = pre.betree.linked.transitive_likes();
+
+                pre.betree.linked.tree_likes_domain(pre.betree.linked.the_ranking());
+                pre.betree.linked.buffer_likes_domain(betree_likes);
+                restrict_domain_au_ensures(buffer_likes, pre.betree.linked.buffer_dv.entries);
+
+                assert(post.inv());
+                assert(LikesBetree::State::next_by(pre.i(), post.i(), lbl.i(), LikesBetree::Step::internal_buffer_noop(new_betree)));
+            }
             AllocationBetree::Step::internal_noop() => {
                 assert(LikesBetree::State::next_by(pre.i(), post.i(), lbl.i(), LikesBetree::Step::internal_noop()));
             }

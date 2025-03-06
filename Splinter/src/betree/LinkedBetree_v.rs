@@ -397,7 +397,7 @@ impl Addrs for SplitAddrs {
 impl<T: Buffer> BufferDisk<T> {
     pub open spec(checked) fn i(self) -> BufferDisk<SimpleBuffer>
     {
-        let entries = Map::new(|k| self.entries.contains_key(k), |k| self.entries[k].i(self) );
+        let entries = Map::new(|addr| self.entries.contains_key(addr), |addr| self.entries[addr].i(self, addr) );
         BufferDisk{entries}
     }
 
@@ -823,36 +823,37 @@ impl<T: Buffer> LinkedBetree<T> {
         }
     }
 
-    pub open spec(checked) fn compact_buffer_valid_domain(self, start: nat, end: nat, compacted_buffer: T, compacted_buffer_dv: BufferDisk<T>) -> bool
+    pub open spec(checked) fn compact_buffer_valid_domain(self, start: nat, end: nat, 
+        buffer: T, new_buffer_dv: BufferDisk<T>, buffer_addr: Address) -> bool
         recommends 
             self.wf(),
             self.has_root(),
             start < end <= self.root().buffers.len(),
     {
-        forall |k| compacted_buffer.linked_contains(compacted_buffer_dv, k) <==> 
+        forall |k| buffer.linked_contains(new_buffer_dv, buffer_addr, k) <==> 
             #[trigger] self.buffer_dv.valid_compact_key_domain(self.root(), start, end, k)
     }
 
     // #[verifier::opaque]
-    pub open spec(checked) fn compact_buffer_valid_range(self, start: nat, end: nat, compacted_buffer: T, compacted_buffer_dv: BufferDisk<T>) -> bool
+    pub open spec(checked) fn compact_buffer_valid_range(self, start: nat, end: nat, 
+        buffer: T, new_buffer_dv: BufferDisk<T>, buffer_addr: Address) -> bool
         recommends 
             self.wf(),
             self.has_root(),
             start < end <= self.root().buffers.len(),
-            self.compact_buffer_valid_domain(start, end, compacted_buffer, compacted_buffer_dv),
+            self.compact_buffer_valid_domain(start, end, buffer, new_buffer_dv, buffer_addr),
     {
-        forall |k| compacted_buffer.linked_contains(compacted_buffer_dv, k) ==>
-            #[trigger]  compacted_buffer.linked_query(compacted_buffer_dv, k) == self.buffer_dv.compact_key_value(self.root(), start, end, k)
+        forall |k| buffer.linked_contains(new_buffer_dv, buffer_addr, k) ==>
+            #[trigger]  buffer.linked_query(new_buffer_dv, buffer_addr, k) == self.buffer_dv.compact_key_value(self.root(), start, end, k)
     }
 
-    pub open spec(checked) fn can_compact(self, start: nat, end: nat, compacted_buffer: T, compacted_buffer_dv: BufferDisk<T>) -> bool 
+    pub open spec(checked) fn can_compact(self, start: nat, end: nat, compacted_buffer: T, compacted_buffer_dv: BufferDisk<T>, new_addrs: TwoAddrs) -> bool 
     {
         &&& self.wf()
         &&& self.has_root()
         &&& start < end <= self.root().buffers.len()
-        // &&& !compacted_buffer.map.is_empty() // do not want to compact nothing?
-        &&& self.compact_buffer_valid_domain(start, end, compacted_buffer, compacted_buffer_dv)
-        &&& self.compact_buffer_valid_range(start, end, compacted_buffer, compacted_buffer_dv)
+        &&& self.compact_buffer_valid_domain(start, end, compacted_buffer, compacted_buffer_dv, new_addrs.addr2)
+        &&& self.compact_buffer_valid_range(start, end, compacted_buffer, compacted_buffer_dv, new_addrs.addr2)
     }
 
     pub open spec /*(checked)*/ fn compact(self, start: nat, end: nat, compacted_buffer: T, new_addrs: TwoAddrs) -> LinkedBetree<T>
@@ -1091,7 +1092,7 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
     transition!{ internal_flush_memtable(lbl: Label, sealed_memtable: T, new_linked: LinkedBetree<T>, new_addrs: TwoAddrs) {
         require lbl is Internal;
         require new_addrs.no_duplicates();
-        require sealed_memtable.i(pre.linked.buffer_dv) == pre.memtable.buffer;
+        require sealed_memtable.i(pre.linked.buffer_dv, new_addrs.addr2) == pre.memtable.buffer;
 
         let pushed = pre.linked.push_memtable(sealed_memtable, new_addrs);
         require pushed.valid_view(new_linked);
@@ -1160,11 +1161,23 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
     transition!{ internal_compact(lbl: Label, new_linked: LinkedBetree<T>, path: Path<T>, 
             start: nat, end: nat, compacted_buffer: T, new_addrs: TwoAddrs, path_addrs: PathAddrs) {
         require lbl is Internal;
-        require path.target().can_compact(start, end, compacted_buffer, new_linked.buffer_dv);
+        require path.target().can_compact(start, end, compacted_buffer, new_linked.buffer_dv, new_addrs);
         require pre.linked.valid_path_replacement(path, new_addrs, path_addrs);
 
         let compacted = Self::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs);
         require compacted.valid_view(new_linked);
+
+        update linked = new_linked;
+    }}
+
+    // allow for delayed buffer gc or adding unlinked buffers
+    transition!{ internal_buffer_noop(lbl: Label, new_linked: LinkedBetree<T>) {
+        require lbl is Internal;
+
+        // NOTE: this doesn't allow for betree nodes to be gced at this step,
+        // but that is fine because betree nodes gc are synchronous
+        require pre.linked.valid_view(new_linked);
+        require pre.linked.reachable_buffers_preserved(new_linked);
 
         update linked = new_linked;
     }}
@@ -1243,6 +1256,10 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
                 { Self::internal_flush_inductive(pre, post, lbl, new_linked, path, child_idx, buffer_gc, new_addrs, path_addrs); }
             Step::internal_compact(new_linked, path, start, end, compacted_buffer, new_addrs, path_addrs) => 
                 { Self::internal_compact_inductive(pre, post, lbl, new_linked, path, start, end, compacted_buffer, new_addrs, path_addrs); }
+            Step::internal_buffer_noop(new_linked) => {
+                pre.linked.valid_view_ensures(new_linked);
+                assert(post.inv());
+            }
             _ => {} 
         }
     }
@@ -2509,18 +2526,6 @@ impl<T: Buffer> Path<T>{
             new_ranking
         }
     }
-
-    // // any newly added buffer address must not be present in the old reachable buffer set
-    // pub open spec(checked) fn new_reachable_buffers_are_fresh(self, replacement: LinkedBetree<T>) -> bool
-    //     recommends
-    //         self.valid(),
-    //         replacement.acyclic(),
-    // {
-    //     let reachable_buffers = self.linked.reachable_buffer_addrs();
-    //     let replacement_buffers = replacement.reachable_buffer_addrs();
-    //     &&& self.target().acyclic()
-    //     &&& reachable_buffers.disjoint(replacement_buffers.difference(self.target().reachable_buffer_addrs()))
-    // }
 
     proof fn substitute_reachable_buffers_ensures(self, replacement: LinkedBetree<T>, path_addrs: PathAddrs, ranking: Ranking)
         requires

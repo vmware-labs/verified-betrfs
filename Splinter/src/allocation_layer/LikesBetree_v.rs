@@ -1136,6 +1136,11 @@ state_machine!{ LikesBetree {
         update buffer_likes = new_buffer_likes;
     }}
 
+    transition!{ internal_buffer_noop(lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>) {
+        require LinkedBetreeVars::State::internal_buffer_noop(pre.betree, new_betree, lbl->linked_lbl, new_betree.linked);
+        update betree = new_betree;
+    }}
+
     transition!{ internal_noop(lbl: Label) {
         require LinkedBetreeVars::State::internal_noop(pre.betree, pre.betree, lbl->linked_lbl);
     }}
@@ -1718,6 +1723,14 @@ state_machine!{ LikesBetree {
         } 
     }
    
+    #[inductive(internal_buffer_noop)]
+    fn internal_buffer_noop_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>) {
+        reveal(LinkedBetreeVars::State::next_by);
+        let linked_step = LinkedBetreeVars::Step::internal_buffer_noop(new_betree.linked);
+        LinkedBetreeVars::State::inv_next_by(pre.betree, new_betree, lbl->linked_lbl, linked_step);
+        pre.betree.linked.valid_view_implies_same_transitive_likes(new_betree.linked);
+    }
+
     #[inductive(internal_noop)]
     fn internal_noop_inductive(pre: Self, post: Self, lbl: Label) {}
 

@@ -70,6 +70,9 @@ impl LikesBetree::State {
             LikesBetree::Step::internal_compact(new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs) => {
                 return Self::internal_compact_satisfies_strong_step(pre, post, lbl, new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs);
             }
+            LikesBetree::Step::internal_buffer_noop(new_betree) => {
+                return LinkedBetreeVars::Step::internal_buffer_noop(new_betree.linked);
+            }
             LikesBetree::Step::internal_noop() => {
                 return LinkedBetreeVars::Step::internal_noop();
             }

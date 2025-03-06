@@ -46,7 +46,7 @@ impl Memtable {
 
     pub open spec(checked) fn is_empty(self) -> bool
     {
-        self.buffer.is_empty()
+        self.buffer == SimpleBuffer::empty()
     }
 
     pub open spec(checked) fn apply_put(self, km: KeyedMessage) -> Memtable {

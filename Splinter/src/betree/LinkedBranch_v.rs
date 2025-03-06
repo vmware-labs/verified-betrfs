@@ -257,50 +257,66 @@ impl<T> LinkedBranch<T> {
         }
     }
 
+    pub open spec fn can_insert(self, key: Key, msg: Message, path: Path<T>) -> bool
+    {
+        &&& path.valid()
+        &&& path.branch == self
+        &&& path.key == key
+        &&& path.target().root() is Leaf
+    }
+
     pub open spec/*XXX (checked)*/ fn insert(self, key: Key, msg: Message, path: Path<T>) -> LinkedBranch<T>
-        recommends
-            path.valid(),
-            path.branch == self,
-            path.key == key,
-            path.target().root() is Leaf,
+        recommends self.can_insert(key, msg, path)
     {
         // Need path.valid() ==> path.target().has_root() && path.target().wf() to restore checked
         path.substitute(path.target().insert_leaf(key, msg))
     }
 
+    pub open spec fn can_grow(self, addr: Address) -> bool
+    {
+        &&& self.wf()
+        &&& self.disk_view.is_fresh(set!{addr})
+    }
+
     pub open spec(checked) fn grow(self, addr: Address) -> LinkedBranch<T>
-        recommends
-            self.wf(),
-            self.disk_view.is_fresh(set!{addr})
+        recommends self.can_grow(addr)
     {
         let new_root = Node::Index{pivots: seq![], children: seq![self.root], aux_ptr: None};
         let new_disk_view = self.disk_view.modify_disk(addr, new_root);
         LinkedBranch{root: addr, disk_view: new_disk_view}
     }
 
+    pub open spec fn can_append(self, keys: Seq<Key>, msgs: Seq<Message>, path: Path<T>) -> bool
+    {
+        &&& path.valid()
+        &&& path.branch == self
+        &&& keys.len() > 0
+        &&& keys.len() == msgs.len()
+        &&& Key::is_strictly_sorted(keys)
+        &&& path.target().root() is Leaf
+        &&& Key::lt(path.target().root()->keys.last(), keys[0])
+        &&& path.key == keys[0]
+        &&& path.path_equiv(keys.last())
+    }
+
     pub open spec/*XXX (checked)*/ fn append(self, keys: Seq<Key>, msgs: Seq<Message>, path: Path<T>) -> LinkedBranch<T>
-        recommends
-            path.valid(),
-            path.branch == self,
-            keys.len() > 0,
-            keys.len() == msgs.len(),
-            Key::is_strictly_sorted(keys),
-            path.target().root() is Leaf,
-            Key::lt(path.target().root()->keys.last(), keys[0]),
-            path.key == keys[0],
-            path.path_equiv(keys.last()),
+        recommends self.can_append(keys, msgs, path)
     {
         // Need path.valid() ==> path.target().wf() to restore checked
         path.substitute(path.target().append_leaf(keys, msgs))
     }
 
+    pub open spec fn can_split(self, addr: Address, path: Path<T>, split_arg: SplitArg) -> bool
+    {
+        &&& path.valid()
+        &&& path.branch == self
+        &&& path.key == split_arg.get_pivot()
+        &&& path.target().can_split_child_of_index(split_arg, addr)
+        &&& self.disk_view.is_fresh(set!{addr})
+    }
+
     pub open spec(checked) fn split(self, addr: Address, path: Path<T>, split_arg: SplitArg) -> LinkedBranch<T>
-        recommends
-            path.valid(),
-            path.branch == self,
-            path.key == split_arg.get_pivot(),
-            path.target().can_split_child_of_index(split_arg, addr),
-            self.disk_view.is_fresh(set!{addr})
+        recommends self.can_split(addr, path, split_arg)
     {
         path.substitute(path.target().split_child_of_index(split_arg, addr))
     }
@@ -317,11 +333,12 @@ impl<T> LinkedBranch<T> {
 
     pub open spec(checked) fn has_root(self) -> bool
     {
-        self.disk_view.valid_address(self.root) && !(self.disk_view.get(self.root) is Auxiliary)
+        &&& self.disk_view.valid_address(self.root)
+        &&& !(self.root() is Auxiliary)
     }
 
     pub open spec(checked) fn root(self) -> Node<T>
-        recommends self.has_root()
+        recommends self.disk_view.valid_address(self.root)
     {
         self.disk_view.get(self.root)
     }

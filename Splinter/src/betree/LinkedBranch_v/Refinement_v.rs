@@ -105,18 +105,30 @@ impl SplitArg {
     }
 }
 
+impl<T> LinkedBranch<T> {
+    pub open spec fn inv(self) -> bool
+    {
+        &&& self.acyclic()
+        &&& self.inv_internal(self.the_ranking())
+    }
+
+    pub open spec fn inv_internal(self, ranking: Ranking) -> bool
+    {
+        &&& self.wf()
+        &&& self.valid_ranking(ranking)
+        &&& self.keys_strictly_sorted_internal(ranking)
+        &&& self.all_keys_in_range_internal(ranking)
+    }
+}
+
 pub open spec(checked) fn inv<T>(branch: LinkedBranch<T>) -> bool
 {
-    &&& branch.acyclic()
-    &&& inv_internal(branch, branch.the_ranking())
+    branch.inv()   
 }
 
 pub open spec(checked) fn inv_internal<T>(branch: LinkedBranch<T>, ranking: Ranking) -> bool
 {
-    &&& branch.wf()
-    &&& branch.valid_ranking(ranking)
-    &&& branch.keys_strictly_sorted_internal(ranking)
-    &&& branch.all_keys_in_range_internal(ranking)
+    branch.inv_internal(ranking)
 }
 
 // TODO(x9du): dedup with pivotbranch route?

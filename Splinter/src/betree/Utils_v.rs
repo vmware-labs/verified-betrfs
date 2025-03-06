@@ -6,6 +6,11 @@ use vstd::prelude::*;
 
 verus! {
 
+pub open spec(checked) fn union_set_of_sets<A>(sets: Set<Set<A>>) -> Set<A>
+{
+    sets.fold(Set::empty(), |u: Set<A>, s| u.union(s))
+}
+
 pub open spec(checked) fn union_seq_of_sets<A>(sets: Seq<Set<A>>) -> Set<A>
 {
     sets.fold_left(Set::empty(), |u: Set<A>, s| u.union(s))

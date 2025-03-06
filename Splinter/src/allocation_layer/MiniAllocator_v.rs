@@ -111,7 +111,6 @@ impl PageAllocator {
     recommends
             self.wf(),
             addrs.subset_of(self.observed + self.reserved),  // ensures out.wf()
-
     {
         Self{observed: self.observed.difference(addrs), reserved: self.reserved.difference(addrs), au: self.au}
     }
@@ -154,7 +153,6 @@ impl MiniAllocator {
     pub open spec(checked) fn add_aus(self, aus: Set<AU>) -> Self
         recommends
             self.wf(),  // ensures out.wf()
-
     {
         let new_allocs = Map::new(
             |au| (aus+self.allocs.dom()).contains(au),
@@ -205,8 +203,6 @@ impl MiniAllocator {
     pub open spec/*(checked)*/ fn prune(self, aus: Set<AU>) -> Self
     recommends
         self.wf(),
-    // ensures out.wf()
-    // ensures out.allocs.dom() == self.alloc.dom() - aus
     {
         let new_allocs = Map::new(
             |au| self.allocs.contains_key(au) && !aus.contains(au),
@@ -214,6 +210,21 @@ impl MiniAllocator {
         let new_curr = if self.curr is Some && aus.contains(self.curr.unwrap()) { None }
                        else { self.curr };
         Self{allocs: new_allocs, curr: new_curr}
+    }
+
+    pub open spec fn reserved_aus(self) -> Set<AU>
+    {
+        Set::new(|au| !self.can_remove(au))
+    }
+
+    pub open spec fn removable_aus(self) -> Set<AU>
+    {
+        Set::new(|au| self.can_remove(au))
+    }
+
+    pub open spec fn all_aus(self) -> Set<AU>
+    {
+        self.allocs.dom()
     }
 }
 

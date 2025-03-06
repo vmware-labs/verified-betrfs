@@ -59,7 +59,7 @@ impl<T> BufferDisk<T> {
 impl<T: Buffer> BufferDisk<T> {
     pub open spec fn query(self, addr: Address, k: Key) -> Message
     {
-        self.entries[addr].linked_query(self, k)
+        self.entries[addr].linked_query(self, addr, k)
     }
 
     pub open spec(checked) fn query_from(self, buffers: LinkedSeq, k: Key, start: int) -> Message 
@@ -77,7 +77,7 @@ impl<T: Buffer> BufferDisk<T> {
     pub open spec fn queryable_contains(self, addr: Address, k: Key) -> bool
     {
         &&& self.entries.contains_key(addr)
-        &&& self.entries[addr].linked_contains(self, k)
+        &&& self.entries[addr].linked_contains(self, addr, k)
     }
 
     pub open spec(checked) fn key_in_buffer(self, buffers: LinkedSeq, from_idx: int, k: Key, idx: int) -> bool
@@ -97,10 +97,18 @@ impl<T: Buffer> BufferDisk<T> {
     pub open spec(checked) fn i_buffer_seq(self, addrs: LinkedSeq) -> BufferSeq_v::BufferSeq
         recommends self.valid_buffers(addrs)
     {
-        let buffers = Seq::new(addrs.len(), |i| self.entries[addrs[i]].i(self));    
+        let buffers = Seq::new(addrs.len(), |i| self.entries[addrs[i]].i(self, addrs[i]));    
         BufferSeq_v::BufferSeq{ buffers: buffers }
     }
 
+    pub open spec(checked) fn valid_buffers(self, buffers: LinkedSeq) -> bool
+    {
+        let addrs = buffers.addrs;
+        &&& addrs.to_set() <= self.repr()
+    }
+}
+
+impl BufferDisk<SimpleBuffer> {
     pub proof fn query_from_commutes_with_i(self, addrs: LinkedSeq, k: Key, start: int)
         requires 
             self.valid_buffers(addrs),
@@ -109,22 +117,9 @@ impl<T: Buffer> BufferDisk<T> {
             self.query_from(addrs, k, start) == self.i_buffer_seq(addrs).query_from(k, start)
         decreases addrs.len() - start
     {
-        broadcast use Buffer::linked_query_refines;
         if start < addrs.len() {
             self.query_from_commutes_with_i(addrs, k, start+1);
         }
-    }
-
-    pub open spec(checked) fn valid_buffers(self, buffers: LinkedSeq) -> bool
-    {
-        let addrs = buffers.addrs;
-        &&& addrs.to_set() <= self.repr()
-        &&& forall |i| 0 <= i < addrs.len() ==> #[trigger] self.entries[addrs[i]].linked_wf(self)
-    }
-
-    pub open spec fn all_entries_valid(self) -> bool
-    {
-        forall |addr| self.entries.contains_key(addr) ==> #[trigger] self.entries[addr].linked_wf(self)
     }
 
     pub broadcast proof fn agrees_implies_same_i(self, other: Self, buffers: LinkedSeq)
@@ -143,7 +138,6 @@ impl<T: Buffer> BufferDisk<T> {
         by {
             if self.entries.contains_key(buffers[i]) {
                 assert(other.entries.contains_key(buffers[i])); // trigger
-                self.entries[buffers[i]].wf_agreeable_ensures(self, other);
             }
         }
         assert(i_this =~= i_other);
