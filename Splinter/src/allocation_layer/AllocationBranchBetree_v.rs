@@ -32,40 +32,38 @@ use crate::abstract_system::MsgHistory_v::*;
 
 verus! {
 
+impl BufferDisk<BranchNode> {
+    pub open spec fn to_branch_disk(self) -> LinkedBranch_v::DiskView::<Summary>
+    {
+       LinkedBranch_v::DiskView{entries: self.entries}
+    }
+}
+
 impl LinkedBetree<BranchNode> {
     pub open spec fn get_branch(self, root: Address) -> LinkedBranch<Summary>
     {
-        LinkedBranch{root, disk_view: LinkedBranch_v::DiskView{entries: self.buffer_dv.entries}}
+        LinkedBranch{root, disk_view: self.buffer_dv.to_branch_disk()}
     }
 
-    pub open spec fn valid_branches(self) -> bool
+    pub open spec fn sealed_branch_roots(self, branch_roots: Set<Address>) -> bool
     {
-        let branch_roots = self.reachable_buffer_addrs();
-    
-        // ensures that each branch is sealed with valid summary
         &&& forall |root| branch_roots.contains(root) 
             ==> #[trigger] self.get_branch(root).valid_sealed_branch()
-        // ensures that no branches share AUs
-        &&& forall |r1, r2| ({
-            &&& #[trigger] branch_roots.contains(r1) 
-            &&& #[trigger] branch_roots.contains(r2) 
-            &&& r1 != r2 }) 
-        ==> {
-            &&& r1.au != r2.au
-            &&& self.get_branch(r1).get_summary().disjoint(self.get_branch(r2).get_summary())
-        }
     }
 
     pub open spec fn build_branch_summary(self, branch_roots: Set<Address>) -> Map<AU, Set<AU>>
-        decreases branch_roots.len() when branch_roots.finite()
+        // decreases branch_roots.len() when branch_roots.finite()
     {
-        if branch_roots.len() == 0 {
-            map!{}
-        } else {
-            let root = branch_roots.choose();
-            let sub_branch_summary = self.build_branch_summary(branch_roots.remove(root));
-            sub_branch_summary.insert(root.au, self.get_branch(root).get_summary())
-        }
+        let root_to_au = Map::new(|addr| branch_roots.contains(addr), |addr: Address| addr.au);
+        let au_to_root = root_to_au.invert();
+        au_to_root.map_values(|root| self.get_branch(root).get_summary())
+        // if branch_roots.len() == 0 {
+        //     map!{}
+        // } else {
+        //     let root = branch_roots.choose();
+        //     let sub_branch_summary = self.build_branch_summary(branch_roots.remove(root));
+        //     sub_branch_summary.insert(root.au, )
+        // }
     }
 }
 
@@ -101,6 +99,22 @@ pub open spec fn seq_addrs_disjoint_aus(addrs: Seq<Address>) -> bool
     ==> #[trigger] addrs[i].au != #[trigger] addrs[j].au
 }
 
+pub open spec fn set_addrs_disjoint_aus(addrs: Set<Address>) -> bool
+{
+    Map::new(|addr| addrs.contains(addr), |addr: Address| addr.au).is_injective()
+    // forall |addr1, addr2| #[trigger] addrs.contains(addr1) 
+    //     && #[trigger] addrs.contains(addr2) && addr1 != addr2
+    // ==> addr1.au != addr2.au
+}
+
+impl CompactorInput{
+    pub open spec(checked) fn input_roots(inputs: Seq<CompactorInput>) -> Set<Address>
+    {
+        let roots_seq = Seq::new(inputs.len(), |i| inputs[i].input_buffers.addrs.to_set());
+        union_seq_of_sets(roots_seq)
+    }
+}
+
 // NOTE: inv needs to maintain disjointness between all wip branches
 
 state_machine!{ AllocationBranchBetree {
@@ -110,7 +124,7 @@ state_machine!{ AllocationBranchBetree {
         pub betree_aus: AULikes,        // tree node reference
         pub branch_aus: AULikes,        // root au of each branch
         pub branch_summary: Map<AU, Summary>,  // map a branch root au to its summary au set
-        
+
         pub compactors: Seq<CompactorInput>, // track ongoing compaction inputs
         pub wip_branches: Seq<AllocationBranch>, // track ongoing branches that are being built
     }
@@ -145,17 +159,20 @@ state_machine!{ AllocationBranchBetree {
     }
 
     init!{ initialize(betree: LinkedBetreeVars::State<BranchNode>) {
-        require LinkedBetreeVars::State::initialize(betree, betree); // bufffer_dv restriction: valid_buffer_dv
-        // au likes level restriction
-        require betree.linked.valid_branches();
-        require to_aus(betree.linked.dv.entries.dom()).disjoint(to_aus(betree.linked.buffer_dv.repr()));
-
+        require LinkedBetreeVars::State::initialize(betree, betree); // buffer_dv restriction: valid_buffer_dv
         let (betree_likes, buffer_likes) = betree.linked.transitive_likes();
+
+        require betree.linked.sealed_branch_roots(buffer_likes.dom());
+        require betree.linked.dv.entries.dom().disjoint(betree.linked.buffer_dv.repr());
+        require set_addrs_disjoint_aus(betree_likes.dom() + buffer_likes.dom());
+
+        let branch_summary = betree.linked.build_branch_summary(buffer_likes.dom());
+        require branch_summary.is_injective(); 
 
         init betree = betree;
         init betree_aus = to_au_likes(betree_likes);
         init branch_aus = to_au_likes(buffer_likes);
-        init branch_summary = betree.linked.build_branch_summary(buffer_likes.dom());
+        init branch_summary = branch_summary;
         init compactors = Seq::empty();
         init wip_branches = Seq::empty();
     }}
@@ -395,6 +412,81 @@ state_machine!{ AllocationBranchBetree {
         update branch_summary = new_branch_summary;
         update compactors = new_compactors;
     }}
+
+    #[invariant]
+    pub open spec(checked) fn inv(self) -> bool {
+        let linked = self.betree.linked;
+        let (betree_likes, buffer_likes) = linked.transitive_likes();
+        let compactor_roots = CompactorInput::input_roots(self.compactors);
+
+        &&& self.betree.inv()
+        &&& self.betree_aus == to_au_likes(betree_likes)
+        &&& self.branch_aus == to_au_likes(buffer_likes)
+
+        // new domain disjointness for AllocationBranchBetree 
+        // couldn't prove this at layers above because we pass through
+        // the "richer" disk and relaxed disk domain requirement to allow for 
+        // garbage collection invisible to upper layers
+        &&& linked.dv.entries.dom().disjoint(linked.buffer_dv.repr())
+
+        // branch related invs
+        // reachable & compactors are valid sealed branches that do not overlap in AUs
+        &&& linked.sealed_branch_roots(buffer_likes.dom())
+        &&& linked.sealed_branch_roots(compactor_roots)
+        &&& set_addrs_disjoint_aus(betree_likes.dom() + buffer_likes.dom() + compactor_roots)
+
+        // summary should be disjoint
+        &&& self.branch_aus.dom() + self.read_ref_aus() == self.branch_summary.dom()
+        &&& self.branch_summary.is_injective()
+        &&& self.branch_summary == linked.build_branch_summary(buffer_likes.dom() + compactor_roots)
+    }
+
+    #[inductive(initialize)]
+    fn initialize_inductive(post: Self, betree: LinkedBetreeVars::State<BranchNode>) {
+        let linked = post.betree.linked;
+        let (betree_likes, buffer_likes) = linked.transitive_likes();
+        let compactor_roots = CompactorInput::input_roots(post.compactors);
+
+        assert(betree_likes.dom() + buffer_likes.dom() + compactor_roots == betree_likes.dom() + buffer_likes.dom());
+        assert(set_addrs_disjoint_aus(betree_likes.dom() + buffer_likes.dom()));
+
+        // what's wrong with this 
+        assume(post.branch_aus.dom() + post.read_ref_aus() == post.branch_summary.dom());
+        assume(post.branch_summary == linked.build_branch_summary(buffer_likes.dom() + compactor_roots));
+    }
+   
+    #[inductive(au_likes_noop)]
+    fn au_likes_noop_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<BranchNode>) { }
+   
+    #[inductive(branch_begin)]
+    fn branch_begin_inductive(pre: Self, post: Self, lbl: Label) { }
+   
+    #[inductive(branch_build)]
+    fn branch_build_inductive(pre: Self, post: Self, lbl: Label, idx: int, post_branch: AllocationBranch, event: BuildEvent) { }
+   
+    #[inductive(branch_abort)]
+    fn branch_abort_inductive(pre: Self, post: Self, lbl: Label, idx: int) { }
+   
+    #[inductive(internal_flush_memtable)]
+    fn internal_flush_memtable_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<BranchNode>, branch_idx: int, new_root_addr: Address) { }
+   
+    #[inductive(internal_grow)]
+    fn internal_grow_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<BranchNode>, new_root_addr: Address) { }
+   
+    #[inductive(internal_split)]
+    fn internal_split_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<BranchNode>, path: Path<BranchNode>, request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs) { }
+   
+    #[inductive(internal_flush)]
+    fn internal_flush_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<BranchNode>, path: Path<BranchNode>, child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, path_addrs: PathAddrs) { }
+   
+    #[inductive(internal_compact_begin)]
+    fn internal_compact_begin_inductive(pre: Self, post: Self, lbl: Label, path: Path<BranchNode>, start: nat, end: nat, input: CompactorInput) { }
+   
+    #[inductive(internal_compact_abort)]
+    fn internal_compact_abort_inductive(pre: Self, post: Self, lbl: Label, input_idx: int, new_betree: LinkedBetreeVars::State<BranchNode>) { }
+   
+    #[inductive(internal_compact_complete)]
+    fn internal_compact_complete_inductive(pre: Self, post: Self, lbl: Label, input_idx: int, new_betree: LinkedBetreeVars::State<BranchNode>, path: Path<BranchNode>, start: nat, end: nat, branch_idx: int, new_node_addr: Address, path_addrs: PathAddrs) { }
 }} // end of AllocationBetree state machine
 
 } // end of verus!

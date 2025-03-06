@@ -35,26 +35,28 @@ pub struct CompactorInput{
 }
 
 pub open spec fn seq_addrs_to_aus(s: Seq<Address>) -> Set<AU>
-    decreases s.len()
+    // decreases s.len()
 {
-    if s.len() > 0 {
-        set![s.last().au] + seq_addrs_to_aus(s.drop_last())
-    } else {
-        set![]
-    }
+    to_aus(s.to_set())
+    // if s.len() > 0 {
+    //     set![s.last().au] + seq_addrs_to_aus(s.drop_last())
+    // } else {
+    //     set![]
+    // }
 }
 
 // to aus 
 
 impl CompactorInput{
     pub open spec(checked) fn input_aus(inputs: Seq<CompactorInput>) -> Set<AU>
-        decreases inputs.len()
+        // decreases inputs.len()
     {
-        if inputs.len() > 0 {
-            seq_addrs_to_aus(inputs.last().input_buffers.addrs) + Self::input_aus(inputs.drop_last())
-        } else {
-            set![]
-        }
+        inputs.fold_left(Set::empty(), |u: Set<AU>, s: CompactorInput| u.union(seq_addrs_to_aus(s.input_buffers.addrs)))
+        // if inputs.len() > 0 {
+        //     seq_addrs_to_aus(inputs.last().input_buffers.addrs) + Self::input_aus(inputs.drop_last())
+        // } else {
+        //     set![]
+        // }
     }
 }
 
