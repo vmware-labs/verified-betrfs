@@ -65,7 +65,14 @@ impl LinkedBetree<BranchNode> {
         //     sub_branch_summary.insert(root.au, )
         // }
     }
-}
+
+    // proof fn build_branch_summary_domain(self, branch_roots: Set<Address>)
+    //     requires self.build_branch_summary(branch_roots).is_injective()
+    //     ensures to_au_likes(branch_roots).dom() == self.build_branch_summary(branch_roots).dom()
+    // {
+
+    // }
+}   
 
 impl SplitAddrs {
     pub open spec fn to_aus(self) -> Set<AU>
@@ -101,11 +108,19 @@ pub open spec fn seq_addrs_disjoint_aus(addrs: Seq<Address>) -> bool
 
 pub open spec fn set_addrs_disjoint_aus(addrs: Set<Address>) -> bool
 {
-    Map::new(|addr| addrs.contains(addr), |addr: Address| addr.au).is_injective()
-    // forall |addr1, addr2| #[trigger] addrs.contains(addr1) 
-    //     && #[trigger] addrs.contains(addr2) && addr1 != addr2
-    // ==> addr1.au != addr2.au
+    forall |addr1, addr2| #[trigger] addrs.contains(addr1) 
+        && #[trigger] addrs.contains(addr2) && addr1 != addr2
+    ==> addr1.au != addr2.au
 }
+
+pub open spec fn map_with_disjoint_values<K,V>(m: Map<K, Set<V>>) -> bool
+{
+    forall |k1, k2| #[trigger] m.contains_key(k1) 
+        && #[trigger] m.contains_key(k2) && k1 != k2
+    ==> m[k1].disjoint(m[k2])
+}
+
+// injective guarantees that values themselves
 
 impl CompactorInput{
     pub open spec(checked) fn input_roots(inputs: Seq<CompactorInput>) -> Set<Address>
@@ -160,18 +175,18 @@ state_machine!{ AllocationBranchBetree {
 
     init!{ initialize(betree: LinkedBetreeVars::State<BranchNode>) {
         require LinkedBetreeVars::State::initialize(betree, betree); // buffer_dv restriction: valid_buffer_dv
-        let (betree_likes, buffer_likes) = betree.linked.transitive_likes();
+        let (betree_likes, branch_likes) = betree.linked.transitive_likes();
 
-        require betree.linked.sealed_branch_roots(buffer_likes.dom());
+        require betree.linked.sealed_branch_roots(branch_likes.dom());
         require betree.linked.dv.entries.dom().disjoint(betree.linked.buffer_dv.repr());
-        require set_addrs_disjoint_aus(betree_likes.dom() + buffer_likes.dom());
+        require set_addrs_disjoint_aus(betree_likes.dom() + branch_likes.dom());
 
-        let branch_summary = betree.linked.build_branch_summary(buffer_likes.dom());
-        require branch_summary.is_injective(); 
+        let branch_summary = betree.linked.build_branch_summary(branch_likes.dom());
+        require map_with_disjoint_values(branch_summary);
 
         init betree = betree;
         init betree_aus = to_au_likes(betree_likes);
-        init branch_aus = to_au_likes(buffer_likes);
+        init branch_aus = to_au_likes(branch_likes);
         init branch_summary = branch_summary;
         init compactors = Seq::empty();
         init wip_branches = Seq::empty();
@@ -416,12 +431,12 @@ state_machine!{ AllocationBranchBetree {
     #[invariant]
     pub open spec(checked) fn inv(self) -> bool {
         let linked = self.betree.linked;
-        let (betree_likes, buffer_likes) = linked.transitive_likes();
+        let (betree_likes, branch_likes) = linked.transitive_likes();
         let compactor_roots = CompactorInput::input_roots(self.compactors);
 
         &&& self.betree.inv()
         &&& self.betree_aus == to_au_likes(betree_likes)
-        &&& self.branch_aus == to_au_likes(buffer_likes)
+        &&& self.branch_aus == to_au_likes(branch_likes)
 
         // new domain disjointness for AllocationBranchBetree 
         // couldn't prove this at layers above because we pass through
@@ -431,32 +446,47 @@ state_machine!{ AllocationBranchBetree {
 
         // branch related invs
         // reachable & compactors are valid sealed branches that do not overlap in AUs
-        &&& linked.sealed_branch_roots(buffer_likes.dom())
+        &&& linked.sealed_branch_roots(branch_likes.dom())
         &&& linked.sealed_branch_roots(compactor_roots)
-        &&& set_addrs_disjoint_aus(betree_likes.dom() + buffer_likes.dom() + compactor_roots)
+        &&& set_addrs_disjoint_aus(betree_likes.dom() + branch_likes.dom() + compactor_roots)
 
         // summary should be disjoint
         &&& self.branch_aus.dom() + self.read_ref_aus() == self.branch_summary.dom()
-        &&& self.branch_summary.is_injective()
-        &&& self.branch_summary == linked.build_branch_summary(buffer_likes.dom() + compactor_roots)
+        &&& map_with_disjoint_values(self.branch_summary) // ensures that summary doesn't overlap
+
+        &&& self.branch_summary == linked.build_branch_summary(branch_likes.dom() + compactor_roots)
     }
 
     #[inductive(initialize)]
     fn initialize_inductive(post: Self, betree: LinkedBetreeVars::State<BranchNode>) {
         let linked = post.betree.linked;
-        let (betree_likes, buffer_likes) = linked.transitive_likes();
+        let (betree_likes, branch_likes) = linked.transitive_likes();
         let compactor_roots = CompactorInput::input_roots(post.compactors);
 
-        assert(betree_likes.dom() + buffer_likes.dom() + compactor_roots == betree_likes.dom() + buffer_likes.dom());
-        assert(set_addrs_disjoint_aus(betree_likes.dom() + buffer_likes.dom()));
+        assert(betree_likes.dom() + branch_likes.dom() + compactor_roots == betree_likes.dom() + branch_likes.dom());
+        assert(set_addrs_disjoint_aus(betree_likes.dom() + branch_likes.dom()));
 
-        // what's wrong with this 
-        assume(post.branch_aus.dom() + post.read_ref_aus() == post.branch_summary.dom());
-        assume(post.branch_summary == linked.build_branch_summary(buffer_likes.dom() + compactor_roots));
+        assert(post.branch_aus.dom() + post.read_ref_aus() == post.branch_aus.dom());
+        assert(post.branch_aus.dom() == to_au_likes(branch_likes).dom());
+
+        let root_to_au = Map::new(|addr| branch_likes.dom().contains(addr), |addr: Address| addr.au);
+        assert(root_to_au.dom() == branch_likes.dom());
+        let au_to_root = root_to_au.invert();
+
+        to_au_likes_domain(branch_likes);
+        assert(to_au_likes(branch_likes).dom() == to_aus(branch_likes.dom()));
+
+        assert(au_to_root.dom() == to_aus(root_to_au.dom()));
+        assert(au_to_root.dom() == post.branch_aus.dom());
+        assert(post.branch_aus.dom() == post.branch_summary.dom());
+
+        assert(branch_likes.dom() + compactor_roots == branch_likes.dom());
+        assert(post.branch_summary == linked.build_branch_summary(branch_likes.dom() + compactor_roots));
     }
    
     #[inductive(au_likes_noop)]
-    fn au_likes_noop_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<BranchNode>) { }
+    fn au_likes_noop_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<BranchNode>) { 
+    }
    
     #[inductive(branch_begin)]
     fn branch_begin_inductive(pre: Self, post: Self, lbl: Label) { }

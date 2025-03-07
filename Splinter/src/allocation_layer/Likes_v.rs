@@ -34,7 +34,9 @@ verus!{
     }
 
     pub proof fn to_au_likes_domain(likes: Likes) 
-        ensures forall |addr| #[trigger] likes.contains(addr) ==> to_au_likes(likes).contains(addr.au)
+        ensures 
+            forall |addr| #[trigger] likes.contains(addr) ==> to_au_likes(likes).contains(addr.au),
+            to_au_likes(likes).dom() == to_aus(likes.dom()),
         decreases likes.len()
     {
         if likes.len() > 0 {
@@ -50,6 +52,19 @@ verus!{
                     assert(to_au_likes(likes.remove(e)) <= to_au_likes(likes));
                 }
             }
+
+            to_aus_singleton(e);
+            to_au_likes_singleton(e);
+            assert(Multiset::singleton(e.au).dom() == set!{e.au});
+
+            to_aus_additive(likes.remove(e).dom(), set!{e});
+            assert(likes.dom() == likes.remove(e).dom() + set!{e});
+            to_au_likes_commutative_over_add(likes.remove(e), Multiset::singleton(e));
+            assert(to_au_likes(likes).dom() == to_au_likes(likes.remove(e)).dom() + to_au_likes(Multiset::singleton(e)).dom()); // trigger
+        } else {
+            assert(likes.dom() == Set::<Address>::empty());
+            assert(to_au_likes(likes).dom() == Set::<AU>::empty());
+            assert(to_aus(likes.dom()) == Set::<AU>::empty());
         }
     }
 
@@ -65,6 +80,7 @@ verus!{
 
     // NOTE: same proof as buffer_likes_additive, would be better if we can 
     // generalize this
+    #[verifier::spinoff_prover]
     pub proof fn to_au_likes_commutative_over_add(likes: Likes, delta: Likes)
         ensures to_au_likes(likes.add(delta)) =~= to_au_likes(likes).add(to_au_likes(delta))
         decreases likes.len() + delta.len()

@@ -7,6 +7,7 @@
 use builtin::*;
 use builtin_macros::*;
 use vstd::prelude::*;
+use vstd::map_lib::*;
 
 use crate::spec::AsyncDisk_t;
 use crate::spec::ImplDisk_t;
@@ -73,8 +74,68 @@ pub open spec(checked) fn min_addr(a: Address, b: Address) -> Address {
 }
 
 /// Returns the set of AUs that the provided set of Addresses live in.
-pub open spec(checked) fn to_aus(addrs: Set<Address>) -> Set<AU> {
-    addrs.map(|addr: Address| addr.au)
+pub open spec(checked) fn to_aus(addrs: Set<Address>) -> Set<AU> 
+    // decreases addrs.len() when addrs.finite()
+{
+    Map::new(|addr| addrs.contains(addr), |addr: Address| addr.au).values()
+}
+
+pub proof fn to_aus_finite(addrs: Set<Address>)
+    requires addrs.finite()
+    ensures to_aus(addrs).finite()
+{
+    let m = Map::new(|addr| addrs.contains(addr), |addr: Address| addr.au);
+    assert(m.dom() == addrs);
+    lemma_values_finite(m);
+}
+
+pub proof fn to_aus_singleton(addr: Address) 
+    ensures to_aus(set!{addr}) == set!{addr.au}
+{
+    let s = set!{addr};
+    let m = Map::new(|addr| s.contains(addr), |addr: Address| addr.au);
+
+    assert(m.dom() == s);
+    assert(m[addr] == addr.au);
+    assert(m.values().contains(addr.au));
+    assert(set!{addr.au} =~= m.values());
+}
+
+pub proof fn to_aus_additive(addrs: Set<Address>, other_addrs: Set<Address>) 
+    ensures to_aus(addrs + other_addrs) == to_aus(addrs) + to_aus(other_addrs)
+{
+    let total = addrs + other_addrs;
+    let m_total = Map::new(|addr| total.contains(addr), |addr: Address| addr.au);
+    let m_addrs = Map::new(|addr| addrs.contains(addr), |addr: Address| addr.au);
+    let m_other_addrs = Map::new(|addr| other_addrs.contains(addr), |addr: Address| addr.au);
+
+    assert(m_total.dom() == total);
+    assert(m_addrs.dom() == addrs);
+    assert(m_other_addrs.dom() == other_addrs);
+
+    assert forall |au| #[trigger] m_total.values().contains(au) <==> 
+        (m_addrs.values() + m_other_addrs.values()).contains(au)
+    by {
+        if m_total.values().contains(au) {
+            let addr = choose |addr| #[trigger] m_total.contains_key(addr) && m_total[addr] == addr.au;
+            assert(m_addrs.contains_key(addr) || m_other_addrs.contains_key(addr));
+            assert(m_addrs.values().contains(addr.au) || m_other_addrs.values().contains(addr.au));
+        }
+
+        if (m_addrs.values() + m_other_addrs.values()).contains(au) {
+            if m_addrs.values().contains(au) {
+                let addr = choose |addr| #[trigger] m_addrs.contains_key(addr) && m_addrs[addr] == au;
+                assert(m_total.contains_key(addr));
+                assert(m_total[addr] == addr.au);
+            } else {
+                assert(m_other_addrs.values().contains(au));
+                let addr = choose |addr| #[trigger] m_other_addrs.contains_key(addr) && m_other_addrs[addr] == au;
+                assert(m_total.contains_key(addr));
+                assert(m_total[addr] == addr.au);
+            }
+        }
+    }
+    assert(m_total.values() =~= m_addrs.values() + m_other_addrs.values());
 }
 
 pub open spec(checked) fn addr_range(au: IAU, start: IPage, end_excl: IPage) -> (addrs: Set<Address>) {
