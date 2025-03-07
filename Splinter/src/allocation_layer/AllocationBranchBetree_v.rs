@@ -65,13 +65,6 @@ impl LinkedBetree<BranchNode> {
         //     sub_branch_summary.insert(root.au, )
         // }
     }
-
-    // proof fn build_branch_summary_domain(self, branch_roots: Set<Address>)
-    //     requires self.build_branch_summary(branch_roots).is_injective()
-    //     ensures to_au_likes(branch_roots).dom() == self.build_branch_summary(branch_roots).dom()
-    // {
-
-    // }
 }   
 
 impl SplitAddrs {
@@ -428,6 +421,12 @@ state_machine!{ AllocationBranchBetree {
         update compactors = new_compactors;
     }}
 
+    pub open spec fn wip_branches_inv(self) -> bool
+    {
+        forall |i| 0 <= i < self.wip_branches.len()
+        ==> #[trigger] self.wip_branches[i].inv()
+    }
+
     #[invariant]
     pub open spec(checked) fn inv(self) -> bool {
         let linked = self.betree.linked;
@@ -453,8 +452,10 @@ state_machine!{ AllocationBranchBetree {
         // summary should be disjoint
         &&& self.branch_aus.dom() + self.read_ref_aus() == self.branch_summary.dom()
         &&& map_with_disjoint_values(self.branch_summary) // ensures that summary doesn't overlap
-
         &&& self.branch_summary == linked.build_branch_summary(branch_likes.dom() + compactor_roots)
+
+        // wip branches must be valid as well
+        &&& self.wip_branches_inv()
     }
 
     #[inductive(initialize)]
@@ -485,20 +486,35 @@ state_machine!{ AllocationBranchBetree {
     }
    
     #[inductive(au_likes_noop)]
-    fn au_likes_noop_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<BranchNode>) { 
+    fn au_likes_noop_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<BranchNode>) {
+        reveal(LinkedBetreeVars::State::next);
+        reveal(LinkedBetreeVars::State::next_by);
+        assert(post.inv());
     }
    
     #[inductive(branch_begin)]
-    fn branch_begin_inductive(pre: Self, post: Self, lbl: Label) { }
+    fn branch_begin_inductive(pre: Self, post: Self, lbl: Label) {
+        assert(post.inv());
+    }
    
     #[inductive(branch_build)]
-    fn branch_build_inductive(pre: Self, post: Self, lbl: Label, idx: int, post_branch: AllocationBranch, event: BuildEvent) { }
+    fn branch_build_inductive(pre: Self, post: Self, lbl: Label, idx: int, post_branch: AllocationBranch, event: BuildEvent) {
+        // build must fail for this 
+        assert(post.inv());
+    }
    
     #[inductive(branch_abort)]
-    fn branch_abort_inductive(pre: Self, post: Self, lbl: Label, idx: int) { }
+    fn branch_abort_inductive(pre: Self, post: Self, lbl: Label, idx: int) {
+        assert(post.inv());
+    }
    
     #[inductive(internal_flush_memtable)]
-    fn internal_flush_memtable_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<BranchNode>, branch_idx: int, new_root_addr: Address) { }
+    fn internal_flush_memtable_inductive(pre: Self, post: Self, lbl: Label, 
+        new_betree: LinkedBetreeVars::State<BranchNode>, branch_idx: int, new_root_addr: Address) 
+    { 
+        
+        // only requiring branch sealed
+    }
    
     #[inductive(internal_grow)]
     fn internal_grow_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<BranchNode>, new_root_addr: Address) { }

@@ -5,6 +5,8 @@ use builtin::*;
 use builtin_macros::*;
 
 use vstd::prelude::*;
+use vstd::map::*;
+
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 use crate::disk::GenericDisk_v::*;
@@ -40,8 +42,8 @@ impl Buffer for BranchNode {
 }
 
 pub enum BuildEvent {
-    Initialize{addr: Address},
-    Insert{key: Key, msg: Message, path: Path<Summary>},
+    Initialize{addr: Address, keys: Seq<Key>, msgs: Seq<Message>},
+    // Insert{key: Key, msg: Message, path: Path<Summary>},
     Append{keys: Seq<Key>, msgs: Seq<Message>, path: Path<Summary>},
     Split{addr: Address, path: Path<Summary>, split_arg: SplitArg},
     AllocFill{},
@@ -49,6 +51,7 @@ pub enum BuildEvent {
 }
 
 pub struct AllocationBranch {
+    pub sealed: bool,
     pub branch: Option<LinkedBranch<Summary>>,
     pub mini_allocator: MiniAllocator,
 }
@@ -56,22 +59,33 @@ pub struct AllocationBranch {
 impl AllocationBranch {
     pub open spec fn new(free_aus: Set<AU>) -> Self {
         AllocationBranch{
+            sealed: false,
             branch: None,
             mini_allocator: MiniAllocator::empty().add_aus(free_aus),
         }
     }
 
-    pub open spec fn can_initialize(self, addr: Address) -> bool
+    pub open spec fn can_initialize(self, addr: Address, keys: Seq<Key>, msgs: Seq<Message>) -> bool
     {
-        self.mini_allocator.can_allocate(addr)
+        &&& !self.sealed
+        &&& self.mini_allocator.can_allocate(addr)
+        &&& keys.len() > 0
+        &&& keys.len() == msgs.len()
+        &&& Key::is_strictly_sorted(keys)
     }
 
-    pub open spec(checked) fn branch_initialize(self, addr: Address) -> Self 
-        recommends self.can_initialize(addr)
+    pub open spec(checked) fn branch_initialize(self, addr: Address, keys: Seq<Key>, msgs: Seq<Message>) -> Self 
+        recommends self.can_initialize(addr, keys, msgs), self.mini_allocator.wf()
     {
+        let branch = LinkedBranch{
+            root: addr, 
+            disk_view: DiskView{entries: map!{addr => Node::Leaf{keys, msgs}}}
+        };
+
         AllocationBranch{
-            branch: Some(empty_linked_branch(addr)),
+            branch: Some(branch),
             mini_allocator: self.mini_allocator.allocate(addr),
+            ..self
         }
     }
 
@@ -81,23 +95,9 @@ impl AllocationBranch {
         self.branch.unwrap().query(key)
     }
 
-    pub open spec fn can_insert(self, key: Key, msg: Message, path: Path<Summary>) -> bool
-    {
-        &&& self.branch is Some
-        &&& self.branch.unwrap().can_insert(key, msg, path)
-    }
-
-    pub open spec fn branch_insert(self, key: Key, msg: Message, path: Path<Summary>) -> Self
-        recommends self.can_insert(key, msg, path)
-    {
-        AllocationBranch{
-            branch: Some(self.branch.unwrap().insert(key, msg, path)),
-            ..self
-        }
-    }
-
     pub open spec fn can_append(self, keys: Seq<Key>, msgs: Seq<Message>, path: Path<Summary>) -> bool
     {
+        &&& !self.sealed
         &&& self.branch is Some
         &&& self.branch.unwrap().can_append(keys, msgs, path)
     }
@@ -113,6 +113,7 @@ impl AllocationBranch {
 
     pub open spec fn can_split(self, addr: Address, path: Path<Summary>, split_arg: SplitArg) -> bool
     {
+        &&& !self.sealed
         &&& self.branch is Some
         &&& self.mini_allocator.can_allocate(addr)
         &&& self.branch.unwrap().can_split(addr, path, split_arg)
@@ -124,12 +125,14 @@ impl AllocationBranch {
         AllocationBranch{
             branch: Some(self.branch.unwrap().split(addr, path, split_arg)),
             mini_allocator: self.mini_allocator.allocate(addr),
+            ..self
         }
     }
 
     pub open spec fn can_fill(self, aus: Set<AU>) -> bool
     {
-        self.mini_allocator.allocs.dom().disjoint(aus)
+        &&& !self.sealed
+        &&& self.mini_allocator.allocs.dom().disjoint(aus)
     }
 
     pub open spec fn mini_allocator_fill(self, aus: Set<AU>) -> Self 
@@ -143,6 +146,7 @@ impl AllocationBranch {
 
     pub open spec fn can_seal(self, ptr: Pointer, dealloc_aus: Set<AU>) -> bool
     {
+        &&& !self.sealed
         &&& self.branch is Some
         &&& ptr is Some <==> self.branch.unwrap().root() is Index
         &&& ptr is Some ==> self.mini_allocator.can_allocate(ptr.unwrap()) 
@@ -159,12 +163,14 @@ impl AllocationBranch {
         if ptr is Some {
             let mini_allocator = self.mini_allocator.allocate(ptr.unwrap());
             let reserved_aus = mini_allocator.reserved_aus();
-            Self{
+            Self{                
+                sealed: true,
                 branch: Some(self.branch.unwrap().seal(ptr.unwrap(), reserved_aus)),
                 mini_allocator: MiniAllocator::empty(),
             }
         } else {
             Self{
+                sealed: true,
                 mini_allocator: MiniAllocator::empty(),
                 ..self
             }
@@ -183,14 +189,9 @@ impl AllocationBranch {
             };
 
         alloc_checks && match event {
-            BuildEvent::Initialize{addr} => {
-                &&& pre.can_initialize(addr)
-                &&& pre.branch_initialize(addr) == post
-            },
-            BuildEvent::Insert{key, msg, path} => {
-                &&& pre.can_insert(key, msg, path)
-                &&& pre.branch_insert(key, msg, path) == post
-                
+            BuildEvent::Initialize{addr, keys, msgs} => {
+                &&& pre.can_initialize(addr, keys, msgs)
+                &&& pre.branch_initialize(addr, keys, msgs) == post
             },
             BuildEvent::Append{keys, msgs, path} => {
                 &&& pre.can_append(keys, msgs, path)
@@ -213,9 +214,7 @@ impl AllocationBranch {
 
     pub open spec(checked) fn branch_sealed(self) -> bool 
     {
-        &&& self.branch is Some
-        &&& self.branch.unwrap().sealed_root()
-        &&& self.mini_allocator == MiniAllocator::empty()
+        self.sealed
     }
 
     // utility functions 
@@ -257,7 +256,7 @@ impl LinkedBranch<Summary> {
         recommends self.acyclic()
     {
         let reachable_addrs = self.reachable_addrs_using_ranking(self.the_ranking());
-        &&& forall |addr| #[trigger] reachable_addrs.contains(addr) 
+        &&& forall |addr| #[trigger] reachable_addrs.contains(addr)
             ==> summary.contains(addr.au)
         &&& self.root() is Index && self.root()->aux_ptr is Some
             ==> summary.contains(self.root()->aux_ptr.unwrap().au)
@@ -284,13 +283,77 @@ impl AllocationBranch {
     pub open spec fn inv(self) -> bool
     {
         &&& self.mini_allocator.wf()
+        &&& self.sealed ==> {
+            &&& self.branch is Some
+            &&& self.branch.unwrap().sealed_root()
+            &&& self.mini_allocator == MiniAllocator::empty()
+        }
         &&& self.branch is Some ==> {
             let branch = self.branch.unwrap();
             &&& branch.inv()
             &&& {
-                let summary_aus = if self.branch_sealed() { branch.get_summary() } else { self.mini_allocator.reserved_aus() };
+                let summary_aus = if self.sealed { branch.get_summary() } else { self.mini_allocator.reserved_aus() };
                 &&& branch.addrs_closed_under_summary(summary_aus)
             }
+        }
+    }
+
+    pub proof fn build_next_preserves_inv(pre: Self, post: Self, event: BuildEvent, allocs: Set<AU>, deallocs: Set<AU>)
+        requires pre.inv(), Self::build_next(pre, post, event, allocs, deallocs), 
+        ensures post.inv()
+    {
+        match event {
+            BuildEvent::Initialize{addr, keys, msgs} => {
+                let branch = post.branch.unwrap();
+                assert(branch.valid_ranking(map!{addr => 1nat}));
+                assert(post.mini_allocator.all_aus().contains(addr.au));
+                assert(post.mini_allocator.allocs[addr.au].reserved.contains(addr)); // trigger
+                assert(post.mini_allocator.reserved_aus().contains(addr.au));
+                assert(post.inv());
+            },
+            BuildEvent::Append{keys, msgs, path} => {
+                let pre_branch = pre.branch.unwrap();
+                let post_branch = post.branch.unwrap();
+
+                Refinement_v::append_refines(pre_branch, keys, msgs, path);
+                assert(post_branch.inv());
+                assert(pre.mini_allocator == post.mini_allocator);
+                assert(pre_branch.representation() == post_branch.representation());
+                path.target_ensures();
+                assert(post.inv());
+            },
+            BuildEvent::Split{addr, path, split_arg} => {
+                let pre_branch = pre.branch.unwrap();
+                let post_branch = post.branch.unwrap();
+
+                Refinement_v::split_refines(pre_branch, addr, path, split_arg);
+                assert(pre_branch.representation().insert(addr) == post_branch.representation());
+                assert(post.mini_allocator.allocs[addr.au].reserved.contains(addr)); // trigger
+                assert(post.mini_allocator.reserved_aus().contains(addr.au));
+
+                let split_child_idx = path.target().root().route(split_arg.get_pivot()) + 1;
+                let split_child_addr = path.target().root()->children[split_child_idx];
+                let except = set!{path.target().root, split_child_addr, addr};
+                assert(post_branch.disk_view.same_except(pre_branch.disk_view, except));
+
+                if !except.contains(post_branch.root) {
+                    assert(pre_branch.disk_view.entries.remove_keys(except).contains_key(post_branch.root)); // trigger
+                    assert(pre_branch.disk_view.entries.remove_keys(except) <= pre_branch.disk_view.entries); // trigger
+                    assert(post_branch.disk_view.entries[post_branch.root] == pre_branch.disk_view.entries[post_branch.root]);
+                }
+                assert(pre.mini_allocator.reserved_aus() <= post.mini_allocator.reserved_aus());   
+                assert(post.inv());
+            },
+            BuildEvent::AllocFill{} => {
+                assume(false);
+                // &&& pre.can_fill(allocs)
+                // &&& pre.mini_allocator_fill(allocs) == post
+            },
+            BuildEvent::Seal{aux_ptr} => {
+                assume(false);
+                // &&& pre.can_seal(aux_ptr, deallocs)
+                // &&& pre.branch_seal(aux_ptr, deallocs) == post
+            },
         }
     }
 } // end of impl AllocationBranch 

@@ -166,12 +166,12 @@ impl<T> DiskView<T> {
         addrs.disjoint(self.entries.dom())
     }
 
-    pub closed spec(checked) fn merge_disk(self, other: Self) -> Self
+    pub open spec(checked) fn merge_disk(self, other: Self) -> Self
     {
         DiskView{entries: self.entries.union_prefer_right(other.entries)}
     }
 
-    pub closed spec(checked) fn remove_disk(self, other: Self) -> Self
+    pub open spec(checked) fn remove_disk(self, other: Self) -> Self
     {
         DiskView{entries: self.entries.remove_keys(other.entries.dom())}
     }
@@ -700,11 +700,6 @@ impl<T> LinkedBranch<T> {
             .modify_disk(self.root, new_root);
         LinkedBranch{root: self.root, disk_view: new_disk_view}
     }
-}
-
-pub open spec(checked) fn empty_linked_branch<T>(root: Address) -> LinkedBranch<T>
-{
-    LinkedBranch{root: root, disk_view: empty_disk().modify_disk(root, Node::Leaf{keys: seq![], msgs: seq![]})}
 }
 
 #[verifier::ext_equal]

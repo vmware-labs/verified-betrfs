@@ -214,7 +214,7 @@ impl MiniAllocator {
 
     pub open spec fn reserved_aus(self) -> Set<AU>
     {
-        Set::new(|au| !self.can_remove(au))
+        self.all_aus().filter(|au| !self.allocs[au].has_no_outstanding_refs())
     }
 
     pub open spec fn removable_aus(self) -> Set<AU>
