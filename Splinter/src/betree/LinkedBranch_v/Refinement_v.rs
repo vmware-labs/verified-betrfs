@@ -301,6 +301,7 @@ pub proof fn insert_refines<T>(pre: LinkedBranch<T>, key: Key, msg: Message, pat
     ensures
         inv(pre.insert(key, msg, path)),
         pre.insert(key, msg, path).i() == pre.i().insert(key, msg, path.i()),
+        pre.disk_view.entries.dom() =~= pre.insert(key, msg, path).disk_view.entries.dom(),
 {
     let post = pre.insert(key, msg, path);
     let target_addr = path.target().root;
@@ -322,6 +323,7 @@ pub proof fn insert_refines_internal<T>(pre: LinkedBranch<T>, ranking: Ranking, 
             == pre.i_internal(ranking).insert(key, msg, path.i_internal(ranking)),
         pre.reachable_addrs_using_ranking(ranking)
             == pre.insert(key, msg, path).reachable_addrs_using_ranking(post_ranking),
+        pre.disk_view.entries.dom() =~= pre.insert(key, msg, path).disk_view.entries.dom(),
     decreases pre.get_rank(ranking),
 {
     let pre_i = pre.i_internal(ranking);
@@ -424,6 +426,7 @@ pub proof fn append_refines<T>(pre: LinkedBranch<T>, keys: Seq<Key>, msgs: Seq<M
     ensures
         inv(pre.append(keys, msgs, path)),
         pre.append(keys, msgs, path).i() == pre.i().append(keys, msgs, path.i()),
+        pre.disk_view.entries.dom() == pre.append(keys, msgs, path).disk_view.entries.dom(),
         pre.representation() == pre.append(keys, msgs, path).representation(),
 {
     let post = pre.append(keys, msgs, path);
@@ -454,6 +457,7 @@ pub proof fn split_refines<T>(pre: LinkedBranch<T>, new_child_addr: Address, pat
         &&& post.i() == pre.i().split(path.i(), split_arg.i())
         &&& pre.representation().insert(new_child_addr) == post.representation()
         &&& post.disk_view.same_except(pre.disk_view, except)
+        &&& post.disk_view.entries.dom() =~= pre.disk_view.entries.dom().insert(new_child_addr)
     })
 {
     let post = pre.split(new_child_addr, path, split_arg);
@@ -529,6 +533,7 @@ pub proof fn split_refines_internal<T>(pre: LinkedBranch<T>, ranking: Ranking, p
         &&& inv_internal(post, post_ranking)
         &&& post.i_internal(post_ranking) == pre.i_internal(ranking).split(path.i_internal(ranking), split_arg.i())
         &&& post.reachable_addrs_using_ranking(post_ranking) == pre.reachable_addrs_using_ranking(ranking).insert(new_child_addr)
+        &&& post.disk_view.entries.dom() =~= pre.disk_view.entries.dom().insert(new_child_addr)
     })
     decreases pre.get_rank(ranking),
 {
@@ -827,6 +832,8 @@ pub proof fn lemma_split_node_interpretation<T>(
     ensures
         left_node == left_branch.i_internal(post_ranking),
         right_node == right_branch.i_internal(post_ranking),
+        branch.disk_view.entries.dom() + set!{new_child_addr}
+        =~= left_branch.disk_view.entries.dom() + right_branch.disk_view.entries.dom(),
         branch.reachable_addrs_using_ranking(ranking) + set!{new_child_addr} 
         == left_branch.reachable_addrs_using_ranking(post_ranking) + right_branch.reachable_addrs_using_ranking(post_ranking),
 {
@@ -1355,6 +1362,8 @@ pub proof fn lemma_append_via_insert_refines<T>(pre: LinkedBranch<T>, ranking: R
         inv_internal(pre.append_via_insert(keys, msgs, path), post_ranking),
         pre.append_via_insert(keys, msgs, path).i_internal(post_ranking)
             == pre.i_internal(ranking).append_via_insert(keys, msgs, path.i_internal(ranking)),
+        pre.append_via_insert(keys, msgs, path).disk_view.entries.dom()
+            == pre.disk_view.entries.dom(),
         pre.append_via_insert(keys, msgs, path).reachable_addrs_using_ranking(post_ranking)
             == pre.reachable_addrs_using_ranking(ranking),
     decreases keys.len(),

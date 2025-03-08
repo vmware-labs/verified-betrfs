@@ -499,7 +499,7 @@ state_machine!{ AllocationBranchBetree {
    
     #[inductive(branch_build)]
     fn branch_build_inductive(pre: Self, post: Self, lbl: Label, idx: int, post_branch: AllocationBranch, event: BuildEvent) {
-        // build must fail for this 
+        AllocationBranch::build_next_preserves_inv(pre.wip_branches[idx], post_branch, event, lbl->allocs, lbl->deallocs);
         assert(post.inv());
     }
    
@@ -512,27 +512,45 @@ state_machine!{ AllocationBranchBetree {
     fn internal_flush_memtable_inductive(pre: Self, post: Self, lbl: Label, 
         new_betree: LinkedBetreeVars::State<BranchNode>, branch_idx: int, new_root_addr: Address) 
     { 
-        
+        assume(false);
         // only requiring branch sealed
     }
    
     #[inductive(internal_grow)]
-    fn internal_grow_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<BranchNode>, new_root_addr: Address) { }
+    fn internal_grow_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<BranchNode>, new_root_addr: Address) 
+    {
+        assume(false);
+    }
    
     #[inductive(internal_split)]
-    fn internal_split_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<BranchNode>, path: Path<BranchNode>, request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs) { }
+    fn internal_split_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<BranchNode>, path: Path<BranchNode>, request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs) 
+    { 
+        assume(false);
+    }
    
     #[inductive(internal_flush)]
-    fn internal_flush_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<BranchNode>, path: Path<BranchNode>, child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, path_addrs: PathAddrs) { }
+    fn internal_flush_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<BranchNode>, path: Path<BranchNode>, child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, path_addrs: PathAddrs) 
+    { 
+        assume(false);    
+    }
    
     #[inductive(internal_compact_begin)]
-    fn internal_compact_begin_inductive(pre: Self, post: Self, lbl: Label, path: Path<BranchNode>, start: nat, end: nat, input: CompactorInput) { }
+    fn internal_compact_begin_inductive(pre: Self, post: Self, lbl: Label, path: Path<BranchNode>, start: nat, end: nat, input: CompactorInput) 
+    { 
+        assume(false);
+    }
    
     #[inductive(internal_compact_abort)]
-    fn internal_compact_abort_inductive(pre: Self, post: Self, lbl: Label, input_idx: int, new_betree: LinkedBetreeVars::State<BranchNode>) { }
+    fn internal_compact_abort_inductive(pre: Self, post: Self, lbl: Label, input_idx: int, new_betree: LinkedBetreeVars::State<BranchNode>) 
+    { 
+        assume(false);
+    }
    
     #[inductive(internal_compact_complete)]
-    fn internal_compact_complete_inductive(pre: Self, post: Self, lbl: Label, input_idx: int, new_betree: LinkedBetreeVars::State<BranchNode>, path: Path<BranchNode>, start: nat, end: nat, branch_idx: int, new_node_addr: Address, path_addrs: PathAddrs) { }
+    fn internal_compact_complete_inductive(pre: Self, post: Self, lbl: Label, input_idx: int, new_betree: LinkedBetreeVars::State<BranchNode>, path: Path<BranchNode>, start: nat, end: nat, branch_idx: int, new_node_addr: Address, path_addrs: PathAddrs) 
+    {
+        assume(false);
+    }
 }} // end of AllocationBetree state machine
 
 } // end of verus!

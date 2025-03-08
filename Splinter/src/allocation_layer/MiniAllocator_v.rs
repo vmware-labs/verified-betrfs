@@ -212,6 +212,12 @@ impl MiniAllocator {
         Self{allocs: new_allocs, curr: new_curr}
     }
 
+    pub open spec fn page_is_reserved(self, addr: Address) -> bool
+    {
+        &&& self.allocs.contains_key(addr.au)
+        &&& self.allocs[addr.au].reserved.contains(addr)
+    }
+
     pub open spec fn reserved_aus(self) -> Set<AU>
     {
         self.all_aus().filter(|au| !self.allocs[au].has_no_outstanding_refs())

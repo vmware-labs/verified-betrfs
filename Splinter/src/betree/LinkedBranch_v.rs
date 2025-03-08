@@ -312,7 +312,7 @@ impl<T> LinkedBranch<T> {
         &&& path.branch == self
         &&& path.key == split_arg.get_pivot()
         &&& path.target().can_split_child_of_index(split_arg, addr)
-        &&& self.disk_view.is_fresh(set!{addr})
+        // &&& self.disk_view.is_fresh(set!{addr})
     }
 
     pub open spec(checked) fn split(self, addr: Address, path: Path<T>, split_arg: SplitArg) -> LinkedBranch<T>

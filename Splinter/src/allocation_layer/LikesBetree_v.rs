@@ -1414,7 +1414,7 @@ state_machine!{ LikesBetree {
         return LinkedBetreeVars::Step::internal_split(new_betree.linked, path, request, new_addrs, path_addrs);
     }
 
-    #[verifier::spinoff_prover]
+    // #[verifier::spinoff_prover]
     pub proof fn post_split_likes_ensures(pre: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
         path: Path<SimpleBuffer>, request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs)
         requires 
@@ -1524,7 +1524,7 @@ state_machine!{ LikesBetree {
         return LinkedBetreeVars::Step::internal_flush(new_betree.linked, path, child_idx, buffer_gc, new_addrs, path_addrs);
     }
 
-    #[verifier::spinoff_prover]
+    // #[verifier::spinoff_prover]
     pub proof fn post_flush_likes_ensures(pre: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
             path: Path<SimpleBuffer>, child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, path_addrs: PathAddrs)
         requires 

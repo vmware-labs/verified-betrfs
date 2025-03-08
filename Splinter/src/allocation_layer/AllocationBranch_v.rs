@@ -149,20 +149,22 @@ impl AllocationBranch {
         &&& !self.sealed
         &&& self.branch is Some
         &&& ptr is Some <==> self.branch.unwrap().root() is Index
-        &&& ptr is Some ==> self.mini_allocator.can_allocate(ptr.unwrap()) 
-                            && !dealloc_aus.contains(ptr.unwrap().au)
+        &&& ptr is Some ==> {
+            &&& self.mini_allocator.can_allocate(ptr.unwrap())
+            &&& !dealloc_aus.contains(ptr.unwrap().au)
+        }
         // NOTE: excludes summary node from being allocated from a new AU which is a fair restriction
         &&& self.mini_allocator.removable_aus() == dealloc_aus 
     }
 
-    // seal creates a summary node if the current root is not a leaf,
+    // seal creates a summary node if the current root is not a leaf
     // returns any unused AUs and resets the mini allocator to empty
     pub open spec fn branch_seal(self, ptr: Pointer, dealloc_aus: Set<AU>) -> Self
         recommends self.can_seal(ptr, dealloc_aus)
     {
         if ptr is Some {
             let mini_allocator = self.mini_allocator.allocate(ptr.unwrap());
-            let reserved_aus = mini_allocator.reserved_aus();
+            let reserved_aus = self.mini_allocator.reserved_aus();
             Self{                
                 sealed: true,
                 branch: Some(self.branch.unwrap().seal(ptr.unwrap(), reserved_aus)),
@@ -224,6 +226,13 @@ impl AllocationBranch {
         let aus = Seq::new(branches.len(), |i:int| branches[i].mini_allocator.all_aus());
         union_seq_of_sets(aus)
     }
+
+    pub open spec(checked) fn addrs_closed_under_mini_allocator(self) -> bool
+        recommends self.branch is Some
+    {
+        forall |addr| #[trigger] self.branch.unwrap().disk_view.entries.contains_key(addr)
+            ==> self.mini_allocator.page_is_reserved(addr)
+    }
 } // end of impl AllocationBranch
 
 impl LinkedBranch<Summary> {
@@ -252,14 +261,10 @@ impl LinkedBranch<Summary> {
         }
     }
 
-    pub open spec(checked) fn addrs_closed_under_summary(self, summary: Summary) -> bool
-        recommends self.acyclic()
+    pub open spec(checked) fn addrs_closed_under_summary(self) -> bool
     {
-        let reachable_addrs = self.reachable_addrs_using_ranking(self.the_ranking());
-        &&& forall |addr| #[trigger] reachable_addrs.contains(addr)
-            ==> summary.contains(addr.au)
-        &&& self.root() is Index && self.root()->aux_ptr is Some
-            ==> summary.contains(self.root()->aux_ptr.unwrap().au)
+        forall |addr| #[trigger] self.disk_view.entries.contains_key(addr)
+            ==> self.get_summary().contains(addr.au)
     }
 
     pub open spec fn sealed_root(self) -> bool
@@ -275,7 +280,7 @@ impl LinkedBranch<Summary> {
     {
         &&& self.inv()
         &&& self.sealed_root()
-        &&& self.addrs_closed_under_summary(self.get_summary())
+        &&& self.addrs_closed_under_summary()
     }
 } // end of impl LinkedBranch<Summary>
 
@@ -291,10 +296,9 @@ impl AllocationBranch {
         &&& self.branch is Some ==> {
             let branch = self.branch.unwrap();
             &&& branch.inv()
-            &&& {
-                let summary_aus = if self.sealed { branch.get_summary() } else { self.mini_allocator.reserved_aus() };
-                &&& branch.addrs_closed_under_summary(summary_aus)
-            }
+            &&& self.sealed ==> branch.addrs_closed_under_summary()
+            &&& !self.sealed ==> self.addrs_closed_under_mini_allocator()
+            &&& !self.sealed ==> branch.tight_disk_view()
         }
     }
 
@@ -316,10 +320,6 @@ impl AllocationBranch {
                 let post_branch = post.branch.unwrap();
 
                 Refinement_v::append_refines(pre_branch, keys, msgs, path);
-                assert(post_branch.inv());
-                assert(pre.mini_allocator == post.mini_allocator);
-                assert(pre_branch.representation() == post_branch.representation());
-                path.target_ensures();
                 assert(post.inv());
             },
             BuildEvent::Split{addr, path, split_arg} => {
@@ -327,34 +327,84 @@ impl AllocationBranch {
                 let post_branch = post.branch.unwrap();
 
                 Refinement_v::split_refines(pre_branch, addr, path, split_arg);
-                assert(pre_branch.representation().insert(addr) == post_branch.representation());
                 assert(post.mini_allocator.allocs[addr.au].reserved.contains(addr)); // trigger
                 assert(post.mini_allocator.reserved_aus().contains(addr.au));
-
-                let split_child_idx = path.target().root().route(split_arg.get_pivot()) + 1;
-                let split_child_addr = path.target().root()->children[split_child_idx];
-                let except = set!{path.target().root, split_child_addr, addr};
-                assert(post_branch.disk_view.same_except(pre_branch.disk_view, except));
-
-                if !except.contains(post_branch.root) {
-                    assert(pre_branch.disk_view.entries.remove_keys(except).contains_key(post_branch.root)); // trigger
-                    assert(pre_branch.disk_view.entries.remove_keys(except) <= pre_branch.disk_view.entries); // trigger
-                    assert(post_branch.disk_view.entries[post_branch.root] == pre_branch.disk_view.entries[post_branch.root]);
-                }
                 assert(pre.mini_allocator.reserved_aus() <= post.mini_allocator.reserved_aus());   
                 assert(post.inv());
             },
             BuildEvent::AllocFill{} => {
-                assume(false);
-                // &&& pre.can_fill(allocs)
-                // &&& pre.mini_allocator_fill(allocs) == post
+                assert(post.inv());
             },
             BuildEvent::Seal{aux_ptr} => {
-                assume(false);
-                // &&& pre.can_seal(aux_ptr, deallocs)
-                // &&& pre.branch_seal(aux_ptr, deallocs) == post
+                let pre_branch = pre.branch.unwrap();
+                let post_branch = post.branch.unwrap();
+                pre.branch_seal_preserves_inv(aux_ptr, deallocs);
+                assert(post.inv());
             },
         }
+    }
+
+    pub proof fn branch_seal_preserves_inv(self, aux_ptr: Pointer, deallocs: Set<AU>)
+        requires self.inv(), self.can_seal(aux_ptr, deallocs), 
+        ensures self.branch_seal(aux_ptr, self.mini_allocator.reserved_aus()).inv()
+    {
+        let branch = self.branch.unwrap();
+        let post = self.branch_seal(aux_ptr, self.mini_allocator.reserved_aus());
+        let post_branch = post.branch.unwrap();
+
+        if aux_ptr is None {
+            assert(post.inv());
+            return;
+        }
+
+        let reserved_aus = self.mini_allocator.reserved_aus();
+        let except = set!{branch.root} + set!{aux_ptr.unwrap()};
+
+        assert(post_branch == branch.seal(aux_ptr.unwrap(), reserved_aus));
+        assert(branch.disk_view.entries.remove_keys(except) =~= post_branch.disk_view.entries.remove_keys(except));
+        assert(post_branch.disk_view.same_except(branch.disk_view, except));
+
+        assert(forall |i| #[trigger] post_branch.root().valid_child_index(i) 
+            ==> branch.root().valid_child_index(i)); // trigger
+
+        let ranking = branch.the_ranking();
+        assert(post_branch.acyclic()) by {
+            assert(post_branch.disk_view.node_children_respects_rank(ranking, branch.root));
+            assert(post_branch.valid_ranking(ranking));
+        }
+
+        let post_ranking = post_branch.the_ranking();
+        assert(post_branch.inv_internal(post_branch.the_ranking())) by {
+            let post_i = post_branch.i_internal(post_ranking);
+            let pre_i = branch.i_internal(ranking);
+
+            Refinement_v::i_internal_wf(branch, ranking);
+            assert(pre_i.wf());
+            assert forall |i| 0 <= i < post_i->children.len()
+            implies post_i->children[i] == pre_i->children[i]
+            by {
+                assert(branch.root().valid_child_index(i));
+                assert(post_branch.root().valid_child_index(i));
+
+                let pre_child = branch.child_at_idx(i);
+                let post_child = post_branch.child_at_idx(i);
+
+                assert(pre_child.reachable_addrs_using_ranking(ranking).disjoint(except)) by {
+                    if pre_child.reachable_addrs_using_ranking(ranking).contains(branch.root) {
+                        Refinement_v::lemma_reachable_child_has_smaller_rank(pre_child, ranking, branch.root);
+                    }
+                    if pre_child.reachable_addrs_using_ranking(ranking).contains(aux_ptr.unwrap()) {
+                        Refinement_v::lemma_reachable_implies_valid_address(pre_child, ranking, aux_ptr.unwrap());
+                    }
+                }
+                Refinement_v::lemma_reachable_unchanged_implies_same_i_internal(
+                    pre_child, ranking, post_child, post_ranking, except);
+            }
+            assert(post_i->children =~= pre_i->children);
+            assert(post_i.wf());
+            Refinement_v::lemma_i_wf_implies_inv(post_branch, post_ranking);
+        }
+        assert(post.inv());
     }
 } // end of impl AllocationBranch 
 } // end of verus
