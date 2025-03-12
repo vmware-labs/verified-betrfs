@@ -204,11 +204,14 @@ impl MiniAllocator {
     recommends
         self.wf(),
     {
-        let new_allocs = Map::new(
-            |au| self.allocs.contains_key(au) && !aus.contains(au),
-            |au| self.allocs[au]);
-        let new_curr = if self.curr is Some && aus.contains(self.curr.unwrap()) { None }
-                       else { self.curr };
+        // let new_allocs = Map::new(
+        //     |au| self.allocs.contains_key(au) && !aus.contains(au),
+        //     |au| self.allocs[au]);
+
+        let new_allocs = self.allocs.remove_keys(aus);
+        let new_curr = if self.curr is Some && aus.contains(self.curr.unwrap()) 
+                        { None } else { self.curr };
+
         Self{allocs: new_allocs, curr: new_curr}
     }
 
@@ -220,7 +223,7 @@ impl MiniAllocator {
 
     pub open spec fn reserved_aus(self) -> Set<AU>
     {
-        self.all_aus().filter(|au| !self.allocs[au].has_no_outstanding_refs())
+        Set::new(|au| self.allocs.contains_key(au) && !self.allocs[au].has_no_outstanding_refs())
     }
 
     pub open spec fn removable_aus(self) -> Set<AU>

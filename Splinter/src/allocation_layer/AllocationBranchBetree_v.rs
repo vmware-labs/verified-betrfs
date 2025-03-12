@@ -39,6 +39,11 @@ impl BufferDisk<BranchNode> {
     }
 }
 
+pub open spec fn addrs_closed<V>(m: Map<Address, V>, domain_set: Set<AU>) -> bool
+{
+    forall |addr| #[trigger] m.contains_key(addr) ==> domain_set.contains(addr.au)
+}
+
 impl LinkedBetree<BranchNode> {
     pub open spec fn get_branch(self, root: Address) -> LinkedBranch<Summary>
     {
@@ -65,6 +70,18 @@ impl LinkedBetree<BranchNode> {
         //     sub_branch_summary.insert(root.au, )
         // }
     }
+
+    pub open spec fn dv_domain_closed(self, domain_set: Set<AU>) -> bool
+    {
+        forall |addr| #[trigger] self.dv.entries.contains_key(addr)
+            ==> domain_set.contains(addr.au)
+    }
+ 
+    // pub open spec fn buffer_dv_domain_closed(self, domain_set: Set<AU>) -> bool
+    // {
+    //     forall |addr| #[trigger] self.buffer_dv.entries.contains_key(addr)
+    //         ==> union_set_of_sets(branch_summary.values()).contains(addr.au)
+    // }
 }   
 
 impl SplitAddrs {
@@ -99,12 +116,12 @@ pub open spec fn seq_addrs_disjoint_aus(addrs: Seq<Address>) -> bool
     ==> #[trigger] addrs[i].au != #[trigger] addrs[j].au
 }
 
-pub open spec fn set_addrs_disjoint_aus(addrs: Set<Address>) -> bool
-{
-    forall |addr1, addr2| #[trigger] addrs.contains(addr1) 
-        && #[trigger] addrs.contains(addr2) && addr1 != addr2
-    ==> addr1.au != addr2.au
-}
+// pub open spec fn set_addrs_disjoint_aus(addrs: Set<Address>) -> bool
+// {
+//     forall |addr1, addr2| #[trigger] addrs.contains(addr1) 
+//         && #[trigger] addrs.contains(addr2) && addr1 != addr2
+//     ==> addr1.au != addr2.au
+// }
 
 pub open spec fn map_with_disjoint_values<K,V>(m: Map<K, Set<V>>) -> bool
 {
@@ -148,7 +165,6 @@ state_machine!{ AllocationBranchBetree {
         &&& self.betree_aus.dom().disjoint(aus)
         &&& self.summary_aus().disjoint(aus)
         &&& self.branch_allocator_aus().disjoint(aus)
-        &&& self.read_ref_aus().disjoint(aus)
     }
 
     pub open spec fn summary_aus(self) -> Set<AU>
@@ -167,18 +183,24 @@ state_machine!{ AllocationBranchBetree {
     }
 
     init!{ initialize(betree: LinkedBetreeVars::State<BranchNode>) {
-        require LinkedBetreeVars::State::initialize(betree, betree); // buffer_dv restriction: valid_buffer_dv
+        require LinkedBetreeVars::State::initialize(betree, betree);
         let (betree_likes, branch_likes) = betree.linked.transitive_likes();
 
         require betree.linked.sealed_branch_roots(branch_likes.dom());
         require betree.linked.dv.entries.dom().disjoint(betree.linked.buffer_dv.repr());
-        require set_addrs_disjoint_aus(betree_likes.dom() + branch_likes.dom());
 
         let branch_summary = betree.linked.build_branch_summary(branch_likes.dom());
         require map_with_disjoint_values(branch_summary);
 
+        let betree_aus = to_au_likes(betree_likes);
+        let summary_aus = union_set_of_sets(branch_summary.values());
+
+        require addrs_closed(betree.linked.dv.entries, betree_aus.dom());
+        require addrs_closed(betree.linked.buffer_dv.entries, summary_aus);
+        require betree_aus.dom().disjoint(summary_aus);
+
         init betree = betree;
-        init betree_aus = to_au_likes(betree_likes);
+        init betree_aus = betree_aus;
         init branch_aus = to_au_likes(branch_likes);
         init branch_summary = branch_summary;
         init compactors = Seq::empty();
@@ -427,6 +449,14 @@ state_machine!{ AllocationBranchBetree {
         ==> #[trigger] self.wip_branches[i].inv()
     }
 
+    pub open spec fn wip_branches_disjoint(self) -> bool
+    {
+        forall |i, j| 0 <= i < self.wip_branches.len() && 
+            0 <= j < self.wip_branches.len() && i != j
+        ==> (#[trigger] self.wip_branches[i]).mini_allocator.all_aus().disjoint(
+            (#[trigger]self.wip_branches[j]).mini_allocator.all_aus())
+    }
+
     #[invariant]
     pub open spec(checked) fn inv(self) -> bool {
         let linked = self.betree.linked;
@@ -437,25 +467,28 @@ state_machine!{ AllocationBranchBetree {
         &&& self.betree_aus == to_au_likes(betree_likes)
         &&& self.branch_aus == to_au_likes(branch_likes)
 
+        // added branch inv
+        &&& linked.sealed_branch_roots(branch_likes.dom())
+        &&& linked.sealed_branch_roots(compactor_roots)
+
+        // summary should be disjoint
+        &&& map_with_disjoint_values(self.branch_summary)
+        &&& self.branch_summary == linked.build_branch_summary(branch_likes.dom() + compactor_roots)
+
         // new domain disjointness for AllocationBranchBetree 
         // couldn't prove this at layers above because we pass through
         // the "richer" disk and relaxed disk domain requirement to allow for 
         // garbage collection invisible to upper layers
-        &&& linked.dv.entries.dom().disjoint(linked.buffer_dv.repr())
+        &&& addrs_closed(linked.dv.entries, self.betree_aus.dom())
+        &&& addrs_closed(linked.buffer_dv.entries, self.summary_aus())
 
-        // branch related invs
-        // reachable & compactors are valid sealed branches that do not overlap in AUs
-        &&& linked.sealed_branch_roots(branch_likes.dom())
-        &&& linked.sealed_branch_roots(compactor_roots)
-        &&& set_addrs_disjoint_aus(betree_likes.dom() + branch_likes.dom() + compactor_roots)
+        &&& self.betree_aus.dom().disjoint(self.summary_aus())
+        &&& self.betree_aus.dom().disjoint(self.branch_allocator_aus())
+        &&& self.summary_aus().disjoint(self.branch_allocator_aus())
+        // &&& self.branch_aus.dom() + self.read_ref_aus() == self.branch_summary.dom() // derive from^
 
-        // summary should be disjoint
-        &&& self.branch_aus.dom() + self.read_ref_aus() == self.branch_summary.dom()
-        &&& map_with_disjoint_values(self.branch_summary) // ensures that summary doesn't overlap
-        &&& self.branch_summary == linked.build_branch_summary(branch_likes.dom() + compactor_roots)
-
-        // wip branches must be valid as well
         &&& self.wip_branches_inv()
+        &&& self.wip_branches_disjoint()
     }
 
     #[inductive(initialize)]
@@ -465,8 +498,6 @@ state_machine!{ AllocationBranchBetree {
         let compactor_roots = CompactorInput::input_roots(post.compactors);
 
         assert(betree_likes.dom() + branch_likes.dom() + compactor_roots == betree_likes.dom() + branch_likes.dom());
-        assert(set_addrs_disjoint_aus(betree_likes.dom() + branch_likes.dom()));
-
         assert(post.branch_aus.dom() + post.read_ref_aus() == post.branch_aus.dom());
         assert(post.branch_aus.dom() == to_au_likes(branch_likes).dom());
 
@@ -494,17 +525,52 @@ state_machine!{ AllocationBranchBetree {
    
     #[inductive(branch_begin)]
     fn branch_begin_inductive(pre: Self, post: Self, lbl: Label) {
+        assert(post.betree_aus.dom() == pre.betree_aus.dom());
+
+        AllocationBranch::alloc_aus_append(pre.wip_branches, post.wip_branches.last());
+        post.wip_branches.last().alloc_aus_singleton();
+        assert(post.branch_allocator_aus() == pre.branch_allocator_aus() + lbl->allocs);
+
+        broadcast use AllocationBranch::alloc_aus_ensures;
         assert(post.inv());
     }
    
     #[inductive(branch_build)]
     fn branch_build_inductive(pre: Self, post: Self, lbl: Label, idx: int, post_branch: AllocationBranch, event: BuildEvent) {
         AllocationBranch::build_next_preserves_inv(pre.wip_branches[idx], post_branch, event, lbl->allocs, lbl->deallocs);
+        broadcast use AllocationBranch::alloc_aus_ensures;
+
+        match event {
+            BuildEvent::AllocFill{} => {
+                assert(post_branch.mini_allocator.all_aus() - lbl->allocs == pre.wip_branches[idx].mini_allocator.all_aus());
+                AllocationBranch::alloc_aus_update(pre.wip_branches, idx, post_branch);
+                assert(pre.branch_allocator_aus() + lbl->allocs =~= post.branch_allocator_aus());
+                assert(post.wip_branches_disjoint());
+            }
+            BuildEvent::Seal{aux_ptr} => {
+                assert(pre.wip_branches[idx].mini_allocator.all_aus() - lbl->deallocs == post_branch.mini_allocator.all_aus());
+                AllocationBranch::alloc_aus_update(post.wip_branches, idx, pre.wip_branches[idx]);
+                assert(post.wip_branches.update(idx, pre.wip_branches[idx]) == pre.wip_branches); // trigger
+                assert(pre.branch_allocator_aus() =~= post.branch_allocator_aus() + lbl->deallocs);
+
+                assert(forall |i|  0 <= i < post.wip_branches.len() ==> 
+                    #[trigger] post.wip_branches[i].mini_allocator.all_aus() 
+                    <= pre.wip_branches[i].mini_allocator.all_aus());
+                assert(post.wip_branches_disjoint());
+            }
+            _ => {
+                assert(pre.wip_branches[idx].mini_allocator.all_aus() == post_branch.mini_allocator.all_aus());
+                AllocationBranch::alloc_aus_update(pre.wip_branches, idx, post_branch);
+                assert(pre.branch_allocator_aus() =~= post.branch_allocator_aus());
+                assert(post.wip_branches_disjoint());
+            }
+        }
         assert(post.inv());
     }
    
     #[inductive(branch_abort)]
     fn branch_abort_inductive(pre: Self, post: Self, lbl: Label, idx: int) {
+        AllocationBranch::alloc_aus_remove(pre.wip_branches, idx);
         assert(post.inv());
     }
    
@@ -512,6 +578,9 @@ state_machine!{ AllocationBranchBetree {
     fn internal_flush_memtable_inductive(pre: Self, post: Self, lbl: Label, 
         new_betree: LinkedBetreeVars::State<BranchNode>, branch_idx: int, new_root_addr: Address) 
     { 
+        // extract transitive likes proof
+        
+
         assume(false);
         // only requiring branch sealed
     }

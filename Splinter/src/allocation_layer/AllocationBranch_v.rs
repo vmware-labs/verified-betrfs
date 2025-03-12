@@ -68,6 +68,8 @@ impl AllocationBranch {
     pub open spec fn can_initialize(self, addr: Address, keys: Seq<Key>, msgs: Seq<Message>) -> bool
     {
         &&& !self.sealed
+        // can initialize also means that no pages are allocated
+        &&& self.mini_allocator.reserved_aus() == Set::<AU>::empty()
         &&& self.mini_allocator.can_allocate(addr)
         &&& keys.len() > 0
         &&& keys.len() == msgs.len()
@@ -168,12 +170,12 @@ impl AllocationBranch {
             Self{                
                 sealed: true,
                 branch: Some(self.branch.unwrap().seal(ptr.unwrap(), reserved_aus)),
-                mini_allocator: MiniAllocator::empty(),
+                mini_allocator: mini_allocator.prune(dealloc_aus),
             }
         } else {
             Self{
                 sealed: true,
-                mini_allocator: MiniAllocator::empty(),
+                mini_allocator: self.mini_allocator.prune(dealloc_aus),
                 ..self
             }
         }
@@ -231,7 +233,110 @@ impl AllocationBranch {
         recommends self.branch is Some
     {
         forall |addr| #[trigger] self.branch.unwrap().disk_view.entries.contains_key(addr)
-            ==> self.mini_allocator.page_is_reserved(addr)
+            <==> self.mini_allocator.page_is_reserved(addr)
+    }
+
+    pub proof fn alloc_aus_singleton(self) 
+        ensures Self::alloc_aus(seq![self]) == self.mini_allocator.all_aus()
+    {
+        let aus = Seq::new(seq![self].len(), |i:int| seq![self][i].mini_allocator.all_aus());
+        assert(union_seq_of_sets(aus.drop_last()) == Set::<AU>::empty());
+        assert(union_seq_of_sets(aus) == union_seq_of_sets(aus.drop_last()).union(aus.last()));
+        assert(union_seq_of_sets(aus) == aus.last());
+        assert(aus.last() == self.mini_allocator.all_aus());
+    }
+
+    pub proof fn alloc_aus_append(branches: Seq<Self>, append: Self) 
+        ensures Self::alloc_aus(branches.push(append)) == 
+            Self::alloc_aus(branches) + Self::alloc_aus(seq![append])
+    {
+        let total_branches = branches.push(append);
+        let total_aus = Seq::new(total_branches.len(), |i:int| total_branches[i].mini_allocator.all_aus());
+        let branches_aus = Seq::new(branches.len(), |i:int| branches[i].mini_allocator.all_aus());
+
+        assert(union_seq_of_sets(total_aus) == union_seq_of_sets(total_aus.drop_last()).union(total_aus.last()));
+        assert(total_aus.drop_last() == branches_aus);
+        append.alloc_aus_singleton();
+    }
+
+    pub proof fn alloc_aus_remove(branches: Seq<Self>, idx: int) 
+        requires 0 <= idx < branches.len(),
+        ensures Self::alloc_aus(branches.remove(idx)) <= Self::alloc_aus(branches) 
+        decreases branches.len()
+    {
+        if idx == branches.len() - 1 {
+            Self::alloc_aus_append(branches.drop_last(), branches.last());
+            assert(branches.drop_last().push(branches.last()) == branches); // trigger
+        } else {
+            Self::alloc_aus_remove(branches.drop_last(), idx);
+            assert(Self::alloc_aus(branches.drop_last().remove(idx)) <= Self::alloc_aus(branches.drop_last()) );
+            assert(branches.drop_last().remove(idx) == branches.remove(idx).drop_last());
+
+            Self::alloc_aus_append(branches.remove(idx).drop_last(), branches.last());
+            Self::alloc_aus_append(branches.drop_last(), branches.last());
+
+            assert(branches.drop_last().push(branches.last()) == branches); // trigger
+            assert(branches.remove(idx).drop_last().push(branches.last()) == branches.remove(idx)); // trigger
+        }
+    }
+
+    pub proof fn alloc_aus_update(branches: Seq<Self>, idx: int, update: Self)
+        requires 
+            0 <= idx < branches.len(),
+            branches[idx].mini_allocator.all_aus() <= update.mini_allocator.all_aus(),
+        ensures 
+            Self::alloc_aus(branches.update(idx, update))
+            == Self::alloc_aus(branches) + (update.mini_allocator.all_aus() - branches[idx].mini_allocator.all_aus()),
+        decreases branches.len()
+    {
+        if idx == branches.len() - 1 {
+            let updated = branches.update(idx, update);
+
+            Self::alloc_aus_append(branches.drop_last(), branches.last());
+            Self::alloc_aus_append(updated.drop_last(), updated.last());
+
+            assert(branches.drop_last().push(branches.last()) == branches); // trigger
+            assert(updated.drop_last().push(updated.last()) == updated); // trigger
+
+            branches.last().alloc_aus_singleton();
+            updated.last().alloc_aus_singleton();
+
+            assert(updated.drop_last() == branches.drop_last());
+            assert(update == updated.last());
+
+            assert(Self::alloc_aus(updated) == Self::alloc_aus(branches.drop_last()) + update.mini_allocator.all_aus());
+            assert(Self::alloc_aus(updated) == Self::alloc_aus(branches)
+                + (update.mini_allocator.all_aus() - branches[idx].mini_allocator.all_aus()));
+        } else {
+            Self::alloc_aus_update(branches.drop_last(), idx, update);
+            assert(branches.drop_last().update(idx, update) == branches.update(idx, update).drop_last());
+                
+            Self::alloc_aus_append(branches.update(idx, update).drop_last(), branches.last());
+            Self::alloc_aus_append(branches.drop_last(), branches.last());
+
+            assert(branches.drop_last().push(branches.last()) == branches); // trigger
+            assert(branches.update(idx, update).drop_last().push(branches.last()) == branches.update(idx, update)); // trigger
+
+            assert(Self::alloc_aus(branches.update(idx, update)) == Self::alloc_aus(branches.drop_last()) + 
+                (update.mini_allocator.all_aus() - branches[idx].mini_allocator.all_aus()) + Self::alloc_aus(seq![branches.last()]));
+            assert(Self::alloc_aus(branches.update(idx, update)) == Self::alloc_aus(branches) +
+                (update.mini_allocator.all_aus() - branches[idx].mini_allocator.all_aus()));
+        }
+    }
+
+    pub broadcast proof fn alloc_aus_ensures(branches: Seq<Self>, i: int) 
+        requires 0 <= i < branches.len()
+        ensures #[trigger] branches[i].mini_allocator.all_aus() <= Self::alloc_aus(branches)
+    {
+        let aus = Seq::new(branches.len(), |i:int| branches[i].mini_allocator.all_aus());
+
+        assert forall |au| #[trigger] branches[i].mini_allocator.all_aus().contains(au)
+        implies Self::alloc_aus(branches).contains(au)
+        by {
+            assert(0 <= i < aus.len());
+            assert(aus[i].contains(au));  // trigger
+            lemma_set_subset_of_union_seq_of_sets(aus, au);
+        }
     }
 } // end of impl AllocationBranch
 
@@ -291,28 +396,44 @@ impl AllocationBranch {
         &&& self.sealed ==> {
             &&& self.branch is Some
             &&& self.branch.unwrap().sealed_root()
-            &&& self.mini_allocator == MiniAllocator::empty()
         }
         &&& self.branch is Some ==> {
             let branch = self.branch.unwrap();
             &&& branch.inv()
-            &&& self.sealed ==> branch.addrs_closed_under_summary()
-            &&& !self.sealed ==> self.addrs_closed_under_mini_allocator()
-            &&& !self.sealed ==> branch.tight_disk_view()
+            &&& self.sealed ==> {
+                &&& branch.addrs_closed_under_summary()
+                &&& branch.get_summary() == self.mini_allocator.all_aus()
+            }
+            &&& !self.sealed ==> {
+                &&& self.addrs_closed_under_mini_allocator()
+                &&& branch.tight_disk_view()
+            }
         }
     }
 
     pub proof fn build_next_preserves_inv(pre: Self, post: Self, event: BuildEvent, allocs: Set<AU>, deallocs: Set<AU>)
-        requires pre.inv(), Self::build_next(pre, post, event, allocs, deallocs), 
-        ensures post.inv()
+        requires 
+            pre.inv(), 
+            Self::build_next(pre, post, event, allocs, deallocs), 
+        ensures 
+            post.inv(), 
+            // event is 
     {
         match event {
             BuildEvent::Initialize{addr, keys, msgs} => {
                 let branch = post.branch.unwrap();
                 assert(branch.valid_ranking(map!{addr => 1nat}));
-                assert(post.mini_allocator.all_aus().contains(addr.au));
-                assert(post.mini_allocator.allocs[addr.au].reserved.contains(addr)); // trigger
-                assert(post.mini_allocator.reserved_aus().contains(addr.au));
+                assert(branch.disk_view.entries.dom() =~= set!{addr});
+                assert(post.mini_allocator.page_is_reserved(addr)); // trigger
+
+                assert forall |address| #[trigger] post.mini_allocator.page_is_reserved(address)
+                implies branch.disk_view.entries.contains_key(address)
+                by {
+                    if address != addr {
+                        assert(pre.mini_allocator.reserved_aus().contains(address.au));
+                        assert(false);
+                    }
+                }
                 assert(post.inv());
             },
             BuildEvent::Append{keys, msgs, path} => {
@@ -346,13 +467,32 @@ impl AllocationBranch {
 
     pub proof fn branch_seal_preserves_inv(self, aux_ptr: Pointer, deallocs: Set<AU>)
         requires self.inv(), self.can_seal(aux_ptr, deallocs), 
-        ensures self.branch_seal(aux_ptr, self.mini_allocator.reserved_aus()).inv()
+        ensures self.branch_seal(aux_ptr, deallocs).inv()
     {
         let branch = self.branch.unwrap();
-        let post = self.branch_seal(aux_ptr, self.mini_allocator.reserved_aus());
+        let post = self.branch_seal(aux_ptr, deallocs);
         let post_branch = post.branch.unwrap();
 
         if aux_ptr is None {
+            assert forall |au| self.mini_allocator.reserved_aus().contains(au) 
+            implies au == branch.root.au
+            by {
+                if au != branch.root.au {
+                    let addr = self.mini_allocator.allocs[au].reserved.choose();
+                    if (self.mini_allocator.allocs[au].reserved.finite()) {
+                        if self.mini_allocator.allocs[au].reserved.len() == 0 {
+                            self.mini_allocator.allocs[au].reserved.lemma_len0_is_empty();
+                            assert(false);
+                        }
+                    }
+                    assert(self.mini_allocator.allocs[au].reserved.contains(addr)); // trigger
+                    assert(branch.disk_view.entries.contains_key(addr));
+                    assert(false);
+                }
+            }
+            assert(branch.get_summary() == set!{branch.root.au});
+            assert(post.mini_allocator.all_aus() == self.mini_allocator.reserved_aus());
+            assert(branch.get_summary() =~= post.mini_allocator.all_aus());
             assert(post.inv());
             return;
         }
@@ -404,6 +544,7 @@ impl AllocationBranch {
             assert(post_i.wf());
             Refinement_v::lemma_i_wf_implies_inv(post_branch, post_ranking);
         }
+        assert(post_branch.get_summary() =~= post.mini_allocator.all_aus());
         assert(post.inv());
     }
 } // end of impl AllocationBranch 
