@@ -16,7 +16,7 @@ pub struct SpecSlice {
 impl SpecSlice {
     pub open spec fn wf(&self) -> bool
     {
-        self.start <= self.end
+        0 <= self.start <= self.end
     }
 
     // Translates WF'
@@ -54,15 +54,20 @@ impl SpecSlice {
         &&& forall |i| self.end<=i<data.len() ==> data[i] == new_data[i]
     }
 
-    pub open spec fn is_subslice(&self, big_slice: SpecSlice) -> bool
+    pub open spec fn is_subslice_of(&self, big_slice: SpecSlice) -> bool
     {
-        &&& big_slice.start <= self.start
-        &&& self.end <= big_slice.end
+        &&& self.wf()
+        &&& self.end <= big_slice.len()
     }
 
     pub open spec fn subslice(&self, a: int, b: int) -> (result: SpecSlice)
     {
         SpecSlice{start: self.start + a, end: self.start + b}
+    }
+
+    pub open spec fn xslice(&self, other: SpecSlice) -> (result: SpecSlice)
+    {
+        self.subslice(other.start, other.end)
     }
 
     pub open spec fn drop(&self, count: int) -> (result: SpecSlice)
@@ -91,11 +96,20 @@ impl Slice {
     }
 
     // TODO(verus): Another nice place for a function-method-like affordance
+    // TODO(jonh): eliminate all uses of subslice; replace with xslice (and rename)
     pub exec fn subslice(&self, a: usize, b: usize) -> (out: Slice)
     requires a <= b <= self@.len()
     ensures out@ == self@.subslice(a as int, b as int)
     {
         Slice{start: self.start + a, end: self.start + b}
+    }
+
+    pub exec fn xslice(&self, other: &Slice) -> (out: Slice)
+    requires other@.is_subslice_of(self@)
+    ensures
+        out@ == self@.xslice(other@),
+    {
+        self.subslice(other.start, other.end)
     }
 
     pub exec fn drop(&self, count: usize) -> (result: Slice)
