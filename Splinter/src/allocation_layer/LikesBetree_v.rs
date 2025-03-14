@@ -1209,82 +1209,84 @@ state_machine!{ LikesBetree {
         return LinkedBetreeVars::Step::internal_flush_memtable(new_betree.memtable.buffer, new_betree.linked, new_addrs);
     }
 
-    pub proof fn push_memtable_likes_ensures(pre: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, new_addrs: TwoAddrs)
+    pub proof fn push_memtable_likes_ensures<T: Buffer>(betree:  LinkedBetreeVars::State<T>, new_betree: LinkedBetreeVars::State<T>,
+        new_buffer: T, new_addrs: TwoAddrs)
         requires 
-            pre.betree.linked.acyclic(),
-            pre.imperative_matches_transitive_likes(),
-            LinkedBetreeVars::State::internal_flush_memtable(pre.betree, new_betree, 
-                lbl->linked_lbl, new_betree.memtable.buffer, new_betree.linked, new_addrs),
-                pre.is_fresh(new_addrs.repr())
+            betree.linked.acyclic(),
+            LinkedBetreeVars::State::internal_flush_memtable(betree, new_betree, 
+                LinkedBetreeVars::Label::Internal{}, new_buffer, new_betree.linked, new_addrs),
+            betree.linked.is_fresh(new_addrs.repr()),
         ensures ({
-            let pushed = pre.betree.linked.push_memtable(new_betree.memtable.buffer, new_addrs);
-            let (betree_likes, buffer_likes) = pushed.transitive_likes();
+            let (betree_likes, buffer_likes) = betree.linked.transitive_likes();
+            let pushed = betree.linked.push_memtable(new_buffer, new_addrs);
+            let (pushed_betree_likes, pushed_buffer_likes) = pushed.transitive_likes();
             &&& pushed.acyclic()
-            &&& pre.betree.linked.root_likes() <= pre.betree_likes
-            &&& betree_likes == pre.betree_likes.sub(pre.betree.linked.root_likes()).add(new_betree.linked.root_likes())
-            &&& buffer_likes == pre.buffer_likes.insert(new_addrs.addr2)
+            &&& betree.linked.root_likes() <= betree_likes
+            &&& pushed_betree_likes == betree_likes.sub(betree.linked.root_likes()).add(new_betree.linked.root_likes())
+            &&& pushed_buffer_likes == buffer_likes.insert(new_addrs.addr2)
         })
     {
-        let buffer = new_betree.memtable.buffer;
-        let pushed = pre.betree.linked.push_memtable(buffer, new_addrs);
-        let ranking = pre.betree.linked.the_ranking();
-        let pushed_ranking = pre.betree.linked.push_memtable_new_ranking(buffer, new_addrs, ranking);
+        let (betree_likes, buffer_likes) = betree.linked.transitive_likes();
+
+        let pushed = betree.linked.push_memtable(new_buffer, new_addrs);
+        let ranking = betree.linked.the_ranking();
+        let pushed_ranking = betree.linked.push_memtable_new_ranking(new_buffer, new_addrs, ranking);
 
         broadcast use 
             LinkedBetree::reachable_betree_addrs_ignore_ranking, 
             LinkedBetree::children_likes_ignore_ranking, 
             LinkedBetree::tree_likes_ignore_ranking;
 
-        pre.betree.linked.tree_likes_domain(pushed_ranking);
-        pre.betree.linked.buffer_likes_domain(pre.betree_likes);
+        betree.linked.tree_likes_domain(pushed_ranking);
+        betree.linked.buffer_likes_domain(betree_likes);
 
         let (pushed_betree_likes, pushed_buffer_likes) = pushed.transitive_likes();
-        let post_betree_likes = pre.betree_likes.sub(pre.betree.linked.root_likes()).add(new_betree.linked.root_likes());
-        let post_buffer_likes = pre.buffer_likes.insert(new_addrs.addr2);
+        let post_betree_likes = betree_likes.sub(betree.linked.root_likes()).add(new_betree.linked.root_likes());
+        let post_buffer_likes = buffer_likes.insert(new_addrs.addr2);
 
-        if pre.betree.linked.has_root() {
-            pre.betree.linked.subdisk_implies_same_children_likes(pushed, pushed_ranking, 0);
+        if betree.linked.has_root() {
+            betree.linked.subdisk_implies_same_children_likes(pushed, pushed_ranking, 0);
             assert(pushed_betree_likes =~= post_betree_likes);
 
-            pre.betree.linked.subdisk_implies_same_buffer_likes(pushed, pre.betree_likes);
+            betree.linked.subdisk_implies_same_buffer_likes(pushed, betree_likes);
             assert(pushed_betree_likes.contains(new_addrs.addr1));
             pushed.tree_buffers_are_closed(post_betree_likes, new_addrs.addr1);
             
-            assert(pushed.root().buffers.addrs =~= pre.betree.linked.root().buffers.addrs + seq![new_addrs.addr2]); // trigger
+            assert(pushed.root().buffers.addrs =~= betree.linked.root().buffers.addrs + seq![new_addrs.addr2]); // trigger
             assert(pushed.root().buffers.addrs[pushed.root().buffers.len() as int - 1] == new_addrs.addr2); // trigger
             pushed.root().buffers.addrs.to_multiset_ensures();
-            pre.betree.linked.root().buffers.addrs.to_multiset_ensures();
+            betree.linked.root().buffers.addrs.to_multiset_ensures();
 
-            assert(pre.betree.linked.root().buffers.addrs.push(new_addrs.addr2) =~= pushed.root().buffers.addrs);
+            assert(betree.linked.root().buffers.addrs.push(new_addrs.addr2) =~= pushed.root().buffers.addrs);
             assert(pushed.root().buffers.likes().contains(new_addrs.addr2));
-            assert(pushed.root().buffers.likes() =~= pre.betree.linked.root().buffers.likes().insert(new_addrs.addr2));
+            assert(pushed.root().buffers.likes() =~= betree.linked.root().buffers.likes().insert(new_addrs.addr2));
             assert(pushed_buffer_likes.contains(new_addrs.addr2));
-            assert(post_betree_likes == pre.betree_likes.sub(pre.betree.linked.root_likes()).add(pushed.root_likes()));
+            assert(post_betree_likes == betree_likes.sub(betree.linked.root_likes()).add(pushed.root_likes()));
 
-            let pre_sub = pre.betree_likes.sub(pre.betree.linked.root_likes());
+            let pre_sub = betree_likes.sub(betree.linked.root_likes());
             let post_sub = post_betree_likes.sub(pushed.root_likes());
             assert(pre_sub =~= post_sub);
 
-            pre.betree.linked.subdisk_implies_same_buffer_likes(pushed, pre_sub);
-            pre.betree.linked.buffer_likes_additive(pre_sub, pre.betree.linked.root_likes());
+            betree.linked.subdisk_implies_same_buffer_likes(pushed, pre_sub);
+            betree.linked.buffer_likes_additive(pre_sub, betree.linked.root_likes());
             pushed.buffer_likes_additive(post_sub, pushed.root_likes());
 
-            assert(pre_sub.add(pre.betree.linked.root_likes()) =~= pre.betree_likes);
-            assert(pre.buffer_likes =~= pre.betree.linked.buffer_likes(pre_sub).add(
-                pre.betree.linked.buffer_likes(pre.betree.linked.root_likes())));
+            assert(pre_sub.add(betree.linked.root_likes()) =~= betree_likes);
+            assert(buffer_likes =~= betree.linked.buffer_likes(pre_sub).add(
+                betree.linked.buffer_likes(betree.linked.root_likes())));
             assert(post_sub.add(pushed.root_likes()) =~= post_betree_likes);
 
             pushed.buffer_likes_additive(post_sub, pushed.root_likes());
-            let pre_root = pre.betree.linked.root_likes().choose();
-            let _ = pre.betree.linked.buffer_likes(pre.betree.linked.root_likes().remove(pre_root)); // trigger
+            let pre_root = betree.linked.root_likes().choose();
+            let _ = betree.linked.buffer_likes(betree.linked.root_likes().remove(pre_root)); // trigger
 
             let pushed_root = pushed.root_likes().choose();
             let _ = pushed.buffer_likes(pushed.root_likes().remove(pushed_root));
 
-            assert(pushed_buffer_likes =~= pre.buffer_likes.insert(new_addrs.addr2));
+            assert(pushed_buffer_likes =~= buffer_likes.insert(new_addrs.addr2));
             assert(pushed_buffer_likes =~= post_buffer_likes); // relating the difference
         } else {
-            assert(pre.betree_likes =~= no_likes());
+            assert(betree_likes =~= no_likes());
             // note: manual unrolling
             assert(pushed.children_likes(pushed_ranking, 1) =~= no_likes());
             assert(pushed.child_at_idx(0).tree_likes(pushed_ranking) =~= no_likes());
@@ -1320,7 +1322,7 @@ state_machine!{ LikesBetree {
             LinkedBetreeVars::State::inv_next_by(pre.betree, new_betree, lbl->linked_lbl, linked_step);
         }
 
-        Self::push_memtable_likes_ensures(pre, lbl, new_betree, new_addrs);
+        Self::push_memtable_likes_ensures(pre.betree, new_betree, new_betree.memtable.buffer, new_addrs);
         pushed.valid_view_implies_same_transitive_likes(post.betree.linked);
         assert(post.betree.linked.transitive_likes() == pushed.transitive_likes());
     }

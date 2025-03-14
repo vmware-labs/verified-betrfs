@@ -302,6 +302,7 @@ state_machine!{ AllocationBetree {
     transition!{ internal_noop(lbl: Label) {
         require LinkedBetreeVars::State::internal_noop(pre.betree, pre.betree, lbl->linked_lbl);
     }}
+
 }} // end of AllocationBetree state machine
 
 } // end of verus!

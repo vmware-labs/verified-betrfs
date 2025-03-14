@@ -56,6 +56,23 @@ impl<T> LinkedBranch<T> {
         }
     }
 
+    pub proof fn subdisk_same_i_internal(self, ranking: Ranking, big: Self, big_ranking: Ranking)
+        requires 
+            self.wf(),
+            big.wf(),
+            self.valid_ranking(ranking),
+            big.valid_ranking(big_ranking),
+            self.root == big.root,
+            self.disk_view.is_sub_disk(big.disk_view),
+        ensures 
+            self.i_internal(ranking) =~= big.i_internal(big_ranking)
+    {
+        let delta = big.disk_view.representation() - self.disk_view.representation();
+        assert(self.disk_view.entries.remove_keys(delta) =~= big.disk_view.entries.remove_keys(delta));
+        lemma_reachable_addrs_subset(self, ranking);
+        lemma_reachable_unchanged_implies_same_i_internal(self, ranking, big, big_ranking, delta);
+    }
+
     pub open spec/*XXX (checked)*/ fn append_via_insert(self, keys: Seq<Key>, msgs: Seq<Message>, path: Path<T>) -> LinkedBranch<T>
         recommends
             path.valid(),
@@ -116,22 +133,6 @@ impl SplitArg {
                 PivotBranch_v::SplitArg::SplitIndex{pivot: pivot, pivot_index: pivot_index}
             }
         }
-    }
-}
-
-impl<T> LinkedBranch<T> {
-    pub open spec fn inv(self) -> bool
-    {
-        &&& self.acyclic()
-        &&& self.inv_internal(self.the_ranking())
-    }
-
-    pub open spec fn inv_internal(self, ranking: Ranking) -> bool
-    {
-        &&& self.wf()
-        &&& self.valid_ranking(ranking)
-        &&& self.keys_strictly_sorted_internal(ranking)
-        &&& self.all_keys_in_range_internal(ranking)
     }
 }
 

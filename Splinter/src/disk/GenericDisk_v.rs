@@ -73,11 +73,23 @@ pub open spec(checked) fn min_addr(a: Address, b: Address) -> Address {
     else { b }
 }
 
+pub open spec fn addrs_closed(addrs: Set<Address>, au_domain: Set<AU>) -> bool
+{
+    forall |addr| #[trigger] addrs.contains(addr) ==> au_domain.contains(addr.au)
+}
+
 /// Returns the set of AUs that the provided set of Addresses live in.
 pub open spec(checked) fn to_aus(addrs: Set<Address>) -> Set<AU> 
-    // decreases addrs.len() when addrs.finite()
 {
     Map::new(|addr| addrs.contains(addr), |addr: Address| addr.au).values()
+}
+
+pub broadcast proof fn to_aus_contains(addrs: Set<Address>, addr: Address)
+    requires #[trigger] addrs.contains(addr)
+    ensures to_aus(addrs).contains(addr.au)
+{
+    let m = Map::new(|addr| addrs.contains(addr), |addr: Address| addr.au);
+    assert(m.dom().contains(addr)); // trigger
 }
 
 pub proof fn to_aus_finite(addrs: Set<Address>)

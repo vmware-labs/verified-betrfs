@@ -134,7 +134,7 @@ impl<T> DiskView<T> {
         self.entries.agrees(other.entries)
     }
 
-    pub open spec(checked) fn is_subset_of(self, other: Self) -> bool
+    pub open spec(checked) fn is_sub_disk(self, other: Self) -> bool
     {
         self.entries <= other.entries
     }
@@ -343,6 +343,20 @@ impl<T> LinkedBranch<T> {
         self.disk_view.get(self.root)
     }
 
+    pub open spec fn inv(self) -> bool
+    {
+        &&& self.acyclic()
+        &&& self.inv_internal(self.the_ranking())
+    }
+
+    pub open spec fn inv_internal(self, ranking: Ranking) -> bool
+    {
+        &&& self.wf()
+        &&& self.valid_ranking(ranking)
+        &&& self.keys_strictly_sorted_internal(ranking)
+        &&& self.all_keys_in_range_internal(ranking)
+    }
+
     pub open spec(checked) fn get_rank(self, ranking: Ranking) -> nat
         recommends self.wf()
     {
@@ -360,6 +374,24 @@ impl<T> LinkedBranch<T> {
         recommends self.acyclic()
     {
         let ranking = choose |ranking| self.valid_ranking(ranking);
+        ranking
+    }
+
+    pub proof fn valid_ranking_big_disk(self, big: Self) -> (out: Ranking)
+        requires 
+            self.acyclic(),
+            self.root == big.root,
+            self.disk_view.is_sub_disk(big.disk_view)
+        ensures 
+            big.valid_ranking(out)
+    {
+        let ranking = self.the_ranking().restrict(self.disk_view.representation());
+        assert forall |addr| #[trigger] ranking.contains_key(addr) 
+            && big.disk_view.entries.contains_key(addr)
+        implies big.disk_view.node_children_respects_rank(ranking, addr)
+        by {
+            assert(self.the_ranking().contains_key(addr)); // trigger
+        }
         ranking
     }
 

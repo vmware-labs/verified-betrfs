@@ -3,12 +3,57 @@
 
 use builtin_macros::*;
 use vstd::prelude::*;
+use vstd::set::*;
 
 verus! {
 
 pub open spec(checked) fn union_set_of_sets<A>(sets: Set<Set<A>>) -> Set<A>
+    decreases sets.len() when sets.finite()
 {
-    sets.fold(Set::empty(), |u: Set<A>, s| u.union(s))
+    if sets.len() > 0 {
+        let s = sets.choose();
+        union_set_of_sets(sets.remove(s)) + s
+    } else {
+        set!{}
+    }
+}
+
+// pub proof fn lemma_union_set_of_sets_finite<A>(sets: Set<Set<A>>)
+//     requires 
+//         sets.finite(),
+//         forall |s| sets.contains(s) ==> #[trigger] s.finite()
+//     ensures 
+//         union_set_of_sets(sets).finite()
+//     decreases sets.len()
+// {
+//     if sets.len() > 0 {
+//         let s = sets.choose();
+//         lemma_union_set_of_sets_finite(sets.remove(s));
+//     }
+// }
+
+pub broadcast proof fn lemma_union_set_of_sets_contains<A>(sets: Set<Set<A>>, s: Set<A>)
+    requires 
+        sets.finite(),
+        #[trigger] sets.contains(s),
+    ensures 
+        union_set_of_sets(sets) == union_set_of_sets(sets.remove(s)) + s
+    decreases sets.len()
+{
+    if sets.len() > 0 {
+        let random = sets.choose();
+        if random != s {
+            lemma_union_set_of_sets_contains(sets.remove(random), s);
+            assert(union_set_of_sets(sets.remove(random)) == union_set_of_sets(sets.remove(random).remove(s)) + s);
+            lemma_union_set_of_sets_contains(sets.remove(s), random);
+            assert(union_set_of_sets(sets.remove(s).remove(random)) + random == union_set_of_sets(sets.remove(s)));
+            assert(sets.remove(s).remove(random) == sets.remove(random).remove(s)); // trigger 
+            assert(union_set_of_sets(sets) == union_set_of_sets(sets.remove(random).remove(s)) + random + s);
+            assert(union_set_of_sets(sets) == union_set_of_sets(sets.remove(s)) + s);
+        } else {
+            assert(union_set_of_sets(sets) == union_set_of_sets(sets.remove(s)) + s);
+        }
+    }
 }
 
 pub open spec(checked) fn union_seq_of_sets<A>(sets: Seq<Set<A>>) -> Set<A>

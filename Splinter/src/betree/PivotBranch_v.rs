@@ -81,6 +81,7 @@ children[i] owns range [pivots[i-1], pivots[i]) where pivots[-1] = -infinity, pi
 Leaf nodes store a map from keys to messages.
 keys[i] maps to msgs[i].
 */
+#[verifier::ext_equal]
 pub enum Node {
     Index{pivots: Seq<Key>, children: Seq<Node>},
     Leaf{keys: Seq<Key>, msgs: Seq<Message>}

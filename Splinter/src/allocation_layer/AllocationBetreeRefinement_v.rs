@@ -10,9 +10,9 @@ use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 use crate::abstract_system::StampedMap_v::*;
 use crate::disk::GenericDisk_v::*;
-use crate::betree::Buffer_v::SimpleBuffer;
+use crate::betree::Buffer_v::*;
 use crate::betree::SplitRequest_v::*;
-use crate::betree::LinkedBetree_v::{LinkedBetreeVars, TwoAddrs, PathAddrs, SplitAddrs, Path};
+use crate::betree::LinkedBetree_v::*;
 use crate::allocation_layer::Likes_v::*;
 use crate::allocation_layer::LikesBetree_v::*;
 use crate::allocation_layer::AllocationBetree_v::*;
@@ -25,6 +25,50 @@ impl AllocationBetree::Label {
         LikesBetree::Label::Label{linked_lbl: self->linked_lbl}
     }
 } // end impl AllocationBetree::Label
+
+impl<T: Buffer> LinkedBetreeVars::State<T> {
+    pub proof fn internal_flush_memtable_aus_ensures(self, new_betree: LinkedBetreeVars::State<T>, new_buffer: T, new_addrs: TwoAddrs)
+    requires
+        self.inv(),
+        LinkedBetreeVars::State::internal_flush_memtable(self, new_betree, 
+            LinkedBetreeVars::Label::Internal{}, new_buffer, new_betree.linked, new_addrs),
+        self.linked.is_fresh(new_addrs.repr()),
+    ensures ({
+        let pushed = self.linked.push_memtable(new_buffer, new_addrs);
+        let (betree_likes, buffer_likes) = self.linked.transitive_likes();
+        let (pushed_betree_likes, pushed_buffer_likes) = pushed.transitive_likes();
+        let (post_betree_aus, post_buffer_aus) = AllocationBetree::State::flush_memtable_au_likes(
+                self, new_betree, new_addrs, to_au_likes(betree_likes), to_au_likes(buffer_likes));
+
+        &&& pushed.inv()
+        &&& post_betree_aus == to_au_likes(pushed_betree_likes)
+        &&& post_buffer_aus == to_au_likes(pushed_buffer_likes)
+    })
+    {
+        let (betree_likes, buffer_likes) = self.linked.transitive_likes();
+        let pushed = self.linked.push_memtable(new_buffer, new_addrs);
+        let _ = self.linked.push_memtable_new_ranking(new_buffer, new_addrs, self.linked.the_ranking());
+        assert( pushed.acyclic());
+    
+        let (pushed_betree_likes, pushed_buffer_likes) = pushed.transitive_likes();
+        let discard_betree = self.linked.root_likes();
+        let add_betree = new_betree.linked.root_likes();
+
+        LikesBetree::State::push_memtable_likes_ensures(self, new_betree, new_buffer, new_addrs);
+        assert(pushed_betree_likes == betree_likes.sub(discard_betree).add(add_betree));
+        assert(pushed_buffer_likes == buffer_likes.insert(new_addrs.addr2));
+
+        to_au_likes_commutative_over_sub(betree_likes, discard_betree);
+        to_au_likes_commutative_over_add(betree_likes.sub(discard_betree), add_betree);
+        assert(to_au_likes(pushed_betree_likes) == to_au_likes(betree_likes).sub(to_au_likes(discard_betree)).add(to_au_likes(add_betree)));
+        
+        to_au_likes_commutative_over_add(buffer_likes, Multiset::singleton(new_addrs.addr2));
+        to_au_likes_singleton(new_addrs.addr2);
+        assert(to_au_likes(pushed_buffer_likes) == to_au_likes(buffer_likes).insert(new_addrs.addr2.au));
+
+        self.linked.push_memtable_ensures(new_buffer, new_addrs);
+    }
+}
 
 impl AllocationBetree::State {    
     pub open spec(checked) fn inv(self) -> bool {
@@ -75,35 +119,14 @@ impl AllocationBetree::State {
     {
         reveal(LikesBetree::State::next_by);
 
-        let (betree_likes, buffer_likes) = pre.betree.linked.transitive_likes();
         let pushed = pre.betree.linked.push_memtable(new_betree.memtable.buffer, new_addrs);
-        let _ = pre.betree.linked.push_memtable_new_ranking(new_betree.memtable.buffer, new_addrs, pre.betree.linked.the_ranking());
+        pre.betree.internal_flush_memtable_aus_ensures(new_betree, new_betree.memtable.buffer, new_addrs);
         pushed.valid_view_ensures(new_betree.linked);
 
-        assert( pushed.acyclic() && new_betree.linked.acyclic() );
-
         let (pushed_betree_likes, pushed_buffer_likes) = pushed.transitive_likes();
-        let discard_betree = pre.betree.linked.root_likes();
-        let add_betree = new_betree.linked.root_likes();
-
-        LikesBetree::State::push_memtable_likes_ensures(pre.i(), lbl.i(), new_betree, new_addrs);
-        assert(pushed_betree_likes == betree_likes.sub(discard_betree).add(add_betree));
-        assert(pushed_buffer_likes == buffer_likes.insert(new_addrs.addr2));
-
-        to_au_likes_commutative_over_sub(betree_likes, discard_betree);
-        to_au_likes_commutative_over_add(betree_likes.sub(discard_betree), add_betree);
-        assert(to_au_likes(pushed_betree_likes) == to_au_likes(betree_likes).sub(to_au_likes(discard_betree)).add(to_au_likes(add_betree)));
-        
-        to_au_likes_commutative_over_add(buffer_likes, Multiset::singleton(new_addrs.addr2));
-        to_au_likes_singleton(new_addrs.addr2);
-        assert(to_au_likes(pushed_buffer_likes) == to_au_likes(buffer_likes).insert(new_addrs.addr2.au));
-
-        assert(post.betree_aus == to_au_likes(pushed_betree_likes));
-        assert(post.buffer_aus == to_au_likes(pushed_buffer_likes));
-
+        LikesBetree::State::push_memtable_likes_ensures(pre.betree, new_betree, new_betree.memtable.buffer, new_addrs);
         pushed.valid_view_implies_same_transitive_likes(post.betree.linked);
 
-        pre.betree.linked.push_memtable_ensures(new_betree.memtable.buffer, new_addrs);
         pushed.tree_likes_domain(pushed.the_ranking());
         pushed.buffer_likes_domain(pushed_betree_likes);
         restrict_domain_au_ensures(pushed_buffer_likes, pushed.buffer_dv.entries);

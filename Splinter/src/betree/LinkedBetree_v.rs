@@ -808,6 +808,13 @@ impl<T> LinkedBetree<T> {
 
 
 impl<T: Buffer> LinkedBetree<T> {
+    pub open spec(checked) fn inv(self) -> bool 
+    {
+        &&& self.acyclic()
+        &&& self.valid_buffer_dv()
+        &&& self.has_root() ==> self.root().my_domain() == total_domain()
+    }
+
     pub open spec(checked) fn valid_buffer_dv(self) -> bool
         recommends self.acyclic()
     {
@@ -1197,9 +1204,7 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
     }}
 
     pub open spec(checked) fn inv(self) -> bool {
-        &&& self.linked.acyclic()
-        &&& self.linked.valid_buffer_dv()
-        &&& self.linked.has_root() ==> self.linked.root().my_domain() == total_domain()
+        self.linked.inv()
     }
 
     pub open spec fn strong_step(self, step: Step<T>) -> bool
