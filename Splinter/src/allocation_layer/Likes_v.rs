@@ -33,9 +33,10 @@ verus!{
         }
     }
 
-    pub proof fn to_au_likes_domain(likes: Likes) 
+    pub proof fn to_au_likes_domain(likes: Likes)
         ensures 
-            forall |addr| #[trigger] likes.contains(addr) ==> to_au_likes(likes).contains(addr.au),
+            forall |addr| #[trigger] likes.contains(addr) ==> 
+                to_au_likes(likes).contains(addr.au),
             to_au_likes(likes).dom() == to_aus(likes.dom()),
         decreases likes.len()
     {
@@ -121,6 +122,38 @@ verus!{
         assert(to_au_likes(likes.sub(delta)) == to_au_likes(likes).sub(to_au_likes(delta)));
     }
 
+    pub open spec fn restrict_domain_au<V>(m: Map<Address, V>, aus: Set<AU>) -> Set<Address>
+    {
+        m.dom().filter(|addr: Address| aus.contains(addr.au))
+    }
+
+    pub proof fn restrict_domain_au_ensures<V>(likes: Likes, m: Map<Address, V>)
+        requires likes.dom() <= m.dom()
+        ensures likes.dom() <= restrict_domain_au(m, to_au_likes(likes).dom()) 
+    {
+        let aus = to_au_likes(likes);
+        let kept_addrs = restrict_domain_au(m, aus.dom());
+    
+        to_au_likes_domain(likes);
+    
+        assert forall |addr| #[trigger] likes.dom().contains(addr)
+        implies kept_addrs.contains(addr) 
+        by {
+            assert(m.contains_key(addr));
+            assert(likes.contains(addr)); // trigger
+        }
+    }
+
+    pub proof fn meow<V>(m1: Map<Address, V>, m2: Map<Address, V>, except: Set<Address>, aus_domain: Set<AU>)
+        requires 
+            m1.remove_keys(except) == m2.remove_keys(except), 
+            forall |addr| #[trigger] except.contains(addr) ==> !aus_domain.contains(addr.au),
+        ensures 
+            restrict_domain_au(m1, aus_domain) == restrict_domain_au(m2, aus_domain)
+    {
+        // 
+        assume(false);
+    }
 
     // pub proof fn single_elems_add<V>(a: Multiset<V>, b: Multiset<V>)
     // requires 
@@ -231,3 +264,4 @@ verus!{
     //     }
     // }
 }
+

@@ -84,12 +84,39 @@ pub open spec(checked) fn to_aus(addrs: Set<Address>) -> Set<AU>
     Map::new(|addr| addrs.contains(addr), |addr: Address| addr.au).values()
 }
 
-pub broadcast proof fn to_aus_contains(addrs: Set<Address>, addr: Address)
-    requires #[trigger] addrs.contains(addr)
-    ensures to_aus(addrs).contains(addr.au)
+pub open spec fn set_addrs_disjoint_aus(addrs: Set<Address>) -> bool
+{
+    forall |a,b| addrs.contains(a) && addrs.contains(b) && a != b
+    ==> #[trigger] a.au != #[trigger] b.au
+}
+
+pub open spec fn seq_addrs_disjoint_aus(addrs: Seq<Address>) -> bool
+{
+    forall |i,j| 0<=i<addrs.len() && 0<=j<addrs.len() && i != j
+    ==> #[trigger] addrs[i].au != #[trigger] addrs[j].au
+}
+
+pub proof fn to_aus_domain(addrs: Set<Address>)
+    ensures addrs_closed(addrs, to_aus(addrs))
 {
     let m = Map::new(|addr| addrs.contains(addr), |addr: Address| addr.au);
-    assert(m.dom().contains(addr)); // trigger
+    assert forall |addr| #[trigger] addrs.contains(addr) 
+    implies to_aus(addrs).contains(addr.au) by {
+        assert(m.dom().contains(addr)); // trigger
+    }
+}
+
+pub proof fn to_aus_preserves_lte(addrs: Set<Address>, big_addrs: Set<Address>)
+    requires addrs <= big_addrs
+    ensures to_aus(addrs) <= to_aus(big_addrs)
+{
+    assert forall |au| #[trigger] to_aus(addrs).contains(au)
+    implies to_aus(big_addrs).contains(au)
+    by {
+        let addr = choose |addr| #[trigger] addrs.contains(addr) && addr.au == au;
+        assert(big_addrs.contains(addr));
+        to_aus_domain(big_addrs);
+    }
 }
 
 pub proof fn to_aus_finite(addrs: Set<Address>)
@@ -109,7 +136,7 @@ pub proof fn to_aus_singleton(addr: Address)
 
     assert(m.dom() == s);
     assert(m[addr] == addr.au);
-    assert(m.values().contains(addr.au));
+    assert(m.contains_value(addr.au));
     assert(set!{addr.au} =~= m.values());
 }
 
@@ -148,6 +175,42 @@ pub proof fn to_aus_additive(addrs: Set<Address>, other_addrs: Set<Address>)
         }
     }
     assert(m_total.values() =~= m_addrs.values() + m_other_addrs.values());
+}
+
+pub proof fn to_aus_subtract(addrs: Set<Address>, other_addrs: Set<Address>) 
+    requires set_addrs_disjoint_aus(addrs + other_addrs)
+    ensures to_aus(addrs - other_addrs) == to_aus(addrs) - to_aus(other_addrs)
+{
+    let sub = Map::new(|addr| (addrs - other_addrs).contains(addr), |addr: Address| addr.au);
+    let m = Map::new(|addr| addrs.contains(addr), |addr: Address| addr.au);
+    let m_other = Map::new(|addr| other_addrs.contains(addr), |addr: Address| addr.au);
+
+    assert forall |au| #[trigger] sub.contains_value(au) <==> (m.values() - m_other.values()).contains(au)
+    by {
+        if sub.contains_value(au) {
+            let addr = choose |addr| #[trigger] sub.contains_key(addr) && addr.au == au;
+            assert(addrs.contains(addr));
+            assert(m.contains_key(addr));
+            assert(m[addr] == au);
+            assert(m.contains_value(au));
+        }
+        if (m.values() - m_other.values()).contains(au) {
+            assert(m.contains_value(au));
+            assert(!m_other.contains_value(au));
+
+            let addr = choose |addr| #[trigger] m.contains_key(addr) && addr.au == au;
+            assert(addrs.contains(addr));
+            if other_addrs.contains(addr) {
+                assert(m_other.contains_key(addr));
+                assert(m_other[addr] == au);
+                assert(m_other.contains_value(au));
+                assert(false);
+            }
+            assert(sub.contains_key(addr));
+            assert(sub.contains_value(au));
+        }
+    }
+    assert(to_aus(addrs - other_addrs) =~= to_aus(addrs) - to_aus(other_addrs));
 }
 
 pub open spec(checked) fn addr_range(au: IAU, start: IPage, end_excl: IPage) -> (addrs: Set<Address>) {

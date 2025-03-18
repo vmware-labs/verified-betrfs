@@ -695,8 +695,7 @@ impl<T> LinkedBetree<T> {
         &&& self.root().flushed.update(child_idx as int, self.root().buffers.len()).all_gte(buffer_gc)
     }
 
-    pub open spec/*XXX(checked)*/ fn flush_buffers(self, child_idx: nat, buffer_gc: nat) -> LinkedSeq
-        recommends self.can_flush(child_idx, buffer_gc)
+    pub open spec/*XXX(checked)*/ fn flush_buffers(self, child_idx: nat) -> LinkedSeq
     {
         let root = self.root();
         let flush_upto = root.buffers.len(); 
@@ -713,7 +712,7 @@ impl<T> LinkedBetree<T> {
         let flush_upto = root.buffers.len();
 
         let child = self.dv.get(root.children[child_idx as int]);
-        let new_child = child.extend_buffer_seq(self.flush_buffers(child_idx, buffer_gc));
+        let new_child = child.extend_buffer_seq(self.flush_buffers(child_idx));
 
         let new_root = BetreeNode{
             buffers: root.buffers.slice(buffer_gc as int, flush_upto as int),
@@ -1378,7 +1377,8 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
             
             &&& flush_parent.acyclic()
             &&& result.acyclic()
-            &&& self.linked.valid_buffer_dv() ==> result.valid_buffer_dv()
+            &&& self.linked.buffer_dv == result.buffer_dv
+            // &&& self.linked.valid_buffer_dv() ==> result.valid_buffer_dv()
         })
     {
         let ranking = self.linked.finite_ranking();
@@ -2543,11 +2543,11 @@ impl<T: Buffer> Path<T>{
         ensures ({
             let result = self.substitute(replacement, path_addrs);
             let replacement_buffers = replacement.reachable_buffer_addrs();
-            let new_buffers = replacement_buffers.difference(self.target().reachable_buffer_addrs());
+            let new_buffers = replacement_buffers - self.target().reachable_buffer_addrs();
 
             &&& result.acyclic()
             &&& replacement.reachable_buffer_addrs() <= result.reachable_buffer_addrs()
-            &&& result.reachable_buffer_addrs().difference(new_buffers) <= self.linked.reachable_buffer_addrs()
+            &&& result.reachable_buffer_addrs() - new_buffers <= self.linked.reachable_buffer_addrs()
         })
         decreases self.depth
     {

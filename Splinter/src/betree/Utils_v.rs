@@ -32,7 +32,21 @@ pub open spec(checked) fn union_set_of_sets<A>(sets: Set<Set<A>>) -> Set<A>
 //     }
 // }
 
-pub broadcast proof fn lemma_union_set_of_sets_contains<A>(sets: Set<Set<A>>, s: Set<A>)
+pub proof fn lemma_union_set_of_sets_contains<A>(sets: Set<Set<A>>, a: A) -> (s: Set<A>)
+    requires sets.finite(), union_set_of_sets(sets).contains(a)
+    ensures sets.contains(s) && s.contains(a)
+    decreases sets.len()
+{
+    assert(sets.len() > 0);
+    let random = sets.choose();
+    if random.contains(a) {
+        random
+    } else {
+        lemma_union_set_of_sets_contains(sets.remove(random), a)
+    }
+}
+
+pub broadcast proof fn lemma_union_set_of_sets_subset<A>(sets: Set<Set<A>>, s: Set<A>)
     requires 
         sets.finite(),
         #[trigger] sets.contains(s),
@@ -43,9 +57,9 @@ pub broadcast proof fn lemma_union_set_of_sets_contains<A>(sets: Set<Set<A>>, s:
     if sets.len() > 0 {
         let random = sets.choose();
         if random != s {
-            lemma_union_set_of_sets_contains(sets.remove(random), s);
+            lemma_union_set_of_sets_subset(sets.remove(random), s);
             assert(union_set_of_sets(sets.remove(random)) == union_set_of_sets(sets.remove(random).remove(s)) + s);
-            lemma_union_set_of_sets_contains(sets.remove(s), random);
+            lemma_union_set_of_sets_subset(sets.remove(s), random);
             assert(union_set_of_sets(sets.remove(s).remove(random)) + random == union_set_of_sets(sets.remove(s)));
             assert(sets.remove(s).remove(random) == sets.remove(random).remove(s)); // trigger 
             assert(union_set_of_sets(sets) == union_set_of_sets(sets.remove(random).remove(s)) + random + s);
@@ -71,18 +85,24 @@ pub proof fn lemma_union_seq_of_sets_finite<A>(sets: Seq<Set<A>>)
     }
 }
 
-pub proof fn lemma_set_subset_of_union_seq_of_sets<A>(sets: Seq<Set<A>>, a: A)
-    requires exists |i| 0 <= i < sets.len() && (#[trigger] sets[i]).contains(a)
-    ensures union_seq_of_sets(sets).contains(a)
+pub proof fn lemma_subset_union_seq_of_sets<A>(sets: Seq<Set<A>>, i: int)
+    requires 0 <= i < sets.len()
+    ensures sets[i] <= union_seq_of_sets(sets)
     decreases sets.len()
 {
     assert(sets.len() > 0);
     assert(union_seq_of_sets(sets) == union_seq_of_sets(sets.drop_last()).union(sets.last()));
-    let i = choose |i| 0 <= i < sets.len() && (#[trigger] sets[i]).contains(a);
     if i < sets.len() - 1 {
-        assert(0 <= i < sets.drop_last().len() && (#[trigger] sets.drop_last()[i]).contains(a));
-        lemma_set_subset_of_union_seq_of_sets(sets.drop_last(), a);
+        lemma_subset_union_seq_of_sets(sets.drop_last(), i);
     }
+}
+
+pub proof fn lemma_set_subset_of_union_seq_of_sets<A>(sets: Seq<Set<A>>, a: A)
+    requires exists |i| 0 <= i < sets.len() && (#[trigger] sets[i]).contains(a)
+    ensures union_seq_of_sets(sets).contains(a)
+{
+    let i = choose |i| 0 <= i < sets.len() && (#[trigger] sets[i]).contains(a);
+    lemma_subset_union_seq_of_sets(sets, i);
 }
 
 pub proof fn lemma_union_seq_of_sets_contains<A>(sets: Seq<Set<A>>, a: A)

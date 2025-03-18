@@ -18,6 +18,7 @@ use crate::betree::BufferOffsets_v::*;
 use crate::betree::OffsetMap_v::*;
 use crate::betree::Memtable_v::*;
 use crate::betree::Domain_v::*;
+use crate::betree::Utils_v::*;
 use crate::betree::PivotTable_v::*;
 use crate::betree::SplitRequest_v::*;
 use crate::betree::LinkedBetree_v::*;
@@ -35,50 +36,22 @@ pub struct CompactorInput{
 }
 
 pub open spec fn seq_addrs_to_aus(s: Seq<Address>) -> Set<AU>
-    // decreases s.len()
 {
     to_aus(s.to_set())
-    // if s.len() > 0 {
-    //     set![s.last().au] + seq_addrs_to_aus(s.drop_last())
-    // } else {
-    //     set![]
-    // }
 }
-
-// to aus 
 
 impl CompactorInput{
-    pub open spec(checked) fn input_aus(inputs: Seq<CompactorInput>) -> Set<AU>
-        // decreases inputs.len()
+    pub open spec(checked) fn input_roots(inputs: Seq<CompactorInput>) -> Set<Address>
     {
-        inputs.fold_left(Set::empty(), |u: Set<AU>, s: CompactorInput| u.union(seq_addrs_to_aus(s.input_buffers.addrs)))
-        // if inputs.len() > 0 {
-        //     seq_addrs_to_aus(inputs.last().input_buffers.addrs) + Self::input_aus(inputs.drop_last())
-        // } else {
-        //     set![]
-        // }
+        let roots_seq = Seq::new(inputs.len(), |i| inputs[i].input_buffers.addrs.to_set());
+        union_seq_of_sets(roots_seq)
     }
-}
 
-pub open spec fn restrict_domain_au<V>(m: Map<Address, V>, aus: Set<AU>) -> Set<Address>
-{
-    m.dom().filter(|addr: Address| aus.contains(addr.au))
-}
-
-pub proof fn restrict_domain_au_ensures<V>(likes: Likes, m: Map<Address, V>)
-    requires likes.dom() <= m.dom()
-    ensures likes.dom() <= restrict_domain_au(m, to_au_likes(likes).dom()) 
-{
-    let aus = to_au_likes(likes);
-    let kept_addrs = restrict_domain_au(m, aus.dom());
-
-    to_au_likes_domain(likes);
-
-    assert forall |addr| #[trigger] likes.dom().contains(addr)
-    implies kept_addrs.contains(addr) 
-    by {
-        assert(m.contains_key(addr));
-        assert(likes.contains(addr)); // trigger
+    pub proof fn input_roots_finite(inputs: Seq<CompactorInput>)
+        ensures Self::input_roots(inputs).finite()
+    {
+        let roots_seq = Seq::new(inputs.len(), |i| inputs[i].input_buffers.addrs.to_set());
+        lemma_union_seq_of_sets_finite(roots_seq);
     }
 }
 
@@ -107,7 +80,7 @@ state_machine!{ AllocationBetree {
 
     pub open spec fn read_ref_aus(self) -> Set<AU>
     {
-        CompactorInput::input_aus(self.compactors)
+        to_aus(CompactorInput::input_roots(self.compactors))
     }
 
     init!{ initialize(betree: LinkedBetreeVars::State<SimpleBuffer>) {
@@ -168,7 +141,7 @@ state_machine!{ AllocationBetree {
         path_addrs: PathAddrs, betree_aus: AULikes, buffer_aus: AULikes) -> (AULikes, AULikes)
     {
         let discard_betree_aus = to_au_likes(split_discard_betree(path, request));
-        let add_betree_aus = to_au_likes(split_add_betree(new_addrs, path_addrs));
+        let add_betree_aus = to_au_likes(add_betree_likes(new_addrs, path_addrs));
         let new_betree_aus = betree_aus.sub(discard_betree_aus).add(add_betree_aus);
 
         let add_buffer_aus = to_au_likes(split_add_buffers(path, request));
@@ -198,11 +171,11 @@ state_machine!{ AllocationBetree {
         new_addrs: TwoAddrs, path_addrs: PathAddrs, betree_aus: AULikes, buffer_aus: AULikes) -> (AULikes, AULikes)
     {
         let discard_betree_aus = to_au_likes(flush_discard_betree(path, child_idx));
-        let add_betree_aus = to_au_likes(flush_add_betree(new_addrs, path_addrs));
+        let add_betree_aus = to_au_likes(add_betree_likes(new_addrs, path_addrs));
         let new_betree_aus = betree_aus.sub(discard_betree_aus).add(add_betree_aus);
 
         let discard_buffer_aus = to_au_likes(flush_discard_buffers(path, buffer_gc));
-        let add_buffer_aus = to_au_likes(flush_add_buffers(path, child_idx, buffer_gc));
+        let add_buffer_aus = to_au_likes(flush_add_buffers(path, child_idx));
         let new_buffer_aus = buffer_aus.sub(discard_buffer_aus).add(add_buffer_aus);
 
         (new_betree_aus, new_buffer_aus)
@@ -286,7 +259,7 @@ state_machine!{ AllocationBetree {
 
         // likes level requirement that new betree must contain all live betree addresses
         require restrict_domain_au(compacted.dv.entries, new_betree_aus.dom()) <= new_betree.linked.dv.entries.dom();
-        require restrict_domain_au(compacted.buffer_dv.entries, new_buffer_aus.dom() + CompactorInput::input_aus(new_compactors)) <= new_betree.linked.buffer_dv.repr();
+        require restrict_domain_au(compacted.buffer_dv.entries, new_buffer_aus.dom() + to_aus(CompactorInput::input_roots(new_compactors))) <= new_betree.linked.buffer_dv.repr();
 
         update betree = new_betree;
         update betree_aus = new_betree_aus;

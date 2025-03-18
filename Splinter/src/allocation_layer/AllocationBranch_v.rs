@@ -16,6 +16,7 @@ use crate::betree::BufferDisk_v::*;
 use crate::betree::LinkedBranch_v::*;
 use crate::betree::LinkedBranch_v::Refinement_v;
 use crate::allocation_layer::MiniAllocator_v::*;
+use crate::allocation_layer::Likes_v::*;
 
 verus!{
 
@@ -387,24 +388,31 @@ impl LinkedBranch<Summary> {
         &&& self.root() is Index ==> {
             &&& self.root()->aux_ptr is Some
             &&& self.disk_view.valid_address(self.root()->aux_ptr.unwrap())
-            &&& self.get_summary().contains(self.root()->aux_ptr.unwrap().au)
+            &&& self.disk_view.entries[self.root()->aux_ptr.unwrap()] is Auxiliary
         }
+    }
+
+    pub open spec fn full_repr(self) -> Set<Address>
+    {
+        if self.root() is Index {
+            self.representation() + set!{self.root()->aux_ptr.unwrap()}
+        } else {
+            self.representation()
+        }
+    }
+
+    pub open spec fn tight_disk_view_with_summary(self) -> bool
+    {
+        self.disk_view.representation() == self.full_repr()
     }
 
     pub open spec fn valid_sealed_branch(self) -> bool
     {
         &&& self.inv()
         &&& self.sealed_root()
-        &&& addrs_closed(self.representation(), self.get_summary())
-    }
 
-    pub open spec fn tight_disk_view_with_summary(self) -> bool
-    {
-        if self.root() is Index {
-            self.disk_view.representation() == self.representation() + set!{self.root()->aux_ptr.unwrap()}
-        } else {
-            self.tight_disk_view()
-        }
+        &&& addrs_closed(self.full_repr(), self.get_summary())
+        &&& restrict_domain_au(self.disk_view.entries, self.get_summary()) =~= self.full_repr()
     }
 } // end of impl LinkedBranch<Summary>
 

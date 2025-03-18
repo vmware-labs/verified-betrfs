@@ -377,23 +377,6 @@ impl<T> LinkedBranch<T> {
         ranking
     }
 
-    pub proof fn valid_ranking_big_disk(self, big: Self) -> (out: Ranking)
-        requires 
-            self.acyclic(),
-            self.root == big.root,
-            self.disk_view.is_sub_disk(big.disk_view)
-        ensures 
-            big.valid_ranking(out)
-    {
-        let ranking = self.the_ranking().restrict(self.disk_view.representation());
-        assert forall |addr| #[trigger] ranking.contains_key(addr) 
-            && big.disk_view.entries.contains_key(addr)
-        implies big.disk_view.node_children_respects_rank(ranking, addr)
-        by {
-            assert(self.the_ranking().contains_key(addr)); // trigger
-        }
-        ranking
-    }
 
     pub open spec(checked) fn acyclic(self) -> bool
     {
