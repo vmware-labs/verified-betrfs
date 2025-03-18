@@ -200,7 +200,7 @@ impl<T> LinkedBetree<T> {
         }
     }
 
-    broadcast proof fn tree_likes_ignore_ranking(self, r1: Ranking, r2: Ranking) 
+    pub broadcast proof fn tree_likes_ignore_ranking(self, r1: Ranking, r2: Ranking) 
         requires 
             #[trigger] self.valid_ranking(r1),
             #[trigger] self.valid_ranking(r2),
@@ -236,7 +236,7 @@ impl<T> LinkedBetree<T> {
         }
     }
 
-    proof fn subdisk_implies_same_tree_likes(self, other: Self, ranking: Ranking)
+    pub proof fn subdisk_implies_same_tree_likes(self, other: Self, ranking: Ranking)
         requires
             self.valid_ranking(ranking),
             other.valid_ranking(ranking),

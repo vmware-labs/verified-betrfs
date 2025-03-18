@@ -144,17 +144,6 @@ verus!{
         }
     }
 
-    pub proof fn meow<V>(m1: Map<Address, V>, m2: Map<Address, V>, except: Set<Address>, aus_domain: Set<AU>)
-        requires 
-            m1.remove_keys(except) == m2.remove_keys(except), 
-            forall |addr| #[trigger] except.contains(addr) ==> !aus_domain.contains(addr.au),
-        ensures 
-            restrict_domain_au(m1, aus_domain) == restrict_domain_au(m2, aus_domain)
-    {
-        // 
-        assume(false);
-    }
-
     // pub proof fn single_elems_add<V>(a: Multiset<V>, b: Multiset<V>)
     // requires 
     //     all_elems_single(a),
