@@ -159,6 +159,38 @@ impl<T: Buffer> LinkedBetreeVars::State<T> {
         to_au_likes_commutative_over_add(buffer_likes.sub(flush_discard_buffers(path, buffer_gc)), flush_add_buffers(path, child_idx));
         self.post_flush_ensures(path, child_idx, buffer_gc, new_addrs, path_addrs);
     }
+
+    pub proof fn internal_compact_complete_aus_ensures(self, new_betree: LinkedBetreeVars::State<T>,
+        path: Path<T>, start: nat, end: nat, compacted_buffer: T, new_addrs: TwoAddrs, path_addrs: PathAddrs)
+    requires
+        self.inv(),
+        LinkedBetreeVars::State::internal_compact(self, new_betree, LinkedBetreeVars::Label::Internal{}, 
+            new_betree.linked, path, start ,end, compacted_buffer, new_addrs, path_addrs),
+        self.linked.is_fresh(new_addrs.repr()),
+        self.linked.is_fresh(path_addrs.to_set()),
+    ensures ({
+        let compacted = LinkedBetreeVars::State::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs);
+        let (betree_likes, buffer_likes) = self.linked.transitive_likes();
+        let (compacted_betree_likes, compacted_buffer_likes) = compacted.transitive_likes();
+        let (post_betree_aus, post_buffer_aus) = AllocationBetree::State::internal_compact_complete_au_likes(
+                path, start, end, new_addrs, path_addrs, to_au_likes(betree_likes), to_au_likes(buffer_likes));
+
+        &&& compacted.inv()
+        &&& post_betree_aus == to_au_likes(compacted_betree_likes)
+        &&& post_buffer_aus == to_au_likes(compacted_buffer_likes)
+    })
+    {
+        let (betree_likes, buffer_likes) = self.linked.transitive_likes();
+        let compacted = LinkedBetreeVars::State::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs);
+        LikesBetree::State::post_compact_likes_ensures(self, new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs);
+
+        let (compacted_betree_likes, compacted_buffer_likes) = compacted.transitive_likes();
+        to_au_likes_commutative_over_sub(betree_likes, compact_discard_betree(path));
+        to_au_likes_commutative_over_add(betree_likes.sub(compact_discard_betree(path)), compact_add_betree(new_addrs, path_addrs));
+        to_au_likes_commutative_over_sub(buffer_likes, compact_discard_buffers(path, start, end));
+        to_au_likes_commutative_over_add(buffer_likes.sub(compact_discard_buffers(path, start, end)), compact_add_buffers(new_addrs));
+        self.post_compact_ensures(path, start, end, compacted_buffer, new_addrs, path_addrs);
+    }
 }
 
 impl AllocationBetree::State {    
@@ -295,7 +327,7 @@ impl AllocationBetree::State {
     }
 
     proof fn internal_compact_complete_inv_refines(pre: Self, post: Self, lbl: AllocationBetree::Label, 
-        input_idx: int, new_betree: LinkedBetreeVars::State<SimpleBuffer>, path: Path<SimpleBuffer>, 
+        new_betree: LinkedBetreeVars::State<SimpleBuffer>, input_idx: int, path: Path<SimpleBuffer>, 
         start: nat, end: nat, compacted_buffer: SimpleBuffer, new_addrs: TwoAddrs, path_addrs: PathAddrs)
     requires 
         pre.inv(), 
@@ -310,14 +342,11 @@ impl AllocationBetree::State {
 
         let (betree_likes, buffer_likes) = pre.betree.linked.transitive_likes();
         let compacted = LinkedBetreeVars::State::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs);
-        LikesBetree::State::post_compact_likes_ensures(pre.i(), lbl.i(), new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs);
 
+        pre.betree.internal_compact_complete_aus_ensures(new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs);
+        LikesBetree::State::post_compact_likes_ensures(pre.betree, new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs);
+        
         let (compacted_betree_likes, compacted_buffer_likes) = compacted.transitive_likes();
-        to_au_likes_commutative_over_sub(betree_likes, compact_discard_betree(path));
-        to_au_likes_commutative_over_add(betree_likes.sub(compact_discard_betree(path)), compact_add_betree(new_addrs, path_addrs));
-        to_au_likes_commutative_over_sub(buffer_likes, compact_discard_buffers(path, start, end));
-        to_au_likes_commutative_over_add(buffer_likes.sub(compact_discard_buffers(path, start, end)), compact_add_buffers(new_addrs));
-
         compacted.valid_view_ensures(new_betree.linked);
         compacted.valid_view_implies_same_transitive_likes(post.betree.linked);
 
@@ -364,7 +393,7 @@ impl AllocationBetree::State {
                 assert(LikesBetree::State::next_by(pre.i(), post.i(), lbl.i(), LikesBetree::Step::internal_noop()));
             }
             AllocationBetree::Step::internal_compact_complete(input_idx, new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs) => {
-                Self::internal_compact_complete_inv_refines(pre, post, lbl, input_idx, new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs);
+                Self::internal_compact_complete_inv_refines(pre, post, lbl, new_betree, input_idx, path, start, end, compacted_buffer, new_addrs, path_addrs);
             }
             AllocationBetree::Step::internal_buffer_noop(new_betree) => {
                 pre.betree.linked.valid_view_ensures(new_betree.linked);

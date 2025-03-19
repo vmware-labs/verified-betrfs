@@ -1671,38 +1671,40 @@ state_machine!{ LikesBetree {
     }
 
     #[verifier::spinoff_prover]
-    pub proof fn post_compact_likes_ensures(pre: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
-        path: Path<SimpleBuffer>, start: nat, end: nat, compacted_buffer: SimpleBuffer, new_addrs: TwoAddrs, path_addrs: PathAddrs)
+    pub proof fn post_compact_likes_ensures<T: Buffer>(betree: LinkedBetreeVars::State<T>, new_betree: LinkedBetreeVars::State<T>, 
+        path: Path<T>, start: nat, end: nat, compacted_buffer: T, new_addrs: TwoAddrs, path_addrs: PathAddrs)
     requires 
-        pre.betree.linked.acyclic(),
-        pre.imperative_matches_transitive_likes(),
-        LinkedBetreeVars::State::internal_compact(pre.betree, new_betree, lbl->linked_lbl, 
+        betree.linked.acyclic(),
+        LinkedBetreeVars::State::internal_compact(betree, new_betree, LinkedBetreeVars::Label::Internal{}, 
             new_betree.linked, path, start, end, compacted_buffer, new_addrs, path_addrs),
-        pre.is_fresh(new_addrs.repr() + path_addrs.to_set()),
+        betree.linked.is_fresh(new_addrs.repr() + path_addrs.to_set()),
     ensures ({
         let compacted = LinkedBetreeVars::State::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs);
-        let (betree_likes, buffer_likes) = compacted.transitive_likes();
+        let (betree_likes, buffer_likes) = betree.linked.transitive_likes();
+        let (post_betree_likes, post_buffer_likes) = compacted.transitive_likes();
+
         &&& compacted.acyclic()
-        &&& compact_discard_betree(path) <= pre.betree_likes
-        &&& compact_discard_buffers(path, start, end) <= pre.buffer_likes
-        &&& betree_likes == pre.betree_likes.sub(compact_discard_betree(path)).add(compact_add_betree(new_addrs, path_addrs))
-        &&& buffer_likes == pre.buffer_likes.sub(compact_discard_buffers(path, start, end)).add(compact_add_buffers(new_addrs))
+        &&& compact_discard_betree(path) <= betree_likes
+        &&& compact_discard_buffers(path, start, end) <= buffer_likes
+        &&& post_betree_likes == betree_likes.sub(compact_discard_betree(path)).add(compact_add_betree(new_addrs, path_addrs))
+        &&& post_buffer_likes == buffer_likes.sub(compact_discard_buffers(path, start, end)).add(compact_add_buffers(new_addrs))
     })
     {
-        let ranking = pre.betree.linked.the_ranking();
+        let (betree_likes, buffer_likes) = betree.linked.transitive_likes();
         let compacted = LinkedBetreeVars::State::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs);
-        pre.betree.post_compact_ensures(path, start, end, compacted_buffer, new_addrs, path_addrs);
+        betree.post_compact_ensures(path, start, end, compacted_buffer, new_addrs, path_addrs);
 
-        let post_betree_likes = pre.betree_likes.sub(compact_discard_betree(path)).add(compact_add_betree(new_addrs, path_addrs));
-        let post_buffer_likes = pre.buffer_likes.sub(compact_discard_buffers(path, start, end)).add(compact_add_buffers(new_addrs));
+        let post_betree_likes = betree_likes.sub(compact_discard_betree(path)).add(compact_add_betree(new_addrs, path_addrs));
+        let post_buffer_likes = buffer_likes.sub(compact_discard_buffers(path, start, end)).add(compact_add_buffers(new_addrs));
 
         let subtree = path.target();
         let new_subtree = path.target().compact(start, end, compacted_buffer, new_addrs);
+        let ranking = betree.linked.the_ranking();
 
         path.target_ensures();
         path.valid_ranking_throughout(ranking);
 
-        let finite_ranking = pre.betree.linked.finite_ranking();
+        let finite_ranking = betree.linked.finite_ranking();
         let compact_ranking = subtree.compact_new_ranking(start, end, compacted_buffer, new_addrs, finite_ranking);
 
         subtree.compact_likes_ensures(start, end, compacted_buffer, new_addrs, compact_ranking);
@@ -1712,31 +1714,31 @@ state_machine!{ LikesBetree {
         let compacted_likes = compacted.tree_likes(compacted.the_ranking());
 
         path.substitute_likes_ensures(new_subtree, path_addrs, compact_ranking);
-        pre.betree.linked.tree_likes_ignore_ranking(compact_ranking, ranking);
+        betree.linked.tree_likes_ignore_ranking(compact_ranking, ranking);
 
         assert(compacted_likes == compacted_likes.sub(new_subtree_likes).add(new_subtree_likes));
         assert(compacted_likes =~= post_betree_likes);
 
         assert(compacted.buffer_likes(compacted_likes) == post_buffer_likes) by {
             path.substitute_ensures(new_subtree, path_addrs);
-            assert(subtree_likes <= pre.betree_likes);
+            assert(subtree_likes <= betree_likes);
             assert(new_subtree_likes <= compacted_likes);
 
             let discard_buffers = path.target().root().buffers.slice(start as int, end as int).addrs.to_multiset();
             let add_buffers = Multiset::singleton(new_addrs.addr2);
-            pre.betree.linked.subtree_buffer_likes_composition(compacted, subtree, new_subtree, compact_ranking, discard_buffers, add_buffers);
+            betree.linked.subtree_buffer_likes_composition(compacted, subtree, new_subtree, compact_ranking, discard_buffers, add_buffers);
         }
 
-        assert(compact_discard_betree(path) <= pre.betree_likes) by {
-            assert(subtree_likes <= pre.betree_likes);
+        assert(compact_discard_betree(path) <= betree_likes) by {
+            assert(subtree_likes <= betree_likes);
         }
 
-        assert(compact_discard_buffers(path, start, end) <= pre.buffer_likes) by {
+        assert(compact_discard_buffers(path, start, end) <= buffer_likes) by {
             subtree.tree_likes_domain(compact_ranking);
-            subtree.subdisk_implies_same_buffer_likes(pre.betree.linked, subtree_likes);
-            pre.betree.linked.tree_likes_domain(ranking);
-            pre.betree.linked.buffer_likes_additive(pre.betree_likes.sub(subtree_likes), subtree_likes);
-            assert(pre.betree_likes.sub(subtree_likes).add(subtree_likes) == pre.betree_likes); // trigger
+            subtree.subdisk_implies_same_buffer_likes(betree.linked, subtree_likes);
+            betree.linked.tree_likes_domain(ranking);
+            betree.linked.buffer_likes_additive(betree_likes.sub(subtree_likes), subtree_likes);
+            assert(betree_likes.sub(subtree_likes).add(subtree_likes) == betree_likes); // trigger
         }
     }
 
@@ -1744,7 +1746,7 @@ state_machine!{ LikesBetree {
     fn internal_compact_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
         path: Path<SimpleBuffer>, start: nat, end: nat, compacted_buffer: SimpleBuffer, new_addrs: TwoAddrs, path_addrs: PathAddrs) { 
         let compacted = LinkedBetreeVars::State::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs);
-        Self::post_compact_likes_ensures(pre, lbl, new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs);
+        Self::post_compact_likes_ensures(pre.betree, new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs);
         compacted.valid_view_implies_same_transitive_likes(new_betree.linked);
         assert(new_betree.inv()) by {
             let linked_step = Self::internal_compact_satisfies_strong_step(pre, post, lbl, new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs);

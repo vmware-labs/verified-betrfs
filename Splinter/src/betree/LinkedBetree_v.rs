@@ -1378,7 +1378,7 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
             &&& flush_parent.acyclic()
             &&& result.acyclic()
             &&& self.linked.buffer_dv == result.buffer_dv
-            // &&& self.linked.valid_buffer_dv() ==> result.valid_buffer_dv()
+            &&& self.linked.valid_buffer_dv() ==> result.valid_buffer_dv()
         })
     {
         let ranking = self.linked.finite_ranking();
@@ -1423,10 +1423,15 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
             path.target().has_root(),
             start < end <= path.target().root().buffers.len(),
             self.linked.valid_path_replacement(path, new_addrs, path_addrs),
-        ensures 
-            path.target().compact(start, end, compacted_buffer, new_addrs).acyclic(),
-            Self::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs).acyclic(),
-            self.linked.valid_buffer_dv() ==> Self::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs).valid_buffer_dv(),
+        ensures ({
+            let compact_subtree = path.target().compact(start, end, compacted_buffer, new_addrs);
+            let result = Self::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs);
+
+            &&& compact_subtree.acyclic()
+            &&& result.acyclic()
+            &&& compact_subtree.buffer_dv == result.buffer_dv
+            &&& self.linked.valid_buffer_dv() ==> result.valid_buffer_dv()
+        })
     {
         let ranking = self.linked.finite_ranking();
         path.target_ensures();
@@ -2428,6 +2433,7 @@ impl<T: Buffer> Path<T>{
             &&& self.depth > 0 ==> result.root().pivots == self.linked.root().pivots
             &&& result.dv.entries.dom() =~= replacement.dv.entries.dom() + path_addrs.to_set()
             &&& replacement.dv.is_sub_disk(result.dv)
+            &&& replacement.buffer_dv == result.buffer_dv
         })
         decreases self.depth, 1nat
     {
