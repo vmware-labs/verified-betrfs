@@ -18,20 +18,6 @@ pub open spec(checked) fn union_set_of_sets<A>(sets: Set<Set<A>>) -> Set<A>
     }
 }
 
-// pub proof fn lemma_union_set_of_sets_finite<A>(sets: Set<Set<A>>)
-//     requires 
-//         sets.finite(),
-//         forall |s| sets.contains(s) ==> #[trigger] s.finite()
-//     ensures 
-//         union_set_of_sets(sets).finite()
-//     decreases sets.len()
-// {
-//     if sets.len() > 0 {
-//         let s = sets.choose();
-//         lemma_union_set_of_sets_finite(sets.remove(s));
-//     }
-// }
-
 pub proof fn lemma_union_set_of_sets_contains<A>(sets: Set<Set<A>>, a: A) -> (s: Set<A>)
     requires sets.finite(), union_set_of_sets(sets).contains(a)
     ensures sets.contains(s) && s.contains(a)
