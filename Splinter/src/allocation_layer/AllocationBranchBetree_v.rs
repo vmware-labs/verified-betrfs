@@ -371,7 +371,8 @@ state_machine!{ AllocationBranchBetree {
         let tree_deallocs_aus = pre.betree_aus.dom() - new_betree_aus.dom();
         let branch_deallocs_aus = pre.branch_aus.dom() - new_branch_aus.dom() - read_ref_aus(new_compactors);
 
-        let new_branch_summary = pre.branch_summary.remove_keys(branch_deallocs_aus);
+        let new_branch_summary = pre.branch_summary.insert(
+            new_branch.root.au, new_branch.get_summary()).remove_keys(branch_deallocs_aus);
         let new_summary_aus = summary_aus(new_branch_summary);
 
         let dealloc_branch_summary = pre.branch_summary.restrict(branch_deallocs_aus);
@@ -380,9 +381,9 @@ state_machine!{ AllocationBranchBetree {
         require lbl->allocs == seq_addrs_to_aus(path_addrs).insert(new_node_addr.au);
         require lbl->deallocs == tree_deallocs_aus + summary_deallocs_aus;
 
-        // domain should jsut 
+        // domain should just 
         let pre_buffer_dv = pre.betree.linked.buffer_dv;
-        let full_buffer_dv =pre_buffer_dv.entries.union_prefer_right(new_branch.disk_view.entries);
+        let full_buffer_dv = pre_buffer_dv.entries.union_prefer_right(new_branch.disk_view.entries);
 
         require restrict_domain_au(compacted.dv.entries, new_betree_aus.dom()) == new_betree.linked.dv.entries.dom();
         require restrict_domain_au(full_buffer_dv, new_summary_aus) == new_betree.linked.buffer_dv.repr();
@@ -638,21 +639,19 @@ state_machine!{ AllocationBranchBetree {
         let pre_buffer_dv = pre.betree.linked.buffer_dv;
         let post_buffer_dv = post.betree.linked.buffer_dv;
 
-        assert forall |root| post_branch_roots.contains(root) 
-        implies (#[trigger] post_buffer_dv.get_branch(root)).valid_sealed_branch()
-        by {
-            let post_branch = post_buffer_dv.get_branch(root);
-            if root == new_branch.root {
-                new_branch.valid_subdisk_preserves_valid_sealed_branch(post_branch, new_branch.get_summary());
-            } else {
-                let pre_branch = pre_buffer_dv.get_branch(root);
-                pre.inv_branch_summary_ensures();
-                assert(pre_branch_roots.contains(root)); // trigger
-                pre_branch.valid_subdisk_preserves_valid_sealed_branch(post_branch, summary_aus(pre.branch_summary));
+        assert(post_buffer_dv.to_branch_disk().wf());
+        assert(pre_branch_roots + set!{new_branch.root} =~= post_branch_roots); // trigger
+        assert(set_addrs_disjoint_aus(post_branch_roots)) by {
+            assert forall |addr| pre_branch_roots.contains(addr)
+            implies addr.au != new_branch.root.au
+            by {
+                assert(pre_buffer_dv.get_branch(addr).valid_sealed_branch()); // trigger
+                assert(pre_buffer_dv.entries.contains_key(addr));
             }
         }
 
         CompactorInput::input_roots_finite(pre.compactors);
+        pre_buffer_dv.build_branch_summary_insert(post_buffer_dv, pre_branch_roots, new_branch);
         pre_buffer_dv.build_branch_summary_finite(pre_branch_roots);
         if pre.branch_summary.contains_key(new_branch.root.au) {
             let addr = pre_buffer_dv.build_branch_summary_get_addr(pre_branch_roots, new_branch.root.au);
@@ -663,7 +662,6 @@ state_machine!{ AllocationBranchBetree {
 
         to_au_likes_singleton(new_root_addr);
         assert(post.betree_aus.dom() <= pre.betree_aus.dom() + set!{ new_root_addr.au });
-
         assert(post.betree_aus.dom().disjoint(summary_aus(post.branch_summary))) by {
             assert(summary_aus(pre.branch_summary).disjoint(set!{new_root_addr.au}));
             assert(new_branch.get_summary().disjoint(set!{new_root_addr.au}));
@@ -678,16 +676,6 @@ state_machine!{ AllocationBranchBetree {
             let pre_idx = if i < branch_idx { i } else { i + 1 };
             assert(pre.wip_branches[pre_idx].mini_allocator.all_aus().contains(au));
         }
-
-        assert(pre_branch_roots + set!{new_branch.root} =~= post_branch_roots); // trigger
-        assert forall |addr| pre_branch_roots.contains(addr)
-        implies addr.au != new_branch.root.au
-        by {
-            assert(pre_buffer_dv.get_branch(addr).valid_sealed_branch()); // trigger
-            assert(pre_buffer_dv.entries.contains_key(addr));
-        }
-        assert(set_addrs_disjoint_aus(post_branch_roots));
-        pre_buffer_dv.build_branch_summary_insert(post_buffer_dv, pre_branch_roots, new_branch);
         assert(post.inv());
     }
 
@@ -834,6 +822,7 @@ state_machine!{ AllocationBranchBetree {
             pre_buffer_dv.build_branch_summary_contains(pre_branch_roots, root);
             pre_branch.valid_subdisk_preserves_valid_sealed_branch(post_branch, summary_aus(pre.branch_summary));
         }
+
 
         pre_buffer_dv.build_branch_summary_remove_keys(post_buffer_dv, pre_branch_roots, post_branch_roots);
         assert(post.branch_summary == post_buffer_dv.build_branch_summary(post_branch_roots));
@@ -1018,50 +1007,160 @@ state_machine!{ AllocationBranchBetree {
         compacted.valid_view_ensures(new_betree.linked);
         compacted.valid_view_implies_same_transitive_likes(post.betree.linked);
 
+        // LikesBetree::State::post_compact_likes_ensures(pre.betree, new_betree, path, start, end, new_branch.root(), linked_new_addrs, path_addrs);
+
         // first show that full buffer dv is valid with sealed branches
         pre.inv_implies_wf_branch_dv();
 
         let pre_buffer_dv = pre.betree.linked.buffer_dv;
         let post_buffer_dv = post.betree.linked.buffer_dv;
-        let full_buffer_dv = pre_buffer_dv.entries.union_prefer_right(new_branch.disk_view.entries);
+
+        let full_buffer_disk = pre_buffer_dv.entries.union_prefer_right(new_branch.disk_view.entries);
+        let full_buffer_dv = BufferDisk{entries: full_buffer_disk};
 
         path.target_ensures();
-        assert(compacted.buffer_dv.entries.dom() <= full_buffer_dv.dom());
 
-        // let tmp 
+        // TODO: first one to prove
+        assume(full_buffer_dv.to_branch_disk().wf());
+
+        assert(new_betree.linked.reachable_buffer_addrs() <= full_buffer_dv.entries.dom());
+        // TODO(JL):
+        // assume(new_betree.linked.reachable_buffer_addrs() <= post_buffer_dv.entries.dom());
 
 
+        let pre_compactor_roots = CompactorInput::input_roots(pre.compactors);
+        let post_compactor_roots = CompactorInput::input_roots(post.compactors);
+ 
+        // TODO(JL):
+        // assume(post_compactor_roots <= pre_compactor_roots);
+
+        let pre_branch_roots =  branch_likes.dom() + pre_compactor_roots;
+        let post_branch_roots = post_branch_likes.dom() + post_compactor_roots;
+
+        let full_branch_roots = pre_branch_roots + set!{new_branch.root};
+        assert(set_addrs_disjoint_aus(full_branch_roots)) by {
+            assert forall |addr| pre_branch_roots.contains(addr)
+            implies addr.au != new_branch.root.au
+            by {
+                assert(pre_buffer_dv.get_branch(addr).valid_sealed_branch()); // trigger
+                assert(pre_buffer_dv.entries.contains_key(addr));
+            }
+        }
+
+        CompactorInput::input_roots_finite(pre.compactors);
+        pre_buffer_dv.build_branch_summary_insert(full_buffer_dv, pre_branch_roots, new_branch);
+        assert(full_buffer_dv.build_branch_summary(full_branch_roots)
+            == pre.branch_summary.insert(new_branch.root.au, new_branch.get_summary()));
+        assert(full_buffer_dv.sealed_branch_roots(full_branch_roots));
+
+        // TODO(prove)
+        assume(post_branch_roots <= full_branch_roots);
+
+        // full_buffer_dv.build_branch_summary_remove_keys(post_buffer_dv, full_branch_roots, post_branch_roots);
+
+        // this makes no
+        // assert(full_buffer_dv.)
+
+        // let new_branch_summary = pre.branch_summary.insert(
+        //     new_branch.root.au, new_branch.get_summary()).remove_keys(branch_deallocs_aus);
+        // let new_summary_aus = summary_aus(new_branch_summary);
+
+
+        // invoke the insert first 
+        // there is new entry inserted into it 
+
+        // assert(compacted.buffer_dv.entries.dom() <= full_buffer_disk.dom());
         // ok so we know that full buffer dv is valid buffer dv so far
-        assert(new_betree.linked.reachable_buffer_addrs() <= full_buffer_dv.dom());
-        
-        // let pre_compactor_roots = CompactorInput::input_roots(pre.compactors);
-        // let pre_branch_roots = branch_likes.dom() + compactor_roots;
-        // let post_push_branch_roots = 
-        
-        // valid sealed buffers
 
-        // so the next step is 
+        // reachable buffer addrs increaased to the new branch au
 
-        // valid buffer dv 
-        // addition 
+        // add first 
 
-        // the push memtable likes ensure s
+        // add means that we are adding it into the 
+        // branch likes removal is a different thing 
         
-    
+
+        // branch roots 
+        // from what range are we removing data? 
+
         // adding doesn't remove anything 
         // compacted is valid buffer_dv
         // assert(full_buffer_dv.valid_buffer_dv());
         // compacted branch likes 
 
         // we want to do it 
-        // let pre_compactor_roots = CompactorInput::input_roots(pre.compactors);
-        // let post_compactor_roots = CompactorInput::input_roots(post.compactors); // with one removed
 
-        // let pre_branch_roots =  pre_branch_likes.dom() + compactor_roots;
-        // let post_branch_roots = post_branch_likes.dom() + compactor_roots;
+
+        // assume(post_branch_roots <= pre_branch_roots);
+
+        let branch_deallocs_aus = pre.branch_aus.dom() - post.branch_aus.dom() - read_ref_aus(post.compactors);
+
+        assume(pre.branch_aus.dom() == to_aus(branch_likes.dom()));
+        assume(post.branch_aus.dom() == to_aus(post_branch_likes.dom()));
+        assert(to_aus(post_compactor_roots) == read_ref_aus(post.compactors));
+
+        let pre_branch_dv = pre_buffer_dv.to_branch_disk();
+        let post_branch_dv = post_buffer_dv.to_branch_disk();
+
+        pre.inv_implies_wf_branch_dv();
+        CompactorInput::input_roots_finite(pre.compactors);
+
+        // branch summary needs to insert b
+
+        // assume(pre.branch_summary == full_buffer_dv)
+        // assume(full_buffer_dv.build_branch_summary(pre_branch_roots) == pre.branch_summary);
+        // assume(addrs_closed(full_buffer_disk.dom(), summary_aus(pre.branch_summary)));
+        // assume(full_buffer_dv.sealed_branch_roots(pre_branch_roots));
+        // assume(full_buffer_dv.to_branch_disk().wf());
+
+        // full_buffer_dv.remove_branch_summary_ensures(
+        //     pre.branch_summary, pre_branch_roots, pre_branch_roots - post_branch_roots);
+
+        // // let post_branch_summary = pre.branch_summary.remove_keys(to_aus(remove));
+        // assume(to_aus(pre_branch_roots-post_branch_roots) == branch_deallocs_aus); 
+        // // assert(post_branch_dv.entries =~= full_buffer_dv.entries.restrict(post_branch_dv.entries.dom()));
+
+        // assert(summary_aus(post.branch_summary) <= summary_aus(pre.branch_summary));
+        // assert(post_branch_dv.wf());
+
+        // assert forall |root| #[trigger] post_branch_roots.contains(root)
+        // implies post_buffer_dv.get_branch(root).valid_sealed_branch()
+        // by {
+        //     let branch = full_buffer_dv.get_branch(root);
+        //     let post_branch = post_buffer_dv.get_branch(root);
+
+        //     full_buffer_dv.build_branch_summary_contains(pre_branch_roots, root);
+        //     assume(branch.get_summary() <= summary_aus(pre.branch_summary));
+        //     branch.valid_subdisk_preserves_valid_sealed_branch(post_branch, summary_aus(pre.branch_summary));
+        // }
+
+        // full_buffer_dv.build_branch_summary_remove_keys(post_buffer_dv, pre_branch_roots, post_branch_roots);
+        // assert(post.branch_summary == post_buffer_dv.build_branch_summary(post_branch_roots));
+
+        // assert(post.branch_summary <= pre.branch_summary);
+
+        // post branch summary
+
+        // assume(summary_aus(post.branch_summary) <= summary_aus(pre.branch_summary));
+
+        // seq_addrs_to_aus(path_addrs).insert(new_node_addr.au)
+        // let add_betree_aus = to_au_likes(compact_add_betree(linked_new_addrs, path_addrs));
+        // assert(add_betree_aus.dom() =~= to_aus(new_addrs.repr() + path_addrs.to_set())) by {
+        //     // path_addrs.to_multiset_ensures();
+        //     // assert(add_betree_likes(new_addrs, path_addrs).dom() =~= new_addrs.repr() + path_addrs.to_set());
+        //     // to_au_likes_domain(add_betree_likes(new_addrs, path_addrs));
+        // }
+        // assert(lbl->allocs =~= to_aus(new_addrs.repr() + path_addrs.to_set())) by {
+        //     to_aus_additive(new_addrs.repr(), path_addrs.to_set());
+        // }
+        // assert(add_betree_aus.dom() == lbl->allocs);
+        // assume(summary_aus(post.branch))
+        // betree summary aus is a subset 
+
+        // the difference is only in removing keys 
 
         // assert forall |root| post_branch_roots.contains(root) 
-        // implies (#[trigger] post_buffer_dv.get_branch(root)).valid_sealed_branch()
+        // implies (#[trigger] full_buffer_dv.get_branch(root)).valid_sealed_branch()
         // by {
         //     let post_branch = post_buffer_dv.get_branch(root);
         //     if root == new_branch.root {
@@ -1116,11 +1215,6 @@ state_machine!{ AllocationBranchBetree {
 
 
         // assert(post.inv());
-
-        // next step is valid buffer dv
-
-        // post.betree.linked.tree_likes_domain(post.betree.linked.the_ranking());
-        // post.betree.linked.buffer_likes_domain(post_betree_likes);
 
         assume(false);
     }
@@ -1185,18 +1279,23 @@ impl BufferDisk<BranchNode> {
 
     pub proof fn build_branch_summary_insert(self, post: Self, branch_roots: Set<Address>, branch: LinkedBranch<Summary>)
         requires 
+            post.to_branch_disk().wf(),
             branch.valid_sealed_branch(),
+            branch.tight_disk_view_with_summary(),
+            branch_roots.finite(),
             self.sealed_branch_roots(branch_roots),
             set_addrs_disjoint_aus(branch_roots + set!{branch.root}),
-            post.entries == self.entries.union_prefer_right(branch.disk_view.entries),
             self.entries.dom().disjoint(branch.disk_view.entries.dom()),
+            post.entries == self.entries.union_prefer_right(branch.disk_view.entries),
+            addrs_closed(self.entries.dom(), summary_aus(self.build_branch_summary(branch_roots))),
+            summary_aus(self.build_branch_summary(branch_roots)).disjoint(branch.get_summary()),
         ensures
-            post.build_branch_summary(branch_roots + set!{branch.root}) 
-            == self.build_branch_summary(branch_roots).insert(branch.root.au, branch.get_summary())
+            post.sealed_branch_roots(branch_roots + set!{branch.root}),
+            post.build_branch_summary(branch_roots + set!{branch.root})
+            == self.build_branch_summary(branch_roots).insert(branch.root.au, branch.get_summary()),
     {
-        let pre_summary = self.build_branch_summary(branch_roots);
-
         let post_branch_roots = branch_roots + set!{branch.root};
+        let pre_summary = self.build_branch_summary(branch_roots);
         let post_summary = post.build_branch_summary(post_branch_roots);
         let insert_summary = pre_summary.insert(branch.root.au, branch.get_summary());
 
@@ -1225,8 +1324,25 @@ impl BufferDisk<BranchNode> {
         }
         assert(insert_summary.dom() =~= post_summary.dom());
         assert(insert_summary =~= post_summary);
-    }    
 
+        if post.to_branch_disk().wf() {
+            assert forall |root| post_branch_roots.contains(root) 
+            implies (#[trigger] post.get_branch(root)).valid_sealed_branch()
+            by {
+                let post_branch = post.get_branch(root);
+                if root == branch.root {
+                    branch.valid_subdisk_preserves_valid_sealed_branch(post_branch, branch.get_summary());
+                } else {
+                    let pre_branch = self.get_branch(root);
+                    self.build_branch_summary_ensures(branch_roots);
+                    assert(branch_roots.contains(root)); // trigger
+                    pre_branch.valid_subdisk_preserves_valid_sealed_branch(post_branch, summary_aus(pre_summary));
+                }
+            }
+        }       
+    }
+
+    // removal should also 
     pub proof fn build_branch_summary_remove_keys(self, post: Self, pre_roots: Set<Address>, post_roots: Set<Address>)
         requires 
             post_roots <= pre_roots,
@@ -1236,7 +1352,7 @@ impl BufferDisk<BranchNode> {
             self.entries.agrees(post.entries),
         ensures
             post.build_branch_summary(post_roots) 
-            == self.build_branch_summary(pre_roots).remove_keys(to_aus(pre_roots - post_roots))
+            == self.build_branch_summary(pre_roots).remove_keys(to_aus(pre_roots - post_roots)),
     {
         let pre_summary = self.build_branch_summary(pre_roots);
         let post_summary = post.build_branch_summary(post_roots);
@@ -1379,6 +1495,41 @@ impl BufferDisk<BranchNode> {
             let s = lemma_union_set_of_sets_contains(post_branch_summary.values(), au);
             assert(branch_summary.contains_value(s));
             lemma_union_set_of_sets_subset(branch_summary.values(), s);
+        }
+    }
+
+    proof fn build_branch_summary_ensures(self, branch_roots: Set<Address>)
+        requires 
+            branch_roots.finite(),
+            set_addrs_disjoint_aus(branch_roots),
+            self.sealed_branch_roots(branch_roots),
+        ensures ({
+            let branch_summary = self.build_branch_summary(branch_roots);
+            &&& branch_summary.dom().finite()
+            &&& branch_summary.values().finite()
+            &&& forall |au| branch_summary.contains_key(au)
+                ==> #[trigger] branch_summary[au].contains(au)
+            &&& forall |addr| #[trigger] branch_roots.contains(addr)
+                ==> self.get_branch(addr).get_summary() <= summary_aus(branch_summary)
+        })
+    {
+        let branch_summary = self.build_branch_summary(branch_roots);
+        self.build_branch_summary_finite(branch_roots);
+
+        assert forall |au| #[trigger] branch_summary.contains_key(au)
+        implies branch_summary[au].contains(au) by {
+            let addr = self.build_branch_summary_get_addr(branch_roots, au);
+            let branch = self.get_branch(addr);
+            assert(branch.valid_sealed_branch()); // trigger
+            assert(branch.full_repr().contains(addr)); // trigger
+        }
+
+        assert forall |addr| #[trigger] branch_roots.contains(addr)
+        implies self.get_branch(addr).get_summary() <= summary_aus(branch_summary)
+        by {
+            let branch = self.get_branch(addr);
+            self.build_branch_summary_contains(branch_roots, addr);
+            lemma_union_set_of_sets_subset(branch_summary.values(), branch.get_summary());
         }
     }
 }
