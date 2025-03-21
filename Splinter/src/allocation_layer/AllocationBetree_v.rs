@@ -53,6 +53,24 @@ impl CompactorInput{
         let roots_seq = Seq::new(inputs.len(), |i| inputs[i].input_buffers.addrs.to_set());
         lemma_union_seq_of_sets_finite(roots_seq);
     }
+
+    pub proof fn input_roots_remove_subset(inputs: Seq<CompactorInput>, i: int)
+        requires 0 <= i < inputs.len()
+        ensures Self::input_roots(inputs.remove(i)) <= Self::input_roots(inputs)
+    {
+        let removed = inputs.remove(i);
+        let roots_seq = Seq::new(inputs.len(), |i| inputs[i].input_buffers.addrs.to_set());
+        let post_roots_seq = Seq::new(removed.len(), |i| removed[i].input_buffers.addrs.to_set());
+
+        assert forall |root| Self::input_roots(removed).contains(root)
+        implies Self::input_roots(inputs).contains(root) by {
+            lemma_union_seq_of_sets_contains(post_roots_seq, root);
+            let post_i = choose |post_i| 0 <= post_i < post_roots_seq.len() 
+                && (#[trigger] post_roots_seq[post_i]).contains(root);
+            let pre_i = if post_i < i { post_i } else { post_i + 1 };
+            lemma_subset_union_seq_of_sets(roots_seq, pre_i);
+        }
+    }
 }
 
 /// Introduces aulikes to track the life time of disk data structures in terms of Allocation Unit.
