@@ -15,10 +15,6 @@ use crate::abstract_system::StampedMap_v::LSN;
 use crate::abstract_system::MsgHistory_v::*;
 use crate::disk::GenericDisk_v::*;
 
-// Needed for pieces of proof pulled in here.
-use crate::journal::PagedJournal_v;
-use crate::journal::PagedJournal_v::PagedJournal;
-
 verus!{
 
 pub struct JournalRecord {
@@ -296,53 +292,7 @@ impl DiskView {
         if depth > 0 {
             self.pointer_after_crop_seq_end(self.next(root), (depth-1) as nat)
         }
-    }
-
-    //////////////////////////////////////////////////////////////////////////
-    // Proof-y stuff, pulled in here because it's required by the invariant
-    // proofs which the state machine macro demands we put inline.
-    //////////////////////////////////////////////////////////////////////////
-
-    pub open spec(checked) fn iptr(self, ptr: Pointer) -> (out: Option<PagedJournal_v::JournalRecord>)
-    recommends
-        self.decodable(ptr),
-        self.acyclic(),
-//     ensures
-//         self.block_in_bounds(ptr),
-//         out is Some ==> out.unwrap().valid(self.boundary_lsn)
-    decreases self.the_rank_of(ptr) when self.decodable(ptr) && self.acyclic()
-    {
-        if ptr is None { None }
-        else {
-            let jr = self.entries[ptr.unwrap()];
-            Some(PagedJournal_v::JournalRecord{
-                message_seq: jr.message_seq,
-                prior_rec: Box::new(self.iptr(jr.cropped_prior(self.boundary_lsn))),
-            })
-        }
-    }
-
-    pub proof fn iptr_ignores_extra_blocks(self, ptr: Pointer, big: DiskView)
-    requires
-        self.wf(),
-        self.is_nondangling_pointer(ptr),
-        big.wf(),
-        big.acyclic(),
-        self.is_sub_disk(big),
-    ensures
-        self.acyclic(),
-        self.iptr(ptr) == big.iptr(ptr),
-    decreases big.the_rank_of(ptr)
-    {
-        // TODO(verus,chris): map.le should broadcast-ensures dom.subset_of(dom)
-        assert( self.entries.dom().subset_of(big.entries.dom()) );
-
-        assert( self.valid_ranking(big.the_ranking()) ); // witness to acyclic
-        if ptr is Some {
-            assert( big.the_rank_of(self.next(ptr)) < big.the_rank_of(ptr) );
-            self.iptr_ignores_extra_blocks(self.next(ptr), big);
-        }
-    }
+    }    
 
     pub open spec /*XXX (checked)*/ fn next(self, ptr: Pointer) -> Pointer
     recommends
@@ -404,20 +354,6 @@ impl DiskView {
             );
     }
 
-    pub open spec(checked) fn is_tight(self, root: Pointer) -> bool
-    {
-        &&& self.decodable(root)
-        &&& self.acyclic()
-        &&& forall |other: Self| {
-            ({
-                &&& other.decodable(root)
-                &&& other.acyclic()
-                &&& self.iptr(root) == other.iptr(root)
-                &&& #[trigger] other.is_sub_disk(self)
-            }) ==> other == self
-        }
-    }
-
     // #[verifier::spinoff_prover]  // flaky proof
     // pub proof fn build_tight_builds_sub_disks(self, root: Pointer)
     // requires
@@ -432,107 +368,6 @@ impl DiskView {
     //     }
     //     assert( self.build_tight(root).is_sub_disk(self) ); // This line shouldn't be necessary
     // }
-
-    // Dafny didn't need this proof
-    pub proof fn tight_empty_disk(self)
-    requires
-        self.decodable(None),
-    ensures
-        self.build_tight(None).is_tight(None),
-    {
-        let tight = self.build_tight(None);
-
-        //XXX need a callout to build_tight_is_awesome?
-        assert( tight.wf() );
-
-        assert( tight.valid_ranking(map![]) ); // new witness; not needed in Dafny
-        assert forall |other: Self|
-        ({
-            &&& other.decodable(None)
-            &&& other.acyclic()
-            &&& tight.iptr(None) == other.iptr(None)
-            &&& #[trigger] other.is_sub_disk(tight)
-        }) implies other =~= tight by {
-            //assert( tight.wf() );   // new trigger when we perturb DiskView::can_crop
-            //assert( forall |addr| !tight.entries.dom().contains(addr) );    // added to fight the flake
-            assert( tight.entries.dom() =~~= other.entries.dom() );
-            assert( other.entries =~~= tight.entries );  // flaky
-        }
-    }
-
-    pub proof fn tight_sub_disk(self, root: Pointer, tight: Self)
-    requires
-        self.decodable(root),
-        tight == self.build_tight(root),
-        self.acyclic(),
-        tight.is_sub_disk(self),
-    ensures
-        tight.is_tight(root),
-    decreases self.the_rank_of(root)
-    {
-        // Yikes. Dafny proof was 15 lines; this "minimized" Verus proof is 73 lines.
-        self.build_tight_ensures(root); //new because not auto
-        //assert(tight.wf());
-        if root is Some {
-            let next = self.next(root);
-            let inner = self.build_tight(next);
-            self.build_tight_shape(root);
-            self.tight_sub_disk(next, inner);
-            assert( tight.valid_ranking(self.the_ranking()) ); // witness
-            assert( tight.is_tight(root) ) by {
-                assert forall |other: Self| {
-                    &&& other.decodable(root)
-                    &&& other.acyclic()
-                    &&& tight.iptr(root) == other.iptr(root)
-                    &&& #[trigger] other.is_sub_disk(tight)
-                } implies other == tight by {
-                    // any other tighter disk implies an "other_inner" disk tighter than inner, but inner.IsTight(next).
-                    let other_inner = DiskView{ entries: other.entries.remove(root.unwrap()), ..other };
-
-                    assert( other_inner.entries_wf() );
-
-                    Self::sub_disk_transitive_auto();
-
-                    assert forall |addr| #[trigger] other_inner.entries.contains_key(addr)
-                        implies other_inner.is_nondangling_pointer(other_inner.entries[addr].cropped_prior(other_inner.boundary_lsn)) by {
-                        let aprior = self.entries[addr].cropped_prior(self.boundary_lsn);
-                        assert( self.entries.contains_key(addr) );
-                        assert( self.is_nondangling_pointer(aprior) );
-                        assert( other.wf() );
-                        if aprior == root {
-                            if tight.entries[addr].cropped_prior(tight.boundary_lsn) == root {
-                                assert( tight.entries.contains_key(addr) );  // dayyum
-                                assert( tight.the_ranking()[tight.entries[addr].cropped_prior(tight.boundary_lsn).unwrap()] > tight.the_ranking()[root.unwrap()] ); // from valid_ranking
-                                assert( tight.the_ranking()[tight.entries[addr].cropped_prior(tight.boundary_lsn).unwrap()] < tight.the_ranking()[root.unwrap()] ); // from build_tight_ranks
-                            }
-                            assert( tight.entries[addr].cropped_prior(tight.boundary_lsn) != root );
-                            assert( other_inner.is_sub_disk(tight) );
-                        }
-                        // frustrating, considering this is the just a repitition of the assert-forall-by
-                        // conclusion
-                        assert( other_inner.is_nondangling_pointer(aprior) );
-                    }
-                
-                    assert( other_inner.is_nondangling_pointer(next) );    //new
-                    assert(other_inner.wf());   // wait, we needed this as a trigger?
-                    assert(other_inner.is_sub_disk(inner)); // new
-                    // we know by here Dafny knowns other_inner.wf()
-                    other_inner.iptr_ignores_extra_blocks(next, inner);
-                    // every line below here is both new and necessary
-                    assert( inner.is_tight(next) ); // new trigger holy crap how did we not get this
-                                                    // calling tight_sub_disk!!!??
-                    assert( forall |a| inner.entries.contains_key(a) ==> #[trigger] other_inner.entries.contains_key(a) && other_inner.entries[a] == inner.entries[a] );
-                    assert( other_inner =~= inner );
-                    assert( other.entries =~= tight.entries );
-                    assert( other =~= tight );
-                }
-                assert( tight.decodable(root) );
-                assert( tight.acyclic() );  // new trigger
-            }
-        } else {
-            self.tight_empty_disk()
-        }
-    }
 
     // pub proof fn tight_interp(big: Self, root: Pointer, tight: Self)
     // requires
@@ -769,6 +604,7 @@ state_machine!{ LinkedJournal {
         pub unmarshalled_tail: MsgHistory,
     }
 
+    // marshalled journal and 
     pub open spec(checked) fn wf(self) -> bool {
         &&& self.truncated_journal.wf()
         &&& self.unmarshalled_tail.wf()
