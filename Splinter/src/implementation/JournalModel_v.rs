@@ -19,11 +19,8 @@ use crate::disk::GenericDisk_v::*;
 
 verus!{
 
-impl TruncatedJournal {
-}
-
 //////////////////////////////////////////////////////////////////////////////
-type LsnAddrIndex = Map<LSN, Address>;
+pub type LsnAddrIndex = Map<LSN, Address>;
 
 pub open spec(checked) fn lsn_disjoint(lsn_index: Set<LSN>, msgs: MsgHistory) -> bool
 {

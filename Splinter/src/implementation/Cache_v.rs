@@ -63,31 +63,33 @@ state_machine!{ Cache {
     }
 
     pub enum Label {
-        // access should be address based 
-        Access{reads: Map<Slot, RawPage>, writes: Map<Slot, RawPage>},
+        Access{reads: Map<Address, RawPage>, writes: Map<Address, RawPage>},
+
+        // I think we can break up DiskOps into 2
+        // cache writes
+        // cache reads 
+
+        // 
         DiskOps{requests: Map<ID, DiskRequest>, responses: Map<ID, DiskResponse>},
         Internal,
     }
 
-    pub open spec fn valid_read(self, slot: Slot, data: RawPage) -> bool 
+    pub open spec fn valid_read(self, addr: Address, data: RawPage) -> bool 
     {
-        &&& self.entries.contains_key(slot)
-        &&& self.entries[slot] is Filled
-        &&& data == self.entries[slot]->data
+        &&& self.lookup_map.contains_key(addr)
+        &&& self.entries[self.lookup_map[addr]] is Filled
+        &&& data == self.entries[self.lookup_map[addr]]->data
     }
 
-    pub open spec fn valid_write(self, slot: Slot) -> bool 
+    pub open spec fn valid_write(self, addr: Address) -> bool 
     {
-        if self.entries.contains_key(slot) {
-            self.entries[slot] is Reserved // write to bypass page
-            || (self.entries[slot] is Filled && !(self.status_map[slot] is Writeback))
-        } else {
-            false
+        &&& self.lookup_map.contains_key(addr) 
+        &&& { 
+            let slot = self.lookup_map[addr];
+            ||| self.entries[slot] is Reserved
+            ||| (self.entries[slot] is Filled && !(self.status_map[slot] is Writeback))
         }
     }
-
-    // pub entries: Map<Slot, Entry>,
-
 
     pub open spec(checked) fn valid_new_slots_mapping(self, mapping: Map<Slot, Address>) -> bool 
     {
@@ -179,26 +181,32 @@ state_machine!{ Cache {
     // model needs to make batch updates as an atomic transition
     transition!{ access(lbl: Label) {
         require lbl is Access;
-        require forall |slot| #[trigger] lbl->reads.contains_key(slot) 
-            ==> pre.valid_read(slot, lbl->reads[slot]);
-        require forall |slot| #[trigger] lbl->writes.contains_key(slot) 
-            ==> pre.valid_write(slot);
+        require forall |addr| #[trigger] lbl->reads.contains_key(addr) 
+            ==> pre.valid_read(addr, lbl->reads[addr]);
+        require forall |addr| #[trigger] lbl->writes.contains_key(addr) 
+            ==> pre.valid_write(addr);
+
+        let write_slots = pre.lookup_map.restrict(lbl->writes.dom()).values();
 
         let updated_entries = Map::new(
-            |slot| lbl->writes.contains_key(slot),
+            |slot| write_slots.contains(slot),
             |slot| Entry::Filled{
                 addr: pre.entries[slot].get_addr(), 
-                data: lbl->writes[slot]
+                data: lbl->writes[pre.entries[slot].get_addr()]
             });
 
         let updated_status_map = Map::new(
-            |slot| lbl->writes.contains_key(slot),
+            |slot| write_slots.contains(slot),
             |slot| Status::Dirty
         );
 
         update entries = pre.entries.union_prefer_right(updated_entries);
         update status_map = pre.status_map.union_prefer_right(updated_status_map);
     }}
+
+    // should write back allow 
+    // when we perform the flush we probably want to give an entire range?
+    // user of the cache wouldn't really know though :o
 
     transition!{ writeback_initiate(lbl: Label) {
         require let Label::DiskOps{requests, responses} = lbl;
@@ -248,6 +256,12 @@ state_machine!{ Cache {
     }}
 
     transition!{ evict(lbl: Label, evicted_slots: Set<Slot>) {
+        // eviction of pages should be seen as internal or not
+        // I guess this is an invalidate page access, we can imagine 
+        // the difference is when the cache is required to enforce it, 
+        // if it's not enforced right away then. the question is is it ever possible
+        // for us to discard journal pages that have never been marshalled and 
+
         require lbl is Internal;
         require evicted_slots <= pre.entries.dom();
         require forall |slot| #[trigger] evicted_slots.contains(slot) ==> {        
