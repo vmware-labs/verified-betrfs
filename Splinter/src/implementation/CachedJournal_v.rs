@@ -135,7 +135,7 @@ state_machine!{ CachedJournal {
         Put{messages: MsgHistory},
         DiscardOld{start_lsn: LSN, require_end: LSN},
         JournalMarshal{writes: Map<Address, JournalRecord>},
-        Internal{},
+        Internal{}, 
     }
 
     // NOTE: we use depth in the following transitions to ensure we only perform operations
@@ -159,7 +159,9 @@ state_machine!{ CachedJournal {
 
         let ptr = pointer_after_crop_index(pre.lsn_addr_index, pre.freshest_rec, pre.boundary_lsn, depth);
 
+        // freeze for commit wants the cache reads 
         require ptr == frozen.freshest_rec;
+        
         require ptr is Some ==> reads.contains_key(ptr.unwrap());
         let frozen_seq_end = if ptr is Some { reads[ptr.unwrap()].message_seq.seq_end } else { frozen.boundary_lsn };
 

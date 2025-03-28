@@ -23,13 +23,13 @@ pub enum Status {
     NotFilled,
     Clean,
     Dirty,
-    Writeback{id: ID},
+    Writeback,
 }
 
 pub enum Entry {
     Empty,
     Reserved{addr: Address},
-    Loading{addr: Address, id: ID}, 
+    Loading{addr: Address}, 
     Filled{addr: Address, data: RawPage},
 }
 
@@ -46,30 +46,17 @@ impl Entry {
     }
 }
 
-pub open spec fn build_lookup_map(entries: Map<Slot, Entry>) -> Map<Address, Slot>
-{
-    let filled_slot_addr_map = Map::new(
-        |slot| entries.contains_key(slot) && entries[slot] is Filled,
-        |slot| entries[slot].get_addr()
-    );
-    filled_slot_addr_map.invert()
-}
-
 state_machine!{ Cache {
     fields {
         pub entries: Map<Slot, Entry>,
         pub status_map: Map<Slot, Status>,
         pub lookup_map: Map<Address, Slot>,
+        pub outstanding_reqs: Map<ID, Slot>,
     }
 
     pub enum Label {
         Access{reads: Map<Address, RawPage>, writes: Map<Address, RawPage>},
-
-        // I think we can break up DiskOps into 2
-        // cache writes
-        // cache reads 
-
-        // 
+        EvictableCheck{addrs: Set<Address>},
         DiskOps{requests: Map<ID, DiskRequest>, responses: Map<ID, DiskResponse>},
         Internal,
     }
@@ -120,46 +107,42 @@ state_machine!{ Cache {
         require let Label::DiskOps{requests, responses} = lbl;
         require !requests.is_empty();
         require responses.is_empty();
-
-        // the same address can't be requested twice
-        require requests.is_injective();
-        require forall |req| #[trigger] requests.values().contains(req) ==> {
-            &&& req is ReadReq
-            &&& pre.lookup_map.contains_key(req->from)
-            &&& pre.entries[pre.lookup_map[req->from]] is Empty
-        };
-
-        let addr_id_map = Map::new(|id| requests.contains_key(id), |id| requests[id]->from).invert();
-
+        
         require pre.valid_new_slots_mapping(new_slots_mapping);
-        require addr_id_map.dom() =~= new_slots_mapping.values();
+        
+        require requests.is_injective();
+        require forall |id| #[trigger] requests.contains_key(id) ==> requests[id] is ReadReq;
+        require forall |req| #[trigger] requests.contains_value(req) <==> new_slots_mapping.contains_value(req->from);
+
+        // new slots mapping should be identical 
+        let invert_slot_map = new_slots_mapping.invert();
+        let updated_outstanding_reqs = Map::new(
+            |id| requests.contains_key(id), 
+            |id| invert_slot_map[requests[id]->from]);
 
         let updated_entries = Map::new(
             |slot| new_slots_mapping.contains_key(slot),
-            |slot| Entry::Loading{addr: new_slots_mapping[slot], id: addr_id_map[new_slots_mapping[slot]]}
+            |slot| Entry::Loading{addr: new_slots_mapping[slot]}
         );
 
         update entries = pre.entries.union_prefer_right(updated_entries);
-        update lookup_map = pre.lookup_map.union_prefer_right(new_slots_mapping.invert());
+        update lookup_map = pre.lookup_map.union_prefer_right(invert_slot_map);
+        update outstanding_reqs = pre.outstanding_reqs.union_prefer_right(updated_outstanding_reqs);
     }}
 
     // receive read responses from disk
-    transition!{ load_complete(lbl: Label, id_slot_map: Map<ID, Slot>) {
+    transition!{ load_complete(lbl: Label) {
         require let Label::DiskOps{requests, responses} = lbl;
         require requests.is_empty();
         require !responses.is_empty();
 
-        require id_slot_map.dom() == responses.dom();
-        require id_slot_map.values() <= pre.entries.dom();
-
+        require responses.dom() <= pre.outstanding_reqs.dom();
         require forall |id| #[trigger] responses.contains_key(id) ==> {
             &&& responses[id] is ReadResp
-            &&& pre.entries[id_slot_map[id]] is Loading
-            &&& pre.entries[id_slot_map[id]]->id == id
+            &&& pre.entries[pre.outstanding_reqs[id]] is Loading
         };
 
-        let slot_id_map = id_slot_map.invert();
-
+        let slot_id_map = pre.outstanding_reqs.restrict(responses.dom()).invert();
         let updated_entries = Map::new(
             |slot| slot_id_map.contains_key(slot),
             |slot| Entry::Filled{
@@ -175,6 +158,7 @@ state_machine!{ Cache {
 
         update entries = pre.entries.union_prefer_right(updated_entries);
         update status_map = pre.status_map.union_prefer_right(updated_status_map);
+        update outstanding_reqs = pre.outstanding_reqs.remove_keys(responses.dom());
     }}
 
     // NOTE: access must enable batched accesses because program
@@ -204,10 +188,6 @@ state_machine!{ Cache {
         update status_map = pre.status_map.union_prefer_right(updated_status_map);
     }}
 
-    // should write back allow 
-    // when we perform the flush we probably want to give an entire range?
-    // user of the cache wouldn't really know though :o
-
     transition!{ writeback_initiate(lbl: Label) {
         require let Label::DiskOps{requests, responses} = lbl;
         require !requests.is_empty();
@@ -220,39 +200,34 @@ state_machine!{ Cache {
             &&& pre.status_map[pre.lookup_map[req->to]] is Dirty
         };
 
-        let id_slot_map = Map::new(|id| requests.contains_key(id), |id| pre.lookup_map[requests[id]->to]);
-        let slot_id_map = id_slot_map.invert();
-
-        let updated_status_map = Map::new(
-            |slot| slot_id_map.contains_key(slot), 
-            |slot| Status::Writeback{id: slot_id_map[slot]}
-        );
+        let updated_outstanding_reqs = Map::new(|id| requests.contains_key(id), |id| pre.lookup_map[requests[id]->to]);
+        let updated_status_map = Map::new(|slot| updated_outstanding_reqs.contains_value(slot), |slot| Status::Writeback{});
 
         update status_map = pre.status_map.union_prefer_right(updated_status_map);
+        update outstanding_reqs = pre.outstanding_reqs.union_prefer_right(updated_outstanding_reqs);
     }}
 
     // receive write responses from disk
-    transition!{ writeback_complete(lbl: Label, id_slot_map: Map<ID, Slot>) {
+    transition!{ writeback_complete(lbl: Label) {
         require let Label::DiskOps{requests, responses} = lbl;
         require requests.is_empty();
         require !responses.is_empty();
     
-        require id_slot_map.dom() == responses.dom();
-        require id_slot_map.values() <= pre.entries.dom();
-
+        require responses.dom() <= pre.outstanding_reqs.dom();
         require forall |id| #[trigger] responses.contains_key(id) ==> {
             &&& responses[id] is WriteResp
-            &&& pre.entries[id_slot_map[id]] is Filled 
-            &&& pre.status_map[id_slot_map[id]] is Writeback
-            &&& pre.status_map[id_slot_map[id]]->id == id
+            &&& pre.entries[pre.outstanding_reqs[id]] is Filled
+            &&& pre.status_map[pre.outstanding_reqs[id]] is Writeback
         };
-    
+
+        let resps_slots = pre.outstanding_reqs.restrict(responses.dom()).values();
         let updated_status_map = Map::new(
-            |slot| id_slot_map.contains_value(slot), 
+            |slot| resps_slots.contains(slot), 
             |slot| Status::Clean
         );
 
         update status_map = pre.status_map.union_prefer_right(updated_status_map);
+        update outstanding_reqs = pre.outstanding_reqs.remove_keys(responses.dom());
     }}
 
     transition!{ evict(lbl: Label, evicted_slots: Set<Slot>) {
@@ -278,6 +253,15 @@ state_machine!{ Cache {
         update lookup_map = pre.lookup_map.remove_keys(evicted_addrs);
     }}
 
+    transition!{ evictable(lbl: Label) {
+        require lbl is EvictableCheck;
+        require forall |addr| #[trigger] lbl->addrs.contains(addr) && pre.lookup_map.contains_key(addr)
+                ==> {
+                    &&& pre.entries[pre.lookup_map[addr]] is Filled
+                    &&& pre.status_map[pre.lookup_map[addr]] is Clean
+                };
+    }}
+
     transition!{ noop(lbl: Label) {
         require lbl is Internal;
     }}
@@ -286,77 +270,122 @@ state_machine!{ Cache {
         init entries = Map::new(|i: Slot| i < slots , |i| Entry::Empty);
         init status_map = Map::new(|i: Slot| i < slots , |i| Status::NotFilled);
         init lookup_map = Map::empty();
+        init outstanding_reqs = Map::empty();
     }}
 
-    // NOTE(disk): 1 outstanding IO for each loading/writeback page, reserved & filled (!writeback) -> 0 I/O
-
-    // #[invariant]
+    #[invariant]
     pub open spec(checked) fn inv(self) -> bool {
+        &&& self.slots_hold_unique_addr()
         &&& self.status_map.dom() =~= self.entries.dom()
-        &&& self.lookup_map == build_lookup_map(self.entries)
+        &&& self.lookup_map == self.build_lookup_map()
+
         &&& forall |slot| #[trigger] self.status_map.contains_key(slot)
             ==> ( (self.status_map[slot] is NotFilled) <==> !(self.entries[slot] is Filled) )
+
+        // &&& self.outstanding_reqs.values() <= self.entries.dom()
+        &&& self.outstanding_reqs.values() <= self.lookup_map.values()
+        &&& self.outstanding_reqs.is_injective()
+        &&& self.outstanding_reqs_non_empty_slots()
+
+        // do we also need to require self.outstanding
+        // NOTE(disk): 1 outstanding IO for each loading/writeback page, reserved & filled (!writeback) -> 0 I/O
     }
 
-    // #[inductive(reserve)]
-    // fn reserve_inductive(pre: Self, post: Self, lbl: Label, new_slots_mapping: Map<Slot, Address>) { 
-    //     injective_map_property(new_slots_mapping);
-    // }
-   
-    // #[inductive(load_initiate)]
-    // fn load_initiate_inductive(pre: Self, post: Self, lbl: Label, new_slots_mapping: Map<Slot, Address>) { 
-    //     injective_map_property(new_slots_mapping);
-    // }
-   
-    // #[inductive(load_complete)]
-    // fn load_complete_inductive(pre: Self, post: Self, lbl: Label, id_slot_map: Map<ID, Slot>) { 
-    //     assume(false);
-    // }
+    pub open spec fn build_lookup_map(self) -> Map<Address, Slot>
+    {
+        let filled_slot_addr_map = Map::new(
+            |slot| self.entries.contains_key(slot) && self.entries[slot] is Filled,
+            |slot| self.entries[slot].get_addr()
+        );
+        filled_slot_addr_map.invert()
+    }
 
-    // #[inductive(access)]
-    // fn access_inductive(pre: Self, post: Self, lbl: Label) { 
-    //     assume(false);
-    // }
+    pub open spec fn non_empty_slot(self, slot: Slot) -> bool
+    {
+        &&& self.entries.contains_key(slot) 
+        &&& !(self.entries[slot] is Empty)
+    }
 
-    // #[inductive(writeback_initiate)]
-    // fn writeback_initiate_inductive(pre: Self, post: Self, lbl: Label) { 
-    //     assume(false);
-    // }
+    pub open spec fn slots_hold_unique_addr(self) -> bool
+    {
+        forall |s1, s2| #[trigger] self.non_empty_slot(s1)
+            && #[trigger] self.non_empty_slot(s2) && s1 != s2 
+        ==> self.entries[s1].get_addr() != self.entries[s2].get_addr()
+    }
 
-    // #[inductive(writeback_complete)]
-    // fn writeback_complete_inductive(pre: Self, post: Self, lbl: Label, id_slot_map: Map<ID, Slot>) { 
-    //     assume(false);
-    // }
+    pub proof fn build_lookup_map_ensures(self)
+    requires self.slots_hold_unique_addr()
+    ensures ({
+        let lookup_map = self.build_lookup_map();
+        &&& forall |addr| #[trigger] lookup_map.contains_key(addr) 
+            <==> self.non_empty_slot(lookup_map[addr]) 
+        &&& forall |slot| #[trigger] self.non_empty_slot(slot)
+            ==> lookup_map.contains_key(self.entries[slot].get_addr()) 
+                && lookup_map[self.entries[slot].get_addr()] == slot
+    }) {
+        assume(false);
+    }
 
-    // #[inductive(evict)]
-    // fn evict_inductive(pre: Self, post: Self, lbl: Label, evicted_slots: Set<Slot>) {
-    //     assume(false);
-    //     // assert forall |addr| #[trigger] post.lookup_map.contains_key(addr) 
-    //     // implies !(post.entries[post.lookup_map[addr]] is Empty)
-    //     // by {
-    //     //     if evicted_slots.contains(post.lookup_map[addr]) {
-    //     //         let evicted_mappings = Map::new(|slot| evicted_slots.contains(slot), |slot| pre.entries[slot].get_addr());
-    //     //         assert(evicted_mappings.contains_key(post.lookup_map[addr]));
-    //     //         assert(evicted_mappings[post.lookup_map[addr]] == addr);
-    //     //         assert(false);
-    //     //     }
-    //     // }
-    // }
+    pub open spec fn outstanding_reqs_non_empty_slots(self) -> bool
+    {
+        forall |id| #[trigger] self.outstanding_reqs.contains_key(id)
+            ==> self.non_empty_slot(self.outstanding_reqs[id])
+    }
 
-    // #[inductive(noop)]
-    // fn noop_inductive(pre: Self, post: Self, lbl: Label) { }
-   
-    // #[inductive(initialize)]
-    // fn initialize_inductive(post: Self, slots: nat) {
-    //     assert(build_lookup_map(post.entries) =~= Map::empty());
-    //     // let filled_slot_addr_map = Map::new(
-    //     //     |slot| entries.contains_key(slot) && entries[slot] is Filled,
-    //     //     |slot| entries[slot].get_addr()
-    //     // );
-    // }
+    pub open spec fn outstanding_reqs_unique_slots(self) -> bool
+    {
+        forall |id1, id2| #[trigger] self.outstanding_reqs.contains_key(id1)
+            && #[trigger] self.outstanding_reqs.contains_key(id2) && id1 != id2
+            ==> self.outstanding_reqs[id1] != self.outstanding_reqs[id2]
+    }
+
+    #[inductive(reserve)]
+    fn reserve_inductive(pre: Self, post: Self, lbl: Label, new_slots_mapping: Map<Slot, Address>) { 
+        assume(false);
+    }
+    
+    #[inductive(load_initiate)]
+    fn load_initiate_inductive(pre: Self, post: Self, lbl: Label, new_slots_mapping: Map<Slot, Address>) {
+        assume(false);
+    }
+    
+    #[inductive(load_complete)]
+    fn load_complete_inductive(pre: Self, post: Self, lbl: Label) { 
+        assume(false);
+    }
+
+    #[inductive(access)]
+    fn access_inductive(pre: Self, post: Self, lbl: Label) { 
+        assume(false);
+    }
+    
+    #[inductive(writeback_initiate)]
+    fn writeback_initiate_inductive(pre: Self, post: Self, lbl: Label) { 
+        assume(false);
+    }
+    
+    #[inductive(writeback_complete)]
+    fn writeback_complete_inductive(pre: Self, post: Self, lbl: Label) { 
+        assume(false);
+    }
+    
+    #[inductive(evict)]
+    fn evict_inductive(pre: Self, post: Self, lbl: Label, evicted_slots: Set<Slot>) { 
+        assume(false);
+    }
+    
+    #[inductive(evictable)]
+    fn evictable_inductive(pre: Self, post: Self, lbl: Label) { }
+    
+    #[inductive(noop)]
+    fn noop_inductive(pre: Self, post: Self, lbl: Label) { }
+    
+    #[inductive(initialize)]
+    pub fn initialize_inductive(post: Self, slots: nat) { 
+        assume(false);
+    }
 }}
 
-// TODO: prove & add to vstd
 pub proof fn injective_map_property<K,V>(map: Map<K, V>)
     requires map.is_injective()
     ensures 
