@@ -53,9 +53,17 @@ pub open spec fn to_cache_writes(writes: Map<Address, JournalRecord>) -> Map<Add
 }
 
 impl Cache::State{
-    pub open spec fn valid_slot(self, slot: Slot) -> bool
+    pub open spec fn valid_clean_slot(self, slot: Slot) -> bool
     {
-        self.entries.contains_key(slot)
+        &&& self.status_map.contains_key(slot)
+        &&& self.status_map[slot] is Clean
+    }
+
+    pub open spec fn valid_dirty_addr(self, addr: Address) -> bool
+    {
+        &&& self.lookup_map.contains_key(addr)
+        &&& (self.status_map[self.lookup_map[addr]] is Writeback 
+            || self.status_map[self.lookup_map[addr]] is Dirty)
     }
 }
 
@@ -239,9 +247,7 @@ state_machine!{ JournalCoordinationSystem{
 
     pub open spec fn clean_cache_pages_agree_with_disk(self) -> bool
     {
-        forall |slot| #[trigger] self.cache.valid_slot(slot) 
-            && self.cache.entries[slot] is Filled 
-            && self.cache.status_map[slot] is Clean
+        forall |slot| #[trigger] self.cache.valid_clean_slot(slot)
         ==> {
             let entry = self.cache.entries[slot];
             &&& self.disk.content.contains_pair(entry.get_addr(), entry->data)
@@ -259,8 +265,7 @@ state_machine!{ JournalCoordinationSystem{
     pub open spec fn dirty_journal_cache(self) -> Map<Address, JournalRecord>
     {
         Map::new(
-            |addr| self.cache.lookup_map.contains_key(addr) 
-            && !(self.cache.status_map[self.cache.lookup_map[addr]] is Clean),
+            |addr| self.cache.valid_dirty_addr(addr),
             |addr| raw_page_to_record(self.cache.entries[self.cache.lookup_map[addr]]->data)
         )
     }
@@ -322,7 +327,48 @@ state_machine!{ JournalCoordinationSystem{
     #[inductive(cache_internal)]
     fn cache_internal_inductive(pre: Self, post: Self, lbl: Label, new_cache: Cache::State) 
     { 
-        assume(false);
+        reveal(Cache::State::next);
+        reveal(Cache::State::next_by);
+
+        Cache::State::inv_next(pre.cache, post.cache, Cache::Label::Internal{});
+        assert(post.cache == new_cache);
+
+        assert(forall |id| #[trigger] post.disk.requests.contains_key(id) 
+            || post.disk.responses.contains_key(id) ==> pre.cache.outstanding_reqs.contains_key(id));
+        assert(post.outstanding_reqs_inv());
+
+        let cache_lbl = Cache::Label::Internal{};
+        let cache_step = choose |cache_step| Cache::State::next_by(pre.cache, post.cache, cache_lbl, cache_step);
+
+        assert(post.clean_cache_pages_agree_with_disk()) by {
+            assert(forall |slot| #[trigger] post.cache.valid_clean_slot(slot)
+                ==> pre.cache.valid_clean_slot(slot)); // trigger
+        }
+
+        match cache_step {
+            Cache::Step::reserve(new_slots_mapping) => {
+                injective_map_property(new_slots_mapping);
+                assert(post.dirty_journal_cache() == pre.dirty_journal_cache());
+            },
+            Cache::Step::evict(evicted_slots) => {
+                let evicted_addrs = Map::new(|slot| evicted_slots.contains(slot), 
+                    |slot| pre.cache.entries[slot].get_addr()).values();
+                assert forall |addr| true
+                implies pre.cache.valid_dirty_addr(addr) <==> post.cache.valid_dirty_addr(addr) 
+                by {
+                    pre.cache.build_lookup_map_ensures();
+                    if evicted_addrs.contains(addr) {
+                        let slot = choose |slot| #[trigger] evicted_slots.contains(slot) 
+                                && pre.cache.entries[slot].get_addr() == addr;
+                        assert(pre.cache.non_empty_slot(slot)); // trigger
+                        assert(!pre.cache.valid_dirty_addr(addr));
+                        assert(!post.cache.valid_dirty_addr(addr));
+                    }
+                }
+                assert(post.dirty_journal_cache() == pre.dirty_journal_cache());
+            },
+            _ => { assert(post.inv()); }
+        }
     }
    
     #[inductive(disk_internal)]
@@ -354,9 +400,7 @@ state_machine!{ JournalCoordinationSystem{
         }
 
         assert(post.clean_cache_pages_agree_with_disk()) by {
-            assert forall |slot| #[trigger] post.cache.valid_slot(slot) 
-                && post.cache.entries[slot] is Filled 
-                && post.cache.status_map[slot] is Clean
+            assert forall |slot| #[trigger] post.cache.valid_clean_slot(slot)
             implies {
                 let entry = post.cache.entries[slot];
                 &&& post.disk.content.contains_pair(entry.get_addr(), entry->data)
@@ -364,7 +408,7 @@ state_machine!{ JournalCoordinationSystem{
                 if disk_step is process_write {
                     assert(slot != processed_slot);
                     assert(post.cache.non_empty_slot(slot)); // trigger
-                } 
+                }
             }
         }
 

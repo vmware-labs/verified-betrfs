@@ -99,6 +99,7 @@ state_machine!{ Cache {
             |slot| Entry::Reserved{addr: new_slots_mapping[slot]}
         );
 
+        // reserve is not filled plus reserved
         update entries = pre.entries.union_prefer_right(updated_entries);
         update lookup_map = pre.lookup_map.union_prefer_right(new_slots_mapping.invert());
     }}
@@ -107,7 +108,9 @@ state_machine!{ Cache {
         require let Label::DiskOps{requests, responses} = lbl;
         require !requests.is_empty();
         require responses.is_empty();
-        
+
+        assert(lbl is DiskOps);
+
         require pre.valid_new_slots_mapping(new_slots_mapping);
         
         require requests.is_injective();
@@ -243,6 +246,10 @@ state_machine!{ Cache {
             &&& pre.entries[slot] is Filled
             &&& pre.status_map[slot] is Clean
         };
+
+        // &&& self.lookup_map.contains_key(addr)
+        // &&& (self.status_map[self.lookup_map[addr]] is Writeback 
+        //     || self.status_map[self.lookup_map[addr]] is Dirty)
  
         let evicted_addrs = Map::new(|slot| evicted_slots.contains(slot), |slot| pre.entries[slot].get_addr()).values();
         let updated_entries = Map::new(|slot| evicted_slots.contains(slot), |slot| Entry::Empty);
@@ -383,6 +390,69 @@ state_machine!{ Cache {
     #[inductive(initialize)]
     pub fn initialize_inductive(post: Self, slots: nat) { 
         assume(false);
+    }
+
+    pub proof fn inv_next(pre: Self, post: Self, lbl: Label)
+        requires Self::next(pre, post, lbl), pre.inv()
+        ensures post.inv()
+    {
+        assume(false);
+
+        // NOTE(JL): commenting out for now, seems like we can't satisfy the *_strong
+        // predicate needed by each inductive proof, probably due to triggers
+        // assuming false here for now since those proofs aren't proven anyway
+
+        // reveal(Cache::State::next);
+        // reveal(Cache::State::next_by);
+
+        // let step = choose |step| Self::next_by(pre, post, lbl, step);
+        // match step {
+        //     Cache::Step::reserve(new_slots_mapping) => {
+        //         Self::reserve_inductive(pre, post, lbl, new_slots_mapping);
+        //     }
+        //     Cache::Step::load_initiate(new_slots_mapping) => {
+        //         assert(pre.inv());
+        //         assert(Self::next_by(pre, post, lbl, step));
+        //         assert(Self::load_initiate(pre, post, lbl, new_slots_mapping));
+
+        //         // assume(false);
+        //         Self::load_initiate_inductive(pre, post, lbl, new_slots_mapping);
+        //     }
+        //     Cache::Step::load_complete() => {
+        //         assume(false);
+        //         Self::load_complete_inductive(pre, post, lbl);
+        //     }
+        //     Cache::Step::access() => {
+        //         assume(false);
+
+        //         Self::access_inductive(pre, post, lbl);
+        //     }
+        //     Cache::Step::writeback_initiate() => {
+        //         assume(false);
+
+        //         Self::writeback_initiate_inductive(pre, post, lbl);
+        //     }
+        //     Cache::Step::writeback_complete() => {
+        //         assume(false);
+
+        //         Self::writeback_complete_inductive(pre, post, lbl);
+        //     }
+        //     Cache::Step::evict(evicted_slots) => {
+        //         assume(false);
+
+        //         Self::evict_inductive(pre, post, lbl, evicted_slots);
+        //     }
+        //     Cache::Step::evictable() => {
+        //         assume(false);
+
+        //         Self::evictable_inductive(pre, post, lbl);
+        //     }
+        //     Cache::Step::noop() => {
+        //         assume(false);
+        //         Self::noop_inductive(pre, post, lbl);
+        //     }
+        //     _ => { assert(false); }
+        // }
     }
 }}
 
