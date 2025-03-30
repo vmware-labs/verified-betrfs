@@ -104,6 +104,7 @@ state_machine!{ CachedJournal {
     pub open spec(checked) fn wf(self) -> bool
     {
         &&& self.seq_start() <= self.seq_end()
+        // &&& self.freshest_rec is Some ==> self.lsn_addr_index.contains_value(self.freshest_rec.unwrap())
         &&& self.unmarshalled_tail.wf()
     }
 
@@ -133,7 +134,7 @@ state_machine!{ CachedJournal {
         FreezeForCommit{frozen: JournalSnapShot, reads: Map<Address, JournalRecord>},
         QueryEndLsn{end_lsn: LSN},
         Put{messages: MsgHistory},
-        DiscardOld{start_lsn: LSN, require_end: LSN},
+        DiscardOld{start_lsn: LSN, require_end: LSN, discard_addrs: Set<Address>},
         JournalMarshal{writes: Map<Address, JournalRecord>},
         Internal{}, 
     }
@@ -184,13 +185,14 @@ state_machine!{ CachedJournal {
         update unmarshalled_tail = pre.unmarshalled_tail.concat(messages);
     }}
 
-    transition!{ discard_old(lbl: Label, new_tj: TruncatedJournal) {
+    transition!{ discard_old(lbl: Label) {
         require lbl is DiscardOld;
         require lbl->require_end == pre.marshalled_seq_end();
         require pre.seq_start() <= lbl->start_lsn <= lbl->require_end;
 
         let new_freshest_rec = if lbl->start_lsn == lbl->require_end { None } else { pre.freshest_rec };
         let new_lsn_addr_index = lsn_addr_index_discard_up_to(pre.lsn_addr_index, lbl->start_lsn);
+        require lbl->discard_addrs == pre.lsn_addr_index.values() - new_lsn_addr_index.values();
 
         update boundary_lsn = lbl->start_lsn;
         update freshest_rec = new_freshest_rec;
@@ -243,13 +245,27 @@ state_machine!{ CachedJournal {
     fn put_inductive(pre: Self, post: Self, lbl: Label) { }
     
     #[inductive(discard_old)]
-    fn discard_old_inductive(pre: Self, post: Self, lbl: Label, new_tj: TruncatedJournal) { }
+    fn discard_old_inductive(pre: Self, post: Self, lbl: Label) { }
     
     #[inductive(internal_journal_marshal)]
     fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address) { }
     
     #[inductive(initialize)]
-    fn initialize_inductive(post: Self, reads: Map<Address, JournalRecord>, boundary_lsn: LSN, freshest_rec: Pointer) { }
+    fn initialize_inductive(post: Self, reads: Map<Address, JournalRecord>, boundary_lsn: LSN, freshest_rec: Pointer) { 
+
+        // if root is Some && reads.contains_key(root.unwrap()) {
+        //     let curr_msgs = reads[root.unwrap()].message_seq;
+        //     let start_lsn = max(boundary_lsn as int, curr_msgs.seq_start as int) as nat;
+        //     let update = singleton_index(start_lsn, curr_msgs.seq_end, root.unwrap());
+    
+        //     let next_ptr = reads[root.unwrap()].cropped_prior(boundary_lsn);
+        //     let sub_index = build_lsn_addr_index_from_reads(reads.remove(root.unwrap()), boundary_lsn, next_ptr);
+    
+        //     sub_index.union_prefer_right(update)
+        // } else {
+        //     map!{}
+        // }
+    }
 
 }}
 } // end of verus

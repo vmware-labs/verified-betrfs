@@ -123,10 +123,21 @@ state_machine!{ JournalCoordinationSystem{
         require CachedJournal::State::next(pre.journal, pre.journal, journal_lbl);
     }}
 
-    transition!{ discard_old(lbl: Label, new_journal: CachedJournal::State) {
+    transition!{ discard_old(lbl: Label, new_journal: CachedJournal::State, discard_addrs: Set<Address>) {
         require lbl is DiscardOld;
-        let journal_lbl = CachedJournal::Label::DiscardOld{require_end: lbl->require_end, start_lsn: lbl->start_lsn};
+
+        let journal_lbl = CachedJournal::Label::DiscardOld{
+                start_lsn: lbl->start_lsn, 
+                require_end: lbl->require_end,
+                discard_addrs: discard_addrs,
+            };
         require CachedJournal::State::next(pre.journal, new_journal, journal_lbl);
+
+        // TODO: this eventually will be tracked by an internal watermark that ensures all pages 
+        // below watermark are clean in cache
+        let cache_lbl = Cache::Label::EvictableCheck{addrs: discard_addrs};
+        require Cache::State::next(pre.cache, pre.cache, cache_lbl);
+
         update journal = new_journal;
     }}
 
@@ -268,8 +279,12 @@ state_machine!{ JournalCoordinationSystem{
 
     pub open spec fn persistent_journal_disk(self) -> Map<Address, JournalRecord>
     {
+        // persistent journal disk should be 
+        // self.ephemeral_tj().disk_view.entries.dom()
+
         Map::new(
-            |addr| self.disk.content.contains_key(addr),
+            |addr| self.disk.content.contains_key(addr)
+                && self.journal.lsn_addr_index.contains_value(addr),
             |addr| raw_page_to_record(self.disk.content[addr])
         )
     }
@@ -319,9 +334,67 @@ state_machine!{ JournalCoordinationSystem{
     fn put_inductive(pre: Self, post: Self, lbl: Label) { }
    
     #[inductive(discard_old)]
-    fn discard_old_inductive(pre: Self, post: Self, lbl: Label, new_journal: CachedJournal::State) 
-    { 
-        assume(false);
+    fn discard_old_inductive(pre: Self, post: Self, lbl: Label, new_journal: CachedJournal::State, discard_addrs: Set<Address>) 
+    {
+        reveal(Cache::State::next);
+        reveal(Cache::State::next_by);
+
+        let cache_lbl = Cache::Label::EvictableCheck{addrs: discard_addrs};
+        assert(Cache::State::evictable(pre.cache, post.cache, cache_lbl));
+
+        reveal(CachedJournal::State::next);
+        reveal(CachedJournal::State::next_by);
+
+        let journal_lbl = CachedJournal::Label::DiscardOld{
+            start_lsn: lbl->start_lsn, 
+            require_end: lbl->require_end,
+            discard_addrs: discard_addrs,
+        };
+
+        assert(post.dirty_cache_pages_bounded_by_journal());
+        assert(pre.dirty_journal_cache() == post.dirty_journal_cache());
+
+        let pre_tj = pre.ephemeral_tj();
+        let post_tj = post.ephemeral_tj();
+
+        lsn_addr_index_discard_up_to_ensures(pre.journal.lsn_addr_index, lbl->start_lsn);
+
+        if pre_tj.freshest_rec is Some {
+            let root = pre_tj.freshest_rec.unwrap();
+            let last_lsn = (pre_tj.seq_end() - 1) as nat;
+
+            assert(pre_tj.seq_end() == lbl->require_end);
+            assert(pre.journal.lsn_addr_index.contains_key(last_lsn));
+            assert(pre.journal.lsn_addr_index[last_lsn] == root);
+
+            if lbl->start_lsn != lbl->require_end {
+                assert(post.journal.lsn_addr_index.contains_key(last_lsn)); // witness
+                assert(post.journal.lsn_addr_index.contains_value(root));
+                assert(!discard_addrs.contains(root));
+            }
+        }
+        assert(post_tj.disk_view.is_nondangling_pointer(post_tj.freshest_rec));
+        assert(post_tj.wf());
+
+        assert forall |addr| post.journal.lsn_addr_index.values().contains(addr)
+        implies post_tj.disk_view.entries.contains_key(addr) 
+        by {
+            assert(pre.journal.lsn_addr_index.values().contains(addr)); // trigger
+            if !post.dirty_journal_cache().contains_key(addr) {
+                assert(pre.disk.content.contains_key(addr));
+            }
+        }
+        assert(post.journal.lsn_addr_index.values() =~= post.ephemeral_tj().disk_view.entries.dom());
+        assert(pre_tj.can_discard_to(lbl->start_lsn));
+        assert(pre_tj.discard_old_cond(lbl->start_lsn, post.journal.lsn_addr_index.values(), post_tj));
+
+        pre_tj.discard_old_preserves_acyclicity(lbl->start_lsn, post.journal.lsn_addr_index.values(), post_tj);
+        assert(post_tj.disk_view.acyclic());
+
+        pre_tj.discard_old_maintains_repr_index(lbl->start_lsn, post.journal.lsn_addr_index, post_tj);
+        assert(post.journal.lsn_addr_index == post.ephemeral_tj().build_lsn_addr_index());
+        assert(post.valid_journal_structure());    
+        assert(post.inv());
     }
    
     #[inductive(journal_marshal)]

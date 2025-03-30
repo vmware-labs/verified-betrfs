@@ -5,7 +5,7 @@
 use builtin::*;
 use vstd::prelude::*;
 use vstd::{map::*,set_lib::*};
-use vstd::math;
+use vstd::{math::*};
 
 use builtin_macros::*;
 use state_machines_macros::state_machine;
@@ -106,7 +106,7 @@ impl DiskView {
             map!{}
         } else {
             let curr_msgs = self.entries[root.unwrap()].message_seq;
-            let start_lsn = math::max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
+            let start_lsn = max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
             //let start_lsn = if self.boundary_lsn > curr_msgs.seq_start { self.boundary_lsn } else { curr_msgs.seq_start };
             let update = singleton_index(start_lsn, curr_msgs.seq_end, root.unwrap());
 
@@ -152,7 +152,7 @@ impl DiskView {
             }
 
             let curr_msgs = self.entries[root.unwrap()].message_seq;
-            let start_lsn = math::max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
+            let start_lsn = max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
             let update = singleton_index(start_lsn, curr_msgs.seq_end, root.unwrap());
     
             assert(update.dom().disjoint(self.build_lsn_addr_index(self.next(root)).dom()));
@@ -160,7 +160,7 @@ impl DiskView {
         }
     }
 
-    spec(checked) fn cropped_msg_seq_contains_lsn(
+    pub open spec(checked) fn cropped_msg_seq_contains_lsn(
         boundary: LSN,
         message_seq: MsgHistory,
         lsn: LSN,
@@ -190,7 +190,7 @@ impl DiskView {
             // TODO(chris) These lets are trigger something... not sure why, since we have the same
             // defn (build_lsn_addr_index) available in scope. ?
             let curr_msgs = self.entries[root.unwrap()].message_seq;
-            let start_lsn = math::max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
+            let start_lsn = max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
             let update = singleton_index(start_lsn, curr_msgs.seq_end, root.unwrap());
             let output = self.build_lsn_addr_index(self.next(root)).union_prefer_right(update);
         } else {
@@ -215,7 +215,7 @@ impl DiskView {
             assert( self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)) );
         } else if self.next(root) is None {
             // let curr_msgs = self.entries[root.unwrap()].message_seq;
-            // let start_lsn = math::max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
+            // let start_lsn = max(self.boundary_lsn as int, curr_msgs.seq_start as int) as nat;
             // let update = singleton_index(start_lsn, curr_msgs.seq_end, root.unwrap());
             // let output = self.build_lsn_addr_index(self.next(root)).union_prefer_right(update);
             assert( self.tj_at(root).index_range_valid(self.build_lsn_addr_index(root)) );
@@ -433,7 +433,7 @@ impl DiskView {
     }
 
     #[verifier(opaque)]
-    pub closed spec(checked) fn index_keys_map_to_valid_entries(self, lsn_addr_index: LsnAddrIndex) -> bool
+    pub open spec(checked) fn index_keys_map_to_valid_entries(self, lsn_addr_index: LsnAddrIndex) -> bool
     recommends
         self.wf(),
     {
@@ -502,17 +502,16 @@ impl TruncatedJournal {
         &&& new.freshest_rec == if self.seq_end() == start_lsn { None } else { self.freshest_rec }
     }
 
-    pub proof fn discard_old_preserves_acyclicity(self, start_lsn: LSN, keep_addrs: Set<Address>, new: Self)
+    pub proof fn discard_old_preserves_acyclicity(self, start_lsn: LSN, keep_addrs: Set<Address>, post: Self)
     requires
-        self.wf(),
         self.disk_view.acyclic(),
         self.can_discard_to(start_lsn),
-        self.discard_old_cond(start_lsn, keep_addrs, new)
+        self.discard_old_cond(start_lsn, keep_addrs, post)
     ensures 
-        new.disk_view.acyclic()
+        post.disk_view.acyclic()
     {
         let dv = self.disk_view;
-        let post_dv = new.disk_view;
+        let post_dv = post.disk_view;
         let ranking = dv.the_ranking();
    
         assert forall |addr| #[trigger] post_dv.entries.contains_key(addr) && post_dv.entries[addr].cropped_prior(post_dv.boundary_lsn) is Some
@@ -521,6 +520,30 @@ impl TruncatedJournal {
             assert(dv.entries.contains_key(addr)); // trigger
         }
         assert(post_dv.valid_ranking(ranking)); // witness
+    }
+
+    pub proof fn discard_old_maintains_repr_index(self, start_lsn: LSN, repr_index: LsnAddrIndex, post: Self)
+    requires
+        self.decodable(),
+        post.decodable(),
+        self.can_discard_to(start_lsn),
+        repr_index == lsn_addr_index_discard_up_to(self.build_lsn_addr_index(), start_lsn),
+        self.discard_old_cond(start_lsn, repr_index.values(), post),
+    ensures
+        post.build_lsn_addr_index() == repr_index
+    {
+        self.build_lsn_addr_index_ensures();
+        let pre_index = self.build_lsn_addr_index();
+        let post_index = post.build_lsn_addr_index();
+        let bdy_post = post.disk_view.boundary_lsn;
+
+        reveal(TruncatedJournal::index_domain_valid);
+        if bdy_post < self.seq_end() {
+            post.disk_view.build_lsn_addr_index_domain_valid(post.freshest_rec);
+            post.disk_view.sub_disk_with_newer_lsn_repr_index(self.disk_view, post.freshest_rec);
+            lsn_addr_index_discard_up_to_ensures(pre_index, bdy_post);
+        }
+        assert(post_index == repr_index);
     }
 }
 
@@ -534,12 +557,6 @@ impl MsgHistory {
         let msgs = if self.seq_start <= new_bdy { self.discard_old(new_bdy) } else { self };
         &&& new.ext_equal(msgs)
     }
-}
-
-// TODO(jonh): move to pervasive
-spec(checked) fn max(a: int, b: int) -> int
-{
-    if a < b { b } else { a }
 }
 
 // Definitions that used to live in the Refinement file, but jonh pulled in here so the invariant
@@ -566,7 +583,7 @@ impl TruncatedJournal {
         &&& forall |lsn| lsn_addr_index.contains_key(lsn) <==> (self.seq_start() <= lsn < self.seq_end())
     }
 
-    pub closed spec /*XXX (checked)*/ fn every_lsn_at_addr_indexed_to_addr(self, lsn_addr_index: LsnAddrIndex, addr: Address) -> bool
+    pub open spec /*XXX (checked)*/ fn every_lsn_at_addr_indexed_to_addr(self, lsn_addr_index: LsnAddrIndex, addr: Address) -> bool
     {
         let msgs = self.disk_view.entries[addr].message_seq;
         let boundary_lsn = self.disk_view.boundary_lsn;
@@ -576,7 +593,7 @@ impl TruncatedJournal {
         }
     }
 
-    pub closed spec /*XXX (checked)*/ fn index_range_valid(self, lsn_addr_index: LsnAddrIndex) -> bool
+    pub open spec /*XXX (checked)*/ fn index_range_valid(self, lsn_addr_index: LsnAddrIndex) -> bool
     recommends
         self.wf(),
         self.index_domain_valid(lsn_addr_index),
@@ -773,64 +790,15 @@ state_machine!{ LikesJournal {
         reveal(LinkedJournal_v::LinkedJournal::State::next_by);
     }
 
-    /* `pub` is only being added to avoid a confusing fake error message, originally we didn't intend for this
-       proof function to be `pub` */
-    pub proof fn discard_old_step_preserves_acyclicity(pre: Self, post: Self, lbl: Label)
-    requires
-        pre.inv(),
-        Self::discard_old(pre, post, lbl, post.journal),
-    ensures
-        post.journal.truncated_journal.disk_view.acyclic(),
-    {
-        let dv = pre.journal.truncated_journal.disk_view;
-        let post_dv = post.journal.truncated_journal.disk_view;
-        let ranking = dv.the_ranking();
-
-        assert forall |addr| #[trigger] post_dv.entries.contains_key(addr) && post_dv.entries[addr].cropped_prior(post_dv.boundary_lsn) is Some
-        implies ranking[post_dv.entries[addr].cropped_prior(post_dv.boundary_lsn).unwrap()] < ranking[addr]
-        by {
-            assert(dv.entries.contains_key(addr)); // trigger
-        }
-        assert(post_dv.valid_ranking(ranking)); // witness
-    }
-
-    pub proof fn discard_old_maintains_repr_index(pre: Self, post: Self, lbl: Label)
-    requires
-        pre.inv(),
-        Self::discard_old(pre, post, lbl, post.journal),
-        post.wf(),
-        post.journal.truncated_journal.disk_view.acyclic(),
-    ensures
-        post.lsn_addr_index == post.journal.truncated_journal.build_lsn_addr_index(),
-    {
-        let tj_pre = pre.journal.truncated_journal;
-        tj_pre.build_lsn_addr_index_ensures();
-
-        let tj_post = post.journal.truncated_journal;
-        let bdy_post = tj_post.disk_view.boundary_lsn;
-        let repr = tj_post.build_lsn_addr_index();
-
-        reveal(TruncatedJournal::index_domain_valid);
-        if bdy_post < tj_pre.seq_end() {
-            tj_post.disk_view.build_lsn_addr_index_domain_valid(tj_post.freshest_rec);
-            tj_post.disk_view.sub_disk_with_newer_lsn_repr_index(tj_pre.disk_view, tj_post.freshest_rec);
-            lsn_addr_index_discard_up_to_ensures(pre.lsn_addr_index, bdy_post);
-            // assert(repr <= post.lsn_addr_index);
-            // assert(post.lsn_addr_index <= repr);
-            assert(repr.dom() =~= post.lsn_addr_index.dom());
-            assert(repr =~= post.lsn_addr_index); // (Jialin): needs to =~= dom then the map, why?
-        } else {
-            assert(post.lsn_addr_index =~= repr);
-        }
-    }
-
     #[inductive(discard_old)]
     fn discard_old_inductive(pre: Self, post: Self, lbl: Label, new_journal: LinkedJournal_v::LinkedJournal::State) {
         let tj = pre.journal.truncated_journal;
         let post_tj = post.journal.truncated_journal;
         let start_lsn = lbl->start_lsn;
+
+        let lsn_addr_index_post = lsn_addr_index_discard_up_to(pre.lsn_addr_index, start_lsn);
         tj.discard_old_preserves_acyclicity(start_lsn, post.lsn_addr_index.values(), post_tj);
-        Self::discard_old_maintains_repr_index(pre, post, lbl);
+        tj.discard_old_maintains_repr_index(start_lsn, lsn_addr_index_post, post_tj);
     }
 
     #[inductive(internal_journal_marshal)]
