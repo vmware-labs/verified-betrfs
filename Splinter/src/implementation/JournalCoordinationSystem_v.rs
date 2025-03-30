@@ -17,6 +17,7 @@ use crate::abstract_system::MsgHistory_v::*;
 use crate::journal::LinkedJournal_v::*;
 use crate::implementation::CachedJournal_v::*;
 use crate::implementation::Cache_v::*;
+use crate::implementation::JournalModel_v::*;
 
 verus!{
 
@@ -187,14 +188,14 @@ state_machine!{ JournalCoordinationSystem{
 
         &&& self.outstanding_reqs_inv()
         &&& self.clean_cache_pages_agree_with_disk()
+        &&& self.dirty_cache_pages_bounded_by_journal()
         &&& self.valid_journal_structure()
     }
 
     pub open spec fn valid_read_request(self, id: ID, addr: Address) -> bool
     {
-        let slot = self.cache.outstanding_reqs[id];
-        &&& self.cache.entries[slot] is Loading
-        &&& self.cache.entries[slot].get_addr() == addr
+        &&& self.cache.entries[self.cache.outstanding_reqs[id]] is Loading
+        &&& self.cache.entries[self.cache.outstanding_reqs[id]].get_addr() == addr
     }
 
     pub open spec fn valid_write_request(self, id: ID, addr: Address, data: RawPage) -> bool
@@ -206,6 +207,9 @@ state_machine!{ JournalCoordinationSystem{
         &&& self.cache.status_map[slot] is Writeback
     }
 
+    // NOTE: we don't need to track whether a page read has previously been written to disk
+    // in fact our cache model allows arbitrary page to be fetched and reserved, but 
+    // the composition ensures that 
     pub open spec fn valid_read_response(self, id: ID, data: RawPage) -> bool
     {
         let slot = self.cache.outstanding_reqs[id];
@@ -221,6 +225,7 @@ state_machine!{ JournalCoordinationSystem{
 
         &&& entry is Filled
         &&& self.cache.status_map[slot] is Writeback
+        // &&& self.disk.content[entry.get_addr()] == entry->data
         &&& self.disk.content.contains_pair(entry.get_addr(), entry->data)
     }
 
@@ -250,8 +255,15 @@ state_machine!{ JournalCoordinationSystem{
         forall |slot| #[trigger] self.cache.valid_clean_slot(slot)
         ==> {
             let entry = self.cache.entries[slot];
-            &&& self.disk.content.contains_pair(entry.get_addr(), entry->data)
+            &&& self.disk.content[entry.get_addr()] == entry->data
+            // &&& self.disk.content.contains_pair(entry.get_addr(), entry->data)
         }
+    }
+
+    pub open spec fn dirty_cache_pages_bounded_by_journal(self) -> bool
+    {
+        forall |addr| #[trigger] self.cache.valid_dirty_addr(addr)
+        ==> self.journal.lsn_addr_index.contains_value(addr)
     }
 
     pub open spec fn persistent_journal_disk(self) -> Map<Address, JournalRecord>
@@ -292,8 +304,8 @@ state_machine!{ JournalCoordinationSystem{
         &&& self.ephemeral_tj().seq_end() == self.journal.unmarshalled_tail.seq_start 
         &&& self.journal.lsn_addr_index == self.ephemeral_tj().build_lsn_addr_index()
         &&& self.journal.lsn_addr_index.values() =~= self.ephemeral_tj().disk_view.entries.dom()
-    }        
-    
+    }
+
     #[inductive(read_for_recovery)]
     fn read_for_recovery_inductive(pre: Self, post: Self, lbl: Label, reads: Map<Address, RawPage>) { }
    
@@ -314,14 +326,179 @@ state_machine!{ JournalCoordinationSystem{
    
     #[inductive(journal_marshal)]
     fn journal_marshal_inductive(pre: Self, post: Self, lbl: Label, new_journal: CachedJournal::State, new_cache: Cache::State, addr: Address, record: JournalRecord) 
-    { 
-        assume(false);
+    {
+        reveal(CachedJournal::State::next);
+        reveal(CachedJournal::State::next_by);
+
+        let journal_lbl = CachedJournal::Label::JournalMarshal{writes: Map::empty().insert(addr, record)};
+        let journal_step = choose |journal_step| CachedJournal::State::next_by(pre.journal, post.journal, journal_lbl, journal_step);
+        assert(post.journal.wf());
+
+        let cache_lbl = Cache::Label::Access{reads: Map::empty(), writes: to_cache_writes(journal_lbl->writes)};
+        Cache::State::inv_next(pre.cache, post.cache, cache_lbl);
+        assert(Cache::State::access(pre.cache, post.cache, cache_lbl)) by {
+            reveal(Cache::State::next);
+            reveal(Cache::State::next_by);
+        }
+
+        assert(post.outstanding_reqs_inv()) by {
+            assert(forall |id| #[trigger] pre.disk.requests.contains_key(id) || pre.disk.responses.contains_key(id) 
+            ==> post.cache.non_empty_slot(post.cache.outstanding_reqs[id])); // trigger
+        }
+
+        assert(post.clean_cache_pages_agree_with_disk()) by {
+            assert(forall |slot| #[trigger] post.cache.valid_clean_slot(slot)
+                ==> pre.cache.valid_clean_slot(slot)); // trigger
+        }
+
+        let cut = journal_step.arrow_internal_journal_marshal_0();
+        let new_addr = journal_step.arrow_internal_journal_marshal_1();
+
+        let marshalled_msgs = pre.journal.unmarshalled_tail.discard_recent(cut);
+        let new_record = JournalRecord{message_seq: marshalled_msgs, prior_rec: pre.journal.freshest_rec};
+
+        lsn_addr_index_append_record_ensures(pre.journal.lsn_addr_index, marshalled_msgs, new_addr);
+
+        assert(lsn_disjoint(pre.journal.lsn_addr_index.dom(), marshalled_msgs)) by {
+            pre.ephemeral_tj().build_lsn_addr_index_ensures();
+            assert(pre.ephemeral_tj().index_domain_valid(pre.journal.lsn_addr_index));
+            reveal(TruncatedJournal::index_domain_valid);
+        }
+
+        assert(post.journal.lsn_addr_index == lsn_addr_index_append_record(pre.journal.lsn_addr_index, marshalled_msgs, new_addr));
+        assert(post.journal.lsn_addr_index.values() == pre.journal.lsn_addr_index.values() + set![new_addr]);
+
+        assert(post.dirty_cache_pages_bounded_by_journal()) by {
+            assert forall |addr| #[trigger] post.cache.valid_dirty_addr(addr)
+            implies post.journal.lsn_addr_index.contains_value(addr)
+            by {
+                if addr != new_addr{
+                    pre.cache.build_lookup_map_ensures();
+                    assert(pre.cache.valid_dirty_addr(addr)); // trigger
+                }
+                assert(post.journal.lsn_addr_index.values().contains(addr)); // trigger
+            }
+        }
+
+        assert(post.valid_journal_structure()) by {
+            let pre_tj = pre.ephemeral_tj();
+            let post_tj = post.ephemeral_tj();
+
+            journal_unmarshall_marshall(new_record);
+            assert(post_tj.disk_view.wf());
+
+            // TODO: my marshalling sequence might be weird?
+            assert(post_tj.disk_view.entries =~= pre_tj.disk_view.entries.insert(new_addr, new_record))
+            by {
+                assert(cache_lbl->writes.contains_key(new_addr)); // trigger
+                assert(pre.cache.lookup_map.contains_key(new_addr));
+
+                let slot = pre.cache.lookup_map[new_addr];
+                assert(pre.cache.lookup_map.restrict(cache_lbl->writes.dom()) =~= map!{new_addr => slot});
+
+                let write_slots = pre.cache.lookup_map.restrict(cache_lbl->writes.dom()).values();
+                assert(write_slots =~= set!{slot});                
+                assert(post.dirty_journal_cache().dom() =~= pre.dirty_journal_cache().dom() + set!{new_addr});
+                assert(post.dirty_journal_cache() =~= pre.dirty_journal_cache().insert(new_addr, new_record));
+            }
+
+            assert(post_tj.decodable()) by {
+                assert(post_tj.disk_view.valid_ranking(pre_tj.marshal_ranking(new_addr)) );    // witness
+            }
+
+            assert(post_tj.seq_end() == post.journal.unmarshalled_tail.seq_start);
+            assert(post.journal.lsn_addr_index.values() =~= post_tj.disk_view.entries.dom());
+
+            pre_tj.disk_view.sub_disk_repr_index(post_tj.disk_view, pre_tj.freshest_rec);
+            assert(post.journal.lsn_addr_index == post_tj.build_lsn_addr_index());
+        }
+        assert(post.inv());
     }
-   
+
     #[inductive(cache_disk_ops)]
     fn cache_disk_ops_inductive(pre: Self, post: Self, lbl: Label, new_cache: Cache::State, new_disk: AsyncDisk::State, requests: Map<ID, DiskRequest>, responses: Map<ID, DiskResponse>) 
     {
-        assume(false);
+        reveal(AsyncDisk::State::next);
+        reveal(AsyncDisk::State::next_by);
+        assert(post.disk.inv());
+
+        reveal(Cache::State::next);
+        reveal(Cache::State::next_by);
+
+        let cache_lbl = Cache::Label::DiskOps{requests, responses};
+        Cache::State::inv_next(pre.cache, post.cache, cache_lbl);
+
+        let cache_step = choose |cache_step| Cache::State::next_by(pre.cache, post.cache, cache_lbl, cache_step);
+
+        if cache_step is load_initiate || cache_step is writeback_initiate {
+            if cache_step is load_initiate {
+                injective_map_property(cache_step.arrow_load_initiate_0());
+                injective_map_property(requests);
+            }
+            assert(forall |id| #[trigger] requests.contains_key(id) ==> requests.contains_value(requests[id])); //  trigger
+            assert(forall |id| #[trigger] pre.disk.requests.contains_key(id) || post.disk.responses.contains_key(id) 
+                    ==> post.cache.non_empty_slot(post.cache.outstanding_reqs[id])); // trigger
+            assert(post.outstanding_reqs_inv());
+
+            assert(forall |slot| #[trigger] post.cache.valid_clean_slot(slot) ==> pre.cache.valid_clean_slot(slot)); // trigger
+            assert(post.clean_cache_pages_agree_with_disk());
+
+            pre.cache.build_lookup_map_ensures();
+            assert(forall |addr| #[trigger] post.cache.valid_dirty_addr(addr) ==> pre.cache.valid_dirty_addr(addr)); // trigger
+            assert(post.dirty_cache_pages_bounded_by_journal());
+            assert(pre.ephemeral_disk() == post.ephemeral_disk());
+        } else {
+            assert(forall |id| #[trigger] post.disk.requests.contains_key(id) ||  post.disk.responses.contains_key(id)
+                    ==> post.cache.non_empty_slot(post.cache.outstanding_reqs[id])); // trigger
+            assert(post.outstanding_reqs_inv());
+
+            let slot_id_map = pre.cache.outstanding_reqs.restrict(responses.dom()).invert();
+            let resps_slots = pre.cache.outstanding_reqs.restrict(responses.dom()).values();
+
+            injective_map_property(pre.cache.outstanding_reqs.restrict(responses.dom()));
+
+            assert forall |slot| #[trigger] post.cache.valid_clean_slot(slot)
+            implies {
+                let entry = post.cache.entries[slot];
+                &&& post.disk.content[entry.get_addr()] == entry->data
+            } by {
+                if !resps_slots.contains(slot) {
+                    assert(pre.cache.valid_clean_slot(slot)); // trigger
+                }
+            }
+            assert(post.clean_cache_pages_agree_with_disk());
+
+            pre.cache.build_lookup_map_ensures();
+            post.cache.build_lookup_map_ensures();
+
+            assert(forall |addr| #[trigger] post.cache.valid_dirty_addr(addr) ==> pre.cache.valid_dirty_addr(addr)); // trigger
+            assert(post.dirty_cache_pages_bounded_by_journal());
+
+            injective_map_property(pre.cache.lookup_map);
+            assert(pre.ephemeral_disk() == post.ephemeral_disk());
+
+            // if cache_step is load_complete {
+            //     assert(pre.dirty_journal_cache() == post.dirty_journal_cache());
+            //     assert(pre.ephemeral_disk() == post.ephemeral_disk());
+            // } else {
+            //     assert(post.dirty_journal_cache() <= pre.dirty_journal_cache());
+                // assert forall |addr| #[trigger] pre.cache.valid_dirty_addr(addr) 
+                //     && !post.cache.valid_dirty_addr(addr)
+                // implies {
+                //    &&& post.persistent_journal_disk().contains_key(addr)
+                //    &&& post.persistent_journal_disk()[addr] == pre.dirty_journal_cache()[addr]
+                // } by {
+                //     let id = slot_id_map[pre.cache.lookup_map[addr]];
+                //     assert(pre.valid_write_response(id));
+                //     // let slot = pre.cache.outstanding_reqs[id];
+                //     // let entry = pre.cache.entries[slot];
+
+                //     // assert(pre.cache.lookup_map[addr] == slot);
+                //     // assert(pre.cache.non_empty_slot(slot));
+                // }
+            // }
+        }
+        assert(post.inv());
     }
    
     #[inductive(cache_internal)]
@@ -333,9 +510,12 @@ state_machine!{ JournalCoordinationSystem{
         Cache::State::inv_next(pre.cache, post.cache, Cache::Label::Internal{});
         assert(post.cache == new_cache);
 
-        assert(forall |id| #[trigger] post.disk.requests.contains_key(id) 
-            || post.disk.responses.contains_key(id) ==> pre.cache.outstanding_reqs.contains_key(id));
-        assert(post.outstanding_reqs_inv());
+        assert(post.outstanding_reqs_inv()) by {
+            assert forall |id| #[trigger] post.disk.requests.contains_key(id) 
+                || post.disk.responses.contains_key(id)
+            implies pre.cache.non_empty_slot(pre.cache.outstanding_reqs[id])
+            by {}
+        }
 
         let cache_lbl = Cache::Label::Internal{};
         let cache_step = choose |cache_step| Cache::State::next_by(pre.cache, post.cache, cache_lbl, cache_step);
@@ -348,6 +528,9 @@ state_machine!{ JournalCoordinationSystem{
         match cache_step {
             Cache::Step::reserve(new_slots_mapping) => {
                 injective_map_property(new_slots_mapping);
+                post.cache.build_lookup_map_ensures();
+                assert(forall |addr| #[trigger] post.cache.valid_dirty_addr(addr) ==> pre.cache.valid_dirty_addr(addr)); // trigger
+                assert(post.dirty_cache_pages_bounded_by_journal());
                 assert(post.dirty_journal_cache() == pre.dirty_journal_cache());
             },
             Cache::Step::evict(evicted_slots) => {
@@ -395,7 +578,7 @@ state_machine!{ JournalCoordinationSystem{
         } by {
             if id != processed_id {
                 let slot = post.cache.outstanding_reqs[id];
-                assert(post.cache.outstanding_reqs.contains_key(id)); // trigger
+                assert(post.cache.non_empty_slot(slot)); // trigger
             }
         }
 
@@ -403,7 +586,7 @@ state_machine!{ JournalCoordinationSystem{
             assert forall |slot| #[trigger] post.cache.valid_clean_slot(slot)
             implies {
                 let entry = post.cache.entries[slot];
-                &&& post.disk.content.contains_pair(entry.get_addr(), entry->data)
+                &&& post.disk.content[entry.get_addr()] == entry->data
             } by {
                 if disk_step is process_write {
                     assert(slot != processed_slot);

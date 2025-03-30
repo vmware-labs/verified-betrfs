@@ -104,20 +104,23 @@ state_machine!{ Cache {
         update lookup_map = pre.lookup_map.union_prefer_right(new_slots_mapping.invert());
     }}
 
+    pub open spec fn valid_load_requests(requests: Map<ID, DiskRequest>, new_slots_mapping: Map<Slot, Address>) -> bool 
+    {
+        &&& forall |id| #[trigger] requests.contains_key(id) ==> requests[id] is ReadReq
+        &&& forall |req| #[trigger] requests.contains_value(req) <==> new_slots_mapping.contains_value(req->from)
+    }
+
     transition!{ load_initiate(lbl: Label, new_slots_mapping: Map<Slot, Address>) {
         require let Label::DiskOps{requests, responses} = lbl;
         require !requests.is_empty();
-        require responses.is_empty();
-
-        assert(lbl is DiskOps);
+        require responses == empty_responses();
 
         require pre.valid_new_slots_mapping(new_slots_mapping);
         
         require requests.is_injective();
-        require forall |id| #[trigger] requests.contains_key(id) ==> requests[id] is ReadReq;
-        require forall |req| #[trigger] requests.contains_value(req) <==> new_slots_mapping.contains_value(req->from);
+        require requests.dom().disjoint(pre.outstanding_reqs.dom());
+        require Self::valid_load_requests(requests, new_slots_mapping);
 
-        // new slots mapping should be identical 
         let invert_slot_map = new_slots_mapping.invert();
         let updated_outstanding_reqs = Map::new(
             |id| requests.contains_key(id), 
@@ -133,17 +136,22 @@ state_machine!{ Cache {
         update outstanding_reqs = pre.outstanding_reqs.union_prefer_right(updated_outstanding_reqs);
     }}
 
+    pub open spec fn valid_load_responses(self, responses: Map<ID, DiskResponse>) -> bool
+    {
+        forall |id| #[trigger] responses.contains_key(id) ==> {
+            &&& responses[id] is ReadResp
+            &&& self.entries[self.outstanding_reqs[id]] is Loading
+        }
+    }
+
     // receive read responses from disk
     transition!{ load_complete(lbl: Label) {
         require let Label::DiskOps{requests, responses} = lbl;
-        require requests.is_empty();
+        require requests == empty_requests();
         require !responses.is_empty();
 
         require responses.dom() <= pre.outstanding_reqs.dom();
-        require forall |id| #[trigger] responses.contains_key(id) ==> {
-            &&& responses[id] is ReadResp
-            &&& pre.entries[pre.outstanding_reqs[id]] is Loading
-        };
+        require pre.valid_load_responses(responses);
 
         let slot_id_map = pre.outstanding_reqs.restrict(responses.dom()).invert();
         let updated_entries = Map::new(
@@ -191,17 +199,23 @@ state_machine!{ Cache {
         update status_map = pre.status_map.union_prefer_right(updated_status_map);
     }}
 
+    pub open spec fn valid_writeback_requests(self, requests: Map<ID, DiskRequest>) -> bool 
+    {
+        forall |req| #[trigger] requests.contains_value(req) ==> {
+            &&& req is WriteReq
+            &&& self.lookup_map.contains_key(req->to)
+            &&& self.entries[self.lookup_map[req->to]] == Entry::Filled{addr: req->to, data: req->data}
+            &&& self.status_map[self.lookup_map[req->to]] is Dirty
+        }
+    }
+
     transition!{ writeback_initiate(lbl: Label) {
         require let Label::DiskOps{requests, responses} = lbl;
         require !requests.is_empty();
-        require responses.is_empty();
+        require responses == empty_responses();
 
-        require forall |req| requests.values().contains(req) ==> {
-            &&& req is WriteReq
-            &&& #[trigger] pre.lookup_map.contains_key(req->to)
-            &&& pre.entries[pre.lookup_map[req->to]] == Entry::Filled{addr: req->to, data: req->data}
-            &&& pre.status_map[pre.lookup_map[req->to]] is Dirty
-        };
+        require requests.dom().disjoint(pre.outstanding_reqs.dom());
+        require pre.valid_writeback_requests(requests);
 
         let updated_outstanding_reqs = Map::new(|id| requests.contains_key(id), |id| pre.lookup_map[requests[id]->to]);
         let updated_status_map = Map::new(|slot| updated_outstanding_reqs.contains_value(slot), |slot| Status::Writeback{});
@@ -210,18 +224,23 @@ state_machine!{ Cache {
         update outstanding_reqs = pre.outstanding_reqs.union_prefer_right(updated_outstanding_reqs);
     }}
 
+    pub open spec fn valid_writeback_responses(self, responses: Map<ID, DiskResponse>) -> bool
+    {
+        forall |id| #[trigger] responses.contains_key(id) ==> {
+            &&& responses[id] is WriteResp
+            &&& self.entries[self.outstanding_reqs[id]] is Filled
+            &&& self.status_map[self.outstanding_reqs[id]] is Writeback
+        }
+    }
+
     // receive write responses from disk
     transition!{ writeback_complete(lbl: Label) {
         require let Label::DiskOps{requests, responses} = lbl;
-        require requests.is_empty();
+        require requests == empty_requests();
         require !responses.is_empty();
     
         require responses.dom() <= pre.outstanding_reqs.dom();
-        require forall |id| #[trigger] responses.contains_key(id) ==> {
-            &&& responses[id] is WriteResp
-            &&& pre.entries[pre.outstanding_reqs[id]] is Filled
-            &&& pre.status_map[pre.outstanding_reqs[id]] is Writeback
-        };
+        require pre.valid_writeback_responses(responses);
 
         let resps_slots = pre.outstanding_reqs.restrict(responses.dom()).values();
         let updated_status_map = Map::new(
@@ -289,7 +308,6 @@ state_machine!{ Cache {
         &&& forall |slot| #[trigger] self.status_map.contains_key(slot)
             ==> ( (self.status_map[slot] is NotFilled) <==> !(self.entries[slot] is Filled) )
 
-        // &&& self.outstanding_reqs.values() <= self.entries.dom()
         &&& self.outstanding_reqs.values() <= self.lookup_map.values()
         &&& self.outstanding_reqs.is_injective()
         &&& self.outstanding_reqs_non_empty_slots()
@@ -324,6 +342,7 @@ state_machine!{ Cache {
     requires self.slots_hold_unique_addr()
     ensures ({
         let lookup_map = self.build_lookup_map();
+        &&& lookup_map.is_injective()
         &&& forall |addr| #[trigger] lookup_map.contains_key(addr) 
             <==> self.non_empty_slot(lookup_map[addr]) 
         &&& forall |slot| #[trigger] self.non_empty_slot(slot)
@@ -335,16 +354,16 @@ state_machine!{ Cache {
 
     pub open spec fn outstanding_reqs_non_empty_slots(self) -> bool
     {
-        forall |id| #[trigger] self.outstanding_reqs.contains_key(id)
-            ==> self.non_empty_slot(self.outstanding_reqs[id])
+        forall |id| self.outstanding_reqs.contains_key(id)
+            ==> #[trigger] self.non_empty_slot(self.outstanding_reqs[id])
     }
 
-    pub open spec fn outstanding_reqs_unique_slots(self) -> bool
-    {
-        forall |id1, id2| #[trigger] self.outstanding_reqs.contains_key(id1)
-            && #[trigger] self.outstanding_reqs.contains_key(id2) && id1 != id2
-            ==> self.outstanding_reqs[id1] != self.outstanding_reqs[id2]
-    }
+    // pub open spec fn outstanding_reqs_unique_slots(self) -> bool
+    // {
+    //     forall |id1, id2| #[trigger] self.outstanding_reqs.contains_key(id1)
+    //         && #[trigger] self.outstanding_reqs.contains_key(id2) && id1 != id2
+    //         ==> self.outstanding_reqs[id1] != self.outstanding_reqs[id2]
+    // }
 
     #[inductive(reserve)]
     fn reserve_inductive(pre: Self, post: Self, lbl: Label, new_slots_mapping: Map<Slot, Address>) { 
@@ -353,6 +372,7 @@ state_machine!{ Cache {
     
     #[inductive(load_initiate)]
     fn load_initiate_inductive(pre: Self, post: Self, lbl: Label, new_slots_mapping: Map<Slot, Address>) {
+        assert(Self::valid_load_requests(lbl->requests, new_slots_mapping));
         assume(false);
     }
     

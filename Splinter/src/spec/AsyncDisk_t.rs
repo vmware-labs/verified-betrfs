@@ -92,6 +92,16 @@ pub enum GenericDiskResponse {
 
 pub type DiskResponse = GenericDiskResponse;
 
+pub open spec fn empty_requests() -> Map<ID, DiskRequest>
+{
+    map!{}
+}
+
+pub open spec fn empty_responses() -> Map<ID, DiskResponse>
+{
+    map!{}
+}
+
 state_machine!{ AsyncDisk {
     fields {
         // ephemeral states
@@ -112,8 +122,8 @@ state_machine!{ AsyncDisk {
     }
 
     init!{ initialize() {
-        init requests = Map::empty();
-        init responses = Map::empty();
+        init requests = empty_requests();
+        init responses = empty_responses();
         init content = Map::empty();
     }}
 

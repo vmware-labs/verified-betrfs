@@ -197,7 +197,7 @@ state_machine!{ CachedJournal {
         update lsn_addr_index = new_lsn_addr_index;
     }}
 
-    transition!{ internal_journal_marshal(lbl: Label, cut: LSN, addr: Address, record: JournalRecord) {
+    transition!{ internal_journal_marshal(lbl: Label, cut: LSN, addr: Address) {
         require lbl is JournalMarshal;
         require !pre.lsn_addr_index.contains_value(addr);
 
@@ -206,9 +206,7 @@ state_machine!{ CachedJournal {
 
         let marshalled_msgs = pre.unmarshalled_tail.discard_recent(cut);
         let new_record = JournalRecord{message_seq: marshalled_msgs, prior_rec: pre.freshest_rec};
-
-        require lbl->writes.contains_key(addr);
-        require lbl->writes[addr] == new_record;
+        require lbl->writes == Map::empty().insert(addr, new_record);
 
         update freshest_rec = Some(addr);
         update unmarshalled_tail = pre.unmarshalled_tail.discard_old(cut);
@@ -245,12 +243,10 @@ state_machine!{ CachedJournal {
     fn put_inductive(pre: Self, post: Self, lbl: Label) { }
     
     #[inductive(discard_old)]
-    fn discard_old_inductive(pre: Self, post: Self, lbl: Label, new_tj: TruncatedJournal) { 
-
-    }
+    fn discard_old_inductive(pre: Self, post: Self, lbl: Label, new_tj: TruncatedJournal) { }
     
     #[inductive(internal_journal_marshal)]
-    fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address, record: JournalRecord) { }
+    fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address) { }
     
     #[inductive(initialize)]
     fn initialize_inductive(post: Self, reads: Map<Address, JournalRecord>, boundary_lsn: LSN, freshest_rec: Pointer) { }
