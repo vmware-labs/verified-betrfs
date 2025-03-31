@@ -147,9 +147,9 @@ state_machine!{ CachedJournal {
         require ptr == frozen.freshest_rec;
         require ptr is Some ==> reads.contains_key(ptr.unwrap());
 
-        let frozen_seq_end = if ptr is Some { reads[ptr.unwrap()].message_seq.seq_end } else { frozen.boundary_lsn };
+        let frozen_seq_end = if ptr is Some { reads[ptr.unwrap()].message_seq.seq_end } else { pre.boundary_lsn };
         require frozen.boundary_lsn <= frozen_seq_end;
-        require frozen_seq_end <= pre.marshalled_seq_end();
+        require ptr is Some ==> frozen.boundary_lsn < frozen_seq_end;
 
         let frozen_lsns = Set::new(|lsn: LSN| frozen.boundary_lsn <= lsn && lsn < frozen_seq_end);
         require frozen.record_domain == pre.lsn_addr_index.restrict(frozen_lsns).values();

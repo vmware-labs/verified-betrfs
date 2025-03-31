@@ -88,7 +88,7 @@ impl JournalCoordinationSystem::State {
 
         // TODO: not going to prove this right now, to prove it 
         // we can maintain inv that index is finite, and show lsns is a subset of index.dom()
-        assume(lsns.finite()); 
+        assume(lsns.finite());
 
         self.ephemeral_tj().build_lsn_addr_index_ensures();
 
@@ -182,15 +182,55 @@ impl JournalCoordinationSystem::State {
         }
     }
 
+    proof fn journal_cache_reads_ensures(self, post: Self, reads: Map<Address, RawPage>)
+        requires
+            self.inv(), post.inv(), 
+            Cache::State::next(self.cache, post.cache, Cache::Label::Access{reads: reads, writes: Map::empty()})
+        ensures 
+            forall |addr| #[trigger] reads.contains_key(addr) && self.ephemeral_disk().entries.contains_key(addr)
+            ==> to_journal_reads(reads)[addr] == self.ephemeral_disk().entries[addr]
+    {
+        reveal(Cache::State::next);
+        reveal(Cache::State::next_by);
+    
+        let journal_reads = to_journal_reads(reads);
+        assert(journal_reads.dom() =~= reads.dom());
+
+        let cache_lbl = Cache::Label::Access{reads: reads, writes: Map::empty()};
+        self.cache.build_lookup_map_ensures();
+
+        assert forall |addr| #[trigger] reads.contains_key(addr) 
+            && self.ephemeral_disk().entries.contains_key(addr)
+        implies journal_reads[addr] == self.ephemeral_disk().entries[addr]
+        by {
+            assert(journal_reads.contains_key(addr));
+            journal_unmarshall_marshall(journal_reads[addr]);
+            assert(raw_page_to_record(reads[addr]) == journal_reads[addr]);
+
+            // reads match with content in the cache
+            assert(cache_lbl->reads.contains_key(addr)); // trigger
+            assert(self.cache.lookup_map.contains_key(addr));
+    
+            // connect this slot to content on ephemeral disk
+            let slot = self.cache.lookup_map[addr];
+            assert(self.cache.non_empty_slot(slot));
+    
+            assert(journal_reads[addr] == raw_page_to_record(self.cache.entries[slot]->data));
+            assert(journal_reads[addr] == self.ephemeral_disk().entries[addr]) by {
+                if self.cache.status_map[slot] is Clean {
+                    assert(self.cache.valid_clean_slot(slot)); // trigger
+                    assert(self.cache.entries[slot].get_addr() == addr);
+                }
+            }
+        }
+    }
+
     proof fn read_for_recovery_refines(self, post: Self, lbl: JournalCoordinationSystem::Label, reads: Map<Address, RawPage>)
         requires self.inv(), post.inv(), Self::read_for_recovery(self, post, lbl, reads)
         ensures LikesJournal::State::next(self.i(), post.i(), lbl.i(self))
     {
         let i_lbl = lbl.i(self);
         let messages = i_lbl.arrow_ReadForRecovery_messages();
-
-        reveal(Cache::State::next);
-        reveal(Cache::State::next_by);
 
         reveal(CachedJournal::State::next);
         reveal(CachedJournal::State::next_by);
@@ -205,32 +245,9 @@ impl JournalCoordinationSystem::State {
         self.can_crop_ptr_after_index_refines(tj.freshest_rec, depth);
         tj.disk_view.pointer_after_crop_ensures(tj.freshest_rec, depth);
         let ptr = tj.disk_view.pointer_after_crop(tj.freshest_rec, depth);
+
         assert(ptr is Some && tj.disk_view.entries.contains_key(ptr.unwrap()));
-
-        let journal_reads = to_journal_reads(reads);
-        assert(journal_reads.contains_key(ptr.unwrap()));
-        assert(journal_reads.dom() =~= reads.dom());
-
-        journal_unmarshall_marshall(journal_reads[ptr.unwrap()]);
-        assert(raw_page_to_record(reads[ptr.unwrap()]) == journal_reads[ptr.unwrap()]);
-
-        // reads match with content in the cache
-        let cache_lbl = Cache::Label::Access{reads: reads, writes: Map::empty()};
-        assert(cache_lbl->reads.contains_key(ptr.unwrap())); // trigger
-        assert(self.cache.lookup_map.contains_key(ptr.unwrap()));
-
-        // connect this slot to content on ephemeral disk
-        let slot = self.cache.lookup_map[ptr.unwrap()];
-        self.cache.build_lookup_map_ensures();
-        assert(self.cache.non_empty_slot(slot));
-
-        assert(journal_reads[ptr.unwrap()] == raw_page_to_record(self.cache.entries[slot]->data));
-        assert(journal_reads[ptr.unwrap()] == tj.disk_view.entries[ptr.unwrap()]) by {
-            if self.cache.status_map[slot] is Clean {
-                assert(self.cache.valid_clean_slot(slot)); // trigger
-            }
-        }
-
+        self.journal_cache_reads_ensures(post, reads);
         assert(messages == tj.disk_view.entries[ptr.unwrap()].message_seq.maybe_discard_old(tj.disk_view.boundary_lsn));
         assert(messages.wf());
 
@@ -250,12 +267,47 @@ impl JournalCoordinationSystem::State {
         requires self.inv(), post.inv(), Self::freeze_for_commit(self, post, lbl, reads)
         ensures LikesJournal::State::next(self.i(), post.i(), lbl.i(self))
     {
+        reveal(CachedJournal::State::next);
+        reveal(CachedJournal::State::next_by);
+
+        let journal_lbl = CachedJournal::Label::FreezeForCommit{frozen: lbl->frozen, reads: to_journal_reads(reads)};
+        let journal_step = choose |journal_step| CachedJournal::State::next_by(self.journal, post.journal, journal_lbl, journal_step);
+        let depth = journal_step.arrow_freeze_for_commit_0();
+
+        let i_lbl = lbl.i(self);
+        let i_frozen = i_lbl->frozen_journal;
+        let new_bdy = i_frozen.seq_start();
+
+        self.can_crop_ptr_after_index_refines(self.journal.freshest_rec, depth);
+        assert(self.ephemeral_disk().can_crop(self.journal.freshest_rec, depth));
+        assert(self.journal.boundary_lsn <= new_bdy);
+
+        let cropped_tj = self.ephemeral_tj().crop(depth);
+        let ptr = self.journal.pointer_after_crop_index(self.journal.freshest_rec, depth);
+        self.ephemeral_tj().crop_ensures(depth);
+        assert(cropped_tj.freshest_rec == ptr);
+
+        assert(i_frozen.decodable()) by {
+            assert(i_frozen.disk_view.entries == self.ephemeral_disk().entries);
+            assert(i_frozen.disk_view.wf());
+            assert(i_frozen.disk_view.is_nondangling_pointer(ptr));
+            if ptr is Some {
+                self.journal_cache_reads_ensures(post, reads);
+                assert(i_frozen.disk_view.valid_ranking(self.ephemeral_disk().the_ranking()));
+            }
+        }
+        assert(cropped_tj.can_discard_to(new_bdy)); 
+
+        let post_discard = cropped_tj.discard_old(new_bdy);
+        let frozen_lsns = Set::new(|lsn: LSN| new_bdy <= lsn && lsn < post_discard.seq_end());
+        let frozen_index = self.journal.lsn_addr_index.restrict(frozen_lsns);
+
+        assert(cropped_tj.discard_old_cond(new_bdy, frozen_index.values(), i_frozen));
+
         reveal(LikesJournal::State::next);
         reveal(LikesJournal::State::next_by);
-
-        assume(false);
-        // depth
-        // assert(LikesJournal::State::next_by(self.i(), post.i(), lbl.i(self), LikesJournal::Step::freeze_for_commit()));
+        assert(LikesJournal::State::next_by(self.i(), post.i(), lbl.i(self), 
+            LikesJournal::Step::freeze_for_commit(depth)));
     }
 
     // can crop 

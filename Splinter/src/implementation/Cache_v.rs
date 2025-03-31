@@ -277,11 +277,12 @@ state_machine!{ Cache {
 
     transition!{ evictable(lbl: Label) {
         require lbl is EvictableCheck;
-        require forall |addr| lbl->addrs.contains(addr) &&  #[trigger] pre.lookup_map.contains_key(addr)
-                ==> {
-                    &&& pre.entries[pre.lookup_map[addr]] is Filled
-                    &&& pre.status_map[pre.lookup_map[addr]] is Clean
-                };
+        require forall |addr| lbl->addrs.contains(addr) 
+            &&  #[trigger] pre.lookup_map.contains_key(addr)
+            ==> {
+                &&& pre.entries[pre.lookup_map[addr]] is Filled
+                &&& pre.status_map[pre.lookup_map[addr]] is Clean
+            };
     }}
 
     transition!{ noop(lbl: Label) {

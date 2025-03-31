@@ -691,11 +691,11 @@ state_machine!{ LikesJournal {
         require tj.disk_view.can_crop(tj.freshest_rec, depth);
         require tj.disk_view.boundary_lsn <= new_bdy;
 
-        let cropped_tj = tj.crop(depth);
-        require cropped_tj.can_discard_to(new_bdy);
+        let cropped_tj = tj.crop(depth); // same bdy, different freshest_rec
+        require cropped_tj.can_discard_to(new_bdy); // see given this new freshest_rec whether we can discard to new_bdy
 
         // figure out the frozen lsn range
-        let post_discard = cropped_tj.discard_old(new_bdy); // tj crops and then just flushes 
+        let post_discard = cropped_tj.discard_old(new_bdy); // update to both new_bdy and cropped freshestrec
         let frozen_lsns = Set::new(|lsn: LSN| new_bdy <= lsn && lsn < post_discard.seq_end());
         let frozen_index = pre.lsn_addr_index.restrict(frozen_lsns);
 
