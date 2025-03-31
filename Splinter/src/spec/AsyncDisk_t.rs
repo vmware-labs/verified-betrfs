@@ -38,11 +38,12 @@ pub struct Address {
 
 /// Returns the number of a disk pages in an Allocation Unit. 
 /// Left as an uninterpreted function since it's implementation defined.
-pub closed spec(checked) fn page_count() -> nat;
+
+pub uninterp spec(checked) fn page_count() -> nat;
 
 /// Returns the number of Allocation Unit of the disk. 
 /// Left as an uninterpreted function since it's implementation defined.
-pub closed spec(checked) fn au_count() -> nat;
+pub uninterp spec(checked) fn au_count() -> nat;
 
 impl Address {
     /// Returns true iff this Address is well formed.

@@ -24,10 +24,10 @@ pub struct IAddress {
 }
 
 /// further restricted by actual disk size
-pub closed spec(checked) fn ipage_count() -> IPage;
+pub uninterp spec(checked) fn ipage_count() -> IPage;
 
 /// further restricted by actual disk size
-pub closed spec(checked) fn iau_count() -> IAU;
+pub uninterp spec(checked) fn iau_count() -> IAU;
 
 impl IAddress {
     pub open spec fn view(self) -> Address {
@@ -43,12 +43,12 @@ impl IAddress {
 /// axioms relating spec and impl page and au count
 #[verifier(external_body)]
 pub broadcast proof fn page_count_equals_ipage_count()
-    ensures page_count() == ipage_count()
+    ensures #[trigger] page_count() == ipage_count()
 ;
 
 #[verifier(external_body)]
 pub broadcast proof fn au_count_equals_iau_count()
-    ensures au_count() == iau_count()
+    ensures #[trigger] au_count() == iau_count()
 ;
 
 pub type IDiskRequest = GenericDiskRequest<IAddress>;

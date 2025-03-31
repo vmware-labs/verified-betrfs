@@ -323,7 +323,6 @@ pub type SyncReqId = u64;
 
 /// A Version is a snapshot of a map (its key-value pairs). Specifically it wraps
 /// a `MapSpec::State`.
-#[verifier::ext_equal]
 pub type Version = PersistentState;
 
 pub open spec fn SingletonVersions(appv: MapSpec::State) -> FloatingSeq<Version> {

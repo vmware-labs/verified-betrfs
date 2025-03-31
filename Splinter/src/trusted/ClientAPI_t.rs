@@ -55,7 +55,7 @@ impl<ProgramModel: ProgramModelTrait> ClientAPI<ProgramModel>{
     }
     
     #[verifier::external_body]
-    pub closed spec fn instance_id(&self) -> InstanceId;
+    pub uninterp spec fn instance_id(&self) -> InstanceId;
 
     // right now this is a tightly coupled API, we cannot ensure that the result is 
     // comes from the tokenized state machine instance transition due to it being in proof mode

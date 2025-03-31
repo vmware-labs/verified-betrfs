@@ -149,10 +149,12 @@ impl JournalRecord {
             ==>
             (#[trigger] Self::opt_rec_crop_head_records(ojr, boundary_lsn, depth)) is Some ==> Self::opt_rec_crop_head_records(ojr, boundary_lsn, depth).unwrap().valid(boundary_lsn),
     {
-        assert forall |ojr: Option<JournalRecord>, boundary_lsn: LSN, depth: nat|
+        assert forall |ojr: Option<JournalRecord>, boundary_lsn: LSN, depth: nat| 
             Self::opt_rec_can_crop_head_records(ojr, boundary_lsn, depth)
-            implies
-            (#[trigger] Self::opt_rec_crop_head_records(ojr, boundary_lsn, depth)) is Some ==> Self::opt_rec_crop_head_records(ojr, boundary_lsn, depth).unwrap().valid(boundary_lsn) by {
+        implies ({
+            (#[trigger] Self::opt_rec_crop_head_records(ojr, boundary_lsn, depth)) is Some 
+            ==> Self::opt_rec_crop_head_records(ojr, boundary_lsn, depth).unwrap().valid(boundary_lsn) 
+        }) by {
             Self::opt_rec_crop_head_records_lemma(ojr, boundary_lsn, depth);
         }
     }
