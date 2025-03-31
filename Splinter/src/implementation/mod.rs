@@ -8,3 +8,4 @@ pub mod Cache_v;
 pub mod CachedJournal_v;
 pub mod JournalModel_v; // copy of LikesJournal_v
 pub mod JournalCoordinationSystem_v;
+pub mod JournalCoordinationRefinement_v;

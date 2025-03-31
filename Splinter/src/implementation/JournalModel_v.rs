@@ -695,7 +695,7 @@ state_machine!{ LikesJournal {
         require cropped_tj.can_discard_to(new_bdy);
 
         // figure out the frozen lsn range
-        let post_discard = cropped_tj.discard_old(new_bdy);
+        let post_discard = cropped_tj.discard_old(new_bdy); // tj crops and then just flushes 
         let frozen_lsns = Set::new(|lsn: LSN| new_bdy <= lsn && lsn < post_discard.seq_end());
         let frozen_index = pre.lsn_addr_index.restrict(frozen_lsns);
 

@@ -29,43 +29,29 @@ pub open spec fn addr_to_lsns(lsn_addr_index: LsnAddrIndex, addr: Address, bdy: 
 
 // to sorted seq, what do we need this for?
 pub open spec fn min_lsn(lsns: Set<LSN>) -> LSN
+    recommends !lsns.is_empty()
+    decreases lsns.len() 
 {
-    lsns.find_unique_minimal(|a: LSN, b: LSN| a < b)
-}
-
-pub open spec fn cropped_prior_index(lsn_addr_index: LsnAddrIndex, addr: Address, bdy: LSN) -> Pointer
-{
-    let lsns = addr_to_lsns(lsn_addr_index, addr, bdy);
-    if lsns.len() > 0 {
-        let min = min_lsn(lsns);
-        let prior_lsn = (min - 1) as nat;
-        if bdy <= prior_lsn && lsn_addr_index.contains_key(prior_lsn) {
-            Some(lsn_addr_index[prior_lsn])
-        } else {
-            None
-        }
+    if !lsns.finite() {
+        arbitrary()
     } else {
-        None
+        let e = lsns.choose();
+        if lsns.remove(e).is_empty() { e } 
+        else { min(e as int, min_lsn(lsns.remove(e)) as int) as nat }
     }
 }
 
-pub open spec fn can_crop_index(lsn_addr_index: LsnAddrIndex, root: Pointer, bdy: LSN, depth: nat) -> bool
-    decreases depth
+pub proof fn min_lsn_ensures(lsns: Set<LSN>)
+    requires !lsns.is_empty(), lsns.finite()
+    ensures 
+        lsns.contains(min_lsn(lsns)),
+        forall |lsn| #[trigger] lsns.contains(lsn) ==> min_lsn(lsns) <= lsn
+    decreases lsns.len()
 {
-    0 < depth ==> {
-        &&& root is Some
-        &&& can_crop_index(lsn_addr_index, cropped_prior_index(lsn_addr_index, root.unwrap(), bdy), bdy, (depth-1) as nat)
-    }
-}
-
-pub open spec(checked) fn pointer_after_crop_index(lsn_addr_index: LsnAddrIndex, root: Pointer, bdy: LSN, depth: nat) -> Pointer
-    recommends can_crop_index(lsn_addr_index, root, bdy, depth)
-    decreases depth
-{
-    if depth == 0 { root }
-    else {
-        let next_ptr = cropped_prior_index(lsn_addr_index, root.unwrap(), bdy);
-        pointer_after_crop_index(lsn_addr_index, next_ptr, bdy, (depth-1) as nat) 
+    let e = lsns.choose();
+    if !lsns.remove(e).is_empty() {
+        let result = min_lsn(lsns);
+        min_lsn_ensures(lsns.remove(e));
     }
 }
 
@@ -104,7 +90,6 @@ state_machine!{ CachedJournal {
     pub open spec(checked) fn wf(self) -> bool
     {
         &&& self.seq_start() <= self.seq_end()
-        // &&& self.freshest_rec is Some ==> self.lsn_addr_index.contains_value(self.freshest_rec.unwrap())
         &&& self.unmarshalled_tail.wf()
     }
 
@@ -146,9 +131,9 @@ state_machine!{ CachedJournal {
 
     transition!{ read_for_recovery(lbl: Label, depth: nat) {
         require let Label::ReadForRecovery{messages, reads} = lbl;
-        require can_crop_index(pre.lsn_addr_index, pre.freshest_rec, pre.boundary_lsn, depth);
+        require pre.can_crop_index(pre.freshest_rec, depth);
 
-        let ptr = pointer_after_crop_index(pre.lsn_addr_index, pre.freshest_rec, pre.boundary_lsn, depth);
+        let ptr = pre.pointer_after_crop_index(pre.freshest_rec, depth);
         require ptr is Some && reads.contains_key(ptr.unwrap());
         require messages == reads[ptr.unwrap()].message_seq.maybe_discard_old(pre.boundary_lsn);
     }}
@@ -156,16 +141,13 @@ state_machine!{ CachedJournal {
     transition!{ freeze_for_commit(lbl: Label, depth: nat) {
         require let Label::FreezeForCommit{frozen, reads} = lbl;
         require pre.seq_start() <= frozen.boundary_lsn;
-        require can_crop_index(pre.lsn_addr_index, pre.freshest_rec, pre.boundary_lsn, depth);
+        require pre.can_crop_index(pre.freshest_rec, depth);
 
-        let ptr = pointer_after_crop_index(pre.lsn_addr_index, pre.freshest_rec, pre.boundary_lsn, depth);
-
-        // freeze for commit wants the cache reads 
+        let ptr = pre.pointer_after_crop_index(pre.freshest_rec, depth);
         require ptr == frozen.freshest_rec;
-        
         require ptr is Some ==> reads.contains_key(ptr.unwrap());
-        let frozen_seq_end = if ptr is Some { reads[ptr.unwrap()].message_seq.seq_end } else { frozen.boundary_lsn };
 
+        let frozen_seq_end = if ptr is Some { reads[ptr.unwrap()].message_seq.seq_end } else { frozen.boundary_lsn };
         require frozen.boundary_lsn <= frozen_seq_end;
         require frozen_seq_end <= pre.marshalled_seq_end();
 
@@ -215,6 +197,7 @@ state_machine!{ CachedJournal {
         update lsn_addr_index = lsn_addr_index_append_record(pre.lsn_addr_index, marshalled_msgs, addr);
     }}
 
+    // this makes it so that we can't really initialize everything in a single transition
     init!{ initialize(reads: Map<Address, JournalRecord>, boundary_lsn: LSN, freshest_rec: Pointer) {
         let lsn_addr_index = build_lsn_addr_index_from_reads(reads, boundary_lsn, freshest_rec);
 
@@ -251,21 +234,45 @@ state_machine!{ CachedJournal {
     fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address) { }
     
     #[inductive(initialize)]
-    fn initialize_inductive(post: Self, reads: Map<Address, JournalRecord>, boundary_lsn: LSN, freshest_rec: Pointer) { 
-
-        // if root is Some && reads.contains_key(root.unwrap()) {
-        //     let curr_msgs = reads[root.unwrap()].message_seq;
-        //     let start_lsn = max(boundary_lsn as int, curr_msgs.seq_start as int) as nat;
-        //     let update = singleton_index(start_lsn, curr_msgs.seq_end, root.unwrap());
-    
-        //     let next_ptr = reads[root.unwrap()].cropped_prior(boundary_lsn);
-        //     let sub_index = build_lsn_addr_index_from_reads(reads.remove(root.unwrap()), boundary_lsn, next_ptr);
-    
-        //     sub_index.union_prefer_right(update)
-        // } else {
-        //     map!{}
-        // }
-    }
+    fn initialize_inductive(post: Self, reads: Map<Address, JournalRecord>, boundary_lsn: LSN, freshest_rec: Pointer) { }
 
 }}
+
+impl CachedJournal::State {
+    pub open spec(checked) fn next_index(self, ptr: Pointer) -> Pointer
+        recommends ptr is Some
+    {
+        let lsns = addr_to_lsns(self.lsn_addr_index, ptr.unwrap(), self.boundary_lsn);
+        if !lsns.is_empty() {
+            let min = min_lsn(lsns);
+            let prior_lsn = (min - 1) as nat;
+            if min > 0 && self.boundary_lsn <= prior_lsn && self.lsn_addr_index.contains_key(prior_lsn) {
+                Some(self.lsn_addr_index[prior_lsn])
+            } else {
+                None
+            }        
+        } else {
+            None
+        }
+    }
+
+    pub open spec fn can_crop_index(self, root: Pointer, depth: nat) -> bool
+        decreases depth
+    {
+        0 < depth ==> {
+            &&& root is Some
+            &&& self.can_crop_index(self.next_index(root), (depth-1) as nat)
+        }
+    }
+
+    pub open spec(checked) fn pointer_after_crop_index(self, root: Pointer, depth: nat) -> Pointer
+        recommends self.can_crop_index(root, depth)
+        decreases depth
+    {
+        if depth == 0 { root }
+        else {
+            self.pointer_after_crop_index(self.next_index(root), (depth-1) as nat)
+        }
+    }
+}
 } // end of verus

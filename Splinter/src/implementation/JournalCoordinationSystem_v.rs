@@ -180,15 +180,30 @@ state_machine!{ JournalCoordinationSystem{
         update disk = new_disk;
     }}
 
-    init!{ initialize(disk: AsyncDisk::State, cache: Cache::State, slots: nat, journal: CachedJournal::State) {
-        require AsyncDisk::State::initialize(disk);
-        require Cache::State::initialize(cache, slots);
-        require CachedJournal::State::initialize(journal, Map::empty(), 0, None);
+    // NOTE: 
+    // init!{ initialize(disk: AsyncDisk::State, cache: Cache::State, slots: nat, journal: CachedJournal::State, reads: Map<Address, RawPage>) {
+    //     // NOTE: this isn't a crash aware composed system so init does not initializes 
+    //     // from fully empty state and looks a bit weird. The main goal is just to refine
+    //     // page walks on cached pages to page walks over the projected disk
 
-        init disk = disk;
-        init cache = cache;
-        init journal = journal;
-    }}
+    //     require disk.responses == empty_responses();
+    //     require disk.requests == empty_requests();
+
+    //     let cache_lbl = Cache::Label::Access{reads: reads, writes: Map::empty()};
+    //     require Cache::State::next(cache, pre.cache, cache_lbl1);
+
+    //     // no more outstanding IO?
+    //     // this restriction over outstanding IOs...
+
+    //     // to initialize we want a version 
+    //     // reads cache access
+    //     // require Cache::State::initialize(cache, slots);
+    //     // require CachedJournal::State::initialize(journal, Map::empty(), 0, None);
+
+    //     init disk = disk;
+    //     init cache = cache;
+    //     init journal = journal;
+    // }}
 
     #[invariant]
     pub open spec fn inv(self) -> bool
@@ -196,6 +211,11 @@ state_machine!{ JournalCoordinationSystem{
         &&& self.journal.wf()
         &&& self.cache.inv()
         &&& self.disk.inv()
+
+        // NOTE(JL): 
+        // bc this is an ephemeral composition model, the initial
+        // version requires pages to be read into the supplied cache already
+        // and disk cannot have any other outstanding requests 
 
         &&& self.outstanding_reqs_inv()
         &&& self.clean_cache_pages_agree_with_disk()
@@ -680,12 +700,12 @@ state_machine!{ JournalCoordinationSystem{
         }
     }
 
-    #[inductive(initialize)]
-    fn initialize_inductive(post: Self, disk: AsyncDisk::State, cache: Cache::State, slots: nat, journal: CachedJournal::State) 
-    {
-        Cache::State::initialize_inductive(post.cache, slots);
-        assert(post.ephemeral_disk().valid_ranking(map!{}));
-    }
+    // #[inductive(initialize)]
+    // fn initialize_inductive(post: Self, disk: AsyncDisk::State, cache: Cache::State, slots: nat, journal: CachedJournal::State) 
+    // {
+    //     Cache::State::initialize_inductive(post.cache, slots);
+    //     assert(post.ephemeral_disk().valid_ranking(map!{}));
+    // }
 }}
 
 }

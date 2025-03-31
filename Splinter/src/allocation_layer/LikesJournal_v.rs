@@ -659,21 +659,7 @@ state_machine!{ LikesJournal {
     
     pub open spec(checked) fn wf(self) -> bool {
         &&& self.journal.wf()
-        // TODO this conjunct ought to be part of journal.wf, at least.
-        // &&& self.journal.truncated_journal.seq_start() <= self.journal.truncated_journal.seq_end()
     }
-
-    // pub open spec fn transitive_likes(self) -> Likes 
-    // {
-    //     let tj = self.journal.truncated_journal;
-    //     if !tj.decodable() { arbitrary() }
-    //     else { map_to_likes(tj.build_lsn_addr_index()) }
-    // }
-
-    // pub open spec fn imperative_likes(self) -> Likes
-    // {
-    //     map_to_likes(self.lsn_addr_index)
-    // }
 
     transition!{ read_for_recovery(lbl: Label) {
         require lbl is ReadForRecovery;
