@@ -55,8 +55,9 @@ pub proof fn min_lsn_ensures(lsns: Set<LSN>)
     }
 }
 
-pub open spec(checked) fn build_lsn_addr_index_from_reads(reads: Map<Address, JournalRecord>, boundary_lsn: LSN, root: Pointer) -> LsnAddrIndex
-    decreases reads.len() when reads.dom().finite()
+pub open spec(checked) fn build_lsn_addr_index_from_reads(reads: Map<Address, JournalRecord>, 
+    boundary_lsn: LSN, root: Pointer, curr_end: LSN) -> LsnAddrIndex
+    decreases curr_end
 {
     if root is Some && reads.contains_key(root.unwrap()) {
         let curr_msgs = reads[root.unwrap()].message_seq;
@@ -64,9 +65,13 @@ pub open spec(checked) fn build_lsn_addr_index_from_reads(reads: Map<Address, Jo
         let update = singleton_index(start_lsn, curr_msgs.seq_end, root.unwrap());
 
         let next_ptr = reads[root.unwrap()].cropped_prior(boundary_lsn);
-        let sub_index = build_lsn_addr_index_from_reads(reads.remove(root.unwrap()), boundary_lsn, next_ptr);
-
-        sub_index.union_prefer_right(update)
+        if start_lsn < curr_end {
+            let sub_index = build_lsn_addr_index_from_reads(reads, boundary_lsn, next_ptr, start_lsn);
+            sub_index.union_prefer_right(update)
+        } else {
+            // never reached if blocks can concat
+            map!{}
+        }
     } else {
         map!{}
     }
@@ -75,7 +80,6 @@ pub open spec(checked) fn build_lsn_addr_index_from_reads(reads: Map<Address, Jo
 pub struct JournalSnapShot {
     pub boundary_lsn: LSN, 
     pub freshest_rec: Pointer,
-    pub record_domain: Set<Address>,
 }
 
 state_machine!{ CachedJournal {
@@ -116,7 +120,7 @@ state_machine!{ CachedJournal {
     pub enum Label
     {
         ReadForRecovery{messages: MsgHistory, reads: Map<Address, JournalRecord>},
-        FreezeForCommit{frozen: JournalSnapShot, reads: Map<Address, JournalRecord>},
+        FreezeForCommit{frozen: JournalSnapShot, frozen_domain: Set<Address>, reads: Map<Address, JournalRecord>},
         QueryEndLsn{end_lsn: LSN},
         Put{messages: MsgHistory},
         DiscardOld{start_lsn: LSN, require_end: LSN, discard_addrs: Set<Address>},
@@ -139,7 +143,7 @@ state_machine!{ CachedJournal {
     }}
 
     transition!{ freeze_for_commit(lbl: Label, depth: nat) {
-        require let Label::FreezeForCommit{frozen, reads} = lbl;
+        require let Label::FreezeForCommit{frozen, frozen_domain, reads} = lbl;
         require pre.seq_start() <= frozen.boundary_lsn;
         require pre.can_crop_index(pre.freshest_rec, depth);
 
@@ -152,7 +156,7 @@ state_machine!{ CachedJournal {
         require ptr is Some ==> frozen.boundary_lsn < frozen_seq_end;
 
         let frozen_lsns = Set::new(|lsn: LSN| frozen.boundary_lsn <= lsn && lsn < frozen_seq_end);
-        require frozen.record_domain == pre.lsn_addr_index.restrict(frozen_lsns).values();
+        require frozen_domain == pre.lsn_addr_index.restrict(frozen_lsns).values();
     }}
 
     transition!{ query_end_lsn(lbl: Label) {
@@ -198,19 +202,20 @@ state_machine!{ CachedJournal {
     }}
 
     // this makes it so that we can't really initialize everything in a single transition
-    init!{ initialize(reads: Map<Address, JournalRecord>, boundary_lsn: LSN, freshest_rec: Pointer) {
-        let lsn_addr_index = build_lsn_addr_index_from_reads(reads, boundary_lsn, freshest_rec);
+    init!{ initialize(reads: Map<Address, JournalRecord>, snapshot: JournalSnapShot) {
+        let ptr = snapshot.freshest_rec;
+        let bdy = snapshot.boundary_lsn;
 
         // NOTE: we need this if we want to maintain internal wf
-        require freshest_rec is Some ==> {
-            &&& reads.contains_key(freshest_rec.unwrap())
-            &&& boundary_lsn <= reads[freshest_rec.unwrap()].message_seq.seq_end
+        require ptr is Some ==> {
+            &&& reads.contains_key(ptr.unwrap())
+            &&& bdy <= reads[ptr.unwrap()].message_seq.seq_end
         };
+        let seq_end = if ptr is Some { reads[ptr.unwrap()].message_seq.seq_end } else { bdy };
+        let lsn_addr_index = build_lsn_addr_index_from_reads(reads, bdy, ptr, seq_end);
 
-        let seq_end = if freshest_rec is Some { reads[freshest_rec.unwrap()].message_seq.seq_end } else { boundary_lsn };
-
-        init boundary_lsn = boundary_lsn;
-        init freshest_rec = freshest_rec;
+        init boundary_lsn = bdy;
+        init freshest_rec = ptr;
         init lsn_addr_index = lsn_addr_index;
         init unmarshalled_tail = MsgHistory::empty_history_at(seq_end); 
     }}
@@ -234,7 +239,7 @@ state_machine!{ CachedJournal {
     fn internal_journal_marshal_inductive(pre: Self, post: Self, lbl: Label, cut: LSN, addr: Address) { }
     
     #[inductive(initialize)]
-    fn initialize_inductive(post: Self, reads: Map<Address, JournalRecord>, boundary_lsn: LSN, freshest_rec: Pointer) { }
+    pub fn initialize_inductive(post: Self, reads: Map<Address, JournalRecord>, snapshot: JournalSnapShot) { }
 
 }}
 

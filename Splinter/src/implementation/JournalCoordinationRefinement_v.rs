@@ -263,14 +263,14 @@ impl JournalCoordinationSystem::State {
         assert(LikesJournal::State::next_by(self.i(), post.i(), lbl.i(self), LikesJournal::Step::read_for_recovery()));
     }
 
-    proof fn freeze_for_commit_refines(self, post: Self, lbl: JournalCoordinationSystem::Label, reads: Map<Address, RawPage>)
-        requires self.inv(), post.inv(), Self::freeze_for_commit(self, post, lbl, reads)
+    proof fn freeze_for_commit_refines(self, post: Self, lbl: JournalCoordinationSystem::Label, frozen_domain: Set<Address>, reads: Map<Address, RawPage>)
+        requires self.inv(), post.inv(), Self::freeze_for_commit(self, post, lbl, frozen_domain, reads)
         ensures LikesJournal::State::next(self.i(), post.i(), lbl.i(self))
     {
         reveal(CachedJournal::State::next);
         reveal(CachedJournal::State::next_by);
 
-        let journal_lbl = CachedJournal::Label::FreezeForCommit{frozen: lbl->frozen, reads: to_journal_reads(reads)};
+        let journal_lbl = CachedJournal::Label::FreezeForCommit{frozen: lbl->frozen, frozen_domain, reads: to_journal_reads(reads)};
         let journal_step = choose |journal_step| CachedJournal::State::next_by(self.journal, post.journal, journal_lbl, journal_step);
         let depth = journal_step.arrow_freeze_for_commit_0();
 
@@ -310,15 +310,11 @@ impl JournalCoordinationSystem::State {
             LikesJournal::Step::freeze_for_commit(depth)));
     }
 
-    // can crop 
-    // proof fn init_refines(self, disk: AsyncDisk::State, cache: Cache::State, slots: nat, journal: CachedJournal::State) 
-    //     requires self.inv(), JournalCoordinationSystem::State::initialize(self, disk, cache, slots, journal), 
-    //     ensures LikesJournal::State::initialize(self.i(), self.ephemeral_tj())
-    // {
-    //     // init doesn't refine right now 
-    //     // stamped_betree.value.i_wf();
-    //     assume(false);
-    // }
+    proof fn init_refines(self, disk: AsyncDisk::State, cache: Cache::State, journal: CachedJournal::State, snapshot: JournalSnapShot, reads: Map<Address, RawPage>) 
+        requires self.inv(), JournalCoordinationSystem::State::initialize(self, disk, cache, journal, snapshot, reads), 
+        ensures LikesJournal::State::initialize(self.i(), self.ephemeral_tj())
+    {
+    }
 
     // Skipping the rest for this exercise
 }
