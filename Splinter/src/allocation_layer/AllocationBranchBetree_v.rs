@@ -120,7 +120,7 @@ state_machine!{ AllocationBranchBetree {
     {
         Label{linked_lbl: LinkedBetreeVars::Label},
         Internal{allocs: Set<AU>, deallocs: Set<AU>}, // internal label
-    }    
+    }
 
     pub open spec fn is_fresh(self, aus: Set<AU>) -> bool
     {
