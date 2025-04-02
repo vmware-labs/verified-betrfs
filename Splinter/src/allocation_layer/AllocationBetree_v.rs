@@ -103,9 +103,7 @@ state_machine!{ AllocationBetree {
 
     init!{ initialize(betree: LinkedBetreeVars::State<SimpleBuffer>) {
         require LinkedBetreeVars::State::initialize(betree, betree);
-
         let (betree_likes, buffer_likes) = betree.linked.transitive_likes();
-
         init betree = betree;
         init betree_aus = to_au_likes(betree_likes);
         init buffer_aus = to_au_likes(buffer_likes);

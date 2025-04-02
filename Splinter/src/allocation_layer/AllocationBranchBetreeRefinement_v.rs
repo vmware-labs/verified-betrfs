@@ -152,18 +152,35 @@ impl AllocationBranchBetree::State {
         v.i_valid();
     }
 
-//     proof fn au_likes_noop_inv_refines(pre: Self, post: Self, lbl: AllocationBetree::Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>)
-//     requires 
-//         pre.inv(),
-//         AllocationBetree::State::au_likes_noop(pre, post, lbl, new_betree),
-//     ensures
-//         post.inv(),
-//         LikesBetree::State::next_by(pre.i(), post.i(), lbl.i(), LikesBetree::Step::likes_noop(new_betree))
-//     {
-//         reveal(LinkedBetreeVars::State::next);
-//         reveal(LinkedBetreeVars::State::next_by);
-//         reveal(LikesBetree::State::next_by);
-//     }
+    proof fn au_likes_noop_refines(pre: Self, post: Self, lbl: AllocationBranchBetree::Label, new_betree: LinkedBetreeVars::State<BranchNode>)
+    requires 
+        pre.inv(),
+        post.inv(),
+        AllocationBranchBetree::State::au_likes_noop(pre, post, lbl, new_betree),
+    ensures
+        AllocationBetree::State::next_by(pre.i(), post.i(), lbl.i(), AllocationBetree::Step::au_likes_noop(new_betree.i())),
+    {
+        reveal(LinkedBetreeVars::State::next);
+        reveal(LinkedBetreeVars::State::next_by);
+        reveal(AllocationBetree::State::next_by);
+
+        // Query, Put, Freeze As
+        match lbl->linked_lbl {
+            LinkedBetreeVars::Label::Query{end_lsn, key, value} => {
+                // valid_for
+                assume(false);
+            }
+            LinkedBetreeVars::Label::Put{puts} => {
+                assert(puts.wf());
+                assert(LinkedBetreeVars::State::next_by(pre.betree.i(), new_betree.i(), 
+                    lbl->linked_lbl, LinkedBetreeVars::Step::put()));
+            }
+            LinkedBetreeVars::Label::FreezeAs{stamped_betree} => {
+                assume(false);
+            }
+            _ => { assert(false); }
+        }
+    }
 
 //     proof fn internal_flush_memtable_inv_refines(pre: Self, post: Self, lbl: AllocationBetree::Label, 
 //         new_betree: LinkedBetreeVars::State<SimpleBuffer>, new_addrs: TwoAddrs)
@@ -291,63 +308,64 @@ impl AllocationBranchBetree::State {
 //         assert(new_betree.linked.valid_buffer_dv());
 //     }
 
-//     proof fn next_refines(pre: Self, post: Self, lbl: AllocationBetree::Label) 
-//         requires 
-//             pre.inv(),
-//             AllocationBetree::State::next(pre, post, lbl),
-//         ensures
-//             post.inv(),
-//             LikesBetree::State::next(pre.i(), post.i(), lbl.i())
-//     {
-//         reveal(AllocationBetree::State::next);
-//         reveal(AllocationBetree::State::next_by);
-//         reveal(LikesBetree::State::next);
-//         reveal(LikesBetree::State::next_by);
-
-//         match choose |step| AllocationBetree::State::next_by(pre, post, lbl, step) {
-//             AllocationBetree::Step::au_likes_noop(new_betree) => { 
-//                 Self::au_likes_noop_inv_refines(pre, post, lbl, new_betree);
-//             }
-//             AllocationBetree::Step::internal_flush_memtable(new_betree, new_addrs) => {
-//                 Self::internal_flush_memtable_inv_refines(pre, post, lbl, new_betree, new_addrs);
-//             }
-//             AllocationBetree::Step::internal_grow(new_betree, new_root_addr) => {
-//                 Self::internal_grow_inv_refines(pre, post, lbl, new_betree, new_root_addr);
-//             }
-//             AllocationBetree::Step::internal_split(new_betree, path, request, new_addrs, path_addrs) => {
-//                 Self::internal_split_inv_refines(pre, post, lbl, new_betree, path, request, new_addrs, path_addrs);
-//             }
-//             AllocationBetree::Step::internal_flush(new_betree, path, child_idx, buffer_gc, new_addrs, path_addrs) => {
-//                 Self::internal_flush_inv_refines(pre, post, lbl, new_betree, path, child_idx, buffer_gc, new_addrs, path_addrs);
-//             }
-//             AllocationBetree::Step::internal_compact_begin(path, start, end, input) => {
-//                 assert(LikesBetree::State::next_by(pre.i(), post.i(), lbl.i(), LikesBetree::Step::internal_noop()));
-//             }
-//             AllocationBetree::Step::internal_compact_abort(input_idx) => {
-//                 assert(LikesBetree::State::next_by(pre.i(), post.i(), lbl.i(), LikesBetree::Step::internal_noop()));
-//             }
-//             AllocationBetree::Step::internal_compact_complete(input_idx, new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs) => {
-//                 Self::internal_compact_complete_inv_refines(pre, post, lbl, new_betree, input_idx, path, start, end, compacted_buffer, new_addrs, path_addrs);
-//             }
-//             AllocationBetree::Step::internal_buffer_noop(new_betree) => {
-//                 pre.betree.linked.valid_view_ensures(new_betree.linked);
-//                 pre.betree.linked.valid_view_implies_same_transitive_likes(new_betree.linked);
-
-//                 let (betree_likes, buffer_likes) = pre.betree.linked.transitive_likes();
-
-//                 pre.betree.linked.tree_likes_domain(pre.betree.linked.the_ranking());
-//                 pre.betree.linked.buffer_likes_domain(betree_likes);
-//                 restrict_domain_au_ensures(buffer_likes, pre.betree.linked.buffer_dv.entries);
-
-//                 assert(post.inv());
-//                 assert(LikesBetree::State::next_by(pre.i(), post.i(), lbl.i(), LikesBetree::Step::internal_buffer_noop(new_betree)));
-//             }
-//             AllocationBetree::Step::internal_noop() => {
-//                 assert(LikesBetree::State::next_by(pre.i(), post.i(), lbl.i(), LikesBetree::Step::internal_noop()));
-//             }
-//             _ => { assert(false); }
-//         }
-//     }
+    proof fn next_refines(pre: Self, post: Self, lbl: AllocationBranchBetree::Label) 
+        requires 
+            pre.inv(),
+            post.inv(),
+            AllocationBranchBetree::State::next(pre, post, lbl),
+        ensures
+            AllocationBetree::State::next(pre.i(), post.i(), lbl.i())
+    {
+        reveal(AllocationBetree::State::next);
+        reveal(AllocationBetree::State::next_by);
+        reveal(AllocationBranchBetree::State::next);
+        reveal(AllocationBranchBetree::State::next_by);
+        
+        match choose |step| Self::next_by(pre, post, lbl, step) {
+            AllocationBranchBetree::Step::au_likes_noop(new_betree) => { 
+                Self::au_likes_noop_refines(pre, post, lbl, new_betree);
+            }
+            AllocationBranchBetree::Step::branch_begin() => { 
+                assert(AllocationBetree::State::next_by(pre.i(), post.i(), lbl.i(), AllocationBetree::Step::internal_noop()));
+            }
+            AllocationBranchBetree::Step::branch_build(idx, post_branch, event) => { 
+                assert(AllocationBetree::State::next_by(pre.i(), post.i(), lbl.i(), AllocationBetree::Step::internal_noop()));
+            }
+            AllocationBranchBetree::Step::branch_abort(idx) => { 
+                assert(AllocationBetree::State::next_by(pre.i(), post.i(), lbl.i(), AllocationBetree::Step::internal_noop()));
+            }
+            AllocationBranchBetree::Step::internal_flush_memtable(new_betree, branch_idx, new_root_addr) => {
+                assume(false);
+                // Self::internal_flush_memtable_inv_refines(pre, post, lbl, new_betree, new_addrs);
+            }
+            AllocationBranchBetree::Step::internal_grow(new_betree, new_root_addr) => {
+                assume(false);
+                // Self::internal_grow_inv_refines(pre, post, lbl, new_betree, new_root_addr);
+            }
+            AllocationBranchBetree::Step::internal_split(new_betree, path, request, new_addrs, path_addrs) => {
+                assume(false);
+                // Self::internal_split_inv_refines(pre, post, lbl, new_betree, path, request, new_addrs, path_addrs);
+            }
+            AllocationBranchBetree::Step::internal_flush(new_betree, path, child_idx, buffer_gc, new_addrs, path_addrs) => {
+                assume(false);
+                // Self::internal_flush_inv_refines(pre, post, lbl, new_betree, path, child_idx, buffer_gc, new_addrs, path_addrs);
+            }
+            AllocationBranchBetree::Step::internal_compact_begin(path, start, end, input) => {
+                assume(false);
+                // assert(AllocationBetree::State::next_by(pre.i(), post.i(), lbl.i(), AllocationBetree::Step::compact_beg()));
+            }
+            AllocationBranchBetree::Step::internal_compact_abort(input_idx, new_betree) => {
+                // TODO something is mismatched here
+                assume(false);
+                // assert(AllocationBetree::State::next_by(pre.i(), post.i(), lbl.i(), AllocationBetree::Step::internal_buffer_noop(new_betree.i())));
+            }
+            AllocationBranchBetree::Step::internal_compact_complete(input_idx, new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs) => {
+                assume(false);
+                // Self::internal_compact_complete_inv_refines(pre, post, lbl, new_betree, input_idx, path, start, end, compacted_buffer, new_addrs, path_addrs);
+            }
+            _ => { assert(false); }
+        }
+    }
 } // end impl AllocationBranchBetree::State
 
 }//verus
