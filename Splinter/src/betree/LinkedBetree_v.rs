@@ -906,7 +906,7 @@ impl<T> QueryReceipt<T>{
         &&& self.lines[0].linked == self.linked
         &&& forall |i:nat| i < self.lines.len() ==> (#[trigger] self.lines[i as int].linked.dv) == self.linked.dv
         &&& forall |i:nat| i < self.lines.len() ==> (#[trigger] self.lines[i as int].linked.buffer_dv) == self.linked.buffer_dv
-        &&& forall |i:nat| i < self.lines.len() ==> (#[trigger] self.lines[i as int].linked.has_root()) <==> i < self.lines.len()-1
+        &&& forall |i:nat| i < self.lines.len() ==> ((#[trigger] self.lines[i as int].linked.has_root()) <==> i < self.lines.len()-1)
         &&& self.lines.last().result == Message::Define{value: default_value()}
     }
 

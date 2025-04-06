@@ -99,9 +99,53 @@ pub open spec fn summary_aus(branch_summary: Map<AU, Set<AU>>) -> Set<AU>
     union_set_of_sets(branch_summary.values())
 }
 
+// read only inputs for the compaction
+pub struct CompactorInput{
+    pub input_buffers: LinkedSeq,
+    pub offset_map: OffsetMap,
+}
+
+impl CompactorInput{
+    pub open spec(checked) fn input_roots(inputs: Seq<CompactorInput>) -> Set<Address>
+    {
+        let roots_seq = Seq::new(inputs.len(), |i| inputs[i].input_buffers.addrs.to_set());
+        union_seq_of_sets(roots_seq)
+    }
+
+    pub proof fn input_roots_finite(inputs: Seq<CompactorInput>)
+        ensures Self::input_roots(inputs).finite()
+    {
+        let roots_seq = Seq::new(inputs.len(), |i| inputs[i].input_buffers.addrs.to_set());
+        lemma_union_seq_of_sets_finite(roots_seq);
+    }
+
+    pub proof fn input_roots_remove_subset(inputs: Seq<CompactorInput>, i: int)
+        requires 0 <= i < inputs.len()
+        ensures Self::input_roots(inputs.remove(i)) <= Self::input_roots(inputs)
+    {
+        let removed = inputs.remove(i);
+        let roots_seq = Seq::new(inputs.len(), |i| inputs[i].input_buffers.addrs.to_set());
+        let post_roots_seq = Seq::new(removed.len(), |i| removed[i].input_buffers.addrs.to_set());
+
+        assert forall |root| Self::input_roots(removed).contains(root)
+        implies Self::input_roots(inputs).contains(root) by {
+            lemma_union_seq_of_sets_contains(post_roots_seq, root);
+            let post_i = choose |post_i| 0 <= post_i < post_roots_seq.len() 
+                && (#[trigger] post_roots_seq[post_i]).contains(root);
+            let pre_i = if post_i < i { post_i } else { post_i + 1 };
+            lemma_subset_union_seq_of_sets(roots_seq, pre_i);
+        }
+    }
+}
+
 pub open spec fn read_ref_aus(compactors: Seq<CompactorInput>) -> Set<AU>
 {
     to_aus(CompactorInput::input_roots(compactors))
+}
+
+pub open spec fn seq_addrs_to_aus(s: Seq<Address>) -> Set<AU>
+{
+    to_aus(s.to_set())
 }
 
 state_machine!{ AllocationBranchBetree {
@@ -301,13 +345,29 @@ state_machine!{ AllocationBranchBetree {
         update branch_summary = new_branch_summary;
     }}
 
+    pub open spec fn valid_compactor_input<T>(path: Path<T>, start: nat, end: nat, input: CompactorInput) -> bool
+    {
+        &&& path.valid()
+        &&& path.target().has_root()
+        &&& {
+            let node = path.target().root();
+            &&& start < end <= node.buffers.len()
+            &&& input == CompactorInput{
+                input_buffers: node.buffers.slice(start as int, end as int),
+                // offset map tracks live buffers for each key given the entire seq of buffers,
+                // here we decrement to account for the slice offset
+                offset_map: node.make_offset_map().decrement(start), 
+            }
+        }
+    }
+
     transition!{ internal_compact_begin(lbl: Label, path: Path<BranchNode>, start: nat, end: nat, input: CompactorInput) {
         require lbl is Internal;
         require lbl->allocs.is_empty();
         require lbl->deallocs.is_empty();
 
         require path.linked == pre.betree.linked;
-        require AllocationBetree::State::valid_compactor_input(path, start, end, input);
+        require Self::valid_compactor_input(path, start, end, input);
         update compactors = pre.compactors.push(input);
     }}
 
@@ -353,7 +413,7 @@ state_machine!{ AllocationBranchBetree {
         require seq_addrs_disjoint_aus(path_addrs);
 
         require 0 <= input_idx < pre.compactors.len();
-        require AllocationBetree::State::valid_compactor_input(path, start, end, pre.compactors[input_idx]);
+        require Self::valid_compactor_input(path, start, end, pre.compactors[input_idx]);
         require 0 <= branch_idx < pre.wip_branches.len();
         require pre.wip_branches[branch_idx].branch_sealed();
 

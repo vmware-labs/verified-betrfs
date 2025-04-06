@@ -327,11 +327,11 @@ impl AllocationBetree::State {
     }
 
     proof fn internal_compact_complete_inv_refines(pre: Self, post: Self, lbl: AllocationBetree::Label, 
-        new_betree: LinkedBetreeVars::State<SimpleBuffer>, input_idx: int, path: Path<SimpleBuffer>, 
+        new_betree: LinkedBetreeVars::State<SimpleBuffer>, path: Path<SimpleBuffer>, 
         start: nat, end: nat, compacted_buffer: SimpleBuffer, new_addrs: TwoAddrs, path_addrs: PathAddrs)
     requires 
         pre.inv(), 
-        AllocationBetree::State::internal_compact_complete(pre, post, lbl, input_idx, new_betree, 
+        AllocationBetree::State::internal_compact_complete(pre, post, lbl, new_betree, 
             path, start, end, compacted_buffer, new_addrs, path_addrs),
     ensures
         post.inv(),
@@ -386,14 +386,8 @@ impl AllocationBetree::State {
             AllocationBetree::Step::internal_flush(new_betree, path, child_idx, buffer_gc, new_addrs, path_addrs) => {
                 Self::internal_flush_inv_refines(pre, post, lbl, new_betree, path, child_idx, buffer_gc, new_addrs, path_addrs);
             }
-            AllocationBetree::Step::internal_compact_begin(path, start, end, input) => {
-                assert(LikesBetree::State::next_by(pre.i(), post.i(), lbl.i(), LikesBetree::Step::internal_noop()));
-            }
-            AllocationBetree::Step::internal_compact_abort(input_idx) => {
-                assert(LikesBetree::State::next_by(pre.i(), post.i(), lbl.i(), LikesBetree::Step::internal_noop()));
-            }
-            AllocationBetree::Step::internal_compact_complete(input_idx, new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs) => {
-                Self::internal_compact_complete_inv_refines(pre, post, lbl, new_betree, input_idx, path, start, end, compacted_buffer, new_addrs, path_addrs);
+            AllocationBetree::Step::internal_compact_complete(new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs) => {
+                Self::internal_compact_complete_inv_refines(pre, post, lbl, new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs);
             }
             AllocationBetree::Step::internal_buffer_noop(new_betree) => {
                 pre.betree.linked.valid_view_ensures(new_betree.linked);

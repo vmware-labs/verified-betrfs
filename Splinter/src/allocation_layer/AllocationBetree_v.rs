@@ -28,61 +28,14 @@ use crate::abstract_system::StampedMap_v::*;
 use crate::abstract_system::MsgHistory_v::*;
 
 verus! {
-
-// read only inputs for the compaction
-pub struct CompactorInput{
-    pub input_buffers: LinkedSeq,
-    pub offset_map: OffsetMap,
-}
-
-pub open spec fn seq_addrs_to_aus(s: Seq<Address>) -> Set<AU>
-{
-    to_aus(s.to_set())
-}
-
-impl CompactorInput{
-    pub open spec(checked) fn input_roots(inputs: Seq<CompactorInput>) -> Set<Address>
-    {
-        let roots_seq = Seq::new(inputs.len(), |i| inputs[i].input_buffers.addrs.to_set());
-        union_seq_of_sets(roots_seq)
-    }
-
-    pub proof fn input_roots_finite(inputs: Seq<CompactorInput>)
-        ensures Self::input_roots(inputs).finite()
-    {
-        let roots_seq = Seq::new(inputs.len(), |i| inputs[i].input_buffers.addrs.to_set());
-        lemma_union_seq_of_sets_finite(roots_seq);
-    }
-
-    pub proof fn input_roots_remove_subset(inputs: Seq<CompactorInput>, i: int)
-        requires 0 <= i < inputs.len()
-        ensures Self::input_roots(inputs.remove(i)) <= Self::input_roots(inputs)
-    {
-        let removed = inputs.remove(i);
-        let roots_seq = Seq::new(inputs.len(), |i| inputs[i].input_buffers.addrs.to_set());
-        let post_roots_seq = Seq::new(removed.len(), |i| removed[i].input_buffers.addrs.to_set());
-
-        assert forall |root| Self::input_roots(removed).contains(root)
-        implies Self::input_roots(inputs).contains(root) by {
-            lemma_union_seq_of_sets_contains(post_roots_seq, root);
-            let post_i = choose |post_i| 0 <= post_i < post_roots_seq.len() 
-                && (#[trigger] post_roots_seq[post_i]).contains(root);
-            let pre_i = if post_i < i { post_i } else { post_i + 1 };
-            lemma_subset_union_seq_of_sets(roots_seq, pre_i);
-        }
-    }
-}
-
 /// Introduces aulikes to track the life time of disk data structures in terms of Allocation Unit.
 /// Incorporates read only reference tracking for determining GC
 
 state_machine!{ AllocationBetree {
     fields {
         pub betree: LinkedBetreeVars::State<SimpleBuffer>,
-
         pub betree_aus: AULikes,    // tree node reference
         pub buffer_aus: AULikes,    // root au of each branch
-        pub compactors: Seq<CompactorInput>, // track ongoing compactions
     }
 
     pub enum Label
@@ -96,18 +49,12 @@ state_machine!{ AllocationBetree {
         self.betree.linked.is_fresh(addrs)
     }
 
-    pub open spec fn read_ref_aus(self) -> Set<AU>
-    {
-        to_aus(CompactorInput::input_roots(self.compactors))
-    }
-
     init!{ initialize(betree: LinkedBetreeVars::State<SimpleBuffer>) {
         require LinkedBetreeVars::State::initialize(betree, betree);
         let (betree_likes, buffer_likes) = betree.linked.transitive_likes();
         init betree = betree;
         init betree_aus = to_au_likes(betree_likes);
         init buffer_aus = to_au_likes(buffer_likes);
-        init compactors = Seq::empty();
     }}
 
     transition!{ au_likes_noop(lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>) {
@@ -138,7 +85,7 @@ state_machine!{ AllocationBetree {
 
         // restrict the range based on aus
         require restrict_domain_au(pushed.dv.entries, new_betree_aus.dom()) <= new_betree.linked.dv.entries.dom();
-        require restrict_domain_au(pushed.buffer_dv.entries, new_buffer_aus.dom() + pre.read_ref_aus()) <= new_betree.linked.buffer_dv.repr();
+        require restrict_domain_au(pushed.buffer_dv.entries, new_buffer_aus.dom()) <= new_betree.linked.buffer_dv.repr();
 
         update betree = new_betree;
         update betree_aus = new_betree_aus;
@@ -176,7 +123,7 @@ state_machine!{ AllocationBetree {
         let (new_betree_aus, new_buffer_aus) = Self::internal_split_au_likes(path, request, new_addrs, path_addrs, pre.betree_aus, pre.buffer_aus);
 
         require restrict_domain_au(splitted.dv.entries, new_betree_aus.dom()) <= new_betree.linked.dv.entries.dom();
-        require restrict_domain_au(splitted.buffer_dv.entries, new_buffer_aus.dom() + pre.read_ref_aus()) <= new_betree.linked.buffer_dv.repr();
+        require restrict_domain_au(splitted.buffer_dv.entries, new_buffer_aus.dom()) <= new_betree.linked.buffer_dv.repr();
 
         update betree = new_betree;
         update betree_aus = new_betree_aus;
@@ -208,41 +155,11 @@ state_machine!{ AllocationBetree {
             buffer_gc, new_addrs, path_addrs, pre.betree_aus, pre.buffer_aus);
 
         require restrict_domain_au(flushed.dv.entries, new_betree_aus.dom()) <= new_betree.linked.dv.entries.dom();
-        require restrict_domain_au(flushed.buffer_dv.entries, new_buffer_aus.dom() + pre.read_ref_aus()) <= new_betree.linked.buffer_dv.repr();
+        require restrict_domain_au(flushed.buffer_dv.entries, new_buffer_aus.dom()) <= new_betree.linked.buffer_dv.repr();
 
         update betree = new_betree;
         update betree_aus = new_betree_aus;
         update buffer_aus = new_buffer_aus;
-    }}
-
-    pub open spec fn valid_compactor_input<T>(path: Path<T>, start: nat, end: nat, input: CompactorInput) -> bool
-    {
-        &&& path.valid()
-        &&& path.target().has_root()
-        &&& {
-            let node = path.target().root();
-            &&& start < end <= node.buffers.len()
-            &&& input == CompactorInput{
-                input_buffers: node.buffers.slice(start as int, end as int),
-                // offset map tracks live buffers for each key given the entire seq of buffers,
-                // here we decrement to account for the slice offset
-                offset_map: node.make_offset_map().decrement(start), 
-            }
-        }
-    }
-
-    transition!{ internal_compact_begin(lbl: Label, path: Path<SimpleBuffer>, start: nat, end: nat, input: CompactorInput) {
-        require LinkedBetreeVars::State::internal_noop(pre.betree, pre.betree, lbl->linked_lbl);
-        require path.linked == pre.betree.linked;
-        require Self::valid_compactor_input(path, start, end, input);
-        update compactors = pre.compactors.push(input);
-    }}
-
-    // can abort a compaction for any reason
-    transition!{ internal_compact_abort(lbl: Label, input_idx: int) {
-        require LinkedBetreeVars::State::internal_noop(pre.betree, pre.betree, lbl->linked_lbl);
-        require 0 <= input_idx < pre.compactors.len();
-        update compactors = pre.compactors.remove(input_idx);
     }}
 
     pub open spec fn internal_compact_complete_au_likes<T: Buffer>(path: Path<T>, start: nat, end: nat, 
@@ -259,28 +176,23 @@ state_machine!{ AllocationBetree {
         (new_betree_aus, new_buffer_aus)
     }
 
-    transition!{ internal_compact_complete(lbl: Label, input_idx: int, new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
+    transition!{ internal_compact_complete(lbl: Label,  new_betree: LinkedBetreeVars::State<SimpleBuffer>, 
         path: Path<SimpleBuffer>, start: nat, end: nat, compacted_buffer: SimpleBuffer, new_addrs: TwoAddrs, path_addrs: PathAddrs) {
-        require 0 <= input_idx < pre.compactors.len();
-        require Self::valid_compactor_input(path, start, end, pre.compactors[input_idx]);
-
         require LinkedBetreeVars::State::internal_compact(pre.betree, new_betree, lbl->linked_lbl, 
             new_betree.linked, path, start, end, compacted_buffer, new_addrs, path_addrs);
         require pre.is_fresh(new_addrs.repr().union(path_addrs.to_set()));
        
-        let new_compactors = pre.compactors.remove(input_idx);
         let compacted = LinkedBetreeVars::State::post_compact(path, start, end, compacted_buffer, new_addrs, path_addrs);
         let (new_betree_aus, new_buffer_aus) = Self::internal_compact_complete_au_likes(
             path, start, end, new_addrs, path_addrs, pre.betree_aus, pre.buffer_aus);
 
         // likes level requirement that new betree must contain all live betree addresses
         require restrict_domain_au(compacted.dv.entries, new_betree_aus.dom()) <= new_betree.linked.dv.entries.dom();
-        require restrict_domain_au(compacted.buffer_dv.entries, new_buffer_aus.dom() + to_aus(CompactorInput::input_roots(new_compactors))) <= new_betree.linked.buffer_dv.repr();
+        require restrict_domain_au(compacted.buffer_dv.entries, new_buffer_aus.dom()) <= new_betree.linked.buffer_dv.repr();
 
         update betree = new_betree;
         update betree_aus = new_betree_aus;
         update buffer_aus = new_buffer_aus;
-        update compactors = new_compactors;
     }}
     
     transition!{ internal_buffer_noop(lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>) {

@@ -13,7 +13,11 @@ use crate::disk::GenericDisk_v::*;
 use crate::betree::Buffer_v::*;
 use crate::betree::BufferDisk_v::*;
 use crate::betree::SplitRequest_v::*;
+use crate::betree::LinkedSeq_v::LinkedSeq;
+use crate::betree::PivotTable_v::PivotTable;
 use crate::betree::LinkedBetree_v::*;
+use crate::betree::LinkedBranch_v::Refinement_v;
+use crate::betree::PivotBranchRefinement_v;
 use crate::allocation_layer::Likes_v::*;
 use crate::allocation_layer::LikesBetree_v::*;
 use crate::allocation_layer::AllocationBetree_v::*;
@@ -88,49 +92,196 @@ impl<T> LinkedBetree<T>{
     }
 }
 
-impl LinkedBetreeVars::State<BranchNode> {
-    pub open spec(checked) fn i_buffer_disk(self) -> BufferDisk<SimpleBuffer>
+impl LinkedBetree<BranchNode> {
+    pub open spec(checked) fn i(self) -> LinkedBetree<SimpleBuffer>
     {
-        let (betree_likes, branch_likes) = self.linked.transitive_likes();
-        BufferDisk{ 
-            entries: Map::new(
-                |addr| branch_likes.contains(addr),
-                |addr| self.linked.buffer_dv.get_branch(addr).i().i(),
-            )
-        }
-    }
-
-    pub open spec(checked) fn i(self) -> LinkedBetreeVars::State<SimpleBuffer>
-    {
-        LinkedBetreeVars::State{
-            memtable: self.memtable,
-            linked: LinkedBetree{
-                root: self.linked.root,
-                dv: self.linked.dv,
-                buffer_dv: self.i_buffer_disk(),
-            }
+        LinkedBetree{
+            root: self.root,
+            dv: self.dv,
+            buffer_dv: self.buffer_dv.i(),
         }
     }
 
     pub proof fn i_valid(self) 
-    requires self.inv()
+    requires 
+        self.inv()
     ensures 
         self.i().inv(),
-        self.linked.transitive_likes() 
-        == self.i().linked.transitive_likes(),
+        self.transitive_likes() 
+        == self.i().transitive_likes(),
+        self.reachable_buffer_addrs()
+        == self.i().reachable_buffer_addrs() //buffer_dv.entries.dom(),
     {
-        let i_linked = self.i().linked;
-        let ranking = self.linked.the_ranking();
+        let i_linked = self.i();
+        let ranking = self.the_ranking();
 
         assert(i_linked.valid_ranking(ranking)); // witness
-        self.linked.transitive_likes_ignores_buffer_dv(i_linked);
+        self.transitive_likes_ignores_buffer_dv(i_linked);
 
-        assert(i_linked.valid_buffer_dv()) by {
-            self.linked.tree_likes_domain(ranking);
-            self.linked.buffer_likes_domain(self.linked.tree_likes(ranking));
-            i_linked.tree_likes_domain(i_linked.the_ranking());
-            i_linked.buffer_likes_domain(i_linked.tree_likes(i_linked.the_ranking()));
+        self.tree_likes_domain(ranking);
+        self.buffer_likes_domain(self.tree_likes(ranking));
+        i_linked.tree_likes_domain(i_linked.the_ranking());
+        i_linked.buffer_likes_domain(i_linked.tree_likes(i_linked.the_ranking()));
+    }
+}
+
+impl LinkedBetreeVars::State<BranchNode> {
+    pub open spec(checked) fn i(self) -> LinkedBetreeVars::State<SimpleBuffer>
+    {
+        LinkedBetreeVars::State{
+            memtable: self.memtable,
+            linked: self.linked.i(),
+        }  
+    }
+}
+
+impl BufferDisk<BranchNode> {
+    // to refine query refines, we need to know that addr get banch is inv
+    pub proof fn query_refines(self, buffer: Address, k: Key)
+        requires self.get_branch(buffer).inv()
+        ensures self.query(buffer, k) == self.i().query(buffer, k)
+    {
+        let branch = self.get_branch(buffer);
+        Refinement_v::query_refines(branch, k, self.query(buffer, k));
+
+        let pivot_branch = branch.i();
+        Refinement_v::i_internal_wf(branch, branch.the_ranking());
+
+        let lbl = PivotBranchRefinement_v::QueryLabel{key: k, msg: self.query(buffer, k)};
+        PivotBranchRefinement_v::query_refines(pivot_branch, lbl);
+    }
+
+    pub proof fn query_from_refines(self, buffers: LinkedSeq, k: Key, start: int)
+        requires 
+            0 <= start <= buffers.len(),
+            forall |i| start <= i < buffers.len() ==> #[trigger] self.get_branch(buffers[i]).inv()
+        ensures 
+            self.query_from(buffers, k, start) == self.i().query_from(buffers, k, start)
+        decreases buffers.len() - start 
+    {
+        if start < buffers.len() {
+            self.query_refines(buffers[start], k);
+            self.query_from_refines(buffers, k, start+1);
         }
+    }
+}
+
+impl<T: Buffer> QueryReceipt<T> {
+    // linked at makes promises at the layer below
+
+    // ensures should be at that layer?
+
+    proof fn receipt_line_root_is_reachable(self, i: int, target: int)
+    requires self.valid(), 0 <= i, i < target < self.lines.len(),
+    ensures self.lines[i].linked.reachable_betree_addrs().contains(
+        #[trigger] self.lines[target].linked.root.unwrap())    
+    decreases self.lines.len() - i
+    {
+        assume(false);
+//         broadcast use PivotTable::route_lemma;
+
+//         if i == target-1 {
+
+//             // how did we even know 
+//             // let r = self.linked.root().pivots.route(self.key);
+
+//             assert(self.child_linked_at(i));
+//             // self.lines[i+1].linked.root == self.node(i).child_ptr(self.key)
+
+//         //     assert(self.linked.root().valid_child_index(r as nat));
+
+//             // assume(false);
+//         } else {
+//             assume(false);
+//         }
+//         // we keep incrementing i if 
+    }
+}
+
+impl QueryReceipt<BranchNode> {
+    pub open spec fn i(self) -> QueryReceipt<SimpleBuffer>
+    {
+        QueryReceipt{
+            key: self.key,
+            linked: self.linked.i(),
+            lines: Seq::new(self.lines.len(), 
+                |i| QueryReceiptLine{
+                    linked: LinkedBetree{
+                        root: self.lines[i].linked.root,
+                        dv: self.lines[i].linked.dv,
+                        buffer_dv: self.linked.i().buffer_dv,
+                    },
+                    result: self.lines[i].result
+                }
+            )
+        }
+    }
+
+    proof fn i_preserves_valid(self)
+        requires 
+            self.valid(), 
+            self.linked.inv(),
+            self.linked.buffer_dv.sealed_branch_roots(
+                self.linked.reachable_buffer_addrs()), // callsite issue
+        ensures self.i().valid()
+    {
+        assert forall |i:nat| i < self.i().lines.len()
+        implies (#[trigger] self.i().lines[i as int]).linked.has_root() <==> i < self.i().lines.len()-1
+        by {
+            if self.i().lines[i as int].linked.has_root() || i < self.i().lines.len()-1 {
+                assert(self.lines[i as int].linked.has_root()); // trigger
+            }
+        }
+        assert(self.i().structure());
+
+        assert forall |i| 0 <= i < self.i().lines.len()
+        implies ({
+            &&& (#[trigger] self.i().lines[i]).wf()
+            &&& self.i().lines[i].linked.acyclic()
+        }) by {
+            let linked = self.lines[i].linked;
+            let i_linked = self.i().lines[i].linked;
+            let ranking = linked.the_ranking();
+    
+            assert(self.lines[i].wf()); // trigger
+            assert(linked.acyclic()); // trigger
+            assert(i_linked.valid_ranking(ranking)); // witness
+        }
+
+        assert forall |i| 0 <= i < self.i().lines.len()-1
+        implies ({
+            &&& self.i().linked.buffer_dv.valid_buffers(self.i().node(i).buffers)
+            &&& (#[trigger] self.i().node(i)).key_in_domain(self.key)
+            &&& self.i().child_linked_at(i)
+            &&& self.i().result_linked_at(i)
+        }) by {
+            self.linked.i_valid();
+            assert(self.node(i) == self.i().node(i));
+            assert(self.linked.buffer_dv.valid_buffers(self.node(i).buffers)); // trigger
+
+            assert(self.child_linked_at(i)); // trigger
+            assert(self.result_linked_at(i)); // trigger
+
+            let linked = self.lines[i].linked;
+            if 0 < i {
+                self.receipt_line_root_is_reachable(0, i);
+            }
+            assert(self.linked.reachable_betree_addrs().contains(linked.root.unwrap()));
+             
+            assert forall |idx| 0 <= idx < self.node(i).buffers.len()
+            implies self.linked.buffer_dv.get_branch(#[trigger] self.node(i).buffers[idx]).inv()
+            by {
+                assert(self.linked.reachable_buffer(linked.root.unwrap(), self.node(i).buffers[idx])); // witness
+            }
+
+            let start = self.node(i).flushed_ofs(self.key);
+            let msg = self.linked.buffer_dv.query_from(self.node(i).buffers, self.key, start as int);
+
+            assert(self.node(i).key_in_domain(self.key)); // trigger
+            self.node(i).pivots.route_lemma(self.key);
+            self.linked.buffer_dv.query_from_refines(self.node(i).buffers, self.key, start as int);
+        }
+        assert(self.i().all_lines_wf());
     }
 }
 
@@ -141,7 +292,6 @@ impl AllocationBranchBetree::State {
             betree: self.betree.i(),
             betree_aus: self.betree_aus,
             buffer_aus: self.branch_aus,
-            compactors: self.compactors,
         }
     }
 
@@ -149,7 +299,7 @@ impl AllocationBranchBetree::State {
         requires self.inv(), AllocationBranchBetree::State::initialize(self, v), 
         ensures AllocationBetree::State::initialize(self.i(), v.i()), 
     {
-        v.i_valid();
+        v.linked.i_valid();
     }
 
     proof fn au_likes_noop_refines(pre: Self, post: Self, lbl: AllocationBranchBetree::Label, new_betree: LinkedBetreeVars::State<BranchNode>)
@@ -164,11 +314,18 @@ impl AllocationBranchBetree::State {
         reveal(LinkedBetreeVars::State::next_by);
         reveal(AllocationBetree::State::next_by);
 
-        // Query, Put, Freeze As
         match lbl->linked_lbl {
             LinkedBetreeVars::Label::Query{end_lsn, key, value} => {
-                // valid_for
-                assume(false);
+                let receipt = choose |receipt| LinkedBetreeVars::State::query(pre.betree,
+                                post.betree, lbl->linked_lbl, receipt);
+
+                let (tree_likes, _) = pre.betree.linked.transitive_likes();
+                pre.betree.linked.tree_likes_domain(pre.betree.linked.the_ranking());
+                pre.betree.linked.buffer_likes_domain(tree_likes);
+                receipt.i_preserves_valid();
+                assert(receipt.i().valid_for(pre.betree.linked.i(), key));
+                assert(LinkedBetreeVars::State::next_by(pre.betree.i(), post.betree.i(), 
+                lbl->linked_lbl, LinkedBetreeVars::Step::query(receipt.i())));
             }
             LinkedBetreeVars::Label::Put{puts} => {
                 assert(puts.wf());
@@ -176,7 +333,11 @@ impl AllocationBranchBetree::State {
                     lbl->linked_lbl, LinkedBetreeVars::Step::put()));
             }
             LinkedBetreeVars::Label::FreezeAs{stamped_betree} => {
-                assume(false);
+                assert(pre.betree.linked.i() == stamped_betree.value);
+                // TODO
+                assume(pre.betree.linked.i().i_bdv() == pre.betree.linked.i());
+                assert(LinkedBetreeVars::State::next_by(pre.betree.i(), new_betree.i(), 
+                    lbl->linked_lbl, LinkedBetreeVars::Step::freeze_as()));
             }
             _ => { assert(false); }
         }
@@ -351,8 +512,7 @@ impl AllocationBranchBetree::State {
                 // Self::internal_flush_inv_refines(pre, post, lbl, new_betree, path, child_idx, buffer_gc, new_addrs, path_addrs);
             }
             AllocationBranchBetree::Step::internal_compact_begin(path, start, end, input) => {
-                assume(false);
-                // assert(AllocationBetree::State::next_by(pre.i(), post.i(), lbl.i(), AllocationBetree::Step::compact_beg()));
+                assert(AllocationBetree::State::next_by(pre.i(), post.i(), lbl.i(), AllocationBetree::Step::internal_noop()));
             }
             AllocationBranchBetree::Step::internal_compact_abort(input_idx, new_betree) => {
                 // TODO something is mismatched here
