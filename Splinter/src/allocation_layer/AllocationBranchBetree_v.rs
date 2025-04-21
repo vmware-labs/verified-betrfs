@@ -588,7 +588,7 @@ state_machine!{ AllocationBranchBetree {
         assert(post.inv());
     }
 
-    proof fn inv_implies_wf_branch_dv(self)
+    pub proof fn inv_implies_wf_branch_dv(self)
         requires self.inv()
         ensures self.betree.linked.buffer_dv.to_branch_disk().wf()
     {
@@ -620,7 +620,7 @@ state_machine!{ AllocationBranchBetree {
         }
     }
 
-    proof fn inv_branch_summary_ensures(self)
+    pub proof fn inv_branch_summary_ensures(self)
         requires self.inv()
         ensures ({
             let (_, branch_likes) = self.betree.linked.transitive_likes();
@@ -630,6 +630,7 @@ state_machine!{ AllocationBranchBetree {
             &&& branch_roots.finite()
             &&& self.branch_aus.dom() <= self.branch_summary.dom()
             &&& read_ref_aus(self.compactors) <= self.branch_summary.dom()
+            &&& self.branch_summary.dom() <= summary_aus(self.branch_summary)
         })
     {
         let buffer_dv = self.betree.linked.buffer_dv;
@@ -640,10 +641,19 @@ state_machine!{ AllocationBranchBetree {
         to_au_likes_domain(branch_likes);
         buffer_dv.build_branch_domain(branch_roots);
         to_aus_additive(branch_likes.dom(), compactor_roots);
-        assert(self.branch_aus.dom() <= self.branch_summary.dom());
         CompactorInput::input_roots_finite(self.compactors);
-    }
 
+        self.betree.linked.buffer_dv.build_branch_summary_finite(branch_roots);
+        self.betree.linked.buffer_dv.build_branch_summary_ensures(branch_roots);
+
+        assert forall |au| #[trigger] self.branch_aus.dom().contains(au)
+        implies summary_aus(self.branch_summary).contains(au) by {
+            assert(self.branch_summary.contains_key(au)); // trigger
+            assert(self.branch_summary.contains_value(self.branch_summary[au])); // trigger
+            lemma_union_set_of_sets_subset(self.branch_summary.values(), self.branch_summary[au]);
+        }
+    }
+    
     #[inductive(internal_flush_memtable)]
     fn internal_flush_memtable_inductive(pre: Self, post: Self, lbl: Label, 
         new_betree: LinkedBetreeVars::State<BranchNode>, branch_idx: int, new_root_addr: Address) 
@@ -668,7 +678,6 @@ state_machine!{ AllocationBranchBetree {
         LikesBetree::State::push_memtable_likes_ensures(pre.betree, new_betree, new_branch.root(), linked_new_addrs);
 
         assert(new_betree.linked.valid_buffer_dv());
-
         pre.inv_implies_wf_branch_dv();
 
         let pre_branch_roots =  pre_branch_likes.dom() + compactor_roots;
@@ -677,7 +686,10 @@ state_machine!{ AllocationBranchBetree {
         let pre_buffer_dv = pre.betree.linked.buffer_dv;
         let post_buffer_dv = post.betree.linked.buffer_dv;
 
+        // NOTE: this wf fact fails to verify in this verification context
+        pre_buffer_dv.to_branch_disk().merge_disjoint_disk_preserves_wf(new_branch.disk_view);
         assert(post_buffer_dv.to_branch_disk().wf());
+
         assert(pre_branch_roots + set!{new_branch.root} =~= post_branch_roots); // trigger
         assert(set_addrs_disjoint_aus(post_branch_roots)) by {
             assert forall |addr| pre_branch_roots.contains(addr)

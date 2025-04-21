@@ -16,12 +16,16 @@ broadcast use PivotBranch_v::Node::route_ensures;
 impl<T> LinkedBranch<T> {
     /// Returns the PivotBranch_v::Node interpretation of the LinkedBranch<T>
     pub open spec/*XXX (checked)*/ fn i(self) -> PivotBranch_v::Node
-        recommends
-            self.acyclic(),
+        // recommends
+        //     self.acyclic(),
     {
-        // Need the_ranking ensures to restore checked
-        let ranking = self.the_ranking();
-        self.i_internal(ranking)
+        if self.acyclic() {
+            // Need the_ranking ensures to restore checked
+            let ranking = self.the_ranking();
+            self.i_internal(ranking)
+        } else {
+            PivotBranch_v::invalid_node()
+        }
     }
 
     pub open spec(checked) fn i_internal(self, ranking: Ranking) -> PivotBranch_v::Node
@@ -29,7 +33,7 @@ impl<T> LinkedBranch<T> {
             self.wf(),
             self.valid_ranking(ranking),
         decreases self.get_rank(ranking)
-        when self.wf() && self.valid_ranking(ranking)
+        when self.root() is Index ==> self.wf() && self.valid_ranking(ranking)
     {
         match self.root() {
             Node::Leaf{keys, msgs} => {

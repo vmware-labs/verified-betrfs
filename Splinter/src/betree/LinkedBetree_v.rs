@@ -1098,7 +1098,7 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
     transition!{ internal_flush_memtable(lbl: Label, sealed_memtable: T, new_linked: LinkedBetree<T>, new_addrs: TwoAddrs) {
         require lbl is Internal;
         require new_addrs.no_duplicates();
-        require sealed_memtable.i(pre.linked.buffer_dv, new_addrs.addr2) == pre.memtable.buffer;
+        require sealed_memtable.i(new_linked.buffer_dv, new_addrs.addr2) == pre.memtable.buffer;
 
         let pushed = pre.linked.push_memtable(sealed_memtable, new_addrs);
         require pushed.valid_view(new_linked);
@@ -1327,7 +1327,8 @@ state_machine!{ LinkedBetreeVars<T: Buffer> {
             &&& split_parent.acyclic()
             &&& result.acyclic()
             &&& result.reachable_buffer_addrs() <= self.linked.reachable_buffer_addrs()
-            &&& self.linked.valid_buffer_dv() ==> result.valid_buffer_dv()
+            &&& self.linked.buffer_dv == result.buffer_dv
+            // &&& self.linked.valid_buffer_dv() ==> result.valid_buffer_dv()
         })
     {
         let ranking = path.linked.finite_ranking();
@@ -1535,7 +1536,7 @@ impl<T> LinkedBetree<T> {
             self.has_root(), 
             self.root().valid_child_index(idx)
         ensures 
-            self.child_at_idx(idx).acyclic()
+            self.child_at_idx(idx).acyclic(),
     {
         assert(self.child_at_idx(idx).valid_ranking(self.the_ranking()));
     }
@@ -2391,7 +2392,7 @@ impl<T: Buffer> Path<T>{
     pub proof fn target_ensures(self)
         requires 
             self.valid(),
-        ensures 
+        ensures
             self.target().dv == self.linked.dv,
             self.target().buffer_dv == self.linked.buffer_dv,
         decreases 

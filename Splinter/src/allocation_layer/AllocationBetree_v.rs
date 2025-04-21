@@ -76,11 +76,11 @@ state_machine!{ AllocationBetree {
     }
 
     transition!{ internal_flush_memtable(lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, new_addrs: TwoAddrs) {
-        require LinkedBetreeVars::State::internal_flush_memtable(pre.betree, 
-            new_betree, lbl->linked_lbl, new_betree.memtable.buffer, new_betree.linked, new_addrs);
+        let buffer = pre.betree.memtable.buffer;
+        require LinkedBetreeVars::State::internal_flush_memtable(pre.betree, new_betree, lbl->linked_lbl, buffer, new_betree.linked, new_addrs);
         require pre.is_fresh(new_addrs.repr());
 
-        let pushed = pre.betree.linked.push_memtable(new_betree.memtable.buffer, new_addrs);
+        let pushed = pre.betree.linked.push_memtable(buffer, new_addrs);
         let (new_betree_aus, new_buffer_aus) = Self::flush_memtable_au_likes(pre.betree, new_betree, new_addrs, pre.betree_aus, pre.buffer_aus);
 
         // restrict the range based on aus

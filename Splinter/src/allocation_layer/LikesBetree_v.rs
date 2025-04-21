@@ -1072,8 +1072,8 @@ state_machine!{ LikesBetree {
     }}
 
     transition!{ internal_flush_memtable(lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, new_addrs: TwoAddrs) {
-        require LinkedBetreeVars::State::internal_flush_memtable(pre.betree, 
-            new_betree, lbl->linked_lbl, new_betree.memtable.buffer, new_betree.linked, new_addrs);
+        require LinkedBetreeVars::State::internal_flush_memtable(pre.betree, new_betree, 
+            lbl->linked_lbl, pre.betree.memtable.buffer, new_betree.linked, new_addrs);
         require pre.is_fresh(new_addrs.repr());
 
         let discard_betree = pre.betree.linked.root_likes();
@@ -1223,7 +1223,7 @@ state_machine!{ LikesBetree {
         pre.betree.linked.tree_likes_domain(pushed_ranking);
         pre.betree.linked.buffer_likes_domain(pre.betree_likes);
 
-        return LinkedBetreeVars::Step::internal_flush_memtable(new_betree.memtable.buffer, new_betree.linked, new_addrs);
+        return LinkedBetreeVars::Step::internal_flush_memtable(pre.betree.memtable.buffer, new_betree.linked, new_addrs);
     }
 
     pub proof fn push_memtable_likes_ensures<T: Buffer>(betree:  LinkedBetreeVars::State<T>, new_betree: LinkedBetreeVars::State<T>,
@@ -1330,7 +1330,7 @@ state_machine!{ LikesBetree {
 
     #[inductive(internal_flush_memtable)]
     #[verifier::spinoff_prover]
-    fn internal_flush_memtable_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, new_addrs: TwoAddrs) { 
+    fn internal_flush_memtable_inductive(pre: Self, post: Self, lbl: Label, new_betree: LinkedBetreeVars::State<SimpleBuffer>, new_addrs: TwoAddrs) {
         let buffer = pre.betree.memtable.buffer;
         let pushed = pre.betree.linked.push_memtable(buffer, new_addrs);
 
@@ -1339,7 +1339,7 @@ state_machine!{ LikesBetree {
             LinkedBetreeVars::State::inv_next_by(pre.betree, new_betree, lbl->linked_lbl, linked_step);
         }
 
-        Self::push_memtable_likes_ensures(pre.betree, new_betree, new_betree.memtable.buffer, new_addrs);
+        Self::push_memtable_likes_ensures(pre.betree, new_betree, buffer, new_addrs);
         pushed.valid_view_implies_same_transitive_likes(post.betree.linked);
         assert(post.betree.linked.transitive_likes() == pushed.transitive_likes());
     }

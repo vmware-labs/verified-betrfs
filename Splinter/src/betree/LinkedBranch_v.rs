@@ -185,6 +185,12 @@ impl<T> DiskView<T> {
     {
         self.entries.remove_keys(except) == other.entries.remove_keys(except)
     }
+
+    pub proof fn merge_disjoint_disk_preserves_wf(self, other: Self)
+        requires self.wf(), other.wf(), self.entries.dom().disjoint(other.entries.dom())
+        ensures self.merge_disk(other).wf()
+    {
+    }
 }
 
 pub open spec(checked) fn empty_disk<T>() -> DiskView<T>

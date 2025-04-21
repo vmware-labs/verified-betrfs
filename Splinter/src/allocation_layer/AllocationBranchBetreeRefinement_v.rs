@@ -16,6 +16,7 @@ use crate::betree::SplitRequest_v::*;
 use crate::betree::LinkedSeq_v::LinkedSeq;
 use crate::betree::PivotTable_v::PivotTable;
 use crate::betree::LinkedBetree_v::*;
+use crate::betree::LinkedBranch_v;
 use crate::betree::LinkedBranch_v::Refinement_v;
 use crate::betree::PivotBranchRefinement_v;
 use crate::allocation_layer::Likes_v::*;
@@ -35,6 +36,54 @@ impl AllocationBranchBetree::Label {
         }
     }
 } // end impl AllocationBranchBetree::Label
+
+impl<T> LinkedBetree<T> {
+    proof fn same_dv_same_buffer_likes<A>(self, other: LinkedBetree<A>, betree_likes: Likes)
+        requires self.dv == other.dv
+        ensures self.buffer_likes(betree_likes) == other.buffer_likes(betree_likes)
+        decreases betree_likes.len()
+    {
+        if betree_likes.len() > 0 {
+            let addr = betree_likes.choose();
+            self.same_dv_same_buffer_likes(other, betree_likes.remove(addr));
+        }
+    }
+}
+
+impl Path<BranchNode> {
+    pub open spec fn i(self) -> Path<SimpleBuffer>
+    {
+        Path{
+            linked: self.linked.i(),
+            key: self.key,
+            depth: self.depth,
+        }
+    }
+
+    proof fn i_ensures(self)
+        requires self.valid(),
+        ensures
+            self.i().valid(), 
+            self.addrs_on_path() == self.i().addrs_on_path(),
+            self.target().i() == self.i().target(),
+        decreases self.depth
+    {
+        assert(self.i().linked.valid_ranking(self.linked.the_ranking())); // witness
+        if self.depth > 0 {
+            self.subpath().i_ensures();
+        }
+    }
+
+    proof fn i_substitute_ensures(self, replacement: LinkedBetree<BranchNode>, path_addrs: PathAddrs)
+        requires self.can_substitute(replacement, path_addrs)
+        ensures self.substitute(replacement, path_addrs).dv == self.i().substitute(replacement.i(), path_addrs).dv
+        decreases self.depth
+    {
+        if self.depth > 0 {
+            self.subpath().i_substitute_ensures(replacement, path_addrs.subrange(1, path_addrs.len() as int));
+        }
+    }
+}
 
 impl<T> LinkedBetree<T>{
     proof fn children_likes_ignores_buffer_dv<A>(self, other: LinkedBetree<A>, ranking: Ranking, start: nat)
@@ -107,10 +156,15 @@ impl LinkedBetree<BranchNode> {
         self.inv()
     ensures 
         self.i().inv(),
-        self.transitive_likes() 
-        == self.i().transitive_likes(),
-        self.reachable_buffer_addrs()
-        == self.i().reachable_buffer_addrs() //buffer_dv.entries.dom(),
+        self.transitive_likes() == self.i().transitive_likes(),
+
+        // self.reachable_addrs == self.reachable_buffer_addrs(),
+
+        self.transitive_likes().1.dom() == self.reachable_buffer_addrs(),
+        self.i().transitive_likes().1.dom() == self.i().reachable_buffer_addrs(),
+
+
+        // self.reachable_buffer_addrs() == self.i().reachable_buffer_addrs(),
     {
         let i_linked = self.i();
         let ranking = self.the_ranking();
@@ -164,37 +218,82 @@ impl BufferDisk<BranchNode> {
             self.query_from_refines(buffers, k, start+1);
         }
     }
+
+    pub proof fn i_preserves_sub_disk(self, other: Self)
+        requires 
+            self.to_branch_disk().wf(),
+            other.to_branch_disk().wf(),
+            self.is_sub_disk(other),
+        ensures 
+            self.i().is_sub_disk(other.i())
+    {
+        assert forall |addr| self.entries.contains_key(addr) 
+        implies self.i().entries[addr] == #[trigger] other.i().entries[addr]
+        by {
+            let branch = self.get_branch(addr);
+            let other_branch = other.get_branch(addr);
+            assert(self.entries[addr] == other.entries[addr]);
+            assert(self.i().entries[addr] == branch.i().i());
+            assert(other.i().entries[addr] == other_branch.i().i());
+
+            if branch.has_root() {
+                assert(branch.wf());
+                if branch.acyclic() {
+                    let finite_ranking = branch.the_ranking().restrict(branch.disk_view.entries.dom());
+                    assert(other_branch.valid_ranking(finite_ranking));
+                    branch.subdisk_same_i_internal(branch.the_ranking(), other_branch, other_branch.the_ranking());
+                } else {
+                    if other_branch.acyclic() {
+                        assert(branch.valid_ranking(other_branch.the_ranking()));
+                        assert(false);
+                    }
+                    assert(!other_branch.acyclic());
+                }
+            } else {
+                assert(branch.root() is Auxiliary);
+                assert(branch.i() == other_branch.i());
+            }
+        }
+    }
 }
 
 impl<T: Buffer> QueryReceipt<T> {
-    // linked at makes promises at the layer below
-
-    // ensures should be at that layer?
-
-    proof fn receipt_line_root_is_reachable(self, i: int, target: int)
-    requires self.valid(), 0 <= i, i < target < self.lines.len(),
-    ensures self.lines[i].linked.reachable_betree_addrs().contains(
-        #[trigger] self.lines[target].linked.root.unwrap())    
+    proof fn receipt_line_root_is_reachable(self, i: int)
+    requires self.valid(), 0 <= i < self.lines.len(),
+    ensures forall |j| i <= j < self.lines.len()-1 ==>
+        #[trigger] self.lines[i].linked.reachable_betree_addrs().contains(self.lines[j].linked.root.unwrap())
     decreases self.lines.len() - i
     {
-        assume(false);
-//         broadcast use PivotTable::route_lemma;
+        let linked = self.lines[i].linked;
+        let ranking = linked.the_ranking();
+        assert(linked.acyclic()); // trigger
 
-//         if i == target-1 {
+        if i < self.lines.len() - 1 {
+            assert(self.node(i).key_in_domain(self.key)); // trigger
+            let r = linked.root().pivots.route(self.key) as nat;
+            linked.root().pivots.route_lemma(self.key);
+            linked.reachable_betree_addrs_using_ranking_closed(ranking);
 
-//             // how did we even know 
-//             // let r = self.linked.root().pivots.route(self.key);
+            assert forall |j| i < j < self.lines.len()-1
+            implies #[trigger] linked.reachable_betree_addrs().contains(self.lines[j].linked.root.unwrap())
+            by {
+                assert(linked.can_recurse_for_reachable(ranking, r));
+                linked.reachable_betree_addrs_using_ranking_recur_lemma(ranking, 0);
+                assert(linked.child_at_idx(r).reachable_betree_addrs_using_ranking(ranking) <= linked.reachable_betree_addrs());
 
-//             assert(self.child_linked_at(i));
-//             // self.lines[i+1].linked.root == self.node(i).child_ptr(self.key)
+                self.receipt_line_root_is_reachable(i+1);
+                assert(self.lines[i+1].linked.acyclic()); // trigger
+                assert(self.lines[i+1].linked.reachable_betree_addrs().contains(self.lines[j].linked.root.unwrap()));
 
-//         //     assert(self.linked.root().valid_child_index(r as nat));
-
-//             // assume(false);
-//         } else {
-//             assume(false);
-//         }
-//         // we keep incrementing i if 
+                assert(self.lines[i+1].linked.reachable_betree_addrs() <= linked.reachable_betree_addrs()) by {
+                    assert(self.child_linked_at(i)); // trigger
+                    assert(linked.root().valid_child_index(r));
+                    assert(linked.child_at_idx(r).valid_ranking(linked.the_ranking()));
+                    self.lines[i+1].linked.reachable_betree_addrs_ignore_ranking(ranking, self.lines[i+1].linked.the_ranking());
+                }
+                assert(linked.reachable_betree_addrs().contains(self.lines[j].linked.root.unwrap()));
+            }
+        }
     }
 }
 
@@ -248,6 +347,8 @@ impl QueryReceipt<BranchNode> {
             assert(i_linked.valid_ranking(ranking)); // witness
         }
 
+        self.receipt_line_root_is_reachable(0);
+
         assert forall |i| 0 <= i < self.i().lines.len()-1
         implies ({
             &&& self.i().linked.buffer_dv.valid_buffers(self.i().node(i).buffers)
@@ -263,9 +364,6 @@ impl QueryReceipt<BranchNode> {
             assert(self.result_linked_at(i)); // trigger
 
             let linked = self.lines[i].linked;
-            if 0 < i {
-                self.receipt_line_root_is_reachable(0, i);
-            }
             assert(self.linked.reachable_betree_addrs().contains(linked.root.unwrap()));
              
             assert forall |idx| 0 <= idx < self.node(i).buffers.len()
@@ -316,16 +414,15 @@ impl AllocationBranchBetree::State {
 
         match lbl->linked_lbl {
             LinkedBetreeVars::Label::Query{end_lsn, key, value} => {
-                let receipt = choose |receipt| LinkedBetreeVars::State::query(pre.betree,
-                                post.betree, lbl->linked_lbl, receipt);
-
+                let receipt = choose |receipt| LinkedBetreeVars::State::query(
+                            pre.betree, post.betree, lbl->linked_lbl, receipt);
                 let (tree_likes, _) = pre.betree.linked.transitive_likes();
                 pre.betree.linked.tree_likes_domain(pre.betree.linked.the_ranking());
                 pre.betree.linked.buffer_likes_domain(tree_likes);
                 receipt.i_preserves_valid();
                 assert(receipt.i().valid_for(pre.betree.linked.i(), key));
                 assert(LinkedBetreeVars::State::next_by(pre.betree.i(), post.betree.i(), 
-                lbl->linked_lbl, LinkedBetreeVars::Step::query(receipt.i())));
+                    lbl->linked_lbl, LinkedBetreeVars::Step::query(receipt.i())));
             }
             LinkedBetreeVars::Label::Put{puts} => {
                 assert(puts.wf());
@@ -334,8 +431,8 @@ impl AllocationBranchBetree::State {
             }
             LinkedBetreeVars::Label::FreezeAs{stamped_betree} => {
                 assert(pre.betree.linked.i() == stamped_betree.value);
-                // TODO
-                assume(pre.betree.linked.i().i_bdv() == pre.betree.linked.i());
+                assert(pre.betree.linked.i().i_bdv().buffer_dv == pre.betree.linked.i().buffer_dv);
+                assert(pre.betree.linked.i().i_bdv() =~= pre.betree.linked.i());
                 assert(LinkedBetreeVars::State::next_by(pre.betree.i(), new_betree.i(), 
                     lbl->linked_lbl, LinkedBetreeVars::Step::freeze_as()));
             }
@@ -343,100 +440,127 @@ impl AllocationBranchBetree::State {
         }
     }
 
-//     proof fn internal_flush_memtable_inv_refines(pre: Self, post: Self, lbl: AllocationBetree::Label, 
-//         new_betree: LinkedBetreeVars::State<SimpleBuffer>, new_addrs: TwoAddrs)
-//     requires 
-//         pre.inv(), 
-//         AllocationBetree::State::internal_flush_memtable(pre, post, lbl, new_betree, new_addrs),
-//     ensures
-//         post.inv(),
-//         LikesBetree::State::next_by(pre.i(), post.i(), lbl.i(), LikesBetree::Step::internal_flush_memtable(new_betree, new_addrs))
-//     {
-//         reveal(LikesBetree::State::next_by);
+    proof fn internal_flush_memtable_refines(pre: Self, post: Self, lbl: AllocationBranchBetree::Label, 
+        new_betree: LinkedBetreeVars::State<BranchNode>, branch_idx: int, new_root_addr: Address)
+    requires 
+        pre.inv(), 
+        post.inv(),
+        AllocationBranchBetree::State::internal_flush_memtable(pre, post, lbl, new_betree, branch_idx, new_root_addr),
+    ensures ({
+        let new_branch = pre.wip_branches[branch_idx].branch.unwrap();
+        let new_addrs = TwoAddrs{addr1: new_root_addr, addr2: new_branch.root};
+        &&& AllocationBetree::State::next_by(pre.i(), post.i(), lbl.i(), 
+            AllocationBetree::Step::internal_flush_memtable(new_betree.i(), new_addrs))}) 
+    {
+        let new_branch = pre.wip_branches[branch_idx].branch.unwrap();
+        let new_addrs = TwoAddrs{addr1: new_root_addr, addr2: new_branch.root};
+        let step = AllocationBetree::Step::internal_flush_memtable(new_betree.i(), new_addrs);
 
-//         let pushed = pre.betree.linked.push_memtable(new_betree.memtable.buffer, new_addrs);
-//         pre.betree.internal_flush_memtable_aus_ensures(new_betree, new_betree.memtable.buffer, new_addrs);
-//         pushed.valid_view_ensures(new_betree.linked);
+        let i_buffer = new_branch.root().i(new_betree.linked.buffer_dv, new_addrs.addr2);
+        let i_pushed = pre.i().betree.linked.push_memtable(i_buffer, new_addrs);    
+        let pushed = pre.betree.linked.push_memtable(new_branch.root(), new_addrs);
 
-//         let (pushed_betree_likes, pushed_buffer_likes) = pushed.transitive_likes();
-//         LikesBetree::State::push_memtable_likes_ensures(pre.betree, new_betree, new_betree.memtable.buffer, new_addrs);
-//         pushed.valid_view_implies_same_transitive_likes(post.betree.linked);
+        assert(pushed.valid_view(new_betree.linked));
+        assert(pre.betree.linked.is_fresh(new_addrs.repr())) by {
+            AllocationBranch::alloc_aus_ensures(pre.wip_branches, branch_idx);
+        }
+        pre.inv_implies_wf_branch_dv();
+        post.inv_implies_wf_branch_dv();
+        pre.betree.linked.buffer_dv.i_preserves_sub_disk(new_betree.linked.buffer_dv);
+        assert(i_pushed.valid_view(new_betree.i().linked));
 
-//         pushed.tree_likes_domain(pushed.the_ranking());
-//         pushed.buffer_likes_domain(pushed_betree_likes);
-//         restrict_domain_au_ensures(pushed_buffer_likes, pushed.buffer_dv.entries);
-//         assert(new_betree.linked.valid_buffer_dv());
-//     }
+        assert(LinkedBetreeVars::State::internal_flush_memtable(pre.i().betree, new_betree.i(), 
+            lbl.i()->linked_lbl, i_buffer, new_betree.i().linked, new_addrs));
+        assert(AllocationBetree::State::internal_flush_memtable(pre.i(), post.i(), lbl.i(), new_betree.i(), new_addrs));
+        reveal(AllocationBetree::State::next_by);
+    }
 
-//     proof fn internal_grow_inv_refines(pre: Self, post: Self, lbl: AllocationBetree::Label, 
-//         new_betree: LinkedBetreeVars::State<SimpleBuffer>, new_root_addr: Address)
-//     requires 
-//         pre.inv(), 
-//         AllocationBetree::State::internal_grow(pre, post, lbl, new_betree, new_root_addr),
-//     ensures
-//         post.inv(),
-//         LikesBetree::State::next_by(pre.i(), post.i(), lbl.i(), LikesBetree::Step::internal_grow(new_betree, new_root_addr))
-//     {
-//         reveal(LikesBetree::State::next_by);
-//         pre.betree.internal_grow_aus_ensures(new_betree, new_root_addr);
-//         LikesBetree::State::grow_likes_ensures(pre.betree, new_betree, new_root_addr);
-//     }
+    proof fn internal_split_refines(pre: Self, post: Self, lbl: AllocationBranchBetree::Label, new_betree: LinkedBetreeVars::State<BranchNode>, 
+        path: Path<BranchNode>, request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs)
+    requires 
+        pre.inv(), 
+        post.inv(),
+        AllocationBranchBetree::State::internal_split(pre, post, lbl, new_betree, path, request, new_addrs, path_addrs),
+    ensures
+        AllocationBetree::State::next_by(pre.i(), post.i(), lbl.i(), 
+            AllocationBetree::Step::internal_split(new_betree.i(), path.i(), request, new_addrs, path_addrs))
+    {
+        assert(pre.betree.linked.is_fresh(new_addrs.repr().union(path_addrs.to_set()))) by {
+            to_aus_domain(path_addrs.to_set());
+            to_aus_domain(new_addrs.repr());
+        }
 
-//     proof fn internal_split_inv_refines(pre: Self, post: Self, lbl: AllocationBetree::Label, 
-//         new_betree: LinkedBetreeVars::State<SimpleBuffer>, path: Path<SimpleBuffer>, 
-//         request: SplitRequest, new_addrs: SplitAddrs, path_addrs: PathAddrs)
-//     requires 
-//         pre.inv(), 
-//         AllocationBetree::State::internal_split(pre, post, lbl, new_betree, path, request, new_addrs, path_addrs),
-//     ensures
-//         post.inv(),
-//         LikesBetree::State::next_by(pre.i(), post.i(), lbl.i(), 
-//             LikesBetree::Step::internal_split(new_betree, path, request, new_addrs, path_addrs))
-//     {
-//         reveal(LikesBetree::State::next_by);
+        path.i_ensures();
+        pre.betree.post_split_ensures(path, request, new_addrs, path_addrs);
 
-//         let (betree_likes, buffer_likes) = pre.betree.linked.transitive_likes();
-//         let splitted = LinkedBetreeVars::State::post_split(path, request, new_addrs, path_addrs);
+        let splitted = LinkedBetreeVars::State::post_split(path, request, new_addrs, path_addrs);
+        let i_splitted = LinkedBetreeVars::State::post_split(path.i(), request, new_addrs, path_addrs);
 
-//         pre.betree.internal_split_aus_ensures(new_betree, path, request, new_addrs, path_addrs);
-//         LikesBetree::State::post_split_likes_ensures(pre.betree, new_betree, path, request, new_addrs, path_addrs);
+        assert(splitted.i().buffer_dv == i_splitted.buffer_dv);
+        path.target_ensures();
+        path.i_substitute_ensures(path.target().split_parent(request, new_addrs), path_addrs);
 
-//         let (splitted_betree_likes, splitted_buffer_likes) = splitted.transitive_likes();
-//         splitted.valid_view_ensures(new_betree.linked);
-//         splitted.valid_view_implies_same_transitive_likes(post.betree.linked);
+        assert(splitted.i().dv == i_splitted.dv);
+        assert(splitted.i() == i_splitted);
 
-//         splitted.tree_likes_domain(splitted.the_ranking());
-//         splitted.buffer_likes_domain(splitted_betree_likes);
-//         restrict_domain_au_ensures(splitted_buffer_likes, splitted.buffer_dv.entries);
-//         assert(new_betree.linked.valid_buffer_dv());
-//     }
+        assert(splitted.buffer_dv == new_betree.linked.buffer_dv);
+        assert(LinkedBetreeVars::State::internal_split(pre.i().betree, new_betree.i(), 
+            lbl.i()->linked_lbl, new_betree.i().linked, path.i(), request, new_addrs, path_addrs));
+        assert(split_discard_betree(path, request) == split_discard_betree(path.i(), request));
+    
+        let old_child = path.target().child_at_idx(request.get_child_idx());
+        let i_child = path.i().target().child_at_idx(request.get_child_idx());
 
-//     proof fn internal_flush_inv_refines(pre: Self, post: Self, lbl: AllocationBetree::Label, 
-//         new_betree: LinkedBetreeVars::State<SimpleBuffer>, path: Path<SimpleBuffer>, 
-//         child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, path_addrs: PathAddrs)
-//     requires 
-//         pre.inv(), 
-//         AllocationBetree::State::internal_flush(pre, post, lbl, new_betree, path, child_idx, buffer_gc, new_addrs, path_addrs),
-//     ensures
-//         post.inv(),
-//         LikesBetree::State::next_by(pre.i(), post.i(), lbl.i(), 
-//             LikesBetree::Step::internal_flush(new_betree, path, child_idx, buffer_gc, new_addrs, path_addrs))
-//     {
-//         reveal(LikesBetree::State::next_by);
-//         let flushed = LinkedBetreeVars::State::post_flush(path, child_idx, buffer_gc, new_addrs, path_addrs);
-//         LikesBetree::State::post_flush_likes_ensures(pre.betree, new_betree, path, child_idx, buffer_gc, new_addrs, path_addrs);
+        assert(old_child.i() == i_child);
+        assert(old_child.root_likes() == old_child.i().root_likes());
 
-//         pre.betree.internal_flush_aus_ensures(new_betree, path, child_idx, buffer_gc, new_addrs, path_addrs);
-//         let (flushed_betree_likes, flushed_buffer_likes) = flushed.transitive_likes();
+        old_child.same_dv_same_buffer_likes(old_child.i(), old_child.root_likes());
+        assert(old_child.buffer_likes(old_child.root_likes()) == old_child.i().buffer_likes(old_child.root_likes()));
+        assert(split_add_buffers(path, request) == split_add_buffers(path.i(), request));
 
-//         flushed.valid_view_ensures(new_betree.linked);
-//         flushed.valid_view_implies_same_transitive_likes(post.betree.linked);
+        assert(AllocationBetree::State::internal_split(pre.i(), post.i(), lbl.i(), new_betree.i(), path.i(), request, new_addrs, path_addrs));
+        reveal(AllocationBetree::State::next_by);
+    }
 
-//         flushed.tree_likes_domain(flushed.the_ranking());
-//         flushed.buffer_likes_domain(flushed_betree_likes);
-//         restrict_domain_au_ensures(flushed_buffer_likes, flushed.buffer_dv.entries);
-//         assert(new_betree.linked.valid_buffer_dv());
-//     }
+    proof fn internal_flush_refines(pre: Self, post: Self, lbl: AllocationBranchBetree::Label, 
+        new_betree: LinkedBetreeVars::State<BranchNode>, path: Path<BranchNode>, 
+        child_idx: nat, buffer_gc: nat, new_addrs: TwoAddrs, path_addrs: PathAddrs)
+    requires 
+        pre.inv(), 
+        post.inv(),
+        AllocationBranchBetree::State::internal_flush(pre, post, lbl, new_betree, path, child_idx, buffer_gc, new_addrs, path_addrs),
+    ensures
+        AllocationBetree::State::next_by(pre.i(), post.i(), lbl.i(), 
+            AllocationBetree::Step::internal_flush(new_betree.i(), path.i(), child_idx, buffer_gc, new_addrs, path_addrs))
+    {
+        assert(pre.betree.linked.is_fresh(new_addrs.repr() + path_addrs.to_set())) by {
+            to_aus_domain(path_addrs.to_set());
+            to_aus_domain(new_addrs.repr());    
+        }
+
+        path.i_ensures();
+        path.target_ensures();
+        pre.betree.post_flush_ensures(path, child_idx, buffer_gc, new_addrs, path_addrs);
+        path.i_substitute_ensures(path.target().flush(child_idx, buffer_gc, new_addrs), path_addrs);
+
+        let flushed = LinkedBetreeVars::State::post_flush(path, child_idx, buffer_gc, new_addrs, path_addrs);
+        pre.inv_implies_wf_branch_dv();
+        post.inv_implies_wf_branch_dv();
+        new_betree.linked.buffer_dv.i_preserves_sub_disk(pre.betree.linked.buffer_dv);
+
+        assert(flushed.i().valid_view(new_betree.i().linked));
+        assert(LinkedBetreeVars::State::internal_flush(pre.i().betree, new_betree.i(), lbl.i()->linked_lbl, 
+            new_betree.i().linked, path.i(), child_idx, buffer_gc, new_addrs, path_addrs));
+
+        let (new_betree_aus, new_buffer_aus) = AllocationBetree::State::internal_flush_au_likes(path.i(), child_idx, 
+            buffer_gc, new_addrs, path_addrs, pre.i().betree_aus, pre.i().buffer_aus);
+
+        post.inv_branch_summary_ensures();
+        assert(post.branch_aus.dom() <= summary_aus(post.branch_summary));
+        assert(AllocationBetree::State::internal_flush(pre.i(), post.i(), lbl.i(), 
+            new_betree.i(), path.i(), child_idx, buffer_gc, new_addrs, path_addrs));
+        reveal(AllocationBetree::State::next_by);
+    }
 
 //     proof fn internal_compact_complete_inv_refines(pre: Self, post: Self, lbl: AllocationBetree::Label, 
 //         new_betree: LinkedBetreeVars::State<SimpleBuffer>, input_idx: int, path: Path<SimpleBuffer>, 
@@ -496,28 +620,36 @@ impl AllocationBranchBetree::State {
                 assert(AllocationBetree::State::next_by(pre.i(), post.i(), lbl.i(), AllocationBetree::Step::internal_noop()));
             }
             AllocationBranchBetree::Step::internal_flush_memtable(new_betree, branch_idx, new_root_addr) => {
-                assume(false);
-                // Self::internal_flush_memtable_inv_refines(pre, post, lbl, new_betree, new_addrs);
+                Self::internal_flush_memtable_refines(pre, post, lbl, new_betree, branch_idx, new_root_addr);
             }
             AllocationBranchBetree::Step::internal_grow(new_betree, new_root_addr) => {
-                assume(false);
-                // Self::internal_grow_inv_refines(pre, post, lbl, new_betree, new_root_addr);
+                assert(AllocationBetree::State::next_by(pre.i(), post.i(), lbl.i(), 
+                    AllocationBetree::Step::internal_grow(new_betree.i(), new_root_addr)));
             }
             AllocationBranchBetree::Step::internal_split(new_betree, path, request, new_addrs, path_addrs) => {
-                assume(false);
-                // Self::internal_split_inv_refines(pre, post, lbl, new_betree, path, request, new_addrs, path_addrs);
+                Self::internal_split_refines(pre, post, lbl, new_betree, path, request, new_addrs, path_addrs);
             }
             AllocationBranchBetree::Step::internal_flush(new_betree, path, child_idx, buffer_gc, new_addrs, path_addrs) => {
-                assume(false);
-                // Self::internal_flush_inv_refines(pre, post, lbl, new_betree, path, child_idx, buffer_gc, new_addrs, path_addrs);
+                Self::internal_flush_refines(pre, post, lbl, new_betree, path, child_idx, buffer_gc, new_addrs, path_addrs);
             }
             AllocationBranchBetree::Step::internal_compact_begin(path, start, end, input) => {
                 assert(AllocationBetree::State::next_by(pre.i(), post.i(), lbl.i(), AllocationBetree::Step::internal_noop()));
             }
             AllocationBranchBetree::Step::internal_compact_abort(input_idx, new_betree) => {
-                // TODO something is mismatched here
-                assume(false);
-                // assert(AllocationBetree::State::next_by(pre.i(), post.i(), lbl.i(), AllocationBetree::Step::internal_buffer_noop(new_betree.i())));
+                assert(pre.i().betree.linked.valid_view(new_betree.i().linked)) by {
+                    pre.inv_implies_wf_branch_dv();
+                    post.inv_implies_wf_branch_dv();
+                    new_betree.linked.buffer_dv.i_preserves_sub_disk(pre.betree.linked.buffer_dv);
+                }
+
+                assert(pre.i().betree.linked.reachable_buffers_preserved(new_betree.i().linked)) by {
+                    pre.betree.linked.i_valid();
+                    post.betree.linked.i_valid();
+                    pre.betree.linked.transitive_likes_ignores_buffer_dv(post.betree.linked);
+                }
+
+                assert(LinkedBetreeVars::State::internal_buffer_noop(pre.i().betree, post.i().betree, lbl.i()->linked_lbl, new_betree.i().linked));
+                assert(AllocationBetree::State::next_by(pre.i(), post.i(), lbl.i(), AllocationBetree::Step::internal_buffer_noop(new_betree.i())));
             }
             AllocationBranchBetree::Step::internal_compact_complete(input_idx, new_betree, path, start, end, compacted_buffer, new_addrs, path_addrs) => {
                 assume(false);

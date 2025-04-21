@@ -238,16 +238,18 @@ impl AllocationBetree::State {
         AllocationBetree::State::internal_flush_memtable(pre, post, lbl, new_betree, new_addrs),
     ensures
         post.inv(),
-        LikesBetree::State::next_by(pre.i(), post.i(), lbl.i(), LikesBetree::Step::internal_flush_memtable(new_betree, new_addrs))
+        LikesBetree::State::next_by(pre.i(), post.i(), lbl.i(), 
+        LikesBetree::Step::internal_flush_memtable(new_betree, new_addrs))
     {
         reveal(LikesBetree::State::next_by);
 
-        let pushed = pre.betree.linked.push_memtable(new_betree.memtable.buffer, new_addrs);
-        pre.betree.internal_flush_memtable_aus_ensures(new_betree, new_betree.memtable.buffer, new_addrs);
+        let buffer = pre.betree.memtable.buffer;
+        let pushed = pre.betree.linked.push_memtable(buffer, new_addrs);
+        pre.betree.internal_flush_memtable_aus_ensures(new_betree, buffer, new_addrs);
         pushed.valid_view_ensures(new_betree.linked);
 
         let (pushed_betree_likes, pushed_buffer_likes) = pushed.transitive_likes();
-        LikesBetree::State::push_memtable_likes_ensures(pre.betree, new_betree, new_betree.memtable.buffer, new_addrs);
+        LikesBetree::State::push_memtable_likes_ensures(pre.betree, new_betree, buffer, new_addrs);
         pushed.valid_view_implies_same_transitive_likes(post.betree.linked);
 
         pushed.tree_likes_domain(pushed.the_ranking());
