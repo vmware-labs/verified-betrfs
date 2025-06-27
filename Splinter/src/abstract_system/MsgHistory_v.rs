@@ -326,13 +326,13 @@ impl MsgHistory {
     history.apply_to_stamped_map(stamped_map)
   }
 
-  pub proof fn map_plus_history_lemma(stamped_map: StampedMap, history: MsgHistory)
+  pub broadcast proof fn map_plus_history_lemma(stamped_map: StampedMap, history: MsgHistory)
     requires
       stamped_map.value.wf(),
       history.wf(),
       history.can_follow(stamped_map.seq_end),
     ensures
-      Self::map_plus_history(stamped_map, history).value.wf(),
+      #[trigger] Self::map_plus_history(stamped_map, history).value.wf(),
       Self::map_plus_history(stamped_map, history).seq_end 
         == stamped_map.seq_end + history.len(),
   {

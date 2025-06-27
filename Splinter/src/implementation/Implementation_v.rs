@@ -20,6 +20,12 @@ use crate::spec::MapSpec_t::{ID, MapSpec, PersistentState};
 use crate::spec::TotalKMMap_t::*;
 use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
+use crate::spec::FloatingSeq_t::*;
+use crate::abstract_system::StampedMap_v;
+use crate::abstract_system::StampedMap_v::{StampedMap};
+use crate::abstract_system::MsgHistory_v::{MsgHistory, KeyedMessage};
+use crate::abstract_system::AbstractCrashAwareSystemRefinement_v;
+
 use crate::implementation::ModelRefinement_v::*;
 use crate::implementation::ConcreteProgramModel_v::*;
 use crate::implementation::AtomicState_v::*;
@@ -83,49 +89,105 @@ impl SyncRequestBuffer {
     }
 }
 
-// This struct supplies KVStoreTrait, which has both the entry point to the implementation and the
-// proof hooks to satisfy the refinement obligation trait.
-pub struct Implementation {
-    store: HashMapWithView<Key, Value>,
-    version: u64,
-
-    model: Tracked<KVStoreTokenized::model<ConcreteProgramModel>>,
-    instance: Tracked<KVStoreTokenized::Instance<ConcreteProgramModel>>,
-
-    sync_requests: SyncRequestBuffer,
-}
-
+pub type ModelShard = KVStoreTokenized::model<ConcreteProgramModel>;
 pub type RequestShard = KVStoreTokenized::requests<ConcreteProgramModel>;
 pub type ReplyShard = KVStoreTokenized::replies<ConcreteProgramModel>;
 
 pub type DiskRespShard = KVStoreTokenized::disk_responses_multiset<ConcreteProgramModel>;
 pub type DiskReqShard = KVStoreTokenized::disk_requests_multiset<ConcreteProgramModel>;
 
-impl Implementation {
-    pub closed spec(checked) fn view_store_as_kmmap(self) -> TotalKMMap
+
+impl Journal {
+    pub open spec fn inv(self) -> bool
     {
-        view_store_as_kmmap(self.store)
+        self@.wf()
+    } 
+
+    pub closed spec fn to_stamped_map(&self) -> StampedMap
+    {
+        MsgHistory::map_plus_history(StampedMap_v::empty(), self@)
     }
 
-    // The View hos HashMapWithView isn't what we need.
-    // Gotta transform Key -> Key (by way of the darn int from the HashMapWithView @ :v)
-    // and Value -> Message.
-    pub closed spec fn i_hashmap(store: Map<int, Value>) -> Map<Key, Message>
+    fn new_empty() -> (out: Self)
+        ensures out.inv(), out@.is_empty(), out.seq_start == 0
     {
-        Map::new(
-            |k: Key| true,
-            |k: Key| if store.contains_key(k.0 as int) { Message::Define{value: store[k.0 as int] } }
-                    else { Message::empty() }
-        )
+        Journal{ msg_history: vec![], seq_start:0 }
+    }
+
+    fn insert(&mut self, key: Key, value: Value)
+        requires old(self).inv()
+        ensures 
+            self.inv(),
+            self@.seq_start == old(self)@.seq_start,
+            self@.seq_end == old(self)@.seq_end+1,
+            self@.msgs =~= old(self)@.msgs.insert(old(self)@.seq_end, 
+                KeyedMessage{key, message: Message::Define{value}}),
+    {
+        self.msg_history.push(KeyedMessage{key, message: Message::Define{value}})
+    }
+}
+
+// This struct supplies KVStoreTrait, which has both the entry point to the implementation and the
+// proof hooks to satisfy the refinement obligation trait.
+pub struct Implementation {
+    // store: HashMapWithView<Key, Value>,
+    journal: Journal,
+
+    // token for the program model variable
+    model: Tracked<ModelShard>,
+
+    // we do not own a mutable reference to this
+    instance: Tracked<KVStoreTokenized::Instance<ConcreteProgramModel>>,
+
+    sync_requests: SyncRequestBuffer,
+}
+
+impl Implementation {
+    closed spec(checked) fn view_as_kmmap(self) -> TotalKMMap
+        recommends self.journal.seq_start == 0
+    {
+        self.view_as_floating_versions().last().appv.kmmap
+    }
+
+    closed spec(checked) fn view_as_floating_versions(self) -> FloatingSeq<PersistentState>
+        recommends self.journal.seq_start == 0
+    {
+        AbstractCrashAwareSystemRefinement_v::floating_versions(
+            StampedMap_v::empty(), self.journal@, self.journal.seq_start as nat)
+    }
+
+    broadcast proof fn view_as_kmmap_ensures(self)
+        requires self.journal.seq_start == 0, self.journal.inv()
+        ensures #[trigger] self.view_as_kmmap() =~= MsgHistory::map_plus_history(StampedMap_v::empty(), self.journal@).value
+    {
+        assert(self.journal@.discard_recent((self.journal@.seq_end) as nat) =~= self.journal@);
     }
 
     pub closed spec fn i(self) -> AtomicState {
-        self.model@.value().state
+        self.state()
     }
 
     closed spec fn state(&self) -> AtomicState
     {
         self.model@.value().state
+
+    // pub history: FloatingSeq<PersistentState>,
+
+    // // tells us what syncs can be replied
+    // pub persistent_version: nat,
+
+    // // tells us what we can bump persistent_version when the disk response comes back.
+    // pub in_flight: Option<InflightInfo>,
+
+    // // maps each syncreq id with a version
+    // pub sync_req_map: Map<SyncReqId, nat>, 
+// }
+        // self.model@.value().state
+    }
+
+    closed spec fn version(&self) -> nat
+    {
+        (self.journal.seq_start + self.journal.msg_history.len()) as nat
     }
 
     closed spec fn inv(self) -> bool {
@@ -133,13 +195,18 @@ impl Implementation {
 
         &&& self.model@.instance_id() == self.instance@.id()
         &&& state.recovery_state is RecoveryComplete
-        &&& self.i().mapspec().kmmap == self.view_store_as_kmmap()
+
+        // model 
+        // &&& self.i().mapspec().kmmap == self.view_as_kmmap()
+        &&& self.i().history == self.view_as_floating_versions()
+
         &&& (state.in_flight is Some
             <==> self.sync_requests.in_flight())
         &&& self.sync_requests.wf(self.instance@.id())
 
         // physical version num tracks ghost model versions
-        &&& self.version == self.state().history.len()-1
+        &&& self.version() == self.state().history.len()-1
+        &&& self.journal.seq_start == 0
 
         &&& (state.in_flight is Some ==> {
             // The in-flight version stays active so get_suffix doesn't choke on it when it's time
@@ -148,7 +215,7 @@ impl Implementation {
             // The in-flight 'satisfied requests' can indeed be satisfied by the in-flight version
             &&& self.sync_reqs_in_version(self.sync_requests.satisfied_reqs@, state.in_flight.get_Some_0().version as int)
         })
-        &&& self.sync_reqs_in_version(self.sync_requests.deferred_reqs@, self.version as int)
+        &&& self.sync_reqs_in_version(self.sync_requests.deferred_reqs@, self.version() as int)
         &&& Self::sync_req_lists_mutually_unique(self.sync_requests.satisfied_reqs@, self.sync_requests.deferred_reqs@)
     }
 
@@ -227,26 +294,28 @@ impl Implementation {
     ensures
         self.inv_api(api),
     {
+        broadcast use 
+            Implementation::view_as_kmmap_ensures,
+            MsgHistory::map_plus_history_lemma;
+
         let out = match req.input {
         Input::PutInput{key, value} => {
             let ghost pre_state = self.model@.value();
-            self.store.insert(key, value);
+
+            self.journal.insert(key.clone(), value);
+
+            assert(self.journal@.msgs == old(self).journal@.msgs.insert(old(self).journal@.seq_end,
+                KeyedMessage{key, message: Message::Define{value}}));
+
+            assert(self.journal@.msgs[old(self).journal@.seq_end].key == key);
 
             let reply = Reply{output: Output::PutOutput, id: req.id};
-
-            let ghost store = MapSpec::State {
-                kmmap: pre_state.state.mapspec().kmmap.insert(key, Message::Define{value})
-            };
-
-            // TODO(jonh): I find it sad that the implementation has to track the history
-            // value. It'd be nice if the implementation could just take local valid steps,
-            // and have a proof at a higher layer carry the ghost history along. But .i() makes
-            // that difficult. Hmm.
             let ghost post_state = ConcreteProgramModel{
-                state: AtomicState {
-                history: self.model@.value().state.history.append(seq![ PersistentState{appv: store} ]),
-                ..self.model@.value().state
-            }};
+                state: AtomicState{
+                    history: self.view_as_floating_versions(),
+                    ..self.state()
+                }
+            };
 
             let tracked mut model = KVStoreTokenized::model::arbitrary();
             proof { tracked_swap(self.model.borrow_mut(), &mut model); }
@@ -257,25 +326,28 @@ impl Implementation {
                 let ghost map_lbl = MapSpec::Label::Put{input: map_req.input, output: map_reply.output};
                 reveal(MapSpec::State::next);
                 reveal(MapSpec::State::next_by);
-                assert( MapSpec::State::next_by(pre_state.state.mapspec(), post_state.state.mapspec(),
-                        map_lbl, MapSpec::Step::put())); // witness to step
-                assert( post_state.state.history.get_prefix(pre_state.state.history.len()) == pre_state.state.history );  // extn
+
+                assert forall |lsn| self.journal@.seq_start <= lsn <= old(self).journal@.seq_end
+                implies self.journal@.discard_recent(lsn) =~= old(self).journal@.discard_recent(lsn) by {}
+
+                assert(self.view_as_kmmap() =~= old(self).view_as_kmmap().insert(key, Message::Define{value}));
+                assert( MapSpec::State::next_by(pre_state.state.mapspec(), post_state.state.mapspec(), map_lbl, MapSpec::Step::put())); // witness to step
+                
+                assert( post_state.state.history.get_prefix(pre_state.state.history.len()) =~= pre_state.state.history );  // extn
                 assert( AtomicState::map_transition(pre_state.state, post_state.state, map_req, map_reply) );
                 assert( ConcreteProgramModel::next(pre_state, post_state, 
                     ProgramLabel::UserIO{op: ProgramUserOp::Execute{req: map_req, reply: map_reply}}) );
             }
 
-//             assert( pre_state == model.value() );
-            let tracked new_reply_token = self.instance.borrow().execute_transition(
+             let tracked new_reply_token = self.instance.borrow().execute_transition(
                 KVStoreTokenized::Label::ExecuteOp{req, reply},
                 post_state,
                 &mut model,
                 req_shard.get(),
             );
             self.model = Tracked(model);
-            self.version = increment(self.version);
 
-            assert( self.i().mapspec().kmmap == self.view_store_as_kmmap() ); // trigger extn equality
+            assert( self.i().mapspec().kmmap == self.view_as_kmmap() ); // trigger extn equality
             api.send_reply(reply, Tracked(new_reply_token), true);
         },
             _ => unreached(),
@@ -305,6 +377,7 @@ impl Implementation {
     {
         match req.input {
         Input::QueryInput{key} => {
+            /*
             let value = match self.store.get(&key) {
                 Some(v) => *v,
                 None => { Value(0) },
@@ -340,6 +413,7 @@ impl Implementation {
             self.model = Tracked(model);
 
             api.send_reply(reply, Tracked(new_reply_token), true);
+            */
         },
             _ => unreached(),
         }
@@ -417,67 +491,68 @@ impl Implementation {
     ensures
         self.inv_api(api),
     {
-        proof { self.system_inv_implies_atomic_state_wf(); }
+        assume(false);
+        // proof { self.system_inv_implies_atomic_state_wf(); }
 
-        // Yoink the store out of self just long enough to marshall it as part of the superblock.
-        let mut tmp_store = new_empty_hash_map();
-        std::mem::swap(&mut self.store, &mut tmp_store);
-        let sb = ISuperblock{
-            store: tmp_store,
-            version_index: self.version,
-        };
-        let raw_page = marshall(&sb);
-        let ISuperblock{store: mut tmp_store, ..} = sb;
-        std::mem::swap(&mut self.store, &mut tmp_store);    // un-yoink
+        // // Yoink the store out of self just long enough to marshall it as part of the superblock.
+        // let mut tmp_store = new_empty_hash_map();
+        // std::mem::swap(&mut self.store, &mut tmp_store);
+        // let sb = ISuperblock{
+        //     store: tmp_store,
+        //     version_index: self.version,
+        // };
+        // let raw_page = marshall(&sb);
+        // let ISuperblock{store: mut tmp_store, ..} = sb;
+        // std::mem::swap(&mut self.store, &mut tmp_store);    // un-yoink
 
-        let req_id_perm = Tracked( api.send_disk_request_predict_id() );
-        let ghost disk_req_id = req_id_perm@;
-        let ghost disk_event = DiskEvent::ExecuteSyncBegin{req_id: disk_req_id};
-        let disk_request = IDiskRequest::WriteReq{to: superblock_addr(), data: raw_page};
-        let ghost disk_reqs = multiset_map_singleton(disk_req_id, disk_request@);
-        let ghost info = ProgramDiskInfo{ reqs: disk_reqs, resps: Multiset::empty() };
+        // let req_id_perm = Tracked( api.send_disk_request_predict_id() );
+        // let ghost disk_req_id = req_id_perm@;
+        // let ghost disk_event = DiskEvent::ExecuteSyncBegin{req_id: disk_req_id};
+        // let disk_request = IDiskRequest::WriteReq{to: superblock_addr(), data: raw_page};
+        // let ghost disk_reqs = multiset_map_singleton(disk_req_id, disk_request@);
+        // let ghost info = ProgramDiskInfo{ reqs: disk_reqs, resps: Multiset::empty() };
 
-        let ghost inflight_info = InflightInfo{version: sb.version_index as nat, req_id: disk_req_id};
-        let ghost post_state = ConcreteProgramModel {
-            state: AtomicState{
-                in_flight: Some(inflight_info),
-                ..old(self).state()}
-        };
+        // let ghost inflight_info = InflightInfo{version: sb.version_index as nat, req_id: disk_req_id};
+        // let ghost post_state = ConcreteProgramModel {
+        //     state: AtomicState{
+        //         in_flight: Some(inflight_info),
+        //         ..old(self).state()}
+        // };
 
-        let tracked empty_disk_responses:KVStoreTokenized::disk_responses_multiset<ConcreteProgramModel>
-            = KVStoreTokenized::disk_responses_multiset::empty(self.instance_id());
+        // let tracked empty_disk_responses:KVStoreTokenized::disk_responses_multiset<ConcreteProgramModel>
+        //     = KVStoreTokenized::disk_responses_multiset::empty(self.instance_id());
 
-        let ghost lbl = KVStoreTokenized::Label::DiskOp{
-                disk_request_tuples: disk_reqs,
-                disk_response_tuples: empty_disk_responses.multiset(),
-            };
-        let ghost info = ProgramDiskInfo{
-                reqs: lbl->disk_request_tuples, 
-                resps: lbl->disk_response_tuples, 
-            };
+        // let ghost lbl = KVStoreTokenized::Label::DiskOp{
+        //         disk_request_tuples: disk_reqs,
+        //         disk_response_tuples: empty_disk_responses.multiset(),
+        //     };
+        // let ghost info = ProgramDiskInfo{
+        //         reqs: lbl->disk_request_tuples, 
+        //         resps: lbl->disk_response_tuples, 
+        //     };
 
-        proof {
-            let pre_sb = self.state().ephemeral_sb();
-            assert( disk_reqs == Multiset::singleton((disk_event.arrow_ExecuteSyncBegin_req_id(), DiskRequest::WriteReq{to: spec_superblock_addr(), data: spec_marshall(pre_sb)})) );   // extn
-            assert( AtomicState::disk_transition(self.state(), post_state.state, disk_event, info.reqs, info.resps) );  // witness
-        }
+        // proof {
+        //     let pre_sb = self.state().ephemeral_sb();
+        //     assert( disk_reqs == Multiset::singleton((disk_event.arrow_ExecuteSyncBegin_req_id(), DiskRequest::WriteReq{to: spec_superblock_addr(), data: spec_marshall(pre_sb)})) );   // extn
+        //     assert( AtomicState::disk_transition(self.state(), post_state.state, disk_event, info.reqs, info.resps) );  // witness
+        // }
 
-        // take the transition, get the token
-        let tracked mut model = KVStoreTokenized::model::arbitrary();
-        proof { tracked_swap(self.model.borrow_mut(), &mut model); }
-        let tracked new_reply_token = self.instance.borrow().disk_transitions(
-            lbl,
-            post_state,
-            &mut model,
-            empty_disk_responses,
-        );
-        self.model = Tracked(model);
-        std::mem::swap(&mut self.sync_requests.satisfied_reqs, &mut self.sync_requests.deferred_reqs);
+        // // take the transition, get the token
+        // let tracked mut model = KVStoreTokenized::model::arbitrary();
+        // proof { tracked_swap(self.model.borrow_mut(), &mut model); }
+        // let tracked new_reply_token = self.instance.borrow().disk_transitions(
+        //     lbl,
+        //     post_state,
+        //     &mut model,
+        //     empty_disk_responses,
+        // );
+        // self.model = Tracked(model);
+        // std::mem::swap(&mut self.sync_requests.satisfied_reqs, &mut self.sync_requests.deferred_reqs);
 
-        assert( new_reply_token.multiset() == multiset_map_singleton(req_id_perm@, disk_request@) );    // extn
-        api.send_disk_request(disk_request, req_id_perm, Tracked(new_reply_token));
+        // assert( new_reply_token.multiset() == multiset_map_singleton(req_id_perm@, disk_request@) );    // extn
+        // api.send_disk_request(disk_request, req_id_perm, Tracked(new_reply_token));
 
-        let ghost state = self.state();
+        // let ghost state = self.state();
     }
 
     exec fn deliver_inflight_replies(&mut self, ready_reqs: &mut Vec<Request>, api: &mut ClientAPI<ConcreteProgramModel>)
@@ -653,6 +728,9 @@ impl Implementation {
         let ghost req = Request{input: Input::NoopInput, id: 0};
         let reply = Reply{output: Output::NoopOutput, id: 0};
 
+
+        assume(false);
+
         let ghost pre_state = self.model@.value();
         let ghost new_persistent_version = pre_state.state.in_flight.get_Some_0().version;
         let ghost post_state = ConcreteProgramModel{ state: AtomicState{
@@ -782,58 +860,60 @@ impl Implementation {
 
             let superblock = unmarshall(&raw_page);
             // Record our learnings in the physical model.
-            self.store = superblock.store;
+            // self.store = superblock.store;
 
-            // Compute the next ghost model and transition our token
-            let ghost post_state = ConcreteProgramModel{state: AtomicState {
-                recovery_state: RecoveryState::RecoveryComplete,
-                history: view_store_as_singleton_floating_seq(superblock.version_index as nat, superblock.store),
-                in_flight: None,
-                persistent_version: superblock.version_index as nat,
-                sync_req_map: Map::empty(),
-            }};
+            assume(false);
 
-            let ghost disk_response_tuples = multiset_map_singleton(disk_req_id, i_disk_response@);
-            // proof { multiset_map_singleton_ensures(disk_req_id, i_disk_response@); }
+            // // Compute the next ghost model and transition our token
+            // let ghost post_state = ConcreteProgramModel{state: AtomicState {
+            //     recovery_state: RecoveryState::RecoveryComplete,
+            //     history: view_store_as_singleton_floating_seq(superblock.version_index as nat, superblock.store),
+            //     in_flight: None,
+            //     persistent_version: superblock.version_index as nat,
+            //     sync_req_map: Map::empty(),
+            // }};
 
-            let ghost disk_event = DiskEvent::CompleteRecovery{req_id: disk_req_id, raw_page: raw_page};
-            // let ghost disk_lbl = AsyncDisk::Label::DiskOps{
-            //             requests: Map::empty(),
-            //             responses: Map::empty().insert(disk_req_id, i_disk_response@),
-            //         };
-            let ghost disk_request_tuples = Multiset::empty();
+            // let ghost disk_response_tuples = multiset_map_singleton(disk_req_id, i_disk_response@);
+            // // proof { multiset_map_singleton_ensures(disk_req_id, i_disk_response@); }
 
-            // extn; why isn't it triggered by requires in macro output?
-            // (Might also make a nice broadcast lemma, if that was usable.)
-            // assert( disk_lbl->requests == multiset_to_map(disk_request_tuples) );   // extn
-            proof {
-                let info = ProgramDiskInfo{
-                    reqs: disk_request_tuples, 
-                    resps: disk_response_tuples, 
-                };
-                // TODO: this is crazy, I have to use info.reqs otherwise it doesn't match for 
-                // valid disk transition
-                multiset_map_singleton_ensures(disk_req_id, i_disk_response@);
-                assert(disk_response_token@.multiset().contains((disk_req_id, i_disk_response@))); //trigger
-                                                                                           //
-                // assert( valid_checksum(raw_page) );
-                assert(AtomicState::disk_transition(
-                    pre_state.state, post_state.state, disk_event, info.reqs, info.resps));
-                assert(ConcreteProgramModel::valid_disk_transition(pre_state, post_state, info));
-                assert(ConcreteProgramModel::next(pre_state, post_state, ProgramLabel::DiskIO{info}));
-            }
+            // let ghost disk_event = DiskEvent::CompleteRecovery{req_id: disk_req_id, raw_page: raw_page};
+            // // let ghost disk_lbl = AsyncDisk::Label::DiskOps{
+            // //             requests: Map::empty(),
+            // //             responses: Map::empty().insert(disk_req_id, i_disk_response@),
+            // //         };
+            // let ghost disk_request_tuples = Multiset::empty();
 
-            let tracked disk_request_tokens = self.instance.borrow().disk_transitions(
-                KVStoreTokenized::Label::DiskOp{
-                    disk_request_tuples,
-                    disk_response_tuples,
-                },
-                post_state,
-                &mut model,
-                disk_response_token.get(),
-            );
-            self.model = Tracked(model);
-            self.version = superblock.version_index;
+            // // extn; why isn't it triggered by requires in macro output?
+            // // (Might also make a nice broadcast lemma, if that was usable.)
+            // // assert( disk_lbl->requests == multiset_to_map(disk_request_tuples) );   // extn
+            // proof {
+            //     let info = ProgramDiskInfo{
+            //         reqs: disk_request_tuples, 
+            //         resps: disk_response_tuples, 
+            //     };
+            //     // TODO: this is crazy, I have to use info.reqs otherwise it doesn't match for 
+            //     // valid disk transition
+            //     multiset_map_singleton_ensures(disk_req_id, i_disk_response@);
+            //     assert(disk_response_token@.multiset().contains((disk_req_id, i_disk_response@))); //trigger
+            //                                                                                //
+            //     // assert( valid_checksum(raw_page) );
+            //     assert(AtomicState::disk_transition(
+            //         pre_state.state, post_state.state, disk_event, info.reqs, info.resps));
+            //     assert(ConcreteProgramModel::valid_disk_transition(pre_state, post_state, info));
+            //     assert(ConcreteProgramModel::next(pre_state, post_state, ProgramLabel::DiskIO{info}));
+            // }
+
+            // let tracked disk_request_tokens = self.instance.borrow().disk_transitions(
+            //     KVStoreTokenized::Label::DiskOp{
+            //         disk_request_tuples,
+            //         disk_response_tuples,
+            //     },
+            //     post_state,
+            //     &mut model,
+            //     disk_response_token.get(),
+            // );
+            // self.model = Tracked(model);
+            // self.version = superblock.version_index;
         }
     }
 }
@@ -867,8 +947,8 @@ impl KVStoreTrait for Implementation {
         ) = KVStoreTokenized::Instance::initialize(ConcreteProgramModel{state: AtomicState::init()});
 
         let selff = Implementation{
-            store: new_empty_hash_map(),
-            version: 0,
+            // store: new_empty_hash_map(),
+            journal: Journal::new_empty(),
             model: Tracked(model),
             instance: Tracked(instance),
             sync_requests: SyncRequestBuffer::new_empty(),

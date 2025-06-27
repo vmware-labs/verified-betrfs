@@ -9,8 +9,12 @@ use crate::spec::KeyType_t::*;
 use crate::spec::Messages_t::*;
 use crate::spec::TotalKMMap_t::*;
 use crate::spec::FloatingSeq_t::*;
+use crate::abstract_system::MsgHistory_v::{MsgHistory, KeyedMessage};
+use crate::abstract_system::StampedMap_v::*;
 
 verus! {
+
+pub type iLSN = u64;
 
 pub open spec(checked) fn singleton_floating_seq(at_index: nat, kmmap: TotalKMMap) -> FloatingSeq<Version>
 {
@@ -32,24 +36,45 @@ pub open spec(checked) fn view_store_as_singleton_floating_seq(at_index: nat, st
 }
 
 pub struct Superblock {
-    pub store: PersistentState,
+    pub store: PersistentState, // mapspec
     // need version so recovery knows the shape of the (mostly-empty) history to reconstruct (the LSN)
     pub version_index: nat,
 }
 
+// NOTE: all subfields must be pub 
+pub struct Journal {
+    pub msg_history: Vec<KeyedMessage>,
+    pub seq_start: iLSN,
+}
+
+impl View for Journal {
+    type V = MsgHistory;
+
+    open spec fn view(&self) -> Self::V
+    {
+        let seq_start = self.seq_start as nat;
+        let seq_end = (self.msg_history.len() + seq_start) as nat;
+        let msgs = Map::new(
+            |k: LSN| seq_start <= k < seq_end,
+            |k: LSN| self.msg_history@[k - seq_start]
+        );
+        MsgHistory{msgs, seq_start, seq_end}
+    }
+}
+
 pub struct ISuperblock {
-    pub store: HashMapWithView<Key, Value>,
-    // need version so recovery knows the shape of the (mostly-empty) history to reconstruct (the LSN)
-    pub version_index: u64,
+    pub journal: Journal
 }
 
 impl View for ISuperblock {
     type V = Superblock;
+
     open spec fn view(&self) -> Self::V
     {
+        let map = self.journal.to_stamped_map();
         Superblock{
-            store: PersistentState{ appv: MapSpec::State{ kmmap: view_store_as_kmmap(self.store)}},
-            version_index: self.version_index as nat
+            store: PersistentState{ appv: MapSpec::State{ kmmap: map.value}},
+            version_index: map.seq_end
         }
     }
 }

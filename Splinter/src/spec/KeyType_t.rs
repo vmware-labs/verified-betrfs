@@ -17,6 +17,14 @@ verus! {
 #[derive(PartialEq, Eq, Hash, Debug)]
 pub struct Key(pub u64);
 
+impl Clone for Key {
+    fn clone(&self) -> (out: Self)
+        ensures self == out
+    {
+        Key(self.0)
+    }
+}
+
 impl View for Key {
     type V = int;
     open spec fn view(&self) -> int {
