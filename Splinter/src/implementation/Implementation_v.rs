@@ -491,68 +491,75 @@ impl Implementation {
     ensures
         self.inv_api(api),
     {
-        assume(false);
-        // proof { self.system_inv_implies_atomic_state_wf(); }
+        proof { self.system_inv_implies_atomic_state_wf(); }
 
-        // // Yoink the store out of self just long enough to marshall it as part of the superblock.
-        // let mut tmp_store = new_empty_hash_map();
-        // std::mem::swap(&mut self.store, &mut tmp_store);
-        // let sb = ISuperblock{
-        //     store: tmp_store,
-        //     version_index: self.version,
-        // };
-        // let raw_page = marshall(&sb);
-        // let ISuperblock{store: mut tmp_store, ..} = sb;
-        // std::mem::swap(&mut self.store, &mut tmp_store);    // un-yoink
+        let ghost version_index = self.version();
 
-        // let req_id_perm = Tracked( api.send_disk_request_predict_id() );
-        // let ghost disk_req_id = req_id_perm@;
-        // let ghost disk_event = DiskEvent::ExecuteSyncBegin{req_id: disk_req_id};
-        // let disk_request = IDiskRequest::WriteReq{to: superblock_addr(), data: raw_page};
-        // let ghost disk_reqs = multiset_map_singleton(disk_req_id, disk_request@);
-        // let ghost info = ProgramDiskInfo{ reqs: disk_reqs, resps: Multiset::empty() };
+        // NOTE: swap out journal to avoid making a copy of it when marshalling the superblock
+        // this is temporary because we are shoving map/journal right into the superblock
+        // actual implementation will only contain pointers of these metadata and not the entire structure
+        let mut tmp_journal = Journal::new_empty();
+        std::mem::swap(&mut self.journal, &mut tmp_journal);
+        let sb = ISuperblock{ journal: tmp_journal };
 
-        // let ghost inflight_info = InflightInfo{version: sb.version_index as nat, req_id: disk_req_id};
-        // let ghost post_state = ConcreteProgramModel {
-        //     state: AtomicState{
-        //         in_flight: Some(inflight_info),
-        //         ..old(self).state()}
-        // };
+        // Yoink the store out of self just long enough to marshall it as part of the superblock.
+        let raw_page = marshall(&sb);
+        let ISuperblock{journal: mut tmp_journal, ..} = sb;
+        std::mem::swap(&mut self.journal, &mut tmp_journal);    // un-yoink
 
-        // let tracked empty_disk_responses:KVStoreTokenized::disk_responses_multiset<ConcreteProgramModel>
-        //     = KVStoreTokenized::disk_responses_multiset::empty(self.instance_id());
+        let req_id_perm = Tracked( api.send_disk_request_predict_id() );
+        let ghost disk_req_id = req_id_perm@;
+        let ghost disk_event = DiskEvent::ExecuteSyncBegin{req_id: disk_req_id};
+        let disk_request = IDiskRequest::WriteReq{to: superblock_addr(), data: raw_page};
+        let ghost disk_reqs = multiset_map_singleton(disk_req_id, disk_request@);
+        let ghost info = ProgramDiskInfo{ reqs: disk_reqs, resps: Multiset::empty() };
 
-        // let ghost lbl = KVStoreTokenized::Label::DiskOp{
-        //         disk_request_tuples: disk_reqs,
-        //         disk_response_tuples: empty_disk_responses.multiset(),
-        //     };
-        // let ghost info = ProgramDiskInfo{
-        //         reqs: lbl->disk_request_tuples, 
-        //         resps: lbl->disk_response_tuples, 
-        //     };
+        let ghost inflight_info = InflightInfo{version: version_index, req_id: disk_req_id};
+        let ghost post_state = ConcreteProgramModel {
+            state: AtomicState{
+                in_flight: Some(inflight_info),
+                ..old(self).state()}
+        };
+      
+        let tracked empty_disk_responses: DiskRespShard = DiskRespShard::empty(self.instance_id());
 
-        // proof {
-        //     let pre_sb = self.state().ephemeral_sb();
-        //     assert( disk_reqs == Multiset::singleton((disk_event.arrow_ExecuteSyncBegin_req_id(), DiskRequest::WriteReq{to: spec_superblock_addr(), data: spec_marshall(pre_sb)})) );   // extn
-        //     assert( AtomicState::disk_transition(self.state(), post_state.state, disk_event, info.reqs, info.resps) );  // witness
-        // }
+        let ghost lbl = KVStoreTokenized::Label::DiskOp{
+                disk_request_tuples: disk_reqs,
+                disk_response_tuples: empty_disk_responses.multiset(),
+            };
+        
+        let ghost info = ProgramDiskInfo{
+                reqs: lbl->disk_request_tuples, 
+                resps: lbl->disk_response_tuples, 
+            };
+
+        proof {
+            let pre_sb = self.state().ephemeral_sb();
+            assert(pre_sb == ISuperblock{journal: self.journal}@) by {
+                self.view_as_kmmap_ensures();
+                self.journal@.apply_to_stamped_map_length_lemma(StampedMap_v::empty());
+            }
+            assert( disk_reqs == Multiset::singleton(
+                (disk_event.arrow_ExecuteSyncBegin_req_id(), 
+                DiskRequest::WriteReq{to: spec_superblock_addr(), data: spec_marshall(pre_sb)})) 
+            );   // extn
+            assert( AtomicState::disk_transition(self.state(), post_state.state, disk_event, info.reqs, info.resps) );  // witness
+        }
 
         // // take the transition, get the token
-        // let tracked mut model = KVStoreTokenized::model::arbitrary();
-        // proof { tracked_swap(self.model.borrow_mut(), &mut model); }
-        // let tracked new_reply_token = self.instance.borrow().disk_transitions(
-        //     lbl,
-        //     post_state,
-        //     &mut model,
-        //     empty_disk_responses,
-        // );
-        // self.model = Tracked(model);
-        // std::mem::swap(&mut self.sync_requests.satisfied_reqs, &mut self.sync_requests.deferred_reqs);
+        let tracked mut model = KVStoreTokenized::model::arbitrary();
+        proof { tracked_swap(self.model.borrow_mut(), &mut model); }
+        let tracked new_reply_token = self.instance.borrow().disk_transitions(
+            lbl,
+            post_state,
+            &mut model,
+            empty_disk_responses,
+        );
+        self.model = Tracked(model);
+        std::mem::swap(&mut self.sync_requests.satisfied_reqs, &mut self.sync_requests.deferred_reqs);
 
-        // assert( new_reply_token.multiset() == multiset_map_singleton(req_id_perm@, disk_request@) );    // extn
-        // api.send_disk_request(disk_request, req_id_perm, Tracked(new_reply_token));
-
-        // let ghost state = self.state();
+        assert( new_reply_token.multiset() == multiset_map_singleton(req_id_perm@, disk_request@) );    // extn
+        api.send_disk_request(disk_request, req_id_perm, Tracked(new_reply_token));
     }
 
     exec fn deliver_inflight_replies(&mut self, ready_reqs: &mut Vec<Request>, api: &mut ClientAPI<ConcreteProgramModel>)
